@@ -2,6 +2,8 @@ from cambc import Controller, Position, Direction, EntityType, Environment
 from map_info import MapInfo
 from pathing import move_card, move_adjacent, init as pathing_init
 import random
+import time
+import sys
 CARDINALS = [
     Direction.NORTH,
     Direction.SOUTH,
@@ -50,7 +52,6 @@ class Builder:
             if d < best_d:
                 best_d = d
                 best = tile
-
         return best
 
     def build_nearby_harvester(self) -> bool:

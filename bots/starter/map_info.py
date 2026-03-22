@@ -27,7 +27,9 @@ class MapInfo:
         team: Team
         direction: Direction | None = None
         vision_sq: int | None = None
-        
+    def in_bounds(self, pos: Position) -> bool:
+        rc =  self.rc
+        return 0 <= pos.x < rc.get_map_width() and 0 <= pos.y < rc.get_map_height()
     def __init__(self, rc: Controller):
         self.rc = rc
         self.width: int = rc.get_map_width()
@@ -66,7 +68,7 @@ class MapInfo:
     def core_center(self, core_id: int, tile: Position) -> Position:
         rc = self.rc
         def empty(pos: Position) -> bool:
-            return rc.is_in_vision(pos) and rc.get_tile_building_id(pos) != core_id
+            return self.in_bounds(pos) and rc.is_in_vision(pos) and rc.get_tile_building_id(pos) != core_id
 
         up = empty(Position(tile.x, tile.y - 1))
         down = empty(Position(tile.x, tile.y + 1))

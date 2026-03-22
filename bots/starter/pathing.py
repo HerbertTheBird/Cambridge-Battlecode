@@ -2,7 +2,7 @@ from heapq import heappush, heappop
 import time
 
 from cambc import Controller, Direction, Position
-
+import sys
 # file = open("time.txt", "a")
 
 # 4-direction movement
@@ -13,10 +13,12 @@ CARD = [
     (Direction.EAST, 1, 0),
 ]
 width = height = 0
+rc = None
 def init(c: Controller):
-    global width, height
+    global width, height, rc
     width = c.get_map_width()
     height = c.get_map_height()
+    rc = c
 def _key(pos: Position) -> tuple[int, int]:
     return (pos.x, pos.y)
 
@@ -28,7 +30,6 @@ def move_adjacent(
 ):
     if avoid is None:
         avoid = set()
-
 
     best_dir = None
     best_score = None
@@ -47,6 +48,7 @@ def move_adjacent(
         second_dir, dist2 = move_card(cand, target, avoid)
         if second_dir is None:
             continue
+        end_time = time.perf_counter()
         score = dist1 + dist2
         if best_score is None or score < best_score:
             best_score = score
@@ -54,7 +56,6 @@ def move_adjacent(
 
     if best_dir is None:
         return None, 0
-
     return best_dir, best_score
 def move_toward(start:Position, target: Position, avoid: set[Position] | None = None):
     dirs = [
@@ -64,7 +65,8 @@ def move_toward(start:Position, target: Position, avoid: set[Position] | None = 
     ]
     return move_card(start, target, avoid, dirs)
 def move_card(start:Position, target: Position, avoid: set[Position] | None = None, dirs=CARD):
-
+    start_time = time.perf_counter()
+    
     if avoid is None:
         avoid = set()
 
@@ -76,26 +78,41 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
 
     avoid_keys = {(p.x, p.y) for p in avoid}
 
+    # Same kind of blocking logic your BFS uses
     if (tx, ty) in avoid_keys:
         return None, 0
 
+    # local bindings for speed
+    dirs = CARD
+    heappush_local = heappush
+    heappop_local = heappop
+    abs_local = abs
+
     def h(x: int, y: int) -> int:
-        return abs(x - tx) + abs(y - ty)
-    
+        return abs_local(x - tx) + abs_local(y - ty)
+
+    # heap item:
+    # (f, g, x, y, first_dir)
+    #
+    # first_dir is the direction taken from the start to reach this node.
+    # We keep it in the heap item so we do not need a separate parent map.
     open_heap = []
-    heappush(open_heap, (h(sx, sy), 0, sx, sy, None))
+    heappush_local(open_heap, (h(sx, sy), 0, sx, sy, None))
 
     # best known g for each tile
     best_g = {(sx, sy): 0}
 
     while open_heap:
-        f, g, x, y, first_dir = heappop(open_heap)
-
+        f, g, x, y, first_dir = heappop_local(open_heap)
+        g *= -1
         # stale entry check
         if best_g.get((x, y)) != g:
             continue
 
         if x == tx and y == ty:
+            end_time = time.perf_counter()
+            # if rc.get_current_round() < 10:
+                # print(rc.get_id(), (end_time - start_time)*1000, start, target, file=sys.stderr)
             return first_dir, g
 
         ng = g + 1
@@ -117,8 +134,8 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
 
             best_g[nkey] = ng
             next_first_dir = direction if first_dir is None else first_dir
-            heappush(
+            heappush_local(
                 open_heap,
-                (ng + h(nx, ny), ng, nx, ny, next_first_dir)
+                (ng + h(nx, ny), -ng, nx, ny, next_first_dir)
             )
     return None, 0
