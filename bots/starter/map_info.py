@@ -41,7 +41,7 @@ class MapInfo:
         
         self.my_core: Position | None = None
         self.their_core: Position | None = None
-
+        self.core_id: int | None = None
 
         self.last_seen: Dict[Position, int] = {}
         self.hor_sym = True
@@ -108,6 +108,7 @@ class MapInfo:
                 if self.my_core is None and self.building[tile].type == EntityType.CORE:
                     if self.building[tile].team == rc.get_team():
                         self.my_core = self.core_center(id, tile)
+                        self.core_id = id
                     else:
                         self.their_core = self.core_center(id, tile)
             else:
@@ -115,7 +116,8 @@ class MapInfo:
             self.last_seen[tile] = current_round
     def get_avoid(self) -> set[Position]:
         avoid = set()
-        if self.my_core is not None:
+        avoid_core = self.rc.get_tile_building_id(self.rc.get_position()) != self.core_id
+        if self.my_core is not None and avoid_core:
             for x in range(self.my_core.x - 1, self.my_core.x + 2):
                 for y in range(self.my_core.y - 1, self.my_core.y + 2):
                     avoid.add(Position(x, y))
@@ -128,5 +130,7 @@ class MapInfo:
                 avoid.add(pos)
         for pos in self.building:
             if self.building[pos] is not None:
+                if self.building[pos].type == EntityType.CORE and not avoid_core:
+                    continue
                 avoid.add(pos)
         return avoid

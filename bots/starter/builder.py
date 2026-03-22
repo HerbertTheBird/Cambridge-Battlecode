@@ -90,6 +90,7 @@ class Builder:
         self.build_nearby_harvester()
         if self.target is None:
             return
+        rc.draw_indicator_line(rc.get_position(), self.target, 0, 255, 0)
         self.nearby_ore = self.nearest_ore()
         avoid = self.map_info.get_avoid()
         for pos in avoid:
