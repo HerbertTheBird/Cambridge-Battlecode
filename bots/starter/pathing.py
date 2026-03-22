@@ -89,7 +89,10 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
     abs_local = abs
 
     def h(x: int, y: int) -> int:
-        return abs_local(x - tx) + abs_local(y - ty)
+        if dirs == CARD:
+            return abs_local(x - tx) + abs_local(y - ty)
+        else:
+            return max(abs_local(x - tx), abs_local(y - ty))
 
     # heap item:
     # (f, g, x, y, first_dir)
