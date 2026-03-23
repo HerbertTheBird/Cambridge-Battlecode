@@ -64,7 +64,15 @@ class MapInfo:
         rot = self.rot_flip(tile)
         if rot in self.ground and self.ground[rot] != self.ground[tile]:
             self.rot_sym = False
-    
+    def possible_flips(self, pos: Position) -> Set[Position]:
+        flips = set()
+        if self.hor_sym:
+            flips.add(self.hor_flip(pos))
+        if self.ver_sym:
+            flips.add(self.ver_flip(pos))
+        if self.rot_sym:
+            flips.add(self.rot_flip(pos))
+        return flips
     def core_center(self, core_id: int, tile: Position) -> Position:
         rc = self.rc
         def empty(pos: Position) -> bool:
@@ -114,8 +122,12 @@ class MapInfo:
             else:
                 self.building[tile] = None
             self.last_seen[tile] = current_round
-    def get_avoid(self) -> set[Position]:
+    def get_avoid(self, avoid_walkables: bool) -> set[Position]:
+        rc = self.rc
         avoid = set()
+        for unit in rc.get_nearby_units():
+            if rc.get_entity_type(unit.id) == EntityType.BUILDER_BOT:
+                avoid.add(unit.position)
         avoid_core = self.rc.get_tile_building_id(self.rc.get_position()) != self.core_id
         if self.my_core is not None and avoid_core:
             for x in range(self.my_core.x - 1, self.my_core.x + 2):
@@ -130,7 +142,10 @@ class MapInfo:
                 avoid.add(pos)
         for pos in self.building:
             if self.building[pos] is not None:
-                if self.building[pos].type == EntityType.CORE and not avoid_core:
+                type = self.building[pos].type
+                if type == EntityType.CORE and not avoid_core:
+                    continue
+                if not avoid_walkables and (type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER or type == EntityType.ROAD):
                     continue
                 avoid.add(pos)
         return avoid

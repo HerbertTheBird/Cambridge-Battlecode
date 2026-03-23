@@ -92,7 +92,7 @@ class Builder:
             return
         rc.draw_indicator_line(rc.get_position(), self.target, 0, 255, 0)
         self.nearby_ore = self.nearest_ore()
-        avoid = self.map_info.get_avoid()
+        avoid = self.map_info.get_avoid(True)
         for pos in avoid:
             rc.draw_indicator_dot(pos, 255, 0, 0)
         if self.target in avoid:
