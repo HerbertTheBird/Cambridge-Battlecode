@@ -107,6 +107,7 @@ class Builder:
 
         self.conveyer_move(move_dir, avoid)
     def __init__(self, c: Controller):
+        print(c.get_id(), c.get_current_round(), file=sys.stderr)
         self.rc = c
         self.target = self.random_edge()
         self.nearby_ore = None

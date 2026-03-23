@@ -126,8 +126,8 @@ class MapInfo:
         rc = self.rc
         avoid = set()
         for unit in rc.get_nearby_units():
-            if rc.get_entity_type(unit.id) == EntityType.BUILDER_BOT:
-                avoid.add(unit.position)
+            if rc.get_entity_type(unit) == EntityType.BUILDER_BOT:
+                avoid.add(rc.get_position(unit))
         avoid_core = self.rc.get_tile_building_id(self.rc.get_position()) != self.core_id
         if self.my_core is not None and avoid_core:
             for x in range(self.my_core.x - 1, self.my_core.x + 2):
