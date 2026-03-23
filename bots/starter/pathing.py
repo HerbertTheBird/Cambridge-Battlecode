@@ -1,7 +1,7 @@
 from heapq import heappush, heappop
 import time
-
-from cambc import Controller, Direction, Position
+import map_info
+from cambc import Controller, Direction, Position, EntityType
 import sys
 # file = open("time.txt", "a")
 
@@ -11,6 +11,16 @@ CARD = [
     (Direction.SOUTH, 0, 1),
     (Direction.WEST, -1, 0),
     (Direction.EAST, 1, 0),
+]
+DIRS = [
+    (Direction.NORTH, 0, -1),
+    (Direction.SOUTH, 0, 1),
+    (Direction.WEST, -1, 0),
+    (Direction.EAST, 1, 0),
+    (Direction.NORTHWEST, -1, -1),
+    (Direction.NORTHEAST, 1, -1),
+    (Direction.SOUTHWEST, -1, 1),
+    (Direction.SOUTHEAST, 1, 1),
 ]
 width = height = 0
 rc = None
@@ -83,17 +93,12 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
         return None, 0
 
     # local bindings for speed
-    dirs = CARD
     heappush_local = heappush
     heappop_local = heappop
     abs_local = abs
 
     def h(x: int, y: int) -> int:
-        if dirs == CARD:
-            return abs_local(x - tx) + abs_local(y - ty)
-        else:
-            return max(abs_local(x - tx), abs_local(y - ty))
-
+        return abs_local(x - tx) + abs_local(y - ty)
     # heap item:
     # (f, g, x, y, first_dir)
     #
@@ -142,3 +147,24 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
                 (ng + h(nx, ny), -ng, nx, ny, next_first_dir)
             )
     return None, 0
+def explore_move(target: Position):
+    avoid = map_info.get_avoid(False)
+    move = move_toward(rc.get_position(), target, avoid)[0]
+    if not move:
+        return False
+    destroy = rc.get_position()
+    next = rc.get_position().add(move)
+    if rc.get_entity_type(rc.get_tile_building_id(destroy)) != EntityType.ROAD:
+        destroy = False
+    if rc.can_move(move):
+        rc.move(move)
+    else:
+        if rc.can_build_road(next):
+            rc.build_road(next)
+        if rc.can_move(move):
+            rc.move(move)
+        else:
+            return False
+    if destroy and rc.can_destroy(destroy):
+        rc.destroy(destroy)
+    return True

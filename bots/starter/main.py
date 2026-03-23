@@ -2,9 +2,9 @@
 
 import random
 from cambc import Controller, Direction, EntityType, Position, Environment
-from core import Core
-from builder import Builder
-from turret import Turret
+import builder
+import core
+import turret
 import time
 import sys
 
@@ -18,11 +18,14 @@ class Player:
         if not self.initialized:
             random.seed(c.get_current_round())
             if etype == EntityType.CORE:
-                self.me = Core(c)
+                self.me = core
+                self.me.init(c)
             elif etype == EntityType.BUILDER_BOT:
-                self.me = Builder(c)
+                self.me = builder
+                self.me.init(c)  # Ensure builder.init(c) is called
             else:
-                self.me = Turret(c)
+                self.me = turret
+                self.me.init(c)  # Ensure turret.init(c) is called if needed
             self.initialized = True
         self.me.run()
         end_time = time.perf_counter()

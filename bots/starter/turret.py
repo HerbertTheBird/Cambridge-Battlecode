@@ -1,8 +1,9 @@
 from cambc import Controller
-class Turret:
-    def run(self):
-        pass
-    def __init__(self, c: Controller):
-        self.rc = c
-        self.type = c.get_entity_type()
-    
+rc = None
+type = None
+def run(self):
+    pass
+def init(self, c: Controller):
+    global rc, type
+    rc = c
+    type = c.get_entity_type()
