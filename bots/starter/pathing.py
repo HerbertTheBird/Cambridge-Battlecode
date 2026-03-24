@@ -3,7 +3,7 @@ import time
 import map_info
 from cambc import Controller, Direction, Position, EntityType
 import sys
-
+weight = 1.2
 # 4-direction movement
 CARD = [
     (Direction.NORTH, 0, -1),
@@ -95,8 +95,8 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
     heappop_local = heappop
     abs_local = abs
 
-    def h(x: int, y: int) -> int:
-        return abs_local(x - tx) + abs_local(y - ty)
+    def h(x: int, y: int) -> float:
+        return (abs_local(x - tx) + abs_local(y - ty))*weight
     # heap item:
     # (f, g, x, y, first_dir)
     #
@@ -211,8 +211,8 @@ def ore_path(start_positions: set, target: Position, adjacent: bool):
             return False
         return True
 
-    def h(pos: Position) -> int:
-        return abs(pos.x - target.x) + abs(pos.y - target.y)
+    def h(pos: Position) -> float:
+        return (abs(pos.x - target.x) + abs(pos.y - target.y))*weight
 
     # Goal = any cardinal tile next to target
     goal_positions = set()

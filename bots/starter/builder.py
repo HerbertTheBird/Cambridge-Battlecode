@@ -98,6 +98,7 @@ def run():
         building_id = rc.get_tile_building_id(nearby_ore) if in_range else None
         block = map_info.their_core != None and map_info.their_core.distance_squared(nearby_ore) < map_info.my_core.distance_squared(nearby_ore)
         if block:
+            rc.draw_indicator_line(rc.get_position(), nearby_ore, 255, 0, 255)
             if in_range:
                 if building_id != None and rc.get_entity_type(building_id) != EntityType.BARRIER:
                     if rc.can_destroy(nearby_ore):
