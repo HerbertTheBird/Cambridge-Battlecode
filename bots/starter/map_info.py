@@ -31,7 +31,7 @@ last_seen: Dict[Position, int] = {}
 hor_sym = True
 ver_sym = True
 rot_sym = True
-
+solved_sym = False
 @dataclass
 class Building:
     id: int
@@ -72,15 +72,16 @@ def update_symmetry(tile: Position):
     if rot in ground and ground[rot] != ground[tile]:
         rot_sym = False
 
-def possible_flips(pos: Position) -> Set[Position]:
-    flips = set()
+def flip(pos: Position):
+    if not solved_sym:
+        return None
     if hor_sym:
-        flips.add(hor_flip(pos))
+        return hor_flip(pos)
     if ver_sym:
-        flips.add(ver_flip(pos))
+        return ver_flip(pos)
     if rot_sym:
-        flips.add(rot_flip(pos))
-    return flips
+        return rot_flip(pos)
+    return None
 
 def core_center(core_id: int, tile: Position) -> Position:
     def empty(pos: Position) -> bool:
@@ -103,13 +104,16 @@ def core_center(core_id: int, tile: Position) -> Position:
     return None
 
 def update() -> None:
-    global my_core, their_core, core_id
+
+    global my_core, their_core, core_id, solved_sym
     current_round = rc.get_current_round()
     visible_tiles = rc.get_nearby_tiles()
     
     for tile in visible_tiles:
-        if tile not in last_seen:
+        if tile not in ground:
             ground[tile] = rc.get_tile_env(tile)
+            if solved_sym:
+                ground[flip(tile)] = ground[tile]
             update_symmetry(tile)
         id = rc.get_tile_building_id(tile)
         if id is not None:
@@ -131,6 +135,22 @@ def update() -> None:
         else:
             building[tile] = None
         last_seen[tile] = current_round
+    possible_syms = 0
+    if hor_sym:
+        possible_syms += 1
+    if ver_sym:
+        possible_syms += 1
+    if rot_sym:
+        possible_syms += 1
+
+    if possible_syms == 1 and not solved_sym:
+        solved_sym = True
+        their_core = flip(my_core)
+        for tile in list(ground):
+            flipped = flip(tile)
+            if flipped not in ground:
+                ground[flipped] = ground[tile]
+                
 
 def get_avoid(avoid_walkables: bool, avoid_builders: bool) -> set[Position]:
     avoid = set()

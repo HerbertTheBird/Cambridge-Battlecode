@@ -17,7 +17,6 @@ nearby_ore = None
 path = None
 path_index = 0
 
-
 def dist(a: Position, b: Position) -> int:
     dx = a.x - b.x
     dy = a.y - b.y
@@ -69,7 +68,7 @@ def nearest_ore() -> Position | None:
             continue
         if map_info.ground[tile] != Environment.ORE_AXIONITE and map_info.ground[tile] != Environment.ORE_TITANIUM:
             continue
-        if map_info.building[tile] is not None:
+        if map_info.building[tile] is not None and map_info.building[tile] == EntityType.HARVESTER:
             continue
         d = dist(me, tile)
         if d < best_d:
@@ -81,23 +80,29 @@ def nearest_ore() -> Position | None:
 def run():
     global target, nearby_ore, path, path_index
     map_info.update()
+        
     if target == None:
         target = random_edge()
-    if pathing.core_to:
-        rc.draw_indicator_dot(pathing.core_to, 0, 255, 0)
     if target is None:
         return
     if path is None:
         nearest_ore()
-
     if nearby_ore is not None:
         rc.draw_indicator_line(rc.get_position(), nearby_ore, 0, 255, 0)
+        in_range = rc.is_in_vision(nearby_ore)
+        building_id = rc.get_tile_building_id(nearby_ore) if in_range else None
+        if in_range:
+            if building_id != None and rc.get_entity_type(building_id) != EntityType.HARVESTER:
+                if rc.can_destroy(nearby_ore):
+                    rc.destroy(nearby_ore)
+                if rc.can_fire(nearby_ore):
+                    rc.fire(nearby_ore)
         if rc.can_build_harvester(nearby_ore) and rc.get_global_resources()[0] > 400:
             rc.build_harvester(nearby_ore)
             path = pathing.conveyor_path(nearby_ore)
             path_index = 0
         elif path is None:
-            pathing.explore_move(nearby_ore.add(Direction.NORTH))
+            pathing.explore_move(nearby_ore)
         else:
             if path is not None:
                 for i in path:

@@ -23,7 +23,6 @@ DIRS = [
 ]
 width = height = 0
 rc = None
-core_to = None
 def init(c: Controller):
     global width, height, rc
     width = c.get_map_width()
@@ -148,7 +147,6 @@ def conveyor_path(target: Position):
     if target is None or map_info.my_core is None:
         return None
 
-    avoid = map_info.get_avoid(False, False)
     core = map_info.my_core
 
 
@@ -171,7 +169,10 @@ def conveyor_path(target: Position):
         # replace these checks with your actual API fields if needed
         if getattr(b, "team", None) == rc.get_team() and getattr(b, "type", None) == EntityType.CONVEYOR:
             start_positions.add(p)
+    return ore_path(start_positions, target)
 
+def ore_path(start_positions: set, target: Position):
+    avoid = map_info.get_avoid(False, False)
     if not start_positions:
         return None
     def is_walkable(pos: Position) -> bool:
@@ -229,12 +230,6 @@ def conveyor_path(target: Position):
                 path.append(current)
                 current = parent_map[current]
 
-            # path currently = core → target
-            # reverse to match old format = target → core
-            # BUT we actually want it to END on a core exit tile
-            # So do NOT include the starting root tile itself
-
-
             if len(path) > 100:
                 return None
 
@@ -282,13 +277,14 @@ def explore_move(target: Position):
             rc.fire(rc.get_position())
         return False
     avoid = map_info.get_avoid(False, True)
+    for tile in avoid:
+        rc.draw_indicator_dot(tile, 255, 0, 0)
     if target in avoid:
         avoid.remove(target)
     move = move_toward(rc.get_position(), target, avoid)[0]
     if not move:
         return False
     destroy = rc.get_position()
-    past = destroy
     next = rc.get_position().add(move)
     if rc.get_entity_type(rc.get_tile_building_id(destroy)) != EntityType.ROAD:
         destroy = False
@@ -301,9 +297,6 @@ def explore_move(target: Position):
             rc.move(move)
         else:
             return False
-    global core_to
-    if not core_to and rc.get_tile_building_id(rc.get_position()) != map_info.core_id:
-        core_to = past
     if destroy and rc.can_destroy(destroy):
         rc.destroy(destroy)
     return True
