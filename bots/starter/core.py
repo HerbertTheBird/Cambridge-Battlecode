@@ -21,7 +21,7 @@ def random_spawn_tile() -> Position | None:
     return None
 def run():
     global num_spawned
-    if num_spawned < 6:
+    if num_spawned < 6 or rc.get_global_resources()[0] > 700:
             spawn_pos = random_spawn_tile()
             if spawn_pos is not None:
                 rc.spawn_builder(spawn_pos)

@@ -14,6 +14,9 @@ CARDINALS = [
 rc = None
 target = None
 nearby_ore = None
+path = None
+path_index = 0
+
 
 def dist(a: Position, b: Position) -> int:
     dx = a.x - b.x
@@ -57,15 +60,6 @@ def nearest_ore() -> Position | None:
     nearby_ore = best
     return best
 
-def build_nearby_harvester() -> bool:
-    me = rc.get_position()
-
-    for d in CARDINALS:
-        ore_pos = me.add(d)
-        if rc.can_build_harvester(ore_pos):
-            rc.build_harvester(ore_pos)
-            return True
-    return False
 
 def conveyer_move(move_dir: Direction, avoid: set[Position]) -> bool:
     next_pos = rc.get_position().add(move_dir)
@@ -86,27 +80,34 @@ def conveyer_move(move_dir: Direction, avoid: set[Position]) -> bool:
     return False
 
 def run():
-    global target, nearby_ore
+    global target, nearby_ore, path, path_index
     map_info.update()
-    build_nearby_harvester()
+    if pathing.core_to:
+        rc.draw_indicator_dot(pathing.core_to, 0, 255, 0)
     if target is None:
         return
-    rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
-    nearest_ore()
-    avoid = map_info.get_avoid(False)
-    for pos in avoid:
-        rc.draw_indicator_dot(pos, 255, 0, 0)
-    if target in avoid:
-        avoid.remove(target)
-    # if nearby_ore is not None:
-    #     move_dir = move_adjacent(rc.get_position(), target, nearby_ore, avoid)[0]
-    # else:
-    #     move_dir = move_card(rc.get_position(), target, avoid)[0]
-    pathing.explore_move(target)
-    # if move_dir is None:
-    #     return
 
-    # conveyer_move(move_dir, avoid)
+    if not nearby_ore:
+        nearest_ore()
+
+    if nearby_ore is not None:
+        rc.draw_indicator_line(rc.get_position(), nearby_ore, 0, 255, 0)
+        if rc.can_build_harvester(nearby_ore):
+            rc.build_harvester(nearby_ore)
+            path = pathing.conveyor_path(nearby_ore)
+            path_index = 0
+        elif path is None:
+            pathing.explore_move(nearby_ore.add(Direction.NORTH))
+        else:
+            path_index += pathing.build_path(path, path_index)
+            if path_index >= len(path) - 1:
+                path = None
+                path_index = 0
+                nearby_ore = None
+    else:
+        rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
+        if not pathing.explore_move(target):
+            target = random_edge()
 
 def init(c: Controller):
     global rc, target

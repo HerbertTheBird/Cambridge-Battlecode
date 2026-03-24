@@ -132,11 +132,12 @@ def update() -> None:
             building[tile] = None
         last_seen[tile] = current_round
 
-def get_avoid(avoid_walkables: bool) -> set[Position]:
+def get_avoid(avoid_walkables: bool, avoid_builders: bool) -> set[Position]:
     avoid = set()
-    for unit in rc.get_nearby_units():
-        if rc.get_entity_type(unit) == EntityType.BUILDER_BOT:
-            avoid.add(rc.get_position(unit))
+    if avoid_builders:
+        for unit in rc.get_nearby_units():
+            if rc.get_entity_type(unit) == EntityType.BUILDER_BOT:
+                avoid.add(rc.get_position(unit))
     avoid_core = rc.get_tile_building_id(rc.get_position()) != core_id
     if my_core is not None and avoid_core:
         for x in range(my_core.x - 1, my_core.x + 2):
