@@ -336,18 +336,11 @@ def build_path(path: list[Position], path_i: int):
             rc.build_conveyor(start, direction)
             explore_move(end)
             return 1
-        else:
-            explore_move(start)  # Move closer if unable to build
-    elif dist <= 3:  # Jump move (cost 5)
+    else:
         if rc.can_destroy(start):
             rc.destroy(start)
         if rc.can_build_bridge(start, end):
             rc.build_bridge(start, end)
             explore_move(end)
             return 1
-        else:
-            explore_move(start)  # Move closer if unable to build
-    else:
-        # Invalid path segment, should not happen
-        return 0
     return 0

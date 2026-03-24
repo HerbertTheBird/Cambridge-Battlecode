@@ -60,25 +60,6 @@ def nearest_ore() -> Position | None:
     nearby_ore = best
     return best
 
-
-def conveyer_move(move_dir: Direction, avoid: set[Position]) -> bool:
-    next_pos = rc.get_position().add(move_dir)
-    if next_pos == target:
-        return False
-    if next_pos in avoid:
-        return False
-    if rc.can_move(move_dir):
-        rc.move(move_dir)
-        return False
-
-    if rc.can_build_conveyor(next_pos, move_dir.opposite()):
-        rc.build_conveyor(next_pos, move_dir.opposite())
-        if rc.can_move(move_dir):
-            rc.move(move_dir)
-        return True
-
-    return False
-
 def run():
     global target, nearby_ore, path, path_index
     map_info.update()
@@ -86,28 +67,32 @@ def run():
         rc.draw_indicator_dot(pathing.core_to, 0, 255, 0)
     if target is None:
         return
-
-    if not nearby_ore:
+    if path is None:
         nearest_ore()
 
     if nearby_ore is not None:
         rc.draw_indicator_line(rc.get_position(), nearby_ore, 0, 255, 0)
-        if rc.can_build_harvester(nearby_ore):
+        if rc.can_build_harvester(nearby_ore) and rc.get_global_resources()[0] > 400:
             rc.build_harvester(nearby_ore)
             path = pathing.conveyor_path(nearby_ore)
             path_index = 0
         elif path is None:
             pathing.explore_move(nearby_ore.add(Direction.NORTH))
         else:
+            if path is not None:
+                for i in path:
+                    rc.draw_indicator_dot(i, 255, 0, 0)
+                rc.draw_indicator_dot(path[path_index], 255, 255, 0)
             path_index += pathing.build_path(path, path_index)
             if path_index >= len(path) - 1:
                 path = None
                 path_index = 0
                 nearby_ore = None
     else:
-        rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
-        if not pathing.explore_move(target):
-            target = random_edge()
+        if rc.get_global_resources()[0] > 500:
+            rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
+            if not pathing.explore_move(target):
+                target = random_edge()
 
 def init(c: Controller):
     global rc, target
