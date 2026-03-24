@@ -300,8 +300,8 @@ def explore_move(target: Position):
             rc.move(move)
         else:
             return False
-    if destroy and rc.can_destroy(destroy):
-        rc.destroy(destroy)
+    # if destroy and rc.can_destroy(destroy):
+    #     rc.destroy(destroy)
     return True
 
 
