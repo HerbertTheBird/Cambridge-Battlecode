@@ -24,6 +24,8 @@ rc = None
 width = height = 0
 ground: Dict[Position, Environment] = {}
 building: Dict[Position, Building | None] = {}
+stuck_turns: Dict[Position, int] = {}
+past_filled: Dict[Position, int] = {}
 my_core: Position | None = None
 their_core: Position | None = None
 core_id: int | None = None
@@ -41,6 +43,10 @@ class Building:
     team: Team
     direction: Direction | None = None
     vision_sq: int | None = None
+    bridge_target: Position | None = None
+    conveyor_speed: int | None = None #number of turns it takes to transfer one resource
+    stored_resource_id: int | None = None #current stored id
+    load: int | None = None #load is how many turns this contains a resource over a 4 turn cycle
 
 def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < width and 0 <= pos.y < height
@@ -103,6 +109,8 @@ def core_center(core_id: int, tile: Position) -> Position:
         return Position(tile.x - 1, tile.y - 1)   # bottom-right -> center is up-left
     return None
 
+def is_conveyor(type: EntityType):
+    return type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER
 def update() -> None:
 
     global my_core, their_core, core_id, solved_sym
@@ -117,15 +125,46 @@ def update() -> None:
             update_symmetry(tile)
         id = rc.get_tile_building_id(tile)
         if id is not None:
+            speed = None
+            type = rc.get_entity_type(id)
+            if last_seen.get(tile, -2) == current_round-1 and is_conveyor(type) and building[tile] is not None and is_conveyor(building[tile].type):
+                if rc.get_stored_resource_id(id) == building[tile].stored_resource_id and rc.get_stored_resource_id(id) is not None:
+                    stuck_turns[tile] = stuck_turns.get(tile, 0) + 1
+                else:
+                    speed = stuck_turns.get(tile, 0)+1
+                    stuck_turns[tile] = 0
+            else:
+                stuck_turns[tile] = 0
+            
+            load = None
+            if is_conveyor(type):
+                if last_seen.get(tile, -2) == current_round-1 and building[tile] is not None and is_conveyor(building[tile].type):
+                    past_filled[tile] = ((past_filled[tile]&15) << 1) | (past_filled[tile]&(~15))
+                    past_filled[tile] += 1 if rc.get_stored_resource(id) is not None else 0
+                    if (past_filled[tile]&16) != 0:
+                        load = (past_filled[tile]&15).bit_count()
+                else:
+                    past_filled[tile] = 2 + (1 if rc.get_stored_resource(id) is not None else 0)
+            
             building[tile] = Building(
                 id=id,
-                type=rc.get_entity_type(id),
+                type=type,
                 hp=rc.get_hp(id),
                 maxhp=rc.get_max_hp(id),
                 team=rc.get_team(id),
                 direction=try_or_none(lambda: rc.get_direction(id)),
                 vision_sq=try_or_none(lambda: rc.get_vision_radius_sq(id)),
+                bridge_target=try_or_none(lambda: rc.get_bridge_target(id)),
+                stored_resource_id=try_or_none(lambda: rc.get_stored_resource_id(id)),
+                conveyor_speed=speed,
+                load=load
             )
+            # if speed == 1:
+            #     rc.draw_indicator_dot(tile, 0, 255, 0)
+            # elif speed != None:
+            #     rc.draw_indicator_dot(tile, 255, 255, 0)
+            if load != None:
+                rc.draw_indicator_dot(tile, 0, 0, 50*load)
             if my_core is None and building[tile].type == EntityType.CORE:
                 if building[tile].team == rc.get_team():
                     my_core = core_center(id, tile)

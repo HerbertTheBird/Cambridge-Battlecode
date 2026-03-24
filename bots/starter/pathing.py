@@ -165,14 +165,17 @@ def conveyor_path(target: Position):
     for p, b in map_info.building.items():
         if b is None:
             continue
-
-        # replace these checks with your actual API fields if needed
-        if getattr(b, "team", None) == rc.get_team() and getattr(b, "type", None) == EntityType.CONVEYOR:
+        if b.team == rc.get_team() and map_info.is_conveyor(b.type) and b.load is not None and b.load < 4:
             start_positions.add(p)
     return ore_path(start_positions, target)
 
 def ore_path(start_positions: set, target: Position):
     avoid = map_info.get_avoid(False, False)
+    for p, b in map_info.building.items():
+        if b is None:
+            continue
+        if b.team == rc.get_team() and map_info.is_conveyor(b.type) and b.load is None or b.load == 4:
+            avoid.add(p)
     if not start_positions:
         return None
     def is_walkable(pos: Position) -> bool:
