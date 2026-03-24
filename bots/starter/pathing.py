@@ -4,7 +4,7 @@ import map_info
 from cambc import Controller, Direction, Position, EntityType
 import sys
 weight = 1.5
-MAX_ITER = 200
+MAX_ITER = 100
 # 4-direction movement
 CARD = [
     (Direction.NORTH, 0, -1),
