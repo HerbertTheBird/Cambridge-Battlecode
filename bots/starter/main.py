@@ -32,5 +32,5 @@ class Player:
         self.me.run()
 
         end_time = time.perf_counter()
-        # if c.get_current_round() < 20:
-        #     print(c.get_id(), c.get_current_round(), (end_time - start_time) * 1000, file=sys.stderr)
+        if c.get_current_round() < 110:
+            print(c.get_id(), c.get_current_round(), (end_time - start_time) * 1000, file=sys.stderr)

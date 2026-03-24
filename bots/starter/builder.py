@@ -122,7 +122,7 @@ def run():
             elif path is None:
                 pathing.explore_move(nearby_ore)
             else:
-                if map_info.is_conveyor(map_info.building[path[-1]].type) and map_info.building[path[-1]].load == 4:
+                if map_info.building[path[-1]] is not None and map_info.is_conveyor(map_info.building[path[-1]].type) and map_info.building[path[-1]].load == 4:
                     path = pathing.new_conveyor_path(path[path_index])
                     path_index = 0
                 if path is not None:

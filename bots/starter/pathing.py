@@ -3,7 +3,8 @@ import time
 import map_info
 from cambc import Controller, Direction, Position, EntityType
 import sys
-weight = 1.2
+weight = 1.5
+MAX_ITER = 200
 # 4-direction movement
 CARD = [
     (Direction.NORTH, 0, -1),
@@ -107,8 +108,11 @@ def move_card(start:Position, target: Position, avoid: set[Position] | None = No
 
     # best known g for each tile
     best_g = {(sx, sy): 0}
-
+    iter = 0
     while open_heap:
+        iter += 1
+        if iter > MAX_ITER:
+            break
         f, g, x, y, first_dir = heappop_local(open_heap)
         g *= -1
         # stale entry check
@@ -241,12 +245,11 @@ def ore_path(start_positions: set, target: Position, adjacent: bool):
         parent_map[start] = None
         heappush(open_heap, (h(start), 0, start))
 
-    iteration_count = 0
-    max_iterations = 2000
+    iter = 0
 
     while open_heap:
-        iteration_count += 1
-        if iteration_count > max_iterations:
+        iter += 1
+        if iter > MAX_ITER:
             return None
 
         f, g, current = heappop(open_heap)
