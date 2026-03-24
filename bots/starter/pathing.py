@@ -167,9 +167,33 @@ def conveyor_path(target: Position):
             continue
         if b.team == rc.get_team() and map_info.is_conveyor(b.type) and b.load is not None and b.load < 4:
             start_positions.add(p)
-    return ore_path(start_positions, target)
+    return ore_path(start_positions, target, True)
+def new_conveyor_path(target: Position):
+    if target is None or map_info.my_core is None:
+        return None
 
-def ore_path(start_positions: set, target: Position):
+    core = map_info.my_core
+
+
+        # Start = 8 tiles around core
+    start_positions = set()
+    core = map_info.my_core
+
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            p = Position(core.x + dx, core.y + dy)
+            start_positions.add(p)
+
+    # Also start from my existing conveyors
+    for p, b in map_info.building.items():
+        if b is None:
+            continue
+        if b.team == rc.get_team() and map_info.is_conveyor(b.type) and b.load is not None and b.load < 4:
+            start_positions.add(p)
+    return ore_path(start_positions, target, False)
+def ore_path(start_positions: set, target: Position, adjacent: bool):
     avoid = map_info.get_avoid(False, False)
     for p, b in map_info.building.items():
         if b is None:
@@ -192,10 +216,13 @@ def ore_path(start_positions: set, target: Position):
 
     # Goal = any cardinal tile next to target
     goal_positions = set()
-    for _, dx, dy in CARD:
-        p = Position(target.x + dx, target.y + dy)
-        if is_walkable(p):
-            goal_positions.add(p)
+    if adjacent:
+        for _, dx, dy in CARD:
+            p = Position(target.x + dx, target.y + dy)
+            if is_walkable(p):
+                goal_positions.add(p)
+    else:
+        goal_positions.add(target)
 
     if not goal_positions:
         return None

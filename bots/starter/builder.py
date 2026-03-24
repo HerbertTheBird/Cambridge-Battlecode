@@ -71,7 +71,7 @@ def nearest_ore() -> Position | None:
             continue
         if map_info.ground[tile] != Environment.ORE_TITANIUM:
             continue
-        if map_info.building[tile] is not None and map_info.building[tile].type == EntityType.HARVESTER:
+        if map_info.building[tile] is not None and (map_info.building[tile].type == EntityType.HARVESTER or map_info.building[tile].type == EntityType.BARRIER):
             continue
         d = dist(me, tile)
         if d < best_d:
@@ -96,28 +96,43 @@ def run():
         rc.draw_indicator_line(rc.get_position(), nearby_ore, 0, 255, 0)
         in_range = rc.is_in_vision(nearby_ore)
         building_id = rc.get_tile_building_id(nearby_ore) if in_range else None
-        if in_range:
-            if building_id != None and rc.get_entity_type(building_id) != EntityType.HARVESTER:
-                if rc.can_destroy(nearby_ore):
-                    rc.destroy(nearby_ore)
-                if rc.can_fire(nearby_ore):
-                    rc.fire(nearby_ore)
-        if rc.can_build_harvester(nearby_ore) and rc.get_global_resources()[0] > HARVESTER_CUTOFF:
-            rc.build_harvester(nearby_ore)
-            path = pathing.conveyor_path(nearby_ore)
-            path_index = 0
-        elif path is None:
+        block = map_info.their_core != None and map_info.their_core.distance_squared(nearby_ore) < map_info.my_core.distance_squared(nearby_ore)
+        if block:
+            if in_range:
+                if building_id != None and rc.get_entity_type(building_id) != EntityType.BARRIER:
+                    if rc.can_destroy(nearby_ore):
+                        rc.destroy(nearby_ore)
+                    if rc.can_fire(nearby_ore):
+                        rc.fire(nearby_ore)
+                if rc.can_build_barrier(nearby_ore):
+                    rc.build_barrier(nearby_ore)
             pathing.explore_move(nearby_ore)
         else:
-            if path is not None:
-                for i in path:
-                    rc.draw_indicator_dot(i, 255, 0, 0)
-                rc.draw_indicator_dot(path[path_index], 255, 255, 0)
-            path_index += pathing.build_path(path, path_index)
-            if path_index >= len(path) - 1:
-                path = None
+            if in_range:
+                if building_id != None and rc.get_entity_type(building_id) != EntityType.HARVESTER:
+                    if rc.can_destroy(nearby_ore):
+                        rc.destroy(nearby_ore)
+                    if rc.can_fire(nearby_ore):
+                        rc.fire(nearby_ore)
+            if rc.can_build_harvester(nearby_ore) and rc.get_global_resources()[0] > HARVESTER_CUTOFF:
+                rc.build_harvester(nearby_ore)
+                path = pathing.conveyor_path(nearby_ore)
                 path_index = 0
-                nearby_ore = None
+            elif path is None:
+                pathing.explore_move(nearby_ore)
+            else:
+                if map_info.is_conveyor(map_info.building[path[-1]].type) and map_info.building[path[-1]].load == 4:
+                    path = pathing.new_conveyor_path(path[path_index])
+                    path_index = 0
+                if path is not None:
+                    for i in path:
+                        rc.draw_indicator_dot(i, 255, 0, 0)
+                    rc.draw_indicator_dot(path[path_index], 255, 255, 0)
+                    path_index += pathing.build_path(path, path_index)
+                    if path_index >= len(path) - 1:
+                        path = None
+                        path_index = 0
+                        nearby_ore = None
     else:
         if rc.get_global_resources()[0] > EXPLORE_CUTOFF:
             rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
