@@ -185,7 +185,7 @@ def ore_path(start_positions: set, target: Position):
         return True
 
     def h(pos: Position) -> int:
-        return max(abs(pos.x - target.x), abs(pos.y - target.y))
+        return abs(pos.x - target.x) + abs(pos.y - target.y)
 
     # Goal = any cardinal tile next to target
     goal_positions = set()
