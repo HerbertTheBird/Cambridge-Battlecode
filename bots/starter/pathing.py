@@ -321,6 +321,14 @@ def build_path(path: list[Position], path_i: int):
         return 0
 
     start = path[path_i]
+    if rc.get_team(rc.get_tile_building_id(start)) != rc.get_team():
+        if current_pos == start:
+            if rc.can_fire(start):
+                rc.fire(start)
+        else:
+            explore_move(start)
+        return 0
+    
     end = path[path_i + 1]
 
     # Calculate the Manhattan distance between the current and next tile

@@ -27,13 +27,31 @@ def random_edge() -> Position:
     w = rc.get_map_width()
     h = rc.get_map_height()
 
-    side = random.randint(0, 3)
+    core_pos = map_info.my_core
+    if core_pos is None:
+        core_pos = Position(w // 2, h // 2)  # Default to center if core position is unknown
 
-    if side == 0:
+    valid_edges = []
+
+    if core_pos.x >= 8:  # Left edge is valid if core is not too close
+        valid_edges.append("left")
+    if core_pos.x <= w - 9:  # Right edge is valid if core is not too close
+        valid_edges.append("right")
+    if core_pos.y >= 8:  # Top edge is valid if core is not too close
+        valid_edges.append("top")
+    if core_pos.y <= h - 9:  # Bottom edge is valid if core is not too close
+        valid_edges.append("bottom")
+
+    if not valid_edges:
+        return Position(w // 2, h // 2)  # Default to center if no valid edges
+
+    side = random.choice(valid_edges)
+
+    if side == "top":
         return Position(random.randint(0, w - 1), 0)
-    if side == 1:
+    if side == "bottom":
         return Position(random.randint(0, w - 1), h - 1)
-    if side == 2:
+    if side == "left":
         return Position(0, random.randint(0, h - 1))
     return Position(w - 1, random.randint(0, h - 1))
 
@@ -63,6 +81,8 @@ def nearest_ore() -> Position | None:
 def run():
     global target, nearby_ore, path, path_index
     map_info.update()
+    if target == None:
+        target = random_edge()
     if pathing.core_to:
         rc.draw_indicator_dot(pathing.core_to, 0, 255, 0)
     if target is None:
@@ -98,7 +118,6 @@ def init(c: Controller):
     global rc, target
     print(c.get_id(), c.get_current_round(), file=sys.stderr)
     rc = c
-    target = random_edge()
     map_info.init(c)
     pathing.init(c)
 
