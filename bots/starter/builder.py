@@ -4,6 +4,9 @@ import pathing
 import random
 import sys
 
+HARVESTER_CUTOFF = 400
+EXPLORE_CUTOFF = 500
+
 CARDINALS = [
     Direction.NORTH,
     Direction.SOUTH,
@@ -68,13 +71,15 @@ def nearest_ore() -> Position | None:
             continue
         if map_info.ground[tile] != Environment.ORE_AXIONITE and map_info.ground[tile] != Environment.ORE_TITANIUM:
             continue
-        if map_info.building[tile] is not None and map_info.building[tile] == EntityType.HARVESTER:
+        if map_info.building[tile] is not None and map_info.building[tile].type == EntityType.HARVESTER:
             continue
         d = dist(me, tile)
         if d < best_d:
             best_d = d
             best = tile
     nearby_ore = best
+    if nearby_ore is not None:
+        rc.draw_indicator_line(Position(0, 0), nearby_ore, 0, 0, 255)
     return best
 
 def run():
@@ -97,7 +102,7 @@ def run():
                     rc.destroy(nearby_ore)
                 if rc.can_fire(nearby_ore):
                     rc.fire(nearby_ore)
-        if rc.can_build_harvester(nearby_ore) and rc.get_global_resources()[0] > 400:
+        if rc.can_build_harvester(nearby_ore) and rc.get_global_resources()[0] > HARVESTER_CUTOFF:
             rc.build_harvester(nearby_ore)
             path = pathing.conveyor_path(nearby_ore)
             path_index = 0
@@ -114,7 +119,7 @@ def run():
                 path_index = 0
                 nearby_ore = None
     else:
-        if rc.get_global_resources()[0] > 500:
+        if rc.get_global_resources()[0] > EXPLORE_CUTOFF:
             rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
             if not pathing.explore_move(target):
                 target = random_edge()

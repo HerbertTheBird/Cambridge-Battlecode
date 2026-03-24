@@ -280,10 +280,13 @@ def explore_move(target: Position):
     for tile in avoid:
         rc.draw_indicator_dot(tile, 255, 0, 0)
     if target in avoid:
+        if target.distance_squared(rc.get_position()) <= 2:
+            return False
         avoid.remove(target)
     move = move_toward(rc.get_position(), target, avoid)[0]
     if not move:
         return False
+    rc.draw_indicator_line(rc.get_position(), rc.get_position().add(move), 255, 255, 0)
     destroy = rc.get_position()
     next = rc.get_position().add(move)
     if rc.get_entity_type(rc.get_tile_building_id(destroy)) != EntityType.ROAD:
