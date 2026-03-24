@@ -8,7 +8,6 @@ import turret
 import time
 import sys
 
-DEBUG = False  # Set to True to enable debug logs
 
 class Player:
     def __init__(self):
@@ -30,14 +29,7 @@ class Player:
                 self.me.init(c)  # Ensure turret.init(c) is called if needed
             self.initialized = True
 
-        if DEBUG and c.get_current_round() > 240:
-            print(f"DEBUG: Round {c.get_current_round()} start for entity {c.get_id()}", file=sys.stderr)
-
         self.me.run()
 
-        if DEBUG and c.get_current_round() > 240:
-            print(f"DEBUG: Round {c.get_current_round()} end for entity {c.get_id()}", file=sys.stderr)
-
         end_time = time.perf_counter()
-        if DEBUG and c.get_current_round() > 240:
-            print(f"DEBUG: Round {c.get_current_round()} execution time: {(end_time - start_time) * 1000:.2f} ms", file=sys.stderr)
+        print(c.get_id(), c.get_current_round(), (end_time - start_time) * 1000, file=sys.stderr)

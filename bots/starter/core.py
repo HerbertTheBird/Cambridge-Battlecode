@@ -20,6 +20,8 @@ def random_spawn_tile() -> Position | None:
 
     return None
 def run():
+    if rc.get_current_round() == 40:
+        rc.self_destruct()
     global num_spawned
     if num_spawned < 4 or rc.get_global_resources()[0] > 800:
             spawn_pos = random_spawn_tile()

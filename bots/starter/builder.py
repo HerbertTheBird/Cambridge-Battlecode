@@ -69,7 +69,7 @@ def nearest_ore() -> Position | None:
     for tile in map_info.ground:
         if not rc.is_in_vision(tile):
             continue
-        if map_info.ground[tile] != Environment.ORE_AXIONITE and map_info.ground[tile] != Environment.ORE_TITANIUM:
+        if map_info.ground[tile] != Environment.ORE_TITANIUM:
             continue
         if map_info.building[tile] is not None and map_info.building[tile].type == EntityType.HARVESTER:
             continue

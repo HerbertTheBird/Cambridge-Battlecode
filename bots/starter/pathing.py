@@ -220,7 +220,8 @@ def ore_path(start_positions: set, target: Position):
             return None
 
         f, g, current = heappop(open_heap)
-
+        g *= -1
+        rc.draw_indicator_dot(current, 0, 0, 255)
         if g != best_cost.get(current):
             continue
 
@@ -249,7 +250,7 @@ def ore_path(start_positions: set, target: Position):
             if new_cost < best_cost.get(nxt, float("inf")):
                 best_cost[nxt] = new_cost
                 parent_map[nxt] = current
-                heappush(open_heap, (new_cost + h(nxt), new_cost, nxt))
+                heappush(open_heap, (new_cost + h(nxt), -new_cost, nxt))
 
         # Jump moves
         for dx in range(-3, 4):
@@ -267,7 +268,7 @@ def ore_path(start_positions: set, target: Position):
                 if new_cost < best_cost.get(nxt, float("inf")):
                     best_cost[nxt] = new_cost
                     parent_map[nxt] = current
-                    heappush(open_heap, (new_cost + h(nxt), new_cost, nxt))
+                    heappush(open_heap, (new_cost + h(nxt), -new_cost, nxt))
 
     return None
 def explore_move(target: Position):

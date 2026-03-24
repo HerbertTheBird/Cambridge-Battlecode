@@ -168,7 +168,7 @@ def get_avoid(avoid_walkables: bool, avoid_builders: bool) -> set[Position]:
             for y in range(their_core.y - 1, their_core.y + 2):
                 avoid.add(Position(x, y))
     for pos in ground:
-        if ground[pos] != Environment.EMPTY:
+        if ground[pos] != Environment.EMPTY and ground[pos] != Environment.ORE_AXIONITE:
             avoid.add(pos)
     for pos in building:
         if building[pos] is not None:
