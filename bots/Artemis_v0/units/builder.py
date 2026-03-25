@@ -118,7 +118,11 @@ def check_explore():
         force_generate_explore_target()
 
 def check_build_harvester():
-    pathing.calculate_path(target_ore)
+    if pathing.calculate_path(target_ore):
+        print(" | Path to mine found")
+    else:
+        print(" | Can't reach mine")
+        
 
 def check_route():
     pass
@@ -139,7 +143,6 @@ def run_explore():
     attempts = 0
     while not moved and attempts < 1:
         if pathing.move_to(explore_target):
-
             moved = True
         else:
             force_generate_explore_target() # generates new target for next attempt
@@ -164,6 +167,7 @@ def run_build_harvester():
     wall_count = 0
     for pos in adjacent_tiles:
         if (pos.distance_squared(rc.get_position()) > rc.get_vision_radius_sq()):
+            perimeter_secure = False
             continue
         
         if not map_info.is_on_map(pos) or rc.get_tile_env(pos) == Environment.WALL:
@@ -174,7 +178,7 @@ def run_build_harvester():
         is_barrier = False
         if building_id is not None:
             try:
-                if rc.get_entity_type(building_id) == EntityType.BARRIER and rc.get_team(building_id) == rc.get_team():
+                if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER] and rc.get_team(building_id) == rc.get_team():
                     is_barrier = True
             except GameError: pass
         
@@ -195,7 +199,7 @@ def run_build_harvester():
                 is_our_barrier = False
                 if building_id:
                     try:
-                        if rc.get_entity_type(building_id) == EntityType.BARRIER and rc.get_team(building_id) == rc.get_team():
+                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER]:
                             is_our_barrier = True
                     except GameError: pass
 
@@ -210,6 +214,10 @@ def run_build_harvester():
                             rc.build_barrier(pos)
                             return
         
+        print(" | Moving to mine")
+        if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
+            if not rc.is_tile_passable(target_ore) and rc.get_entity_type(rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
+                rc.destroy(target_ore)
         pathing.execute_path()
         return
 
@@ -217,9 +225,18 @@ def run_build_harvester():
     else:
         # If we are on the ore, move off.
         if rc.get_position() == target_ore:
+            moved = False
             for d in random.sample(list(Direction), len(list(Direction))):
                 if rc.can_move(d):
                     rc.move(d)
+                    moved = True
+            # nowhere to move
+            if not moved:
+                for d in random.sample(list(Direction), len(list(Direction))):
+                    if rc.is_tile_passable(rc.get_position().add(d)):
+                        pathing.move(d)
+                        moved = True
+                    
 
         # If adjacent to the ore, clear it and build.
         if rc.get_position().distance_squared(target_ore) <= 2:
