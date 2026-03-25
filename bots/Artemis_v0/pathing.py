@@ -200,6 +200,7 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
         if path[i] in avoid:
             return True
     return False
+
 def move_to(target: Position):
     global path, path_idx
     avoid = map_info.get_avoid(False, True)
@@ -223,8 +224,12 @@ def move_to(target: Position):
     if move(dir):
         path_idx += 1
     return True
-def calculate_path(start: Position, target: Position):
+
+def calculate_path(target: Position, start=None):
     global path, path_idx
+    if start == None:
+        start = rc.get_position()
+        
     avoid = map_info.get_avoid(False, True)
     if len(heap) == 0:
         init_a_star(rc.get_position(), target)
@@ -242,18 +247,14 @@ def calculate_path(start: Position, target: Position):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if path is None or len(path) < path_idx+2:
         return None
-def calculate_path(target: Position):
-    return calculate_path(rc.get_position(), target)
-def execute_path():
-    if path is None or path_idx > len(path)-2:
+
+def execute_path(sample_path=None, path_idx=0):
+    if (sample_path == None):
+        sample_path = path
+    if path_idx > len(sample_path)-2:
         return False
-    dir = path[path_idx].direction_to(path[path_idx+1])
+    dir = path[path_idx].direction_to(sample_path[path_idx+1])
     if move(dir):
         path_idx += 1
         return True
     return False
-def execute_path(path, path_idx):
-    if path is None or path_idx > len(path)-2:
-        return False
-    dir = path[path_idx].direction_to(path[path_idx+1])
-    return move(dir)

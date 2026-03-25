@@ -7,6 +7,9 @@ from typing import Dict, Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
 from dataclasses import dataclass
 
+def is_on_map(pos : Position):
+    return 0 <= pos.x < width and 0 <= pos.y < height 
+
 def try_or_none(func):
     try:
         return func()
