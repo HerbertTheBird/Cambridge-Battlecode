@@ -23,7 +23,7 @@ def random_spawn_tile() -> Position | None:
 def run():
     comms.communicate(rc)
     global num_spawned
-    if num_spawned < 1 or rc.get_global_resources()[0] > 1000 + 50*rc.get_scale_percent():
+    if num_spawned < 3 or rc.get_global_resources()[0] > 1000 + 50*rc.get_scale_percent():
             spawn_pos = random_spawn_tile()
             if spawn_pos is not None:
                 rc.spawn_builder(spawn_pos)

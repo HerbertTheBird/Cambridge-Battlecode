@@ -63,7 +63,7 @@ def communicate(rc: Controller):
     frame = video_frames[current_frame_index]
 
     center_x = rc.get_map_width() / 2
-    center_y = 20
+    center_y = -25
 
     offset_x = int(center_x - video_width / 2)
     offset_y = int(center_y - video_height / 2)
