@@ -37,9 +37,9 @@ def init(c : Controller):
 def run():
     global mode
     run_pre() # preliminary calculations
-    print(f"CHECKING STATE: {mode.desc}")
+    print(f"CHECKING STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
     globals()[f"check_{mode.name.lower()}"]()
-    print(f"NEW STATE: {mode.desc}")
+    print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
     globals()[f"run_{mode.name.lower()}"]()
     run_post() # cleanup
 
@@ -54,6 +54,7 @@ def run_post():
 
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
+    print(" | Forcing new explore")
     turns_since_last_explore_target = 0
     random_x = random.randint(0, map_info.width - 1)
     random_y = random.randint(0, map_info.height - 1)
