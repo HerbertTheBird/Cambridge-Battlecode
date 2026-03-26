@@ -8,7 +8,7 @@ from array import array
 import time
 weight = 1.5
 MAX_ITER = 500
-TIME_CUTOFF = 1600
+TIME_CUTOFF = 1200
 # 4-direction movement
 
 #todo
