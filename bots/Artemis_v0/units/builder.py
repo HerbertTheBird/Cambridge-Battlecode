@@ -302,7 +302,7 @@ def check_route():
         launcher_idx = 0
         if ore_path:
             launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
-    if route_idx >= len(ore_path)-1 and launcher_idx >= len(launcher_positions):
+    if ore_path and route_idx >= len(ore_path)-1 and launcher_idx >= len(launcher_positions):
         mode = Mode.EXPLORE
         ore_path = None
         launcher_positions = None
