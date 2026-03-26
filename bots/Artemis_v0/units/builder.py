@@ -308,8 +308,15 @@ def check_route():
         launcher_positions = None
 
 def run_route():
-    global route_idx, launcher_idx
+    global route_idx, launcher_idx, ore_path, launcher_positions
     if ore_path:
+        if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(False, False, False)):
+            new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
+            if new_path:
+                ore_path = new_path
+                launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
+                launcher_idx = 0
+                route_idx = 0
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
             rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
@@ -331,7 +338,7 @@ def run_route():
                     pathing.move_to(launcher)
                     if rc.get_position() == launcher and rc.can_fire(launcher):
                         rc.fire(launcher)
-                else:
+                elif nearby_conv:
                     pathing.move_to(nearby_conv)
                     if rc.can_destroy(launcher):
                         rc.destroy(launcher)

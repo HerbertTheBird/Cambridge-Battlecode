@@ -278,19 +278,22 @@ def execute_path(sample_path=None, path_idx=0):
         return True
     return False
 
-def calculate_conveyor_path(ore: Position):
+def calculate_conveyor_path(ore: Position, update:bool = False):
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
+    for p, b in map_info.building.items():
+        if b and map_info.is_conveyor(b) and b.load and b.load < 4:
+            target.add(p)
     avoid = map_info.get_avoid(True, False, False)
     for dir in CARD_DIR:
         pos = ore.add(dir)
         if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.BARRIER:
             avoid.discard(pos)
     if len(heap) == 0:
-        init_a_star(ore, target, CONV, True)
+        init_a_star(ore, target, CONV, not update)
     next_path = a_star(ore, avoid)
     if next_path is not None and moves_through_impassible(next_path, avoid):
-        init_a_star(ore, target, CONV, True)
+        init_a_star(ore, target, CONV, not update)
         next_path = a_star(ore, avoid)
     if next_path is not None:
         path = next_path
