@@ -171,7 +171,7 @@ def a_star(avoid_p: set[Position] = None) -> list[Position] | None:
             card = dx == 0 or dy == 0
             heappush(
                 hp,
-                (ng + h(n)*new_h, -ng, card, n if ng%2 == 0 else -n)
+                (ng + h(n)*new_h, -ng, card, n if ng%4 <= 1 else -n)
             )
     return []
 def moves_through_impassible(path: list[Position], avoid: set[Position] = None) -> bool:
