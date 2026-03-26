@@ -234,3 +234,63 @@ def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barriers_ore: b
                 continue
             avoid.add(pos)
     return avoid
+def best_sentinel_dir(pos: Position):
+    valid = set()
+    for dir in CARDINALS:
+        new_pos = pos.add(dir)
+        if new_pos in building and building[new_pos] and building[new_pos].team != rc.get_team() and building[new_pos].type == EntityType.HARVESTER:
+            valid.add(dir)
+            valid.add(dir.rotate_left())
+            valid.add(dir.rotate_right())
+    valid = list(valid)
+    best_dir = valid[0]
+    mx_harvesters = 0
+    mx_base = 0
+    mx_conveyors = 0
+    mx_other = 0
+    for dir in valid:
+        see = set()
+        pew = pos
+        for i in range(1, 6):
+            pew = pew.add(dir)
+            see.update(pew.add(d) for d in Direction)
+        harvesters = 0
+        base = 0
+        conveyors = 0
+        other = 0
+        for s in see:
+            if not (s in building and building[s] and building[s].team != rc.get_team()):
+                continue
+            type = building[s].type
+            if type == EntityType.HARVESTER:
+                harvesters += 1
+            elif type == EntityType.CORE:
+                base = 1
+            elif is_conveyor(type):
+                conveyors += 1
+            else:
+                other += 1
+        win = None
+        if win is None and harvesters > mx_harvesters:
+            win = True
+        if win is None and harvesters < mx_harvesters:
+            win = False
+        if win is None and base > mx_base:
+            win = True
+        if win is None and base < mx_base:
+            win = False
+        if win is None and conveyors > mx_conveyors:
+            win = True
+        if win is None and conveyors < mx_conveyors:
+            win = False
+        if win is None and other > mx_other:
+            win = True
+        if win:
+            mx_harvesters = harvesters
+            mx_base = base
+            mx_conveyors = conveyors
+            mx_other = other
+            best_dir = dir
+    return best_dir
+        
+        
