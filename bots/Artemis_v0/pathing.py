@@ -320,7 +320,12 @@ def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Po
         j = i
 
         while j < len(path)-1:
-            here = {path[j].add(dir) for dir in Direction}
+            here = {
+                path[j].add(dir)
+                for dir in Direction
+                if 0 <= path[j].add(dir).x < map_info.width
+                and 0 <= path[j].add(dir).y < map_info.height
+            }
             here -= avoid
 
             if possible is None:
