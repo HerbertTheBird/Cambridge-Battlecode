@@ -38,6 +38,16 @@ ver_sym = True
 rot_sym = True
 solved_sym = False
 
+ground_blocked_all: set[Position] = set()
+ground_blocked_no_ore: set[Position] = set()
+
+building_blocked_all: set[Position] = set()
+building_blocked_no_barrier: set[Position] = set()
+building_blocked_no_conveyors: set[Position] = set()
+building_blocked_no_barrier_no_conveyors: set[Position] = set()
+
+my_core_area: set[Position] = set()
+their_core_area: set[Position] = set()
 
 @dataclass
 class Building:
@@ -61,6 +71,10 @@ def in_bounds(pos: Position) -> bool:
 def init(c: Controller):
     global rc, width, height
     global ground, ground_seen, building, stuck_turns, past_filled, last_seen
+    global ground_blocked_all, ground_blocked_no_ore
+    global building_blocked_all, building_blocked_no_barrier
+    global building_blocked_no_conveyors, building_blocked_no_barrier_no_conveyors
+    global my_core_area, their_core_area
 
     rc = c
     width = rc.get_map_width()
@@ -73,7 +87,16 @@ def init(c: Controller):
     past_filled = [[0 for _ in range(height)] for _ in range(width)]
     last_seen = [[-2 for _ in range(height)] for _ in range(width)]
 
+    ground_blocked_all = set()
+    ground_blocked_no_ore = set()
 
+    building_blocked_all = set()
+    building_blocked_no_barrier = set()
+    building_blocked_no_conveyors = set()
+    building_blocked_no_barrier_no_conveyors = set()
+
+    my_core_area = set()
+    their_core_area = set()
 def hor_flip(pos: Position):
     return Position(width - 1 - pos.x, pos.y)
 
@@ -144,7 +167,73 @@ def is_conveyor(type: EntityType):
 def is_turret(type: EntityType):
     return type == EntityType.GUNNER or type == EntityType.SENTINEL or type == EntityType.BREACH
 
+def _rebuild_core_areas() -> None:
+    global my_core_area, their_core_area
 
+    my_core_area = set()
+    their_core_area = set()
+
+    if my_core is not None:
+        for x in range(my_core.x - 1, my_core.x + 2):
+            for y in range(my_core.y - 1, my_core.y + 2):
+                if 0 <= x < width and 0 <= y < height:
+                    my_core_area.add(Position(x, y))
+
+    if their_core is not None:
+        for x in range(their_core.x - 1, their_core.x + 2):
+            for y in range(their_core.y - 1, their_core.y + 2):
+                if 0 <= x < width and 0 <= y < height:
+                    their_core_area.add(Position(x, y))
+
+
+def _update_ground_blocked_at(x: int, y: int) -> None:
+    pos = Position(x, y)
+    env = ground[x][y]
+
+    ground_blocked_all.discard(pos)
+    ground_blocked_no_ore.discard(pos)
+
+    if env is None:
+        return
+    if env == Environment.EMPTY or env == Environment.ORE_AXIONITE:
+        return
+
+    ground_blocked_all.add(pos)
+    if env != Environment.ORE_TITANIUM:
+        ground_blocked_no_ore.add(pos)
+
+
+def _update_building_blocked_at(x: int, y: int) -> None:
+    pos = Position(x, y)
+    b = building[x][y]
+
+    building_blocked_all.discard(pos)
+    building_blocked_no_barrier.discard(pos)
+    building_blocked_no_conveyors.discard(pos)
+    building_blocked_no_barrier_no_conveyors.discard(pos)
+
+    if b is None:
+        return
+
+    t = b.type
+    if t == EntityType.ROAD or t == EntityType.MARKER:
+        return
+
+    is_barrier = t == EntityType.BARRIER
+    is_conv = (
+        t == EntityType.CONVEYOR
+        or t == EntityType.ARMOURED_CONVEYOR
+        or t == EntityType.BRIDGE
+        or t == EntityType.SPLITTER
+    )
+
+    building_blocked_all.add(pos)
+    if not is_barrier:
+        building_blocked_no_barrier.add(pos)
+    if not is_conv:
+        building_blocked_no_conveyors.add(pos)
+    if not is_barrier and not is_conv:
+        building_blocked_no_barrier_no_conveyors.add(pos)
 def update() -> None:
     print("start update", rc.get_cpu_time_elapsed())
     start_time = time.perf_counter()
@@ -175,6 +264,7 @@ def update() -> None:
             env = rc.get_tile_env(tile)
             ground_local[x][y] = env
             ground_seen_local[x][y] = True
+            _update_ground_blocked_at(x, y)
 
             if solved_sym_local:
                 flipped = flip(tile)
@@ -182,12 +272,15 @@ def update() -> None:
                 fy = flipped.y
                 ground_local[fx][fy] = env
                 ground_seen_local[fx][fy] = True
+                _update_ground_blocked_at(fx, fy)
 
             update_symmetry(tile)
 
         entity_id = rc.get_tile_building_id(tile)
         if entity_id is None:
-            building_local[x][y] = None
+            if building_local[x][y] is not None:
+                building_local[x][y] = None
+                _update_building_blocked_at(x, y)
             last_seen_local[x][y] = current_round
             continue
 
@@ -257,6 +350,7 @@ def update() -> None:
             load=load,
         )
         building_local[x][y] = new_building
+        _update_building_blocked_at(x, y)
 
         if load is not None:
             rc.draw_indicator_dot(tile, 0, 0, 50 * load)
@@ -265,10 +359,11 @@ def update() -> None:
             if team == my_team:
                 my_core = core_center(entity_id, tile)
                 core_id = entity_id
+                _rebuild_core_areas()
             else:
                 their_core = core_center(entity_id, tile)
-
-        last_seen_local[x][y] = current_round
+                _rebuild_core_areas()
+                last_seen_local[x][y] = current_round
 
     possible_syms = int(hor_sym) + int(ver_sym) + int(rot_sym)
 
@@ -294,6 +389,7 @@ def update() -> None:
                     if not ground_seen_local[fx][fy]:
                         ground_local[fx][fy] = ground_local[x][y]
                         ground_seen_local[fx][fy] = True
+                        _update_ground_blocked_at(fx, fy)
 
     end_time = time.perf_counter()
     print("end update", rc.get_cpu_time_elapsed(), (end_time - start_time) * 1000000)
@@ -301,57 +397,44 @@ def is_tile_empty(pos: Position):
     return in_bounds(pos) and (rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) == EntityType.MARKER))
 
 
-def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barrier: bool = True, avoid_ore: bool = True) -> set[Position]:
-    avoid = set()
+def get_avoid(
+    avoid_conveyors: bool,
+    avoid_builders: bool,
+    avoid_barrier: bool = True,
+    avoid_ore: bool = True,
+) -> set[Position]:
+    avoid_core = rc.get_tile_building_id(rc.get_position()) != core_id
+
+    if avoid_ore:
+        avoid = ground_blocked_all.copy()
+    else:
+        avoid = ground_blocked_no_ore.copy()
+
+    if avoid_conveyors:
+        if avoid_barrier:
+            avoid.update(building_blocked_all)
+        else:
+            avoid.update(building_blocked_no_barrier)
+    else:
+        if avoid_barrier:
+            avoid.update(building_blocked_no_conveyors)
+        else:
+            avoid.update(building_blocked_no_barrier_no_conveyors)
+
+    if avoid_core:
+        avoid.update(my_core_area)
+
+    avoid.update(their_core_area)
+
+    if not avoid_core and my_core is not None:
+        avoid.difference_update(my_core_area)
+
     if avoid_builders:
         for unit in rc.get_nearby_units():
             if rc.get_entity_type(unit) == EntityType.BUILDER_BOT:
                 avoid.add(rc.get_position(unit))
 
-    avoid_core = rc.get_tile_building_id(rc.get_position()) != core_id
-    if my_core is not None and avoid_core:
-        for x in range(my_core.x - 1, my_core.x + 2):
-            for y in range(my_core.y - 1, my_core.y + 2):
-                avoid.add(Position(x, y))
-
-    if their_core is not None:
-        for x in range(their_core.x - 1, their_core.x + 2):
-            for y in range(their_core.y - 1, their_core.y + 2):
-                avoid.add(Position(x, y))
-
-    for x in range(width):
-        for y in range(height):
-            if ground_seen[x][y]:
-                env = ground[x][y]
-                if env != Environment.EMPTY and env != Environment.ORE_AXIONITE:
-                    if not avoid_ore and env == Environment.ORE_TITANIUM:
-                        continue
-                    avoid.add(Position(x, y))
-
-    for x in range(width):
-        for y in range(height):
-            b = building[x][y]
-            if b is not None:
-                type = b.type
-                if type == EntityType.CORE and not avoid_core:
-                    continue
-                if type == EntityType.ROAD:
-                    continue
-                if type == EntityType.MARKER:
-                    continue
-                if type == EntityType.BARRIER and not avoid_barrier:
-                    continue
-                if not avoid_conveyors and (
-                    type == EntityType.CONVEYOR
-                    or type == EntityType.ARMOURED_CONVEYOR
-                    or type == EntityType.BRIDGE
-                    or type == EntityType.SPLITTER
-                ):
-                    continue
-                avoid.add(Position(x, y))
-
     return avoid
-
 
 def best_sentinel_dir(pos: Position):
     valid = set()
