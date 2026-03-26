@@ -223,3 +223,37 @@ def move_to(target: Position):
     if move(dir):
         path_idx += 1
     return True
+def calculate_path(start: Position, target: Position):
+    global path, path_idx
+    avoid = map_info.get_avoid(False, True)
+    if len(heap) == 0:
+        init_a_star(rc.get_position(), target)
+    next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None and moves_through_impassible(next_path, avoid):
+        init_a_star(rc.get_position(), target)
+        next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None:
+        path = next_path
+        path_idx = 0
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 50, 0)
+    elif path is not None and len(path) > 1:
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
+    if path is None or len(path) < path_idx+2:
+        return None
+def calculate_path(target: Position):
+    return calculate_path(rc.get_position(), target)
+def execute_path():
+    if path is None or path_idx > len(path)-2:
+        return False
+    dir = path[path_idx].direction_to(path[path_idx+1])
+    if move(dir):
+        path_idx += 1
+        return True
+    return False
+def execute_path(path, path_idx):
+    if path is None or path_idx > len(path)-2:
+        return False
+    dir = path[path_idx].direction_to(path[path_idx+1])
+    return move(dir)
