@@ -218,7 +218,7 @@ def run_build_harvester():
         is_barrier = False
         if building_id is not None:
             try:
-                if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYER, EntityType.BRIDGE] and rc.get_team(building_id) == rc.get_team():
+                if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE] and rc.get_team(building_id) == rc.get_team():
                     is_barrier = True
             except GameError: pass
         
@@ -239,7 +239,7 @@ def run_build_harvester():
                 is_our_barrier = False
                 if building_id:
                     try:
-                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYER, EntityType.BRIDGE]:
+                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE]:
                             is_our_barrier = True
                     except GameError: pass
 
