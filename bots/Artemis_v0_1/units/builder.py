@@ -333,13 +333,13 @@ def run_build_harvester():
 
     if opponent_sabotaged:
         if target_ore.distance_squared(rc.get_position()) < rc.get_vision_radius_sq():
-            if rc.get_tile_building_id(target_ore) and rc.get_tile_building_id(target_ore) != EntityType.BARRIER and rc.can_destroy(target_ore):
+            if rc.get_tile_building_id(target_ore) and rc.get_tile_building_id(target_ore) != EntityType.BARRIER and rc.can_destroy(target_ore) and rc.get_entity_type(building_id) != EntityType.SENTINEL:
                 rc.destroy(target_ore)
             if rc.can_build_barrier(target_ore):
                 global blocked_ores
                 rc.build_barrier(target_ore)
+                blocked_ores[target_ore] = rc.get_current_round() + 150
                 target_ore = None
-                blocked_ores[target_ore] = rc.get_current_round() + 2000
                 mode = Mode.EXPLORE
             return
 
@@ -554,9 +554,9 @@ def check_sabotage():
             print(f" | Turret detected, marking {opponent_ore}")
             # Successfully sabotaged → leave
             mode = Mode.EXPLORE
-            opponent_ore = None
             defended_ores.add(opponent_ore)
             blocked_ores[opponent_ore] = rc.get_current_round() + 100
+            opponent_ore = None
             return
 
 def run_sabotage():
@@ -625,9 +625,9 @@ def run_sabotage():
         if dist_sq <= 2:
             direction = map_info.best_sentinel_dir(empty_tile)
             if direction:
-                if rc.get_tile_building_id(pos) and rc.get_entity_type(rc.get_tile_building_id(pos)) != EntityType.SENTINEL:
-                    if rc.can_destroy(pos):
-                        rc.destroy(pos)
+                if rc.get_tile_building_id(empty_tile) and rc.get_entity_type(rc.get_tile_building_id(empty_tile)) != EntityType.SENTINEL:
+                    if rc.can_destroy(empty_tile):
+                        rc.destroy(empty_tile)
                 if rc.can_build_sentinel(empty_tile, direction):
                     rc.build_sentinel(empty_tile, direction)
 
