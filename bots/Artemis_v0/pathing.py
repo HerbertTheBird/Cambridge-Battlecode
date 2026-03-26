@@ -8,7 +8,7 @@ from array import array
 import time
 import math
 weight = 1.5
-MAX_ITER = 200
+MAX_ITER = None
 TIME_CUTOFF = 1200
 # 4-direction movement
 
@@ -83,7 +83,7 @@ path_idx = 0
 
 
 def init(c: Controller):
-    global width, height, rc, seen, parent, best_g, target, avoid
+    global width, height, rc, seen, parent, best_g, target, avoid, MAX_ITER
     width = c.get_map_width()
     height = c.get_map_height()
     rc = c
@@ -92,10 +92,14 @@ def init(c: Controller):
     target = array('I', [0])*(width*height)
     avoid = array('I', [0])*(width*height)
     best_g = array('I', [0])*(width*height)
+    MAX_ITER = int(math.sqrt(width*height))*4
 def move(dir: Direction):
-    map_info.update()
     new_pos = rc.get_position().add(dir)
-    if new_pos in map_info.building and map_info.building[new_pos.x][new_pos.y] and map_info.building[new_pos.x][new_pos.y].type == EntityType.BARRIER and rc.can_destroy(new_pos):
+    if not map_info.in_bounds(new_pos):
+        return False
+    id = rc.get_tile_building_id(new_pos)
+    
+    if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos):
         rc.destroy(new_pos)
     if rc.can_build_road(new_pos):
         rc.build_road(new_pos)
