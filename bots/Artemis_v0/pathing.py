@@ -2,6 +2,7 @@ import heapq
 import time
 import map_info
 from cambc import Controller, Direction, Position, EntityType
+import comms
 import sys
 from array import array
 import time
@@ -220,6 +221,25 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
     return False
 
 def move_to(target: Position, destroy_barriers: bool = False):
+    marked = False
+    for dir in Direction:
+        pos = rc.get_position().add(dir)
+        if not map_info.in_bounds(pos):
+            continue
+        id = rc.get_tile_building_id(pos)
+        if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team():
+            for dir2 in Direction:
+                id2 = rc.get_tile_building_id(pos.add(dir2))
+                if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(id2) == EntityType.ROAD and rc.can_destroy(pos.add(dir2)):
+                    rc.destroy(pos.add(dir2))
+                if rc.can_place_marker(pos.add(dir2)):
+                    rc.place_marker(pos.add(dir2), comms.encode_launch(target))
+                    marked = True
+                    break
+        if marked:
+            break
+    if marked:
+        return
     global path, path_idx
     avoid = map_info.get_avoid(False, True, not destroy_barriers)
     if len(heap) == 0:

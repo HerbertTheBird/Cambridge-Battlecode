@@ -45,7 +45,7 @@ def run():
         return
     if rc.get_ammo_amount() < 5:
         return
-    vision_r = math.sqrt(rc.get_vision_radius_sq())
+    vision_r = int(math.sqrt(rc.get_vision_radius_sq()))
     pos = rc.get_position()
     best = None
     best_priority = float('inf')

@@ -6,6 +6,7 @@ import sys
 
 import map_info
 import pathing
+import comms
 
 class Mode(Enum):
     EXPLORE_ATHENA = (100, 255, 100, "preliminary explore (athena)")
@@ -39,6 +40,7 @@ def init(c : Controller):
     global rc
     rc = c
     map_info.init(c)
+    comms.init(c)
     pathing.init(c)
     pass
 
@@ -117,25 +119,25 @@ def run_pre():
         rc.draw_indicator_dot(target_ore, 255, 255, 0)
 
 def run_post():
-    # pick a random empty tile surrounding the builder and place a marker
-    surrounding_tiles = []
-    for d in list(Direction):
-        if d == Direction.CENTRE:
-            continue
+    # # pick a random empty tile surrounding the builder and place a marker
+    # surrounding_tiles = []
+    # for d in list(Direction):
+    #     if d == Direction.CENTRE:
+    #         continue
         
-        pos = rc.get_position().add(d)
-        try:
-            if rc.can_place_marker(pos):
-                surrounding_tiles.append(pos)
-        except GameError:
-            # position is off map
-            pass
+    #     pos = rc.get_position().add(d)
+    #     try:
+    #         if rc.can_place_marker(pos):
+    #             surrounding_tiles.append(pos)
+    #     except GameError:
+    #         # position is off map
+    #         pass
 
-    if surrounding_tiles:
-        target_pos = random.choice(surrounding_tiles)
-        value = generate_encoded_int(rc.get_id())
-        rc.place_marker(target_pos, value)
-
+    # if surrounding_tiles:
+    #     target_pos = random.choice(surrounding_tiles)
+    #     value = generate_encoded_int(rc.get_id())
+    #     rc.place_marker(target_pos, value)
+    pass
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
     print(" | Forcing new explore")

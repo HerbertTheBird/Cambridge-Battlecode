@@ -21,7 +21,6 @@ def random_spawn_tile() -> Position | None:
 
     return None
 def run():
-    # comms.communicate(rc)
     global num_spawned
     if num_spawned < 3 or rc.get_global_resources()[0] > 1000 + 50*rc.get_scale_percent():
             spawn_pos = random_spawn_tile()
@@ -30,6 +29,5 @@ def run():
                 num_spawned += 1
 def init(c: Controller):
     global rc, num_spawned
-    comms.init()
     rc = c
     num_spawned = 0
