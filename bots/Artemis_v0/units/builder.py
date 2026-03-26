@@ -86,16 +86,19 @@ def run_pre():
             building_id = rc.get_tile_building_id(pos)
             
             has_allied_harvester = False
+            occupied_opponent = False
             if building_id is not None:
                 try:
                     building_type = rc.get_entity_type(building_id)
                     building_team = rc.get_team(building_id)
                     if building_type == EntityType.HARVESTER and building_team == rc.get_team():
                         has_allied_harvester = True
+                    if building_type != EntityType.MARKER and building_team != rc.get_team():
+                        occupied_opponent = True
                 except GameError:
                     pass
 
-            if not has_allied_harvester:
+            if not has_allied_harvester or occupied_opponent:
                 dist_sq = pos.distance_squared(map_info.my_core)
                 if dist_sq < min_dist_sq:
                     min_dist_sq = dist_sq
@@ -158,6 +161,16 @@ def check_explore():
         force_generate_explore_target()
 
 def check_build_harvester():
+    global mode, target_ore
+    
+    if not target_ore:
+        mode = Mode.EXPLORE
+    if (target_ore.distance_squared(rc.get_position())) <= rc.get_vision_radius_sq():
+        building_id = rc.get_tile_building_id(target_ore)
+        if building_id and (rc.get_entity_type(building_id) == EntityType.HARVESTER or rc.get_team(building_id) != rc.get_team()):
+            target_ore = None
+            mode = Mode.EXPLORE
+            return
     if pathing.calculate_path(target_ore):
         print(" | Path to mine found")
     else:
@@ -276,7 +289,7 @@ def run_build_harvester():
         # If adjacent to the ore, clear it and build.
         if rc.get_position().distance_squared(target_ore) <= 2:
             building_id = rc.get_tile_building_id(target_ore)
-            if building_id and rc.get_team(building_id) == rc.get_team():
+            if building_id and rc.get_team(building_id) == rc.get_team() and rc.get_entity_type(building_id) != EntityType.HARVESTER:
                 if rc.can_destroy(target_ore):
                     rc.destroy(target_ore)
             
