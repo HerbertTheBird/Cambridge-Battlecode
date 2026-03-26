@@ -17,30 +17,26 @@ class Player:
     def __init__(self):
         self.initialized = False
     def run(self, c: Controller) -> None:
-        try:
-            start_time = time.perf_counter()
-            etype = c.get_entity_type()
-            if not self.initialized:
-                random.seed(c.get_current_round())
-                if etype == EntityType.CORE:
-                    self.me = core
-                elif etype == EntityType.BUILDER_BOT:
-                    self.me = builder
-                elif etype == EntityType.GUNNER:
-                    self.me = gunner
-                elif etype == EntityType.SENTINEL:
-                    self.me = sentinel
-                elif etype == EntityType.BREACH:
-                    self.me = breach
-                elif etype == EntityType.LAUNCHER:
-                    self.me = launcher
-                self.me.init(c)
-                self.initialized = True
-            self.me.run()
-            end_time = time.perf_counter()
-            print(int((end_time-start_time)*1_000_000),"μs")
-            if end_time-start_time > 0.002:
-                print("timed out", c.get_id(), c.get_current_round(), int((end_time-start_time)*1_000_000),"μs", file=sys.stderr)
-        except Exception:
-            traceback.print_exc()
-            raise
+        start_time = time.perf_counter()
+        etype = c.get_entity_type()
+        if not self.initialized:
+            random.seed(c.get_current_round())
+            if etype == EntityType.CORE:
+                self.me = core
+            elif etype == EntityType.BUILDER_BOT:
+                self.me = builder
+            elif etype == EntityType.GUNNER:
+                self.me = gunner
+            elif etype == EntityType.SENTINEL:
+                self.me = sentinel
+            elif etype == EntityType.BREACH:
+                self.me = breach
+            elif etype == EntityType.LAUNCHER:
+                self.me = launcher
+            self.me.init(c)
+            self.initialized = True
+        self.me.run()
+        end_time = time.perf_counter()
+        print(int((end_time-start_time)*1_000_000),"μs")
+        if end_time-start_time > 0.002:
+            print("timed out", c.get_id(), c.get_current_round(), int((end_time-start_time)*1_000_000),"μs", file=sys.stderr)

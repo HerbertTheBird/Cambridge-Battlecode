@@ -330,7 +330,7 @@ def execute_path(sample_path=None, path_idx=0):
 
 def calculate_conveyor_path(ore: Position, update:bool = False):
     print("start calculate_conveyor_path", rc.get_cpu_time_elapsed())
-
+    start_time = time.perf_counter()
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
     for x in range(map_info.width):
@@ -359,7 +359,8 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if len(path) == 0:
         heap.clear()
-    print("end calculate_conveyor_path", rc.get_cpu_time_elapsed())
+    end_time = time.perf_counter()
+    print("end calculate_conveyor_path", rc.get_cpu_time_elapsed(), (end_time-start_time)*1000000)
 
     if path is None or len(path) < path_idx+2:
         return None
@@ -367,7 +368,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
 
 def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Position]:
     print("start calculate_launcher_positions", rc.get_cpu_time_elapsed())
-
+    start_time = time.perf_counter()
     avoid = map_info.get_avoid(True, False)
     avoid.update(path)
 
@@ -431,6 +432,6 @@ def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Po
 
         current_pos = best
         i = j
-
-    print("end calculate_launcher_positions", rc.get_cpu_time_elapsed())
+    end_time = time.perf_counter()
+    print("end calculate_launcher_positions", rc.get_cpu_time_elapsed(), (end_time-start_time)*1000000)
     return result
