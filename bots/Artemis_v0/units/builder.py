@@ -429,13 +429,14 @@ def check_route():
 
 def run_route():
     global route_idx, launcher_idx, ore_path, launcher_positions
+    print("route idx", route_idx, "launcher idx", launcher_idx)
     if ore_path:
+        launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
+        launcher_idx = 0
         if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(False, False, False, True)):
             new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
                 ore_path = new_path
-                launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
-                launcher_idx = 0
                 route_idx = 0
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
@@ -483,10 +484,16 @@ def run_route():
                     route_idx += 1
                 elif not bridge and rc.can_build_conveyor(to_build, dir):
                     rc.build_conveyor(to_build, dir)
+                    print("success", to_build, dir)
+                    if to_build:
+                        print("here1", rc.get_tile_building_id(to_build))
                     route_idx += 1
             next = ore_path[route_idx]
             pathing.move_to(next)
-
+            if to_build:
+                print("here2", rc.get_tile_building_id(to_build))
+    if to_build:
+        print("here3", rc.get_tile_building_id(to_build))
 def check_sabotage():
     global mode, opponent_ore
 
