@@ -327,6 +327,12 @@ def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Po
                 if 0 <= path[j].add(dir).x < map_info.width
                 and 0 <= path[j].add(dir).y < map_info.height
             }
+            done = False
+            for pos in here:
+                if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.LAUNCHER:
+                    done = True
+            if done:
+                continue
             here -= avoid
 
             if possible is None:
