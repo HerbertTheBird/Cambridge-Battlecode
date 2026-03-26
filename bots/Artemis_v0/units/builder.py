@@ -287,10 +287,8 @@ def run_build_harvester():
             
             if rc.get_tile_building_id(target_ore) is None and rc.can_build_harvester(target_ore):
                 rc.build_harvester(target_ore)
-                global routed_ore, ore_path, launcher_positions
+                global routed_ore
                 routed_ore = target_ore
-                ore_path = None
-                launcher_positions = None
                 target_ore = None
                 mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
                 return
@@ -301,6 +299,10 @@ def check_route():
         route_idx = 0
         if ore_path:
             launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
+    if route_idx == len(ore_path)-1:
+        mode = Mode.EXPLORE
+        ore_path = None
+        launcher_positions = None
 
 def run_route():
     global route_idx

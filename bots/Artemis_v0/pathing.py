@@ -130,7 +130,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
     avoid_changed = False
     max_length = None
     for a in avoid_p:
-        if hash(a.x, a.y) == start or target[hash(a.x, a.y)] == run_id:
+        if (hash(a.x, a.y) == start and not adjacent) or target[hash(a.x, a.y)] == run_id:
             continue
         if avoid[hash(a.x, a.y)] != avoid_id - 1:
             avoid_changed = True
