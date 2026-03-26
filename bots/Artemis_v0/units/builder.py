@@ -74,7 +74,8 @@ def generate_encoded_int(builder_id: int) -> int:
 def run_pre():
     global target_ore
     map_info.update()
-
+    if rc.get_hp() < rc.get_max_hp() and rc.can_heal(rc.get_position()):
+        rc.heal(rc.get_position())
     if map_info.my_core is None:
         return
 
