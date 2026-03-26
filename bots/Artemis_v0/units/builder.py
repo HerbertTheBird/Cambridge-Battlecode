@@ -287,6 +287,13 @@ def run_build_harvester():
                 target_ore = None
                 mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
                 return
+        else:
+            print(" | Moving to harvester loc")
+            if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
+                if not rc.is_tile_passable(target_ore) and rc.get_entity_type(rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
+                    rc.destroy(target_ore)
+            pathing.execute_path()
+
 def check_route():
     global ore_path, launcher_positions, route_idx, mode, launcher_idx
     if not ore_path:
