@@ -488,7 +488,7 @@ def run_route():
             next = ore_path[route_idx]
             pathing.move_to(next)
 def check_sabotage():
-    global mode, opponent_ore
+    global mode, opponent_ore, defended_ores
 
     # safety
     if opponent_ore is None:
@@ -546,7 +546,7 @@ def check_sabotage():
             continue
 
 def run_sabotage():
-    global opponent_ore, mode
+    global opponent_ore, mode, defended_ores
     
     adjacent_tiles = []
     for d in cardinal_dirs:
@@ -607,7 +607,3 @@ def run_sabotage():
                 rc.fire(rc.get_position())
 
         return
-
-    # should never come here?
-    print(" | FATAL, potential infinite loop")
-    mode = Mode.EXPLORE
