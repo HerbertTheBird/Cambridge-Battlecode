@@ -245,6 +245,7 @@ def best_sentinel_dir(pos: Position):
     mx_base = 0
     mx_conveyors = 0
     mx_other = 0
+    best_dir = None
     for dir in valid:
         see = set()
         pew = pos
