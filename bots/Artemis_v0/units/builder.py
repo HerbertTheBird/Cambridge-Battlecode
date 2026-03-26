@@ -453,6 +453,8 @@ def check_route():
 def run_route():
     global route_idx, launcher_idx, ore_path, launcher_positions
     print("route idx", route_idx, "launcher idx", launcher_idx)
+    if ore_path and launcher_positions:
+        print("hi", len(ore_path), len(launcher_positions))
     if ore_path:
         launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
         launcher_idx = 0
@@ -490,6 +492,7 @@ def run_route():
                         rc.build_launcher(launcher)
                         launcher_idx += 1
                 return
+
         if route_idx < len(ore_path)-1:
             to_build = ore_path[route_idx]
             bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
