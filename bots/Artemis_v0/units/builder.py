@@ -44,6 +44,22 @@ def run():
     globals()[f"run_{mode.name.lower()}"]()
     run_post() # cleanup
 
+def generate_encoded_int(builder_id: int) -> int:
+    if not (0 <= builder_id <= 31):
+        builder_id %= 32
+    
+    # Step 1: rightmost 3 bits
+    right_bits = random.randint(0, 6)  # 3 bits
+    
+    # Step 2: next 5 bits for builder_id
+    builder_bits = builder_id & 0b11111  # ensure 5 bits
+    
+    # Step 3: next 9 bits random number
+    random_bits = random.randint(0, 511)  # 9 bits
+    
+    # Combine everything
+    encoded = (random_bits << (5 + 3)) | (builder_bits << 3) | right_bits
+    return encoded
 
 # invariant calculations
 def run_pre():
@@ -91,7 +107,24 @@ def run_pre():
         rc.draw_indicator_dot(target_ore, 255, 255, 0)
 
 def run_post():
-    pass
+    # pick a random empty tile surrounding the builder and place a marker
+    surrounding_tiles = []
+    for d in list(Direction):
+        if d == Direction.CENTRE:
+            continue
+        
+        pos = rc.get_position().add(d)
+        try:
+            if rc.can_place_marker(pos):
+                surrounding_tiles.append(pos)
+        except GameError:
+            # position is off map
+            pass
+
+    if surrounding_tiles:
+        target_pos = random.choice(surrounding_tiles)
+        value = generate_encoded_int(rc.get_id())
+        rc.place_marker(target_pos, value)
 
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
@@ -233,7 +266,7 @@ def run_build_harvester():
             # nowhere to move
             if not moved:
                 for d in random.sample(list(Direction), len(list(Direction))):
-                    if rc.is_tile_passable(rc.get_position().add(d)):
+                    if rc.is_tile_empty(rc.get_position().add(d)):
                         pathing.move(d)
                         moved = True
                     
