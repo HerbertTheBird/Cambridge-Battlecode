@@ -140,6 +140,7 @@ def a_star(avoid_p: set[Position] = None) -> list[Position] | None:
         if iter > MAX_ITER:
             break
         f, g, card, pos = heappop(hp)
+        pos = abs_local(pos)
         if avoid[pos] == avoid_id:
             continue
         rc.draw_indicator_dot(Position(pos%width, pos//width), 255, 0, 0)
@@ -170,7 +171,7 @@ def a_star(avoid_p: set[Position] = None) -> list[Position] | None:
             card = dx == 0 or dy == 0
             heappush(
                 hp,
-                (ng + h(n)*new_h, -ng, card, n)
+                (ng + h(n)*new_h, -ng, card, n if ng%2 == 0 else -n)
             )
     return []
 def moves_through_impassible(path: list[Position], avoid: set[Position] = None) -> bool:
@@ -189,6 +190,7 @@ def move_to(target: Position):
         init_a_star(rc.get_position(), target)
         path = a_star(avoid)
     if path is None or len(path) < 2:
-        return
+        return False
     dir = path[0].direction_to(path[1])
     move(dir)
+    return True
