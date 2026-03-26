@@ -53,5 +53,7 @@ def run():
             if rc.can_fire(Position(x, y)):
                 if not best or priority(Position(x, y)) < priority(best):
                     best = Position(x, y)
+    if priority(best) == 9:
+        return
     if best is not None:
         rc.fire(best)
