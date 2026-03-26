@@ -6,6 +6,7 @@ import comms
 import sys
 from array import array
 import time
+import math
 weight = 1.5
 MAX_ITER = 500
 TIME_CUTOFF = 1200
@@ -228,14 +229,30 @@ def move_to(target: Position, destroy_barriers: bool = False):
             continue
         id = rc.get_tile_building_id(pos)
         if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team():
-            for dir2 in Direction:
-                id2 = rc.get_tile_building_id(pos.add(dir2))
-                if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(id2) == EntityType.ROAD and rc.can_destroy(pos.add(dir2)):
-                    rc.destroy(pos.add(dir2))
-                if rc.can_place_marker(pos.add(dir2)):
-                    rc.place_marker(pos.add(dir2), comms.encode_launch(target))
-                    marked = True
-                    break
+            r = int(math.sqrt(rc.get_vision_radius_sq()))
+            best = None
+            best_dist = 0
+            for x in range(pos.x-r, pos.x+r+1):
+                for y in range(pos.y-r, pos.y+r+1):
+                    p = Position(x, y)
+                    if rc.is_in_vision(p) and rc.is_tile_passable(p):
+                        init_a_star(p, target)
+                        pt = a_star(p, map_info.get_avoid(False, True, not destroy_barriers, True))
+                        if pt and len(pt) > 0:
+                            if not best or best_dist > len(pt):
+                                best = p
+                                best_dist = len(pt)
+            if best:
+                for dir2 in Direction:
+                    if not map_info.in_bounds(pos.add(dir2)):
+                        continue
+                    id2 = rc.get_tile_building_id(pos.add(dir2))
+                    if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(id2) == EntityType.ROAD and rc.can_destroy(pos.add(dir2)):
+                        rc.destroy(pos.add(dir2))
+                    if rc.can_place_marker(pos.add(dir2)):
+                        rc.place_marker(pos.add(dir2), comms.encode_launch(best))
+                        marked = True
+                        break
         if marked:
             break
     if marked:

@@ -17,22 +17,12 @@ def run():
     for target, id, p in messages:
         r = int(math.sqrt(rc.get_vision_radius_sq()))
         pos = rc.get_position()
-        best = None
-        for x in range(pos.x-r, pos.x+r+1):
-            for y in range(pos.y-r, pos.y+r+1):
-                vp = Position(x, y)
-                if not rc.is_in_vision(vp):
-                    continue
-                if not rc.is_tile_passable(vp):
-                    continue
-                if not best or vp.distance_squared(target) < best.distance_squared(target):
-                    best = vp
         try:
             bot_pos = rc.get_position(id)
         except GameError:
             bot_pos = None
-        if best and bot_pos and bot_pos.distance_squared(pos) <= 2 and rc.can_launch(bot_pos, best):
-            rc.launch(bot_pos, best)
+        if target and bot_pos and bot_pos.distance_squared(pos) <= 2 and rc.can_launch(bot_pos, target):
+            rc.launch(bot_pos, target)
             if rc.can_place_marker(p):
                 rc.place_marker(p, 0)
                 
