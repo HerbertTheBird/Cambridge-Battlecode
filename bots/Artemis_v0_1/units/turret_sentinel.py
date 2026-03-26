@@ -41,8 +41,11 @@ def priority(tile: Position):
         return 3
     if building_type == EntityType.CORE:
         return 4
-    if building_type == EntityType.HARVESTER and rc.get_position().distance_squared(tile) > 1 and not adjacent_sentinel:
-        return 5
+    if building_type == EntityType.HARVESTER and rc.get_position().distance_squared(tile) > 1:
+        if adjacent_sentinel:
+            return 9
+        else:
+            return 5
     if building_type == EntityType.LAUNCHER:
         return 6
     if building_type == EntityType.BARRIER:
