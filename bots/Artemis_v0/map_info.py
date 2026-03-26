@@ -239,11 +239,8 @@ def best_sentinel_dir(pos: Position):
     for dir in CARDINALS:
         new_pos = pos.add(dir)
         if new_pos in building and building[new_pos] and building[new_pos].team != rc.get_team() and building[new_pos].type == EntityType.HARVESTER:
-            valid.add(dir)
             valid.add(dir.rotate_left())
             valid.add(dir.rotate_right())
-    valid = list(valid)
-    best_dir = valid[0]
     mx_harvesters = 0
     mx_base = 0
     mx_conveyors = 0
