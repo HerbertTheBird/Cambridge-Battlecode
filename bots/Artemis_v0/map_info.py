@@ -189,7 +189,8 @@ def update() -> None:
 
     if possible_syms == 1 and not solved_sym:
         solved_sym = True
-        their_core = flip(my_core)
+        if my_core:
+            their_core = flip(my_core)
         for tile in list(ground):
             flipped = flip(tile)
             if flipped not in ground:

@@ -1,6 +1,7 @@
 
 from cambc import Controller, EntityType, Position, GameError
 import map_info
+import sys
 
 rc: Controller | None = None
 
@@ -10,6 +11,7 @@ def init(c: Controller):
     map_info.init(c)
 
 def run():
+    map_info.update()
     if rc.get_action_cooldown() > 0:
         return
 
@@ -81,7 +83,7 @@ def run():
     for dest_pos in valid_destinations:
         min_dist_sq_to_conveyance = sys.maxsize
         for conveyance_pos in all_conveyances:
-            dist_sq = dest_pos.distance_sq(conveyance_pos)
+            dist_sq = dest_pos.distance_squared(conveyance_pos)
             if dist_sq < min_dist_sq_to_conveyance:
                 min_dist_sq_to_conveyance = dist_sq
         
@@ -91,10 +93,6 @@ def run():
     
     # --- Launch ---
     if best_destination:
-        try:
-            target_bot_pos = rc.get_position(target_bot_id)
-            if rc.can_launch(target_bot_pos, best_destination):
-                rc.launch(target_bot_pos, best_destination)
-        except GameError:
-            # Target might have moved, died, or destination may no longer be valid
-            pass
+        target_bot_pos = rc.get_position(target_bot_id)
+        if rc.can_launch(target_bot_pos, best_destination):
+            rc.launch(target_bot_pos, best_destination)
