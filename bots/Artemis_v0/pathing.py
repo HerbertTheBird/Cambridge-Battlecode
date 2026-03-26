@@ -64,8 +64,10 @@ heap = []
 iter = 0
 dirs = None
 
+path_dirs = None
 path = []
 path_idx = 0
+
 
 def init(c: Controller):
     global width, height, rc, seen, parent, start, target, avoid
@@ -110,7 +112,7 @@ def init_a_star(start_p: Position, target_p: Position| set[Position], input_dirs
         seen[t] = run_id
     iter = 0
 def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
-    global iter, avoid_id
+    global iter, avoid_id, path_dirs
     heappush = heapq.heappush
     heappop = heapq.heappop
     abs_local = abs
@@ -137,8 +139,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         if avoid[hash(a.x, a.y)] != avoid_id - 1:
             avoid_changed = True
         avoid[hash(a.x, a.y)] = avoid_id
-    if not avoid_changed and path is not None and len(path) > 0:
-        prev_start = hash(path[0].x, path[0].y)
+    if not avoid_changed and path is not None and len(path) > 0 and dirs == path_dirs:
         if path[0].distance_squared(Position(start%width, start//width)) <= 2 and target[hash(path[-1].x, path[-1].y)] == run_id:
             max_length = len(path)-1
     if dirs == DIRS:
@@ -163,6 +164,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         g *= -1
         if (not adjacent and pos == start) or (adjacent and (pos == left or pos == right or pos == up or pos == down)):
             path_out = []
+            path_dirs = dirs
             while pos != -1:
                 path_out.append(Position(pos%width, pos//width))
                 pos = parent[pos] if target[pos] != run_id else -1
