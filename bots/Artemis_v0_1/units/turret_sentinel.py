@@ -1,4 +1,4 @@
-from cambc import Controller, Position, EntityType
+from cambc import Controller, Position, EntityType, Direction
 import math
 import map_info
 rc = None
