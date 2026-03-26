@@ -56,8 +56,8 @@ avoid = None
 
 width = height = 0
 rc = None
-run_id = 0
-avoid_id = 0
+run_id = 1
+avoid_id = 1
 
 
 heap = []
@@ -130,10 +130,23 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
     if avoid_p is None:
         avoid_p = set()
     avoid_id += 1
+    avoid_changed = False
+    max_length = None
     for a in avoid_p:
         if hash(a.x, a.y) == start or target[hash(a.x, a.y)] == run_id:
             continue
+        if avoid[hash(a.x, a.y)] != avoid_id - 1:
+            avoid_changed = True
         avoid[hash(a.x, a.y)] = avoid_id
+    if not avoid_changed and path is not None and len(path) > 0:
+        prev_start = hash(path[0].x, path[0].y)
+        if path[0].distance_squared(Position(start%width, start//width)) <= 2 and target[hash(path[-1].x, path[-1].y)] == run_id:
+            max_length = 0
+            for i in range(len(path)-1):
+                if path[i].distance_squared(path[i+1]) < 2: #assume conveyors arent placed diagonally 1
+                    max_length += 1
+                else:
+                    max_length += bridge_cost
     if dirs == DIRS:
         h = lambda pos: (max_local(abs_local(pos%width - tx), abs_local(pos//width - ty)))
     else:
@@ -155,12 +168,12 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         rc.draw_indicator_dot(Position(pos%width, pos//width), 255, 0, 0)
         g *= -1
         if (not adjacent and pos == start) or (adjacent and (pos == left or pos == right or pos == up or pos == down)):
-            path = []
+            path_out = []
             while pos != -1:
-                path.append(Position(pos%width, pos//width))
+                path_out.append(Position(pos%width, pos//width))
                 pos = parent[pos] if target[pos] != run_id else -1
             hp.clear()
-            return path
+            return path_out
 
         for dx, dy, cost in dirs:
             nx = pos%width + dx
@@ -177,10 +190,13 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
             parent[n] = pos
             h0 = h(n)
             new_h = 0 if h0 == 0 else 1.2+(weight-1.2)*max_local(0, 1-g/h0)
+            new_f = ng + h(n)*new_h
+            if max_length is not None and ng + h(n) >= max_length:
+                continue
             card = dx == 0 or dy == 0
             heappush(
                 hp,
-                (ng + h(n)*new_h, -ng, card, n if ng%4 <= 1 else -n)
+                (new_f, -ng, card, n if ng%4 <= 1 else -n)
             )
     return []
 def moves_through_impassible(path: list[Position], avoid: set[Position] = None) -> bool:
