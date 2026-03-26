@@ -2,7 +2,7 @@ from cambc import Controller, Position, EntityType, GameError
 import math
 rc = None
 LAUNCHER_BIT = 31
-ID_BITS = 7
+ID_BITS = 12
 def init(c: Controller):
     global rc
     rc = c
