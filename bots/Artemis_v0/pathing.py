@@ -340,7 +340,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     for x in range(map_info.width):
         for y in range(map_info.height):
             b = map_info.building[x][y]
-            if b and map_info.is_conveyor(b.type) and b.load and b.load < 3 and b.team == rc.get_team():
+            if b and map_info.is_conveyor(b.type) and b.load and b.load < 4 and b.team == rc.get_team():
                 target.add(Position(x, y))
     avoid = map_info.get_avoid(True, False, False, True)
     for dir in CARD_DIR:

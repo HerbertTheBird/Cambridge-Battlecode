@@ -444,8 +444,6 @@ def check_route():
         ore_path = pathing.calculate_conveyor_path(routed_ore)
         route_idx = 0
         launcher_idx = 0
-        if ore_path:
-            launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
     if ore_path and route_idx >= len(ore_path)-1 and launcher_idx >= len(launcher_positions):
         mode = Mode.EXPLORE
         ore_path = None
@@ -460,8 +458,7 @@ def run_route():
         if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(True, False, False, True)):
             new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
-                ore_path = new_path
-                route_idx = 0
+                ore_path = ore_path[:route_idx] + new_path[route_idx:]
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
             rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
