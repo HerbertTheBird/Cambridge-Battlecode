@@ -113,7 +113,7 @@ def run_pre():
                 except GameError:
                     pass
 
-            if not blocked or occupied_opponent:
+            if not blocked and not occupied_opponent:
                 dist_sq = pos.distance_squared(map_info.my_core)
                 if dist_sq < min_dist_sq:
                     min_dist_sq = dist_sq
