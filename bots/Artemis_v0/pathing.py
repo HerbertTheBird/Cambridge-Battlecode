@@ -9,7 +9,7 @@ import time
 import math
 weight = 1.5
 MAX_ITER = 200
-TIME_CUTOFF = 800
+TIME_CUTOFF = 1500
 # 4-direction movement
 
 #todo

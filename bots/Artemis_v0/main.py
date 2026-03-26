@@ -40,7 +40,7 @@ class Player:
             end_time = time.perf_counter()
             print(int((end_time-start_time)*1_000_000),"μs")
             if end_time-start_time > 0.002:
-                print("timed out", c.get_id(), c.get_current_round(), int((end_time-start_time)*1_000_000),"μs")
+                print("timed out", c.get_id(), c.get_current_round(), int((end_time-start_time)*1_000_000),"μs", file=sys.stderr)
         except Exception:
             traceback.print_exc()
             raise

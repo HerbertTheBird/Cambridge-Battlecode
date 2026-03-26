@@ -142,7 +142,7 @@ def run():
 
 def init(c: Controller):
     global rc, target
-    print(c.get_id(), c.get_current_round(), file=sys.stderr)
+    # print(c.get_id(), c.get_current_round(), file=sys.stderr)
     rc = c
     map_info.init(c)
     pathing.init(c)
