@@ -215,7 +215,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
             h0 = h(n)
             new_h = 0 if h0 == 0 else 1.2+(weight-1.2)*max_local(0, 1-g/h0)
             new_f = ng + h(n)*new_h
-            if max_length is not None and ng + h(n) >= max_length:
+            if max_length is not None and ng + h(n) > max_length:
                 continue
             card = dx == 0 or dy == 0
             heappush(
@@ -262,6 +262,9 @@ def move_to(target: Position, destroy_barrier: bool = False):
         if not map_info.in_bounds(pos):
             continue
         id = rc.get_tile_building_id(pos)
+        if id and rc.get_entity_type(id) == EntityType.MARKER and comms.decode_id(rc.get_marker_value(id)) == rc.get_id():
+            marked = True
+            break
         if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team():
             r = int(math.sqrt(rc.get_vision_radius_sq()))
             best = None
@@ -306,6 +309,7 @@ def calculate_path(target: Position, start=None):
         init_a_star(rc.get_position(), target)
         next_path = a_star(rc.get_position(), avoid)
     if next_path is not None:
+        print("path", next_path)
         path = next_path
         path_idx = 0
         for i in range(len(path)-1):
@@ -336,7 +340,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     for x in range(map_info.width):
         for y in range(map_info.height):
             b = map_info.building[x][y]
-            if b and map_info.is_conveyor(b.type) and b.load and b.load < 3 and b.team == rc.get_team():
+            if b and map_info.is_conveyor(b.type) and b.load and b.load < 4 and b.team == rc.get_team():
                 target.add(Position(x, y))
     avoid = map_info.get_avoid(True, False, False, True)
     for dir in CARD_DIR:
