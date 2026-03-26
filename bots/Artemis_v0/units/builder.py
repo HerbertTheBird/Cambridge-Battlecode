@@ -195,13 +195,25 @@ def run_post():
     #     value = generate_encoded_int(rc.get_id())
     #     rc.place_marker(target_pos, value)
     pass
+
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
     print(" | Forcing new explore")
     turns_since_last_explore_target = 0
+
+    for _ in range(2):  # slightly more aggressive
+        random_x = random.randint(0, map_info.width - 1)
+        random_y = random.randint(0, map_info.height - 1)
+        if map_info.ground[random_x][random_y] is None:
+            explore_target = Position(random_x, random_y)
+            print(f" | New explore target: {explore_target}")
+            return
+
+    # If no empty tile found after 100 tries, fallback to completely random
     random_x = random.randint(0, map_info.width - 1)
     random_y = random.randint(0, map_info.height - 1)
     explore_target = Position(random_x, random_y)
+    print(f" | Fallback explore target: {explore_target}")
 
 # check block
 def check_explore_athena():
@@ -261,6 +273,9 @@ def run_explore():
     
     if explore_target is None:
         force_generate_explore_target()
+
+    if rc.get_global_resources()[0] < rc.get_bridge_cost()[0]:
+        return
 
     # loop until we find a target we can path to and move.
     moved = False
@@ -347,7 +362,7 @@ def run_build_harvester():
 
                 if not is_our_barrier:
                     # This tile needs a barrier. Can we build/destroy?
-                    if building_id and rc.get_team(building_id) == rc.get_team():
+                    if building_id and rc.get_team(building_id) == rc.get_team() and rc.get_entity_type(building_id) != EntityType.SENTINEL:
                         if rc.can_destroy(pos):
                             rc.destroy(pos)
                     if rc.can_build_barrier(pos):
@@ -545,6 +560,35 @@ def check_sabotage():
 def run_sabotage():
     global opponent_ore, mode, defended_ores
     
+    my_pos = rc.get_position()
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            candidate = Position(my_pos.x + dx, my_pos.y + dy)
+            if not map_info.is_on_map(candidate):
+                continue
+            if my_pos.distance_squared(candidate) > 2:
+                continue
+
+            # Check all 4 cardinal neighbors of this candidate for enemy harvester
+            adjacent_enemy_harvester = False
+            for d in cardinal_dirs:
+                neighbor = candidate.add(d)
+                if not map_info.is_on_map(neighbor):
+                    continue
+                neighbor_id = rc.get_tile_building_id(neighbor)
+                if neighbor_id is not None and rc.get_entity_type(neighbor_id) == EntityType.HARVESTER:
+                    if rc.get_team(neighbor_id) != rc.get_team():
+                        adjacent_enemy_harvester = True
+                        break
+
+            if adjacent_enemy_harvester and rc.can_build_sentinel(candidate, Direction.NORTH):
+                # Pick a direction arbitrarily or you could try best_sentinel_dir
+                direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
+                if rc.can_build_sentinel(candidate, direction):
+                    rc.build_sentinel(candidate, direction)
+                    rc.draw_indicator_dot(candidate, mode.r, mode.g, mode.b)
+                    return  # override done, skip normal sabotage logic
+    
     adjacent_tiles = []
     for d in cardinal_dirs:
         adj = opponent_ore.add(d)
@@ -554,7 +598,7 @@ def run_sabotage():
     empty_tile = None
     for pos in adjacent_tiles:
         if rc.get_position().distance_squared(pos) <= rc.get_vision_radius_sq():
-            if map_info.is_tile_empty(pos):
+            if map_info.is_tile_empty(pos) or rc.can_destroy(pos):
                 empty_tile = pos
                 break
 
@@ -577,6 +621,9 @@ def run_sabotage():
         # We are within distance ≤ 2 → try placing turret
         direction = map_info.best_sentinel_dir(empty_tile)
         if direction:
+            if rc.get_tile_building_id(pos) and rc.get_entity_type(rc.get_tile_building_id(pos)) != EntityType.SENTINEL:
+                if rc.can_destroy(pos):
+                    rc.destroy(pos)
             if rc.can_build_sentinel(empty_tile, direction):
                 rc.build_sentinel(empty_tile, direction)
 
