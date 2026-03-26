@@ -36,5 +36,4 @@ def decode_launch():
                 out.append((target, decode_id(v), p))
     return out
 def encode_launch(target):
-    pos = rc.get_position()
     return rc.get_id() + (target.x<<ID_BITS) + (target.y<<(ID_BITS+6)) + (1<<LAUNCHER_BIT)
