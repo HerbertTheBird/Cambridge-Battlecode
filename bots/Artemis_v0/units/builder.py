@@ -285,7 +285,7 @@ def run_build_harvester():
             if rc.get_tile_building_id(target_ore) is None and rc.can_build_harvester(target_ore):
                 rc.build_harvester(target_ore)
                 target_ore = None
-                mode = Mode.EXPLORE # works really well, but we want to avoid changing states in run code, refactor later
+                mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
                 return
 
 def run_route():
