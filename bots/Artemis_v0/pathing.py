@@ -155,10 +155,8 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         if avoid[hash(a.x, a.y)] != avoid_id - 1:
             avoid_changed = True
         avoid[hash(a.x, a.y)] = avoid_id
-    print("stats", avoid_changed, path, Position(start%width, start//width))
     if not avoid_changed and path is not None and len(path) > 0 and dirs == path_dirs:
         if path[0].distance_squared(Position(start%width, start//width)) <= 2 and target[hash(path[-1].x, path[-1].y)] == run_id:
-            print("max length is", max_length)
             max_length = len(path)-1
     if dirs == DIRS:
         h = lambda pos: (max_local(abs_local(pos%width - tx), abs_local(pos//width - ty)))
