@@ -438,18 +438,15 @@ def get_avoid(
 
 def best_sentinel_dir(pos: Position):
     valid = set()
-    for dir in Direction:
-        if dir == Direction.CENTRE:
-            continue
-        valid.add(dir)
-    # for dir in CARDINALS:
-        # new_pos = pos.add(dir)
-        # if in_bounds(new_pos):
-        #     b = building[new_pos.x][new_pos.y]
-        #     if b and b.team != rc.get_team() and b.type == EntityType.HARVESTER:
-        #         valid.add(dir.rotate_left())
-        #         valid.add(dir.rotate_right())
-
+    for dir in CARDINALS:
+        new_pos = pos.add(dir)
+        if in_bounds(new_pos):
+            b = building[new_pos.x][new_pos.y]
+            if b and b.team != rc.get_team() and b.type == EntityType.HARVESTER:
+                for dir2 in Direction:
+                    if dir2 == Direction.CENTRE or dir2 == dir:
+                        continue
+                    valid.add(dir2)
     mx_harvesters = 0
     mx_base = 0
     mx_conveyors = 0

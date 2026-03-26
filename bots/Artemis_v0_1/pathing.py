@@ -326,13 +326,14 @@ def execute_path(sample_path=None, path_idx=0):
         sample_path = path
     if path_idx > len(sample_path)-2:
         return False
-    dir = path[path_idx].direction_to(sample_path[path_idx+1])
+    dir = sample_path[path_idx].direction_to(sample_path[path_idx+1])
     if move(dir):
         path_idx += 1
         return True
     return False
 
 def calculate_conveyor_path(ore: Position, update:bool = False):
+    global path, path_idx
     print("start calculate_conveyor_path", rc.get_cpu_time_elapsed())
     start_time = time.perf_counter()
     core = map_info.my_core
@@ -350,15 +351,15 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     if len(heap) == 0:
         init_a_star(ore, target, CONV, not update)
     next_path = a_star(ore, avoid)
-    if next_path is not None and moves_through_impassible(next_path, avoid):
+    if next_path and moves_through_impassible(next_path, avoid):
         init_a_star(ore, target, CONV, not update)
         next_path = a_star(ore, avoid)
-    if next_path is not None:
+    if next_path:
         path = next_path
         path_idx = 0
         for i in range(len(path)-1):
             rc.draw_indicator_line(path[i], path[i+1], 0, 50, 0)
-    elif path is not None and len(path) > 1:
+    elif path and len(path) > 1:
         for i in range(len(path)-1):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if len(path) == 0:

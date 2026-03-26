@@ -445,7 +445,7 @@ def check_route():
         ore_path = pathing.calculate_conveyor_path(routed_ore)
         route_idx = 0
         launcher_idx = 0
-    if ore_path and route_idx >= len(ore_path)-1 and launcher_idx >= len(launcher_positions):
+    if ore_path and route_idx >= len(ore_path)-1 and launcher_positions and launcher_idx >= len(launcher_positions):
         mode = Mode.EXPLORE
         ore_path = None
         launcher_positions = None

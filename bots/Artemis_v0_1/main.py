@@ -1,6 +1,6 @@
 # main.py
 
-from cambc import Controller, EntityType
+from cambc import Controller, EntityType, Position
 
 import random
 import time
@@ -43,3 +43,5 @@ class Player:
                 print("timed out", c.get_id(), c.get_current_round(), int((end_time-start_time)*1_000_000),"μs", file=sys.stderr)
         except Exception as e:
             print("Error:", e)
+            c.draw_indicator_line(Position(-100, -100), c.get_position(), 255, 0, 0)
+            traceback.print_exc(file=sys.stdout)
