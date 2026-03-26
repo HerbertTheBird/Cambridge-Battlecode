@@ -371,6 +371,19 @@ def update() -> None:
         solved_sym = True
         if my_core:
             their_core = flip(my_core)
+            core = Building(
+                id=-1,
+                type=EntityType.CORE,
+                hp=500,
+                maxhp=500,
+                team=rc.get_team()+1,
+                direction=None,
+                vision_sq=36,
+            )
+            for x in range(their_core.x-1, their_core.x+2):
+                for y in range(their_core.y-1, their_core.y+2):
+                    building[x][y] = core
+                    
 
         # pick one flip function once, instead of branching in flip() for every tile
         if hor_sym:
@@ -483,10 +496,6 @@ def best_sentinel_dir(pos: Position):
                 other += 1
 
         win = None
-        if win is None and harvesters > mx_harvesters:
-            win = True
-        if win is None and harvesters < mx_harvesters:
-            win = False
         if win is None and base > mx_base:
             win = True
         if win is None and base < mx_base:
@@ -494,6 +503,10 @@ def best_sentinel_dir(pos: Position):
         if win is None and conveyors > mx_conveyors:
             win = True
         if win is None and conveyors < mx_conveyors:
+            win = False
+        if win is None and harvesters > mx_harvesters:
+            win = True
+        if win is None and harvesters < mx_harvesters:
             win = False
         if win is None and other > mx_other:
             win = True

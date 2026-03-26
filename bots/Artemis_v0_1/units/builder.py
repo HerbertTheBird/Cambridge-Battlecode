@@ -37,9 +37,8 @@ sabotage_ore = None
 #route state
 routed_ore = None
 ore_path = None
-launcher_positions = None
+launcher_position = None
 route_idx = 0
-launcher_idx = 0
 
 rc = None
 def init(c : Controller):
@@ -440,24 +439,19 @@ def run_build_harvester():
             pathing.execute_path()
 
 def check_route():
-    global ore_path, launcher_positions, route_idx, mode, launcher_idx
+    global ore_path, launcher_position, route_idx, mode
     if not ore_path:
         ore_path = pathing.calculate_conveyor_path(routed_ore)
         route_idx = 0
-        launcher_idx = 0
-    if ore_path and route_idx >= len(ore_path)-1 and launcher_positions and launcher_idx >= len(launcher_positions):
+    if ore_path:
+        launcher_position = pathing.calculate_launcher_position(ore_path, routed_ore)
+    if ore_path and route_idx >= len(ore_path)-1 and not launcher_position:
         mode = Mode.EXPLORE
         ore_path = None
-        launcher_positions = None
 
 def run_route():
-    global route_idx, launcher_idx, ore_path, launcher_positions
-    print("route idx", route_idx, "launcher idx", launcher_idx)
-    if ore_path and launcher_positions:
-        print("hi", len(ore_path), len(launcher_positions))
+    global route_idx, ore_path, launcher_position
     if ore_path:
-        launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
-        launcher_idx = 0
         if route_idx < len(ore_path)-1:
             new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
@@ -465,10 +459,8 @@ def run_route():
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
             rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
-        for i in launcher_positions:
-            rc.draw_indicator_dot(i, 255, 0, 0)
-        if launcher_idx < len(launcher_positions):
-            launcher = launcher_positions[launcher_idx]
+        if launcher_position:
+            launcher = launcher_position
             place = True
             nearby_conv = None
             for i in range(len(ore_path)-1):
@@ -479,7 +471,7 @@ def run_route():
                         place = False
 
             if place:
-                if launcher in map_info.building and map_info.building[launcher.x][launcher.y] and map_info.building[launcher.x][launcher.y].team != rc.get_team():
+                if map_info.building[launcher.x][launcher.y] and map_info.building[launcher.x][launcher.y].team != rc.get_team():
                     pathing.move_to(launcher)
                     if rc.get_position() == launcher and rc.can_fire(launcher):
                         rc.fire(launcher)
@@ -490,7 +482,6 @@ def run_route():
                     id = rc.get_tile_building_id(rc.get_position())
                     if rc.can_build_launcher(launcher):
                         rc.build_launcher(launcher)
-                        launcher_idx += 1
                 return
 
         if route_idx < len(ore_path)-1:

@@ -6,6 +6,13 @@ def init(c: Controller):
     global rc
     rc = c
  
+CARDINALS = [
+    Direction.NORTH,
+    Direction.SOUTH,
+    Direction.WEST,
+    Direction.EAST,
+]
+
 def priority(tile: Position):
     id = rc.get_tile_builder_bot_id(tile)
     enemy_builder = False
@@ -16,7 +23,14 @@ def priority(tile: Position):
     my_building = id is not None and rc.get_team(id) == rc.get_team()
     if id is not None and rc.get_team(id) != rc.get_team():
         building_type = rc.get_entity_type(id)
-    
+    adjacent_sentinel = False
+    for dir in CARDINALS:
+        pos = rc.get_position().add(dir)
+        if not map_info.in_bounds(pos):
+            continue
+        id = rc.get_tile_building_id(pos)
+        if id and rc.get_team(id) == rc.get_team() and rc.get_entity_type(id) == EntityType.SENTINEL:
+            adjacent_sentinel = True
     if enemy_builder and building_type is not None:
         return 0
     if map_info.is_conveyor(building_type):
@@ -27,7 +41,7 @@ def priority(tile: Position):
         return 3
     if building_type == EntityType.CORE:
         return 4
-    if building_type == EntityType.HARVESTER and rc.get_position().distance_squared(tile) > 1:
+    if building_type == EntityType.HARVESTER and rc.get_position().distance_squared(tile) > 1 and not adjacent_sentinel:
         return 5
     if building_type == EntityType.LAUNCHER:
         return 6
