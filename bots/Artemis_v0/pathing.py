@@ -125,7 +125,7 @@ def init_a_star(start_p: Position, target_p: Position| set[Position], input_dirs
     else:
         h = lambda pos: (abs_local(pos%width - tx) + abs_local(pos//width - ty))
     hash = lambda x, y: y*width + x
-    heap = []
+    heap.clear()
     for p in target_p:
         t = hash(p.x, p.y)
         target[t] = run_id
@@ -145,7 +145,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
     start = hash(start_p.x, start_p.y)
     tx = start_p.x
     ty = start_p.y
-
+    print(dirs)
     if adjacent:
         left = -1 if start%width == 0 else start-1
         right = -1 if start%width == width-1 else start+1
@@ -262,9 +262,9 @@ def move_to(target: Position, destroy_barrier: bool = False):
         if not map_info.in_bounds(pos):
             continue
         id = rc.get_tile_building_id(pos)
-        if id and rc.get_entity_type(id) == EntityType.MARKER and comms.decode_id(rc.get_marker_value(id)) == rc.get_id():
-            marked = True
-            break
+        # if id and rc.get_entity_type(id) == EntityType.MARKER and comms.decode_id(rc.get_marker_value(id)) == rc.get_id():
+        #     marked = True
+        #     break
         if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team():
             r = int(math.sqrt(rc.get_vision_radius_sq()))
             best = None
@@ -282,7 +282,7 @@ def move_to(target: Position, destroy_barrier: bool = False):
                     if not map_info.in_bounds(pos.add(dir2)):
                         continue
                     id2 = rc.get_tile_building_id(pos.add(dir2))
-                    if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(id2) == EntityType.ROAD and rc.can_destroy(pos.add(dir2)):
+                    if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(id2) == EntityType.ROAD and rc.can_destroy(pos.add(dir2)) and dir != Direction.CENTRE:
                         rc.destroy(pos.add(dir2))
                     if rc.can_place_marker(pos.add(dir2)):
                         rc.place_marker(pos.add(dir2), comms.encode_launch(best))
@@ -340,7 +340,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     for x in range(map_info.width):
         for y in range(map_info.height):
             b = map_info.building[x][y]
-            if b and map_info.is_conveyor(b.type) and b.load and b.load < 4 and b.team == rc.get_team():
+            if b and map_info.is_conveyor(b.type) and b.load and b.load < 3 and b.team == rc.get_team():
                 target.add(Position(x, y))
     avoid = map_info.get_avoid(True, False, False, True)
     for dir in CARD_DIR:
@@ -368,6 +368,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
 
     if path is None or len(path) < path_idx+2:
         return None
+    print("conv path is", path)
     return path
 
 def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Position]:

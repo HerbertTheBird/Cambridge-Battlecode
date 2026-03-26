@@ -459,7 +459,7 @@ def run_route():
         if route_idx < len(ore_path)-1:
             new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
-                ore_path = ore_path[:route_idx] + new_path[route_idx:]
+                ore_path = ore_path[:route_idx] + new_path
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
             rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
