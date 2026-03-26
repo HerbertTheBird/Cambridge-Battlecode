@@ -218,7 +218,7 @@ def run_build_harvester():
         is_barrier = False
         if building_id is not None:
             try:
-                if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER] and rc.get_team(building_id) == rc.get_team():
+                if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER] and rc.get_team(building_id) == rc.get_team():
                     is_barrier = True
             except GameError: pass
         
@@ -239,7 +239,7 @@ def run_build_harvester():
                 is_our_barrier = False
                 if building_id:
                     try:
-                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER]:
+                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER]:
                             is_our_barrier = True
                     except GameError: pass
 
@@ -248,11 +248,9 @@ def run_build_harvester():
                     if building_id and rc.get_team(building_id) == rc.get_team():
                         if rc.can_destroy(pos):
                             rc.destroy(pos)
-                            return
-                    elif not building_id:
-                        if rc.can_build_barrier(pos):
-                            rc.build_barrier(pos)
-                            return
+                    if rc.can_build_barrier(pos):
+                        rc.build_barrier(pos)
+                        return
         
         print(" | Moving to mine")
         if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
