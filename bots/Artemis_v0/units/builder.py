@@ -94,6 +94,7 @@ def run_explore():
     attempts = 0
     while not moved and attempts < 1:
         if pathing.move_to(explore_target):
+
             moved = True
         else:
             force_generate_explore_target() # generates new target for next attempt

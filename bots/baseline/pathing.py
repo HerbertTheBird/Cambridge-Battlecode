@@ -146,9 +146,9 @@ def a_star(avoid_p: set[Position] = None) -> list[Position] | None:
         g *= -1
         if start[pos] == run_id:
             path = []
-            while pos != 0:
+            while pos != -1:
                 path.append(Position(pos%width, pos//width))
-                pos = parent[pos]
+                pos = parent[pos] if target[pos] != run_id else -1
             hp.clear()
             return path
 
