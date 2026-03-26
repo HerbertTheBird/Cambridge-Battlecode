@@ -221,6 +221,8 @@ def get_avoid(avoid_conveyors: bool, avoid_builders: bool) -> set[Position]:
                 continue
             if type == EntityType.ROAD:
                 continue
+            if type == EntityType.MARKER:
+                continue
             if not avoid_conveyors and (type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER):
                 continue
             avoid.add(pos)
