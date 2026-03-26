@@ -35,7 +35,7 @@ DIRS = [
     (1, 1, 1),
 ]
 
-bridge_cost = 4
+bridge_cost = 6
 CONV = [
     (0, -1, 1),
     (0, 1, 1),
@@ -162,7 +162,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         heappush(hp, (0, 0, False, start))
     seen[start] = 0
     while hp:
-        # time.sleep(0.0001)1
+        # time.sleep(0.0001)
         if rc.get_cpu_time_elapsed() > TIME_CUTOFF:
             return None
         iter += 1
@@ -206,6 +206,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
                 hp,
                 (new_f, -ng, card, n if ng%4 <= 1 else -n)
             )
+    hp.clear()
     return []
 def moves_through_impassible(path: list[Position], avoid: set[Position] = None) -> bool:
     if avoid is None:

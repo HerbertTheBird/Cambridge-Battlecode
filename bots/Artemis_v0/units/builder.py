@@ -32,6 +32,7 @@ routed_ore = None
 ore_path = None
 launcher_positions = None
 route_idx = 0
+launcher_idx = 0
 
 rc = None
 def init(c : Controller):
@@ -102,10 +103,6 @@ def run_pre():
 
     # Update target_ore based on what we can see right now
     if closest_ore is not None:
-        path = pathing.calculate_conveyor_path(closest_ore)
-        launchers = pathing.calculate_launcher_positions(path, closest_ore)
-        for i in launchers:
-            rc.draw_indicator_line(Position(0, 0),i, 0, 255, 255)
         if target_ore is None:
             target_ore = closest_ore
         else:
@@ -291,10 +288,11 @@ def run_build_harvester():
                 mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
                 return
 def check_route():
-    global ore_path, launcher_positions, route_idx, mode
+    global ore_path, launcher_positions, route_idx, mode, launcher_idx
     if not ore_path:
         ore_path = pathing.calculate_conveyor_path(routed_ore)
         route_idx = 0
+        launcher_idx = 0
         if ore_path:
             launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
     if route_idx == len(ore_path)-1:
@@ -303,30 +301,37 @@ def check_route():
         launcher_positions = None
 
 def run_route():
-    global route_idx
+    global route_idx, launcher_idx
     if ore_path and route_idx < len(ore_path)-1:
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
             rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
         for i in launcher_positions:
             rc.draw_indicator_dot(i, 255, 0, 0)
-            if rc.is_in_vision(i) and rc.get_entity_type(rc.get_tile_building_id(i)) == EntityType.LAUNCHER:
-                continue
+        if launcher_idx < len(launcher_positions):
+            launcher = launcher_positions[launcher_idx]
             place = True
-            for p in ore_path:
-                if p.distance_squared(i) <= 2:
-                    if rc.is_in_vision(p):
-                        id = rc.get_tile_building_id(p)
-                        if not (id is not None and map_info.is_conveyor(rc.get_entity_type(id)) and rc.get_team(id) == rc.get_team()):
-                            place = False
+            nearby_conv = None
+            for i in range(len(ore_path)):
+                p = ore_path[i]
+                if p.distance_squared(launcher) <= 2:
+                    nearby_conv = p
+                    if route_idx <= i:
+                        place = False
             if place:
-                if rc.can_destroy(i):
-                    rc.destroy(i)
-                id = rc.get_tile_building_id(rc.get_position())
-                if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
-                    rc.fire(rc.get_position())
-                if rc.can_build_launcher(i):
-                    rc.build_launcher(i)
+                if launcher in map_info.building and map_info.building[launcher] and map_info.building[launcher].team != rc.get_team():
+                    pathing.move_to(launcher)
+                    if rc.get_position() == launcher and rc.can_fire(launcher):
+                        rc.fire(launcher)
+                else:
+                    pathing.move_to(nearby_conv)
+                    if rc.can_destroy(launcher):
+                        rc.destroy(launcher)
+                    id = rc.get_tile_building_id(rc.get_position())
+                    if rc.can_build_launcher(launcher):
+                        rc.build_launcher(launcher)
+                        launcher_idx += 1
+                return
         to_build = ore_path[route_idx]
         bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
         dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
@@ -345,5 +350,3 @@ def run_route():
                 route_idx += 1
         next = ore_path[route_idx]
         pathing.move_to(next)
-        
-    pass
