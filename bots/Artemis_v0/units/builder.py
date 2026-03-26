@@ -27,6 +27,12 @@ explore_target = None
 turns_since_last_explore_target = 0
 target_ore = None
 
+#route state
+routed_ore = None
+ore_path = None
+launcher_positions = None
+route_idx = 0
+
 rc = None
 def init(c : Controller):
     global rc
@@ -161,9 +167,6 @@ def check_build_harvester():
         print(" | Can't reach mine")
         
 
-def check_route():
-    pass
-
 
 # run block
 def run_explore_athena():
@@ -284,9 +287,48 @@ def run_build_harvester():
             
             if rc.get_tile_building_id(target_ore) is None and rc.can_build_harvester(target_ore):
                 rc.build_harvester(target_ore)
+                global routed_ore, ore_path, launcher_positions
+                routed_ore = target_ore
+                ore_path = None
+                launcher_positions = None
                 target_ore = None
                 mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
                 return
+def check_route():
+    global ore_path, launcher_positions, route_idx
+    if not ore_path:
+        ore_path = pathing.calculate_conveyor_path(routed_ore)
+        route_idx = 0
+        if ore_path:
+            launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
 
 def run_route():
+    global route_idx
+    if ore_path and route_idx < len(ore_path)-1:
+        for i in range(len(ore_path)-1):
+            rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
+            rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
+        for i in launcher_positions:
+            rc.draw_indicator_dot(i, 255, 0, 0)
+            if rc.is_in_vision(i) and rc.get_entity_type(rc.get_tile_building_id(i)) == EntityType.LAUNCHER:
+                continue
+            if rc.can_destroy(i):
+                rc.destroy(i)
+            if rc.can_build_launcher(i):
+                rc.build_launcher(i)
+        to_build = ore_path[route_idx]
+        bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
+        dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
+        if to_build.distance_squared(rc.get_position()) <= 2:
+            if rc.can_destroy(to_build):
+                rc.destroy(to_build)
+            if bridge and rc.can_build_bridge(to_build, ore_path[route_idx+1]):
+                rc.build_bridge(to_build, ore_path[route_idx+1])
+                route_idx += 1
+            elif not bridge and rc.can_build_conveyor(to_build, dir):
+                rc.build_conveyor(to_build, dir)
+                route_idx += 1
+        next = ore_path[route_idx]
+        pathing.move_to(next)
+        
     pass

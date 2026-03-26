@@ -39,14 +39,10 @@ CONV = [
     (-3, 0, bridge_cost),
     (0, 3, bridge_cost),
     (0, -3, bridge_cost),
-    (2, 1, bridge_cost),
-    (2, -1, bridge_cost),
-    (-2, 1, bridge_cost),
-    (-2, -1, bridge_cost),
-    (1, 2, bridge_cost),
-    (1, -2, bridge_cost),
-    (-1, 2, bridge_cost),
-    (-1, -2, bridge_cost),
+    (2, 2, bridge_cost),
+    (2, -2, bridge_cost),
+    (-2, 2, bridge_cost),
+    (-2, -2, bridge_cost),
 ]
 seen = None
 adjacent = None
