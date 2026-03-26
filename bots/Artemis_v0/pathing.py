@@ -12,6 +12,12 @@ TIME_CUTOFF = 1900
 
 #todo
 #make bridges more favorable, weighted a*, no small bridges, prevent revisits, beam search
+CARD_DIR = [
+    Direction.NORTH,
+    Direction.SOUTH,
+    Direction.EAST,
+    Direction.WEST,
+]
 CARD = [
     (0, -1, 1),
     (0, 1, 1),
@@ -76,6 +82,8 @@ def init(c: Controller):
     avoid = array('I', [0])*(width*height)
 def move(dir: Direction):
     new_pos = rc.get_position().add(dir)
+    if new_pos in map_info.building and map_info.building[new_pos] and map_info.building[new_pos].type == EntityType.BARRIER and rc.can_destroy(new_pos):
+        rc.destroy(new_pos)
     if rc.can_build_road(new_pos):
         rc.build_road(new_pos)
     if rc.can_move(dir):
@@ -199,9 +207,9 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
             return True
     return False
 
-def move_to(target: Position):
+def move_to(target: Position, destroy_barriers: bool = False):
     global path, path_idx
-    avoid = map_info.get_avoid(False, True)
+    avoid = map_info.get_avoid(False, True, not destroy_barriers)
     if len(heap) == 0:
         init_a_star(rc.get_position(), target)
     next_path = a_star(rc.get_position(), avoid)
@@ -217,7 +225,10 @@ def move_to(target: Position):
         for i in range(len(path)-1):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if path is None or len(path) < path_idx+2:
-        return False
+        if destroy_barriers:
+            return False
+        else:
+            return move_to(target, True)
     dir = path[path_idx].direction_to(path[path_idx+1])
     if move(dir):
         path_idx += 1
@@ -261,11 +272,11 @@ def execute_path(sample_path=None, path_idx=0):
 def calculate_conveyor_path(ore: Position):
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
-    avoid = map_info.get_avoid(True, False)
-    avoid.discard(ore.add(Direction.NORTH))
-    avoid.discard(ore.add(Direction.SOUTH))
-    avoid.discard(ore.add(Direction.EAST))
-    avoid.discard(ore.add(Direction.WEST))
+    avoid = map_info.get_avoid(True, False, False)
+    for dir in CARD_DIR:
+        pos = ore.add(dir)
+        if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.BARRIER:
+            avoid.discard(pos)
     if len(heap) == 0:
         init_a_star(ore, target, CONV, True)
     next_path = a_star(ore, avoid)
@@ -289,10 +300,6 @@ def calculate_conveyor_path(ore: Position):
 
 def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Position]:
     avoid = map_info.get_avoid(True, False)
-    avoid.add(ore.add(Direction.NORTH))
-    avoid.add(ore.add(Direction.SOUTH))
-    avoid.add(ore.add(Direction.EAST))
-    avoid.add(ore.add(Direction.WEST))
     for p in path:
         avoid.add(p)
     result: list[Position] = []

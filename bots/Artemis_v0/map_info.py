@@ -198,7 +198,7 @@ def update() -> None:
 def is_tile_empty(pos : Position):
     return rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) == EntityType.MARKER)
 
-def get_avoid(avoid_conveyors: bool, avoid_builders: bool) -> set[Position]:
+def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barriers: bool = True) -> set[Position]:
     avoid = set()
     if avoid_builders:
         for unit in rc.get_nearby_units():
@@ -224,6 +224,8 @@ def get_avoid(avoid_conveyors: bool, avoid_builders: bool) -> set[Position]:
             if type == EntityType.ROAD:
                 continue
             if type == EntityType.MARKER:
+                continue
+            if type == EntityType.BARRIER and not avoid_barriers:
                 continue
             if not avoid_conveyors and (type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER):
                 continue

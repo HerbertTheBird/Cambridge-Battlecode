@@ -314,10 +314,18 @@ def run_route():
             rc.draw_indicator_dot(i, 255, 0, 0)
             if rc.is_in_vision(i) and rc.get_entity_type(rc.get_tile_building_id(i)) == EntityType.LAUNCHER:
                 continue
-            if rc.can_destroy(i):
-                rc.destroy(i)
-            if rc.can_build_launcher(i):
-                rc.build_launcher(i)
+            place = True
+            for p in ore_path:
+                if p.distance_squared(i) <= 2:
+                    if rc.is_in_vision(p):
+                        id = rc.get_tile_building_id(p)
+                        if not (id is not None and map_info.is_conveyor(rc.get_entity_type(id)) and rc.get_team(id) == rc.get_team()):
+                            place = False
+            if place:
+                if rc.can_destroy(i):
+                    rc.destroy(i)
+                if rc.can_build_launcher(i):
+                    rc.build_launcher(i)
         to_build = ore_path[route_idx]
         bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
         dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
