@@ -357,7 +357,7 @@ def run_build_harvester():
         # If we are on the ore, move off.
         print(" | Perimeter done")
         if rc.get_position() == target_ore:
-            building_id = rc.get_tile_building_id(pos)
+            building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_team(building_id) != rc.get_team():
                 rc.fire()
                 return
@@ -610,7 +610,8 @@ def run_sabotage():
         if rc.can_destroy(passable_tile):
             rc.destroy(passable_tile)
         elif rc.get_position() == passable_tile:
-            rc.fire(rc.get_position())
+            if rc.can_fire(rc.get_position()):
+                rc.fire(rc.get_position())
 
         return
 
