@@ -270,7 +270,7 @@ def run_build_harvester():
             # nowhere to move
             if not moved:
                 for d in random.sample(list(Direction), len(list(Direction))):
-                    if rc.is_tile_empty(rc.get_position().add(d)):
+                    if map_info.is_tile_empty(rc.get_position().add(d)):
                         pathing.move(d)
                         moved = True
                     

@@ -194,7 +194,9 @@ def update() -> None:
             flipped = flip(tile)
             if flipped not in ground:
                 ground[flipped] = ground[tile]
-                
+
+def is_tile_empty(pos : Position):
+    return rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) == EntityType.MARKER)
 
 def get_avoid(avoid_conveyors: bool, avoid_builders: bool) -> set[Position]:
     avoid = set()
