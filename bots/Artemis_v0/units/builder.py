@@ -442,7 +442,7 @@ def run_route():
     if ore_path:
         launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
         launcher_idx = 0
-        if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(False, False, False, True)):
+        if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(True, False, False, True)):
             new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
                 ore_path = new_path
