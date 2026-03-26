@@ -128,7 +128,7 @@ def run_pre():
                     if building_type == EntityType.HARVESTER and building_team != rc.get_team():
                         # Check for at least one passable adjacent tile
                         has_passable_adjacent = False
-                        for d in Direction:
+                        for d in cardinal_dirs:
                             if d == Direction.CENTRE:
                                 continue
                             adj = pos.add(d)
