@@ -25,7 +25,7 @@ def priority(tile: Position):
         building_type = rc.get_entity_type(id)
     adjacent_sentinel = False
     for dir in CARDINALS:
-        pos = rc.get_position().add(dir)
+        pos = tile.add(dir)
         if not map_info.in_bounds(pos):
             continue
         id = rc.get_tile_building_id(pos)
