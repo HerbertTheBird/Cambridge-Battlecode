@@ -35,7 +35,7 @@ DIRS = [
     (1, 1, 1),
 ]
 
-bridge_cost = 6
+bridge_cost = 5
 CONV = [
     (0, -1, 1),
     (0, 1, 1),
@@ -59,6 +59,7 @@ CONV = [
     (-1, -2, bridge_cost),
 ]
 seen = None
+best_g = None
 adjacent = None
 parent = None
 target = None
@@ -80,7 +81,7 @@ path_idx = 0
 
 
 def init(c: Controller):
-    global width, height, rc, seen, parent, start, target, avoid
+    global width, height, rc, seen, parent, best_g, target, avoid
     width = c.get_map_width()
     height = c.get_map_height()
     rc = c
@@ -88,6 +89,7 @@ def init(c: Controller):
     parent = array('I', [0])*(width*height)
     target = array('I', [0])*(width*height)
     avoid = array('I', [0])*(width*height)
+    best_g = array('I', [0])*(width*height)
 def move(dir: Direction):
     new_pos = rc.get_position().add(dir)
     if new_pos in map_info.building and map_info.building[new_pos] and map_info.building[new_pos].type == EntityType.BARRIER and rc.can_destroy(new_pos):
@@ -191,9 +193,10 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
             n = hash(nx, ny)
             if avoid[n] == avoid_id:
                 continue
-            if seen[n] == run_id:
-                continue
             ng = g+cost
+            if ng >= best_g[n] and seen[n] == run_id:
+                continue
+            best_g[n] = ng
             seen[n] = run_id
             parent[n] = pos
             h0 = h(n)
