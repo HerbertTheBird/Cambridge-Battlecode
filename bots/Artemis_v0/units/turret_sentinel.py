@@ -48,11 +48,10 @@ def run():
     vision_r = int(math.sqrt(rc.get_vision_radius_sq()))
     pos = rc.get_position()
     best = None
-    best_priority = float('inf')
     for x in range(pos.x-vision_r, pos.x+vision_r+1):
         for y in range(pos.y-vision_r, pos.y+vision_r+1):
             if rc.can_fire(Position(x, y)):
-                if priority(Position(x, y)) < priority(best):
+                if not best or priority(Position(x, y)) < priority(best):
                     best = Position(x, y)
     if best is not None:
         rc.fire(best)
