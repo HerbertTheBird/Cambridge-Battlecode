@@ -332,15 +332,16 @@ def run_build_harvester():
             perimeter_secure = False
 
     if opponent_sabotaged:
-        if rc.get_tile_building_id(target_ore) and rc.get_tile_building_id(target_ore) != EntityType.BARRIER and rc.can_destroy(target_ore):
-            rc.destroy(target_ore)
-        if rc.can_build_barrier(target_ore):
-            global blocked_ores
-            rc.build_barrier(target_ore)
-            target_ore = None
-            blocked_ores[target_ore] = rc.get_current_round() + 2000
-            mode = Mode.EXPLORE
-        return
+        if target_ore.distance_squared(rc.get_position()) < rc.get_vision_radius_sq():
+            if rc.get_tile_building_id(target_ore) and rc.get_tile_building_id(target_ore) != EntityType.BARRIER and rc.can_destroy(target_ore):
+                rc.destroy(target_ore)
+            if rc.can_build_barrier(target_ore):
+                global blocked_ores
+                rc.build_barrier(target_ore)
+                target_ore = None
+                blocked_ores[target_ore] = rc.get_current_round() + 2000
+                mode = Mode.EXPLORE
+            return
 
     # State 1: Perimeter is not secure. Let's build barriers.
     if not perimeter_secure and wall_count < 4:
