@@ -4,7 +4,7 @@ from typing import Optional, Set, Tuple
 
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
 from dataclasses import dataclass
-
+import time
 def is_on_map(pos: Position):
     return 0 <= pos.x < width and 0 <= pos.y < height
 
@@ -147,112 +147,156 @@ def is_turret(type: EntityType):
 
 def update() -> None:
     print("start update", rc.get_cpu_time_elapsed())
+    start_time = time.perf_counter()
 
     global my_core, their_core, core_id, solved_sym
+
     current_round = rc.get_current_round()
     visible_tiles = rc.get_nearby_tiles()
+    my_team = rc.get_team()
+
+    ground_local = ground
+    ground_seen_local = ground_seen
+    building_local = building
+    stuck_turns_local = stuck_turns
+    past_filled_local = past_filled
+    last_seen_local = last_seen
+
+    solved_sym_local = solved_sym
+    hor_sym_local = hor_sym
+    ver_sym_local = ver_sym
+    rot_sym_local = rot_sym
 
     for tile in visible_tiles:
         x = tile.x
         y = tile.y
 
-        if not ground_seen[x][y]:
-            ground[x][y] = rc.get_tile_env(tile)
-            ground_seen[x][y] = True
-            if solved_sym:
+        if not ground_seen_local[x][y]:
+            env = rc.get_tile_env(tile)
+            ground_local[x][y] = env
+            ground_seen_local[x][y] = True
+
+            if solved_sym_local:
                 flipped = flip(tile)
-                ground[flipped.x][flipped.y] = ground[x][y]
-                ground_seen[flipped.x][flipped.y] = True
+                fx = flipped.x
+                fy = flipped.y
+                ground_local[fx][fy] = env
+                ground_seen_local[fx][fy] = True
+
             update_symmetry(tile)
 
-        id = rc.get_tile_building_id(tile)
-        if id is not None:
-            speed = None
-            type = rc.get_entity_type(id)
+        entity_id = rc.get_tile_building_id(tile)
+        if entity_id is None:
+            building_local[x][y] = None
+            last_seen_local[x][y] = current_round
+            continue
 
-            if (
-                last_seen[x][y] == current_round - 1
-                and is_conveyor(type)
-                and building[x][y] is not None
-                and is_conveyor(building[x][y].type)
-            ):
-                current_stored_resource_id = rc.get_stored_resource_id(id) if type in has_stored_resource else None
-                if current_stored_resource_id == building[x][y].stored_resource_id and current_stored_resource_id is not None:
-                    stuck_turns[x][y] = stuck_turns[x][y] + 1
-                else:
-                    speed = stuck_turns[x][y] + 1
-                    stuck_turns[x][y] = 0
+        prev_building = building_local[x][y]
+        seen_last_turn = last_seen_local[x][y] == current_round - 1
+
+        entity_type = rc.get_entity_type(entity_id)
+        is_conv = (
+            entity_type == EntityType.CONVEYOR
+            or entity_type == EntityType.ARMOURED_CONVEYOR
+            or entity_type == EntityType.BRIDGE
+            or entity_type == EntityType.SPLITTER
+        )
+        prev_is_conv = prev_building is not None and (
+            prev_building.type == EntityType.CONVEYOR
+            or prev_building.type == EntityType.ARMOURED_CONVEYOR
+            or prev_building.type == EntityType.BRIDGE
+            or prev_building.type == EntityType.SPLITTER
+        )
+
+        has_sr = entity_type in has_stored_resource
+
+        stored_resource_id = rc.get_stored_resource_id(entity_id) if has_sr else None
+        stored_resource = None
+        if is_conv and has_sr:
+            stored_resource = rc.get_stored_resource(entity_id)
+
+        speed = None
+        if seen_last_turn and is_conv and prev_is_conv:
+            if stored_resource_id == prev_building.stored_resource_id and stored_resource_id is not None:
+                stuck_turns_local[x][y] += 1
             else:
-                stuck_turns[x][y] = 0
-
-            load = None
-            if is_conveyor(type):
-                current_stored_resource = rc.get_stored_resource(id) if type in has_stored_resource else None
-                if last_seen[x][y] == current_round - 1 and building[x][y] is not None and is_conveyor(building[x][y].type):
-                    past_filled[x][y] = ((past_filled[x][y] & 15) << 1) | (past_filled[x][y] & (~15))
-                    past_filled[x][y] += 1 if current_stored_resource is not None else 0
-                    if (past_filled[x][y] & 16) != 0:
-                        load = (past_filled[x][y] & 15).bit_count()
-                else:
-                    past_filled[x][y] = 2 + (1 if current_stored_resource is not None else 0)
-
-            direction = rc.get_direction(id) if type in has_direction else None
-            vision_sq = rc.get_vision_radius_sq(id) if type in has_vision else None
-            bridge_target = rc.get_bridge_target(id) if type in has_bridge_target else None
-            stored_resource_id = rc.get_stored_resource_id(id) if type in has_stored_resource else None
-
-            building[x][y] = Building(
-                id=id,
-                type=type,
-                hp=rc.get_hp(id),
-                maxhp=rc.get_max_hp(id),
-                team=rc.get_team(id),
-                direction=direction,
-                vision_sq=vision_sq,
-                bridge_target=bridge_target,
-                stored_resource_id=stored_resource_id,
-                conveyor_speed=speed,
-                load=load
-            )
-
-            if load != None:
-                rc.draw_indicator_dot(tile, 0, 0, 50 * load)
-
-            if my_core is None and building[x][y].type == EntityType.CORE:
-                if building[x][y].team == rc.get_team():
-                    my_core = core_center(id, tile)
-                    core_id = id
-                else:
-                    their_core = core_center(id, tile)
+                speed = stuck_turns_local[x][y] + 1
+                stuck_turns_local[x][y] = 0
         else:
-            building[x][y] = None
+            stuck_turns_local[x][y] = 0
 
-        last_seen[x][y] = current_round
+        load = None
+        if is_conv:
+            if seen_last_turn and prev_is_conv:
+                pf = past_filled_local[x][y]
+                pf = ((pf & 15) << 1) | (pf & (~15))
+                if stored_resource is not None:
+                    pf += 1
+                past_filled_local[x][y] = pf
+                if pf & 16:
+                    load = (pf & 15).bit_count()
+            else:
+                past_filled_local[x][y] = 2 + (1 if stored_resource is not None else 0)
 
-    possible_syms = 0
-    if hor_sym:
-        possible_syms += 1
-    if ver_sym:
-        possible_syms += 1
-    if rot_sym:
-        possible_syms += 1
+        direction = rc.get_direction(entity_id) if entity_type in has_direction else None
+        vision_sq = rc.get_vision_radius_sq(entity_id) if entity_type in has_vision else None
+        bridge_target = rc.get_bridge_target(entity_id) if entity_type in has_bridge_target else None
+
+        team = rc.get_team(entity_id)
+        new_building = Building(
+            id=entity_id,
+            type=entity_type,
+            hp=rc.get_hp(entity_id),
+            maxhp=rc.get_max_hp(entity_id),
+            team=team,
+            direction=direction,
+            vision_sq=vision_sq,
+            bridge_target=bridge_target,
+            stored_resource_id=stored_resource_id,
+            conveyor_speed=speed,
+            load=load,
+        )
+        building_local[x][y] = new_building
+
+        if load is not None:
+            rc.draw_indicator_dot(tile, 0, 0, 50 * load)
+
+        if my_core is None and entity_type == EntityType.CORE:
+            if team == my_team:
+                my_core = core_center(entity_id, tile)
+                core_id = entity_id
+            else:
+                their_core = core_center(entity_id, tile)
+
+        last_seen_local[x][y] = current_round
+
+    possible_syms = int(hor_sym) + int(ver_sym) + int(rot_sym)
 
     if possible_syms == 1 and not solved_sym:
         solved_sym = True
         if my_core:
             their_core = flip(my_core)
+
+        # pick one flip function once, instead of branching in flip() for every tile
+        if hor_sym:
+            flip_func = hor_flip
+        elif ver_sym:
+            flip_func = ver_flip
+        else:
+            flip_func = rot_flip
+
         for x in range(width):
             for y in range(height):
-                if ground_seen[x][y]:
-                    tile = Position(x, y)
-                    flipped = flip(tile)
-                    if not ground_seen[flipped.x][flipped.y]:
-                        ground[flipped.x][flipped.y] = ground[x][y]
-                        ground_seen[flipped.x][flipped.y] = True
+                if ground_seen_local[x][y]:
+                    flipped = flip_func(Position(x, y))
+                    fx = flipped.x
+                    fy = flipped.y
+                    if not ground_seen_local[fx][fy]:
+                        ground_local[fx][fy] = ground_local[x][y]
+                        ground_seen_local[fx][fy] = True
 
-    print("end update", rc.get_cpu_time_elapsed())
-
-
+    end_time = time.perf_counter()
+    print("end update", rc.get_cpu_time_elapsed(), (end_time - start_time) * 1000000)
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) == EntityType.MARKER))
 
