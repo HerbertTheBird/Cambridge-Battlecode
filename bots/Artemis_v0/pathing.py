@@ -93,6 +93,7 @@ def init(c: Controller):
     avoid = array('I', [0])*(width*height)
     best_g = array('I', [0])*(width*height)
 def move(dir: Direction):
+    map_info.update()
     new_pos = rc.get_position().add(dir)
     if new_pos in map_info.building and map_info.building[new_pos] and map_info.building[new_pos].type == EntityType.BARRIER and rc.can_destroy(new_pos):
         rc.destroy(new_pos)

@@ -484,16 +484,9 @@ def run_route():
                     route_idx += 1
                 elif not bridge and rc.can_build_conveyor(to_build, dir):
                     rc.build_conveyor(to_build, dir)
-                    print("success", to_build, dir)
-                    if to_build:
-                        print("here1", rc.get_tile_building_id(to_build))
                     route_idx += 1
             next = ore_path[route_idx]
             pathing.move_to(next)
-            if to_build:
-                print("here2", rc.get_tile_building_id(to_build))
-    if to_build:
-        print("here3", rc.get_tile_building_id(to_build))
 def check_sabotage():
     global mode, opponent_ore
 
