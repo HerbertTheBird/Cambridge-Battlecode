@@ -129,6 +129,7 @@ def init_a_star(start_p: Position, target_p: Position| set[Position], input_dirs
         seen[t] = run_id
     iter = 0
 def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
+    print("call a*", rc.get_cpu_time_elapsed())
     global iter, avoid_id, path_dirs
     heappush = heapq.heappush
     heappop = heapq.heappop
@@ -169,6 +170,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
     while hp:
         # time.sleep(0.0001)
         if rc.get_cpu_time_elapsed() > TIME_CUTOFF:
+            print("end a*", rc.get_cpu_time_elapsed())
             return None
         iter += 1
         if iter > MAX_ITER:
@@ -186,6 +188,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
                 path_out.append(Position(pos%width, pos//width))
                 pos = parent[pos] if target[pos] != run_id else -1
             hp.clear()
+            print("end a*", rc.get_cpu_time_elapsed())
             return path_out
 
         for dx, dy, cost in dirs:
@@ -213,6 +216,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
                 (new_f, -ng, card, n if ng%4 <= 1 else -n)
             )
     hp.clear()
+    print("end a*", rc.get_cpu_time_elapsed())
     return []
 def moves_through_impassible(path: list[Position], avoid: set[Position] = None) -> bool:
     if avoid is None:
@@ -222,9 +226,9 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
             return True
     return False
 
-def move_to(target: Position):
+def move_to(target: Position, destroy_barrier: bool = False):
     global path, path_idx
-    avoid = map_info.get_avoid(False, True, False, False)
+    avoid = map_info.get_avoid(False, True, not destroy_barrier, False)
     if len(heap) == 0:
         init_a_star(rc.get_position(), target)
     next_path = a_star(rc.get_position(), avoid)
@@ -240,7 +244,10 @@ def move_to(target: Position):
         for i in range(len(path)-1):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if path is None or len(path) < path_idx+2:
-        return False
+        if destroy_barrier:
+            return False
+        else:
+            return move_to(target, True)
     move_dir = path[path_idx].direction_to(path[path_idx+1])
     marked = False
     for dir in Direction:
@@ -257,7 +264,7 @@ def move_to(target: Position):
                     p = Position(x, y)
                     if rc.is_in_vision(p) and rc.is_tile_passable(p):
                         init_a_star(p, target)
-                        pt = a_star(p, map_info.get_avoid(False, True, False, True))
+                        pt = a_star(p, map_info.get_avoid(False, True, not destroy_barrier, True))
                         if pt and len(pt) > 0:
                             if not best or best_dist > len(pt):
                                 best = p
