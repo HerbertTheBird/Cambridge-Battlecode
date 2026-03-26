@@ -322,12 +322,19 @@ def run_route():
             if place:
                 if rc.can_destroy(i):
                     rc.destroy(i)
+                id = rc.get_tile_building_id(rc.get_position())
+                if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
+                    rc.fire(rc.get_position())
                 if rc.can_build_launcher(i):
                     rc.build_launcher(i)
         to_build = ore_path[route_idx]
         bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
         dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
         if to_build.distance_squared(rc.get_position()) <= 2:
+            if to_build == rc.get_position():
+                id = rc.get_tile_building_id(rc.get_position())
+                if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
+                    rc.fire(rc.get_position())
             if rc.can_destroy(to_build):
                 rc.destroy(to_build)
             if bridge and rc.can_build_bridge(to_build, ore_path[route_idx+1]):
