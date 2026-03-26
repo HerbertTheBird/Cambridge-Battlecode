@@ -155,8 +155,10 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         if avoid[hash(a.x, a.y)] != avoid_id - 1:
             avoid_changed = True
         avoid[hash(a.x, a.y)] = avoid_id
+    print("stats", avoid_changed, path, Position(start%width, start//width))
     if not avoid_changed and path is not None and len(path) > 0 and dirs == path_dirs:
         if path[0].distance_squared(Position(start%width, start//width)) <= 2 and target[hash(path[-1].x, path[-1].y)] == run_id:
+            print("max length is", max_length)
             max_length = len(path)-1
     if dirs == DIRS:
         h = lambda pos: (max_local(abs_local(pos%width - tx), abs_local(pos//width - ty)))
@@ -221,7 +223,29 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
             return True
     return False
 
-def move_to(target: Position, destroy_barriers: bool = False):
+def move_to(target: Position, destroy_barriers: bool = True):
+    global path, path_idx
+    avoid = map_info.get_avoid(False, True, not destroy_barriers, False)
+    if len(heap) == 0:
+        init_a_star(rc.get_position(), target)
+    next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None and moves_through_impassible(next_path, avoid):
+        init_a_star(rc.get_position(), target)
+        next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None:
+        path = next_path
+        path_idx = 0
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 50, 0)
+    elif path is not None and len(path) > 1:
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
+    if path is None or len(path) < path_idx+2:
+        if destroy_barriers:
+            return False
+        else:
+            return move_to(target, True)
+    move_dir = path[path_idx].direction_to(path[path_idx+1])
     marked = False
     for dir in Direction:
         pos = rc.get_position().add(dir)
@@ -242,7 +266,7 @@ def move_to(target: Position, destroy_barriers: bool = False):
                             if not best or best_dist > len(pt):
                                 best = p
                                 best_dist = len(pt)
-            if best:
+            if best and best_dist < len(path)-path_idx:
                 for dir2 in Direction:
                     if not map_info.in_bounds(pos.add(dir2)):
                         continue
@@ -257,29 +281,7 @@ def move_to(target: Position, destroy_barriers: bool = False):
             break
     if marked:
         return
-    global path, path_idx
-    avoid = map_info.get_avoid(False, True, not destroy_barriers, True)
-    if len(heap) == 0:
-        init_a_star(rc.get_position(), target)
-    next_path = a_star(rc.get_position(), avoid)
-    if next_path is not None and moves_through_impassible(next_path, avoid):
-        init_a_star(rc.get_position(), target)
-        next_path = a_star(rc.get_position(), avoid)
-    if next_path is not None:
-        path = next_path
-        path_idx = 0
-        for i in range(len(path)-1):
-            rc.draw_indicator_line(path[i], path[i+1], 0, 50, 0)
-    elif path is not None and len(path) > 1:
-        for i in range(len(path)-1):
-            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
-    if path is None or len(path) < path_idx+2:
-        if destroy_barriers:
-            return False
-        else:
-            return move_to(target, True)
-    dir = path[path_idx].direction_to(path[path_idx+1])
-    if move(dir):
+    if move(move_dir):
         path_idx += 1
     return True
 
@@ -322,7 +324,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
     for p, b in map_info.building.items():
-        if b and map_info.is_conveyor(b.type) and b.load and b.load < 3:
+        if b and map_info.is_conveyor(b.type) and b.load and b.load < 3 and b.team == rc.get_team():
             target.add(p)
     avoid = map_info.get_avoid(True, False, False, True)
     for dir in CARD_DIR:
