@@ -237,9 +237,9 @@ def run_build_harvester():
 
                 building_id = rc.get_tile_building_id(pos)
                 is_our_barrier = False
-                if building_id or rc.get_tile_builder_bot_id(pos):
+                if building_id or rc.get_tile_builder_bot_id():
                     try:
-                        if rc.get_tile_builder_bot_id(pos) or rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE]:
+                        if rc.get_tile_builder_bot_id() or rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE]:
                             is_our_barrier = True
                     except GameError: pass
 
