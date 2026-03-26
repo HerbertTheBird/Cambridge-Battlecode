@@ -332,6 +332,7 @@ def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Po
                 if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.LAUNCHER:
                     done = True
             if done:
+                j += 1
                 continue
             here -= avoid
 
