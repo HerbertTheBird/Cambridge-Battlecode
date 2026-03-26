@@ -221,9 +221,9 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
             return True
     return False
 
-def move_to(target: Position, destroy_barriers: bool = True):
+def move_to(target: Position):
     global path, path_idx
-    avoid = map_info.get_avoid(False, True, not destroy_barriers, False)
+    avoid = map_info.get_avoid(False, True, False, False)
     if len(heap) == 0:
         init_a_star(rc.get_position(), target)
     next_path = a_star(rc.get_position(), avoid)
@@ -239,10 +239,7 @@ def move_to(target: Position, destroy_barriers: bool = True):
         for i in range(len(path)-1):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if path is None or len(path) < path_idx+2:
-        if destroy_barriers:
-            return False
-        else:
-            return move_to(target, True)
+        return False
     move_dir = path[path_idx].direction_to(path[path_idx+1])
     marked = False
     for dir in Direction:
@@ -259,7 +256,7 @@ def move_to(target: Position, destroy_barriers: bool = True):
                     p = Position(x, y)
                     if rc.is_in_vision(p) and rc.is_tile_passable(p):
                         init_a_star(p, target)
-                        pt = a_star(p, map_info.get_avoid(False, True, not destroy_barriers, True))
+                        pt = a_star(p, map_info.get_avoid(False, True, False, True))
                         if pt and len(pt) > 0:
                             if not best or best_dist > len(pt):
                                 best = p
