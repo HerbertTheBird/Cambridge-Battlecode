@@ -263,15 +263,19 @@ def execute_path(sample_path=None, path_idx=0):
     return False
 
 def calculate_conveyor_path(ore: Position):
-    global path, path_idx
-        
+    core = map_info.my_core
+    target = {core.add(i) for i in Direction}
     avoid = map_info.get_avoid(True, False)
+    avoid.discard(ore.add(Direction.NORTH))
+    avoid.discard(ore.add(Direction.SOUTH))
+    avoid.discard(ore.add(Direction.EAST))
+    avoid.discard(ore.add(Direction.WEST))
     if len(heap) == 0:
         init_a_star(ore, target, CONV, True)
     next_path = a_star(ore, avoid)
     if next_path is not None and moves_through_impassible(next_path, avoid):
-        init_a_star(ore, target)
-        next_path = a_star(rc.get_position(), avoid)
+        init_a_star(ore, target, CONV, True)
+        next_path = a_star(ore, avoid)
     if next_path is not None:
         path = next_path
         path_idx = 0
@@ -280,5 +284,8 @@ def calculate_conveyor_path(ore: Position):
     elif path is not None and len(path) > 1:
         for i in range(len(path)-1):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
+    if len(path) == 0:
+        heap.clear()
     if path is None or len(path) < path_idx+2:
         return None
+    return path
