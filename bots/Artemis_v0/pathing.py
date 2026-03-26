@@ -9,7 +9,7 @@ import time
 import math
 weight = 1.5
 MAX_ITER = 200
-TIME_CUTOFF = 1500
+TIME_CUTOFF = 1200
 # 4-direction movement
 
 #todo
@@ -265,19 +265,11 @@ def move_to(target: Position, destroy_barrier: bool = False):
             for x in range(pos.x-r, pos.x+r+1):
                 for y in range(pos.y-r, pos.y+r+1):
                     p = Position(x, y)
-                    if rc.is_in_vision(p) and rc.is_tile_passable(p):
-                        if target.distance_squared(p) < 30:
-                            init_a_star(p, target)
-                            pt = a_star(p, map_info.get_avoid(False, True, not destroy_barrier, True))
-                            if pt and len(pt) > 0:
-                                if not best or best_dist > len(pt):
-                                    best = p
-                                    best_dist = len(pt)
-                        else:
-                            dist = max(abs(p.x-target.x), abs(p.y-target.y))
-                            if not best or best_dist > dist*weight:
-                                best_dist = dist*weight
-                                best = p
+                    if rc.is_in_vision(p) and rc.is_tile_passable(p) and target.distance_squared(p) <= 2:
+                        dist = max(abs(p.x-target.x), abs(p.y-target.y))
+                        if not best or best_dist > dist*weight:
+                            best_dist = dist*weight
+                            best = p
             if best and best_dist < len(path)-path_idx:
                 for dir2 in Direction:
                     if not map_info.in_bounds(pos.add(dir2)):
@@ -333,6 +325,8 @@ def execute_path(sample_path=None, path_idx=0):
     return False
 
 def calculate_conveyor_path(ore: Position, update:bool = False):
+    print("start calculate_conveyor_path")
+
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
     for p, b in map_info.building.items():
@@ -359,12 +353,15 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if len(path) == 0:
         heap.clear()
+    print("end calculate_conveyor_path")
+
     if path is None or len(path) < path_idx+2:
         return None
     return path
 
 
 def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Position]:
+    print("start calculate_launcher_positions")
     avoid = map_info.get_avoid(True, False)
     for p in path:
         avoid.add(p)
@@ -414,5 +411,6 @@ def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Po
 
         pos = best
         i = j
+    print("end calculate_launcher_positions")
 
     return result

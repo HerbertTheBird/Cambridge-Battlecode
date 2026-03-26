@@ -54,9 +54,13 @@ def run():
     global mode
     run_pre() # preliminary calculations
     print(f"CHECKING STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
+    print("run check", mode.name)
     globals()[f"check_{mode.name.lower()}"]()
     print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
+    print("run run", mode.name)
     globals()[f"run_{mode.name.lower()}"]()
+    print("done", mode.name)
+
     # run_post() # cleanup
 
 def generate_encoded_int(builder_id: int) -> int:

@@ -117,6 +117,7 @@ def is_conveyor(type: EntityType):
 def is_turret(type: EntityType):
     return type == EntityType.GUNNER or type == EntityType.SENTINEL or type == EntityType.BREACH
 def update() -> None:
+    print("start update")
 
     global my_core, their_core, core_id, solved_sym
     current_round = rc.get_current_round()
@@ -195,6 +196,8 @@ def update() -> None:
             flipped = flip(tile)
             if flipped not in ground:
                 ground[flipped] = ground[tile]
+    print("end update")
+
 
 def is_tile_empty(pos : Position):
     return in_bounds(pos) and (rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) == EntityType.MARKER))
