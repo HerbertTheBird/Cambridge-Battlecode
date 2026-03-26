@@ -208,9 +208,10 @@ def check_explore_athena():
     pass
 
 def check_explore():
-    global mode, explore_target, turns_since_last_explore_target
+    global mode, explore_target, turns_since_last_explore_target, defended_ores
     
-    if opponent_ore:
+    if opponent_ore and opponent_ore not in defended_ores:
+        print(f" | Triggering {opponent_ore}")
         mode = Mode.SABOTAGE
     if target_ore:
         mode = Mode.BUILD_HARVESTER
@@ -229,6 +230,10 @@ def check_build_harvester():
     if (target_ore.distance_squared(rc.get_position())) <= rc.get_vision_radius_sq():
         building_id = rc.get_tile_building_id(target_ore)
         if building_id and (rc.get_entity_type(building_id) == EntityType.HARVESTER or rc.get_team(building_id) != rc.get_team()):
+            # if (rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) == EntityType.HARVESTER):
+            #     mode = Mode.SABOTAGE
+            #     opponent_ore = target_ore
+            #     return
             target_ore = None
             mode = Mode.EXPLORE
             return
@@ -507,24 +512,16 @@ def check_sabotage():
         opponent_ore = None
         return
 
-    try:
-        building_type = rc.get_entity_type(building_id)
-        building_team = rc.get_team(building_id)
+    building_type = rc.get_entity_type(building_id)
+    building_team = rc.get_team(building_id)
 
-        if not (building_type == EntityType.HARVESTER and building_team != rc.get_team()):
-            mode = Mode.EXPLORE
-            opponent_ore = None
-            return
-    except GameError:
+    if not (building_type == EntityType.HARVESTER and building_team != rc.get_team()):
         mode = Mode.EXPLORE
         opponent_ore = None
         return
 
     # we already put a turret
-    for d in Direction:
-        if d == Direction.CENTRE:
-            continue
-
+    for d in cardinal_dirs:
         adj = opponent_ore.add(d)
 
         # Only consider tiles on map AND in vision
@@ -533,21 +530,17 @@ def check_sabotage():
         if rc.get_position().distance_squared(adj) > rc.get_vision_radius_sq():
             continue
 
-        try:
-            building_id = rc.get_tile_building_id(adj)
-            if building_id is None:
-                continue
-            if (rc.get_entity_type(building_id) == EntityType.SENTINEL and
-                rc.get_team(building_id) == rc.get_team()):
-                # Successfully sabotaged → leave
-                mode = Mode.EXPLORE
-                opponent_ore = None
-                defended_ores.add(opponent_ore)
-                blocked_ores[opponent_ore] = rc.get_current_round() + 100
-                return
-        except GameError:
-            # Safety: shouldn't happen now, but skip just in case
+        building_id = rc.get_tile_building_id(adj)
+        if building_id is None:
             continue
+        if (rc.get_entity_type(building_id) == EntityType.SENTINEL and rc.get_team(building_id) == rc.get_team()):
+            print(f" | Turret detected, marking {opponent_ore}")
+            # Successfully sabotaged → leave
+            mode = Mode.EXPLORE
+            opponent_ore = None
+            defended_ores.add(opponent_ore)
+            blocked_ores[opponent_ore] = rc.get_current_round() + 100
+            return
 
 def run_sabotage():
     global opponent_ore, mode, defended_ores
