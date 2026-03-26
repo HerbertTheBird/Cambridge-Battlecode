@@ -293,7 +293,7 @@ def run_build_harvester():
                 mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
                 return
 def check_route():
-    global ore_path, launcher_positions, route_idx
+    global ore_path, launcher_positions, route_idx, mode
     if not ore_path:
         ore_path = pathing.calculate_conveyor_path(routed_ore)
         route_idx = 0
