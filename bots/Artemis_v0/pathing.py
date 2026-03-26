@@ -285,7 +285,7 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
     for p, b in map_info.building.items():
-        if b and map_info.is_conveyor(b) and b.load and b.load < 4:
+        if b and map_info.is_conveyor(b.type) and b.load and b.load < 4:
             target.add(p)
     avoid = map_info.get_avoid(True, False, False)
     for dir in CARD_DIR:
