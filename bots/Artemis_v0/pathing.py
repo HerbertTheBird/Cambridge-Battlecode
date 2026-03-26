@@ -241,7 +241,7 @@ def move_to(target: Position, destroy_barriers: bool = False):
     if marked:
         return
     global path, path_idx
-    avoid = map_info.get_avoid(False, True, not destroy_barriers)
+    avoid = map_info.get_avoid(False, True, not destroy_barriers, True)
     if len(heap) == 0:
         init_a_star(rc.get_position(), target)
     next_path = a_star(rc.get_position(), avoid)
@@ -305,9 +305,9 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
     for p, b in map_info.building.items():
-        if b and map_info.is_conveyor(b.type) and b.load and b.load < 4:
+        if b and map_info.is_conveyor(b.type) and b.load and b.load < 3:
             target.add(p)
-    avoid = map_info.get_avoid(True, False, False)
+    avoid = map_info.get_avoid(True, False, False, True)
     for dir in CARD_DIR:
         pos = ore.add(dir)
         if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.BARRIER:

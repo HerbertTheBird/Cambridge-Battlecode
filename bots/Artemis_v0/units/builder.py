@@ -326,7 +326,7 @@ def check_route():
 def run_route():
     global route_idx, launcher_idx, ore_path, launcher_positions
     if ore_path:
-        if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(False, False, False)):
+        if route_idx < len(ore_path)-1 and pathing.moves_through_impassible(ore_path, map_info.get_avoid(False, False, False, True)):
             new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
                 ore_path = new_path

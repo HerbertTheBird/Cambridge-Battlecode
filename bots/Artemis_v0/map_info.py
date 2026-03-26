@@ -199,7 +199,7 @@ def update() -> None:
 def is_tile_empty(pos : Position):
     return rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) == EntityType.MARKER)
 
-def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barriers_ore: bool = True) -> set[Position]:
+def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barrier: bool = True, avoid_ore: bool = True) -> set[Position]:
     avoid = set()
     if avoid_builders:
         for unit in rc.get_nearby_units():
@@ -216,7 +216,7 @@ def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barriers_ore: b
                 avoid.add(Position(x, y))
     for pos in ground:
         if ground[pos] != Environment.EMPTY and ground[pos] != Environment.ORE_AXIONITE:
-            if not avoid_barriers_ore and ground[pos] == Environment.ORE_TITANIUM:
+            if not avoid_ore and ground[pos] == Environment.ORE_TITANIUM:
                 continue
             avoid.add(pos)
     for pos in building:
@@ -228,7 +228,7 @@ def get_avoid(avoid_conveyors: bool, avoid_builders: bool, avoid_barriers_ore: b
                 continue
             if type == EntityType.MARKER:
                 continue
-            if type == EntityType.BARRIER and not avoid_barriers_ore:
+            if type == EntityType.BARRIER and not avoid_barrier:
                 continue
             if not avoid_conveyors and (type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER):
                 continue
