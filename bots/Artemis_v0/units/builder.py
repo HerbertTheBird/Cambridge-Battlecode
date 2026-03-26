@@ -262,6 +262,9 @@ def run_explore():
     if explore_target is None:
         force_generate_explore_target()
 
+    if rc.get_global_resources()[0] < rc.get_bridge_cost()[0]:
+        return
+
     # loop until we find a target we can path to and move.
     moved = False
     attempts = 0
