@@ -95,7 +95,7 @@ def init(c: Controller):
 def move(dir: Direction):
     map_info.update()
     new_pos = rc.get_position().add(dir)
-    if new_pos in map_info.building and map_info.building[new_pos] and map_info.building[new_pos].type == EntityType.BARRIER and rc.can_destroy(new_pos):
+    if new_pos in map_info.building and map_info.building[new_pos.x][new_pos.y] and map_info.building[new_pos.x][new_pos.y].type == EntityType.BARRIER and rc.can_destroy(new_pos):
         rc.destroy(new_pos)
     if rc.can_build_road(new_pos):
         rc.build_road(new_pos)
@@ -325,17 +325,19 @@ def execute_path(sample_path=None, path_idx=0):
     return False
 
 def calculate_conveyor_path(ore: Position, update:bool = False):
-    print("start calculate_conveyor_path")
+    print("start calculate_conveyor_path", rc.get_cpu_time_elapsed())
 
     core = map_info.my_core
     target = {core.add(i) for i in Direction}
-    for p, b in map_info.building.items():
-        if b and map_info.is_conveyor(b.type) and b.load and b.load < 3 and b.team == rc.get_team():
-            target.add(p)
+    for x in range(map_info.width):
+        for y in range(map_info.height):
+            b = map_info.building[x][y]
+            if b and map_info.is_conveyor(b.type) and b.load and b.load < 3 and b.team == rc.get_team():
+                target.add(Position(x, y))
     avoid = map_info.get_avoid(True, False, False, True)
     for dir in CARD_DIR:
         pos = ore.add(dir)
-        if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.BARRIER:
+        if pos in map_info.building and map_info.building[pos.x][pos.y] and map_info.building[pos.x][pos.y].team == rc.get_team() and map_info.building[pos.x][pos.y].type == EntityType.BARRIER:
             avoid.discard(pos)
     if len(heap) == 0:
         init_a_star(ore, target, CONV, not update)
@@ -353,47 +355,61 @@ def calculate_conveyor_path(ore: Position, update:bool = False):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if len(path) == 0:
         heap.clear()
-    print("end calculate_conveyor_path")
+    print("end calculate_conveyor_path", rc.get_cpu_time_elapsed())
 
     if path is None or len(path) < path_idx+2:
         return None
     return path
 
-
 def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Position]:
-    print("start calculate_launcher_positions")
+    print("start calculate_launcher_positions", rc.get_cpu_time_elapsed())
+
     avoid = map_info.get_avoid(True, False)
-    for p in path:
-        avoid.add(p)
+    avoid.update(path)
+
     result: list[Position] = []
-    pos = rc.get_position()
+    current_pos = rc.get_position()
+
+    width = map_info.width
+    height = map_info.height
+    building = map_info.building
+    team = rc.get_team()
+    path_len = len(path)
 
     i = 0
-    while i < len(path)-1:
+    while i < path_len - 1:
         possible: set[Position] | None = None
         last_possible: set[Position] | None = None
         j = i
 
-        while j < len(path)-1:
-            here = {
-                path[j].add(dir)
-                for dir in Direction
-                if 0 <= path[j].add(dir).x < map_info.width
-                and 0 <= path[j].add(dir).y < map_info.height
-            }
+        while j < path_len - 1:
+            base = path[j]
+
+            here: set[Position] = set()
+            for dir in Direction:
+                candidate = base.add(dir)
+                x = candidate.x
+                y = candidate.y
+                if 0 <= x < width and 0 <= y < height:
+                    here.add(candidate)
+
             done = False
-            for pos in here:
-                if pos in map_info.building and map_info.building[pos] and map_info.building[pos].team == rc.get_team() and map_info.building[pos].type == EntityType.LAUNCHER:
+            for candidate in here:
+                b = building[candidate.x][candidate.y]
+                if b and b.team == team and b.type == EntityType.LAUNCHER:
                     done = True
+                    break
+
             if done:
                 j += 1
                 continue
-            here -= avoid
 
             if possible is None:
-                new_possible = here
+                new_possible = here - avoid
             else:
-                new_possible = possible & here
+                new_possible = possible.intersection(here)
+                if new_possible:
+                    new_possible.difference_update(avoid)
 
             if not new_possible:
                 break
@@ -406,11 +422,11 @@ def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Po
             i += 1
             continue
 
-        best = min(last_possible, key=lambda p: p.distance_squared(pos))
+        best = min(last_possible, key=lambda p: p.distance_squared(current_pos))
         result.append(best)
 
-        pos = best
+        current_pos = best
         i = j
-    print("end calculate_launcher_positions")
 
+    print("end calculate_launcher_positions", rc.get_cpu_time_elapsed())
     return result

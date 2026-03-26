@@ -47,7 +47,7 @@ def run():
         try:
             if rc.get_team(unit_id) != my_team and rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT:
                 bot_pos = rc.get_position(unit_id)
-                building_on_tile = map_info.building.get(bot_pos)
+                building_on_tile = map_info.building[bot_pos.x][bot_pos.y]
                 
                 # Primary Target: opponent bot on our conveyor/bridge
                 if building_on_tile and building_on_tile.team == my_team and map_info.is_conveyor(building_on_tile.type):

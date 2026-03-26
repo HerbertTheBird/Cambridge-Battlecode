@@ -54,12 +54,12 @@ def run():
     global mode
     run_pre() # preliminary calculations
     print(f"CHECKING STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
-    print("run check", mode.name)
+    print("run check", mode.name, rc.get_cpu_time_elapsed())
     globals()[f"check_{mode.name.lower()}"]()
     print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
-    print("run run", mode.name)
+    print("run run", mode.name, rc.get_cpu_time_elapsed())
     globals()[f"run_{mode.name.lower()}"]()
-    print("done", mode.name)
+    print("done", mode.name, rc.get_cpu_time_elapsed())
 
     # run_post() # cleanup
 
@@ -459,7 +459,7 @@ def run_route():
                         place = False
 
             if place:
-                if launcher in map_info.building and map_info.building[launcher] and map_info.building[launcher].team != rc.get_team():
+                if launcher in map_info.building and map_info.building[launcher.x][launcher.y] and map_info.building[launcher.x][launcher.y].team != rc.get_team():
                     pathing.move_to(launcher)
                     if rc.get_position() == launcher and rc.can_fire(launcher):
                         rc.fire(launcher)
