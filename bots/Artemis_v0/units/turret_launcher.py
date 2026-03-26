@@ -71,12 +71,15 @@ def run():
     all_roads = []
     all_conveyances = []
 
-    for pos, building in map_info.building.items():
-        if building:
-            if building.type == EntityType.ROAD:
-                all_roads.append(pos)
-            elif map_info.is_conveyor(building.type) or building.type == EntityType.BRIDGE:
-                all_conveyances.append(pos)
+    for x in range(map_info.width):
+        for y in range(map_info.height):
+            b = map_info.building[x][y]
+            if b:
+                pos = Position(x, y)
+                if b.type == EntityType.ROAD:
+                    all_roads.append(pos)
+                elif map_info.is_conveyor(b.type) or b.type == EntityType.BRIDGE:
+                    all_conveyances.append(pos)
 
     valid_destinations = []
     for road_pos in all_roads:
