@@ -120,7 +120,6 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
     start = hash(start_p.x, start_p.y)
     tx = start_p.x
     ty = start_p.y
-    rc.draw_indicator_line(Position(0, 0), start_p, 255, 0, 0)
 
     if adjacent:
         left = -1 if start%width == 0 else start-1
@@ -141,12 +140,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
     if not avoid_changed and path is not None and len(path) > 0:
         prev_start = hash(path[0].x, path[0].y)
         if path[0].distance_squared(Position(start%width, start//width)) <= 2 and target[hash(path[-1].x, path[-1].y)] == run_id:
-            max_length = 0
-            for i in range(len(path)-1):
-                if path[i].distance_squared(path[i+1]) < 2: #assume conveyors arent placed diagonally 1
-                    max_length += 1
-                else:
-                    max_length += bridge_cost
+            max_length = len(path)-1
     if dirs == DIRS:
         h = lambda pos: (max_local(abs_local(pos%width - tx), abs_local(pos//width - ty)))
     else:
@@ -165,7 +159,7 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
         pos = abs_local(pos)
         if avoid[pos] == avoid_id:
             continue
-        rc.draw_indicator_dot(Position(pos%width, pos//width), 255, 0, 0)
+        rc.draw_indicator_dot(Position(pos%width, pos//width), 50, 0, 0)
         g *= -1
         if (not adjacent and pos == start) or (adjacent and (pos == left or pos == right or pos == up or pos == down)):
             path_out = []
@@ -219,10 +213,10 @@ def move_to(target: Position):
         path = next_path
         path_idx = 0
         for i in range(len(path)-1):
-            rc.draw_indicator_line(path[i], path[i+1], 0, 255, 0)
+            rc.draw_indicator_line(path[i], path[i+1], 0, 50, 0)
     elif path is not None and len(path) > 1:
         for i in range(len(path)-1):
-            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 255)
+            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if path is None or len(path) < path_idx+2:
         return False
     dir = path[path_idx].direction_to(path[path_idx+1])
