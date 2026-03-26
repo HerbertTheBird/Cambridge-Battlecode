@@ -196,7 +196,7 @@ def update() -> None:
                 ground[flipped] = ground[tile]
                 
 
-def get_avoid(avoid_walkables: bool, avoid_builders: bool) -> set[Position]:
+def get_avoid(avoid_conveyors: bool, avoid_builders: bool) -> set[Position]:
     avoid = set()
     if avoid_builders:
         for unit in rc.get_nearby_units():
@@ -219,7 +219,9 @@ def get_avoid(avoid_walkables: bool, avoid_builders: bool) -> set[Position]:
             type = building[pos].type
             if type == EntityType.CORE and not avoid_core:
                 continue
-            if not avoid_walkables and (type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER or type == EntityType.ROAD):
+            if type == EntityType.ROAD:
+                continue
+            if not avoid_conveyors and (type == EntityType.CONVEYOR or type == EntityType.ARMOURED_CONVEYOR or type == EntityType.BRIDGE or type == EntityType.SPLITTER):
                 continue
             avoid.add(pos)
     return avoid

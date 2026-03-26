@@ -249,6 +249,7 @@ def calculate_path(target: Position, start=None):
             rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
     if path is None or len(path) < path_idx+2:
         return None
+    return path
 
 def execute_path(sample_path=None, path_idx=0):
     if (sample_path == None):
@@ -260,3 +261,24 @@ def execute_path(sample_path=None, path_idx=0):
         path_idx += 1
         return True
     return False
+
+def calculate_conveyor_path(ore: Position):
+    global path, path_idx
+        
+    avoid = map_info.get_avoid(True, False)
+    if len(heap) == 0:
+        init_a_star(ore, target, CONV, True)
+    next_path = a_star(ore, avoid)
+    if next_path is not None and moves_through_impassible(next_path, avoid):
+        init_a_star(ore, target)
+        next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None:
+        path = next_path
+        path_idx = 0
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 50, 0)
+    elif path is not None and len(path) > 1:
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 50)
+    if path is None or len(path) < path_idx+2:
+        return None
