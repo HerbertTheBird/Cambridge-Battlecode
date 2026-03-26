@@ -129,6 +129,7 @@ def init_a_star(start_p: Position, target_p: Position| set[Position], input_dirs
         seen[t] = run_id
     iter = 0
 def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
+    start_time = time.perf_counter()
     print("call a*", rc.get_cpu_time_elapsed())
     global iter, avoid_id, path_dirs
     heappush = heapq.heappush
@@ -188,6 +189,8 @@ def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] |
                 path_out.append(Position(pos%width, pos//width))
                 pos = parent[pos] if target[pos] != run_id else -1
             hp.clear()
+            end_time = time.perf_counter()
+            print("a* real time", (end_time-start_time)*1000000)
             print("end a*", rc.get_cpu_time_elapsed())
             return path_out
 
@@ -263,12 +266,18 @@ def move_to(target: Position, destroy_barrier: bool = False):
                 for y in range(pos.y-r, pos.y+r+1):
                     p = Position(x, y)
                     if rc.is_in_vision(p) and rc.is_tile_passable(p):
-                        init_a_star(p, target)
-                        pt = a_star(p, map_info.get_avoid(False, True, not destroy_barrier, True))
-                        if pt and len(pt) > 0:
-                            if not best or best_dist > len(pt):
+                        if target.distance_squared(p) < 30:
+                            init_a_star(p, target)
+                            pt = a_star(p, map_info.get_avoid(False, True, not destroy_barrier, True))
+                            if pt and len(pt) > 0:
+                                if not best or best_dist > len(pt):
+                                    best = p
+                                    best_dist = len(pt)
+                        else:
+                            dist = max(abs(p.x-target.x), abs(p.y-target.y))
+                            if not best or best_dist > dist*weight:
+                                best_dist = dist*weight
                                 best = p
-                                best_dist = len(pt)
             if best and best_dist < len(path)-path_idx:
                 for dir2 in Direction:
                     if not map_info.in_bounds(pos.add(dir2)):
