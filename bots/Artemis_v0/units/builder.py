@@ -620,13 +620,16 @@ def run_sabotage():
             pathing.move_to(empty_tile)
 
         # We are within distance ≤ 2 → try placing turret
-        direction = map_info.best_sentinel_dir(empty_tile)
-        if direction:
-            if rc.get_tile_building_id(pos) and rc.get_entity_type(rc.get_tile_building_id(pos)) != EntityType.SENTINEL:
-                if rc.can_destroy(pos):
-                    rc.destroy(pos)
-            if rc.can_build_sentinel(empty_tile, direction):
-                rc.build_sentinel(empty_tile, direction)
+        
+        dist_sq = rc.get_position().distance_squared(empty_tile)
+        if dist_sq <= 2:
+            direction = map_info.best_sentinel_dir(empty_tile)
+            if direction:
+                if rc.get_tile_building_id(pos) and rc.get_entity_type(rc.get_tile_building_id(pos)) != EntityType.SENTINEL:
+                    if rc.can_destroy(pos):
+                        rc.destroy(pos)
+                if rc.can_build_sentinel(empty_tile, direction):
+                    rc.build_sentinel(empty_tile, direction)
 
         return
 
