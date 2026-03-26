@@ -289,3 +289,49 @@ def calculate_conveyor_path(ore: Position):
     if path is None or len(path) < path_idx+2:
         return None
     return path
+
+
+def calculate_launcher_positions(path: list[Position], ore: Position) -> list[Position]:
+    avoid = map_info.get_avoid(True, False)
+    avoid.add(ore.add(Direction.NORTH))
+    avoid.add(ore.add(Direction.SOUTH))
+    avoid.add(ore.add(Direction.EAST))
+    avoid.add(ore.add(Direction.WEST))
+    for p in path:
+        avoid.add(p)
+    result: list[Position] = []
+    pos = rc.get_position()
+
+    i = 0
+    while i < len(path)-1:
+        possible: set[Position] | None = None
+        last_possible: set[Position] | None = None
+        j = i
+
+        while j < len(path)-1:
+            here = {path[j].add(dir) for dir in Direction}
+            here -= avoid
+
+            if possible is None:
+                new_possible = here
+            else:
+                new_possible = possible & here
+
+            if not new_possible:
+                break
+
+            last_possible = new_possible
+            possible = new_possible
+            j += 1
+
+        if not last_possible:
+            i += 1
+            continue
+
+        best = min(last_possible, key=lambda p: p.distance_squared(pos))
+        result.append(best)
+
+        pos = best
+        i = j
+
+    return result
