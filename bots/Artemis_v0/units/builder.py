@@ -96,6 +96,10 @@ def run_pre():
 
     # Update target_ore based on what we can see right now
     if closest_ore is not None:
+        path = pathing.calculate_conveyor_path(closest_ore)
+        launchers = pathing.calculate_launcher_positions(path, closest_ore)
+        for i in launchers:
+            rc.draw_indicator_line(Position(0, 0),i, 0, 255, 255)
         if target_ore is None:
             target_ore = closest_ore
         else:
