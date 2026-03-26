@@ -220,8 +220,6 @@ def run_build_harvester():
             for d in random.sample(list(Direction), len(list(Direction))):
                 if rc.can_move(d):
                     rc.move(d)
-                    return
-            return # Can't move, stuck.
 
         # If adjacent to the ore, clear it and build.
         if rc.get_position().distance_squared(target_ore) <= 2:
@@ -229,7 +227,6 @@ def run_build_harvester():
             if building_id and rc.get_team(building_id) == rc.get_team():
                 if rc.can_destroy(target_ore):
                     rc.destroy(target_ore)
-                    return
             
             if rc.get_tile_building_id(target_ore) is None and rc.can_build_harvester(target_ore):
                 rc.build_harvester(target_ore)
