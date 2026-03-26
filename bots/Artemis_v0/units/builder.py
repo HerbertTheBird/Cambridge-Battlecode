@@ -302,14 +302,14 @@ def check_route():
         launcher_idx = 0
         if ore_path:
             launcher_positions = pathing.calculate_launcher_positions(ore_path, routed_ore)
-    if route_idx == len(ore_path)-1:
+    if route_idx >= len(ore_path)-1 and launcher_idx >= len(launcher_positions):
         mode = Mode.EXPLORE
         ore_path = None
         launcher_positions = None
 
 def run_route():
     global route_idx, launcher_idx
-    if ore_path and route_idx < len(ore_path)-1:
+    if ore_path:
         for i in range(len(ore_path)-1):
             rc.draw_indicator_line(ore_path[i], ore_path[i+1], 0, 255, 0)
             rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
@@ -319,12 +319,13 @@ def run_route():
             launcher = launcher_positions[launcher_idx]
             place = True
             nearby_conv = None
-            for i in range(len(ore_path)):
+            for i in range(len(ore_path)-1):
                 p = ore_path[i]
                 if p.distance_squared(launcher) <= 2:
                     nearby_conv = p
                     if route_idx <= i:
                         place = False
+
             if place:
                 if launcher in map_info.building and map_info.building[launcher] and map_info.building[launcher].team != rc.get_team():
                     pathing.move_to(launcher)
@@ -339,21 +340,22 @@ def run_route():
                         rc.build_launcher(launcher)
                         launcher_idx += 1
                 return
-        to_build = ore_path[route_idx]
-        bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
-        dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
-        if to_build.distance_squared(rc.get_position()) <= 2:
-            if to_build == rc.get_position():
-                id = rc.get_tile_building_id(rc.get_position())
-                if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
-                    rc.fire(rc.get_position())
-            if rc.can_destroy(to_build):
-                rc.destroy(to_build)
-            if bridge and rc.can_build_bridge(to_build, ore_path[route_idx+1]):
-                rc.build_bridge(to_build, ore_path[route_idx+1])
-                route_idx += 1
-            elif not bridge and rc.can_build_conveyor(to_build, dir):
-                rc.build_conveyor(to_build, dir)
-                route_idx += 1
-        next = ore_path[route_idx]
-        pathing.move_to(next)
+        if route_idx < len(ore_path)-1:
+            to_build = ore_path[route_idx]
+            bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
+            dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
+            if to_build.distance_squared(rc.get_position()) <= 2:
+                if to_build == rc.get_position():
+                    id = rc.get_tile_building_id(rc.get_position())
+                    if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
+                        rc.fire(rc.get_position())
+                if rc.can_destroy(to_build):
+                    rc.destroy(to_build)
+                if bridge and rc.can_build_bridge(to_build, ore_path[route_idx+1]):
+                    rc.build_bridge(to_build, ore_path[route_idx+1])
+                    route_idx += 1
+                elif not bridge and rc.can_build_conveyor(to_build, dir):
+                    rc.build_conveyor(to_build, dir)
+                    route_idx += 1
+            next = ore_path[route_idx]
+            pathing.move_to(next)
