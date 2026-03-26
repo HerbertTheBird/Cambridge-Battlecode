@@ -22,11 +22,13 @@ class Mode(Enum):
 
 mode = Mode.EXPLORE
 indicator = []
+blocked_ores = {}
 
 # explore state
 explore_target = None
 turns_since_last_explore_target = 0
 target_ore = None
+sabotage_ore = None
 
 #route state
 routed_ore = None
@@ -51,7 +53,7 @@ def run():
     globals()[f"check_{mode.name.lower()}"]()
     print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
     globals()[f"run_{mode.name.lower()}"]()
-    run_post() # cleanup
+    # run_post() # cleanup
 
 def generate_encoded_int(builder_id: int) -> int:
     if not (0 <= builder_id <= 31):
@@ -72,40 +74,56 @@ def generate_encoded_int(builder_id: int) -> int:
 
 # invariant calculations
 def run_pre():
-    global target_ore
+    global target_ore, blocked_ores, sabotage_ore
     map_info.update()
     if rc.get_hp() < rc.get_max_hp() and rc.can_heal(rc.get_position()):
         rc.heal(rc.get_position())
+    # Clean up expired blocks
+    current_round = rc.get_current_round()
+    for ore, unblock_round in list(blocked_ores.items()):
+        if current_round >= unblock_round:
+            del blocked_ores[ore]
+
     if map_info.my_core is None:
         return
 
     closest_ore = None
     min_dist_sq = float('inf')
+    min_dist_sq_sabotage = float('inf')
 
     # Find all visible titanium ores without an allied harvester on them
     for pos in rc.get_nearby_tiles():
+        if pos in blocked_ores:
+            continue
+            
         env = rc.get_tile_env(pos)
         if env == Environment.ORE_TITANIUM:
             building_id = rc.get_tile_building_id(pos)
             
-            has_allied_harvester = False
+            blocked = False
             occupied_opponent = False
             if building_id is not None:
                 try:
                     building_type = rc.get_entity_type(building_id)
                     building_team = rc.get_team(building_id)
-                    if building_type == EntityType.HARVESTER and building_team == rc.get_team():
-                        has_allied_harvester = True
+                    if building_type == EntityType.HARVESTER and building_team == rc.get_team() or building_type == EntityType.BARRIER:
+                        blocked = True
                     if building_type != EntityType.MARKER and building_team != rc.get_team():
                         occupied_opponent = True
                 except GameError:
                     pass
 
-            if not has_allied_harvester or occupied_opponent:
+            if not blocked or occupied_opponent:
                 dist_sq = pos.distance_squared(map_info.my_core)
                 if dist_sq < min_dist_sq:
                     min_dist_sq = dist_sq
                     closest_ore = pos
+                    
+            
+            dist_sq_sabotage = pos.distance_squared(rc.get_position())
+            if dist_sq_sabotage < min_dist_sq_sabotage:
+                min_dist_sq_sabotage = dist_sq_sabotage
+                sabotage_ore = pos
 
     # Update target_ore based on what we can see right now
     if closest_ore is not None:
@@ -178,6 +196,14 @@ def check_build_harvester():
         print(" | Path to mine found")
     else:
         print(" | Can't reach mine")
+        current_distance = rc.get_position().distance_squared(target_ore)
+        if current_distance > 2:
+            global blocked_ores
+            print(f" | Blocking mine at {target_ore}")
+            blocked_ores[target_ore] = rc.get_current_round() + 150
+            target_ore = None
+            mode = Mode.EXPLORE
+            return
         
 
 
@@ -207,17 +233,24 @@ def run_explore():
         rc.draw_indicator_line(rc.get_position(), explore_target, mode.r, mode.g, mode.b)
 
 def run_build_harvester():
-    global mode, target_ore
+    global mode, target_ore, blocked_ores
 
     if target_ore is None:
         mode = Mode.EXPLORE
         return
+    
+    if sabotage_ore and sabotage_ore != target_ore:
+        print(" | Sabotaging titanium ore")
+        if rc.can_build_barrier(sabotage_ore):
+            rc.build_barrier(sabotage_ore)
+            return
 
     cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
     adjacent_tiles = [target_ore.add(d) for d in cardinal_dirs]
     
     perimeter_secure = True
     wall_count = 0
+    opponent_sabotaged = False
     for pos in adjacent_tiles:
         if (pos.distance_squared(rc.get_position()) > rc.get_vision_radius_sq()):
             perimeter_secure = False
@@ -230,13 +263,25 @@ def run_build_harvester():
         building_id = rc.get_tile_building_id(pos)
         is_barrier = False
         if building_id is not None:
-            try:
-                if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE] and rc.get_team(building_id) == rc.get_team():
-                    is_barrier = True
-            except GameError: pass
+            if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE] and rc.get_team(building_id) == rc.get_team():
+                is_barrier = True
+            if rc.get_team(building_id) != rc.get_team():
+                print(" | Opponent sabotaged")
+                opponent_sabotaged = True
         
         if not is_barrier:
             perimeter_secure = False
+
+    if opponent_sabotaged:
+        if rc.can_destroy(target_ore):
+            rc.destroy(target_ore)
+        if rc.can_build_barrier(target_ore):
+            global blocked_ores
+            rc.build_barrier(target_ore)
+            target_ore = None
+            blocked_ores[target_ore] = rc.get_current_round() + 2000
+            mode = Mode.EXPLORE
+            return
 
     # State 1: Perimeter is not secure. Let's build barriers.
     if not perimeter_secure and wall_count < 4:
@@ -275,7 +320,12 @@ def run_build_harvester():
     # State 2: Perimeter is secure (or all walls). Let's build the harvester.
     else:
         # If we are on the ore, move off.
+        print(" | Perimeter done")
         if rc.get_position() == target_ore:
+            building_id = rc.get_tile_building_id(pos)
+            if building_id and rc.get_team(building_id) != rc.get_team():
+                rc.fire()
+                return
             moved = False
             for d in random.sample(list(Direction), len(list(Direction))):
                 if rc.can_move(d):
@@ -296,13 +346,32 @@ def run_build_harvester():
                 if rc.can_destroy(target_ore):
                     rc.destroy(target_ore)
             
-            if rc.get_tile_building_id(target_ore) is None and rc.can_build_harvester(target_ore):
-                rc.build_harvester(target_ore)
-                global routed_ore
-                routed_ore = target_ore
-                target_ore = None
-                mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
-                return
+            if rc.get_tile_building_id(target_ore) is None:
+                my_core = map_info.my_core
+                if my_core:
+                    manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
+                    harvester_cost = rc.get_harvester_cost()[0]
+                    conveyor_cost = rc.get_conveyor_cost()[0]
+                    scale = 1.1
+                    
+                    required_titanium = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost)
+                    current_titanium = rc.get_global_resources()[0]
+
+                    if current_titanium < required_titanium:
+                        print(f" | Not enough titanium for harvester.")
+                        print(f" | Estimate: {current_titanium} / {required_titanium}")
+                        blocked_ores[target_ore] = rc.get_current_round() + 50
+                        target_ore = None
+                        mode = Mode.EXPLORE
+                        return
+
+                if rc.can_build_harvester(target_ore):
+                    rc.build_harvester(target_ore)
+                    global routed_ore
+                    routed_ore = target_ore
+                    target_ore = None
+                    mode = Mode.ROUTE
+                    return
         else:
             print(" | Moving to harvester loc")
             if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
