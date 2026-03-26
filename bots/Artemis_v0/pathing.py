@@ -49,8 +49,8 @@ CONV = [
     (-1, -2, bridge_cost),
 ]
 seen = None
+adjacent = None
 parent = None
-start = None
 target = None
 avoid = None
 
@@ -63,8 +63,9 @@ avoid_id = 0
 heap = []
 iter = 0
 dirs = None
-tx = 0
-ty = 0
+
+path = []
+path_idx = 0
 
 def init(c: Controller):
     global width, height, rc, seen, parent, start, target, avoid
@@ -73,7 +74,6 @@ def init(c: Controller):
     rc = c
     seen = array('I', [0])*(width*height)
     parent = array('I', [0])*(width*height)
-    start = array('I', [0])*(width*height)
     target = array('I', [0])*(width*height)
     avoid = array('I', [0])*(width*height)
 def move(dir: Direction):
@@ -82,12 +82,13 @@ def move(dir: Direction):
         rc.build_road(new_pos)
     if rc.can_move(dir):
         rc.move(dir)
-    pass
-def init_a_star(start_p:Position, target_p: Position| set[Position], input_dirs=DIRS, adjacent: bool = False):
-    global heap, iter, dirs, tx, ty
+        return True
+    return False
+def init_a_star(start_p: Position, target_p: Position| set[Position], input_dirs=DIRS, adjacent_in: bool = False):
+    global heap, iter, dirs, adjacent, run_id
+    adjacent = adjacent_in
     if isinstance(target_p, Position):
         target_p = {target_p}
-    global run_id
     run_id += 1
     heappush = heapq.heappush
     heappop = heapq.heappop
@@ -107,33 +108,41 @@ def init_a_star(start_p:Position, target_p: Position| set[Position], input_dirs=
         target[t] = run_id
         heappush(heap, (h(t), 0, True, t))
         seen[t] = run_id
-    if adjacent:
-        for dx, dy, _ in CARD:
-            start[hash(start_p.x + dx, start_p.y + dy)] = run_id
-    else:
-        start[hash(start_p.x, start_p.y)] = run_id
     iter = 0
-def a_star(avoid_p: set[Position] = None) -> list[Position] | None:
+def a_star(start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
     global iter, avoid_id
-    hash = lambda x, y: y*width + x
-    if avoid_p is None:
-        avoid_p = set()
-    avoid_id += 1
-    for a in avoid_p:
-        if start[hash(a.x, a.y)] == run_id or target[hash(a.x, a.y)] == run_id:
-            continue
-        avoid[hash(a.x, a.y)] = avoid_id
     heappush = heapq.heappush
     heappop = heapq.heappop
     abs_local = abs
     max_local = max
     hp = heap
+    hash = lambda x, y: y*width + x
+    start = hash(start_p.x, start_p.y)
+    tx = start_p.x
+    ty = start_p.y
+    rc.draw_indicator_line(Position(0, 0), start_p, 255, 0, 0)
+
+    if adjacent:
+        left = -1 if start%width == 0 else start-1
+        right = -1 if start%width == width-1 else start+1
+        up = -1 if start//width == 0 else start-width
+        down = -1 if start//width == height-1 else start+width
+    if avoid_p is None:
+        avoid_p = set()
+    avoid_id += 1
+    for a in avoid_p:
+        if hash(a.x, a.y) == start or target[hash(a.x, a.y)] == run_id:
+            continue
+        avoid[hash(a.x, a.y)] = avoid_id
     if dirs == DIRS:
         h = lambda pos: (max_local(abs_local(pos%width - tx), abs_local(pos//width - ty)))
     else:
         h = lambda pos: (abs_local(pos%width - tx) + abs_local(pos//width - ty))
+    if seen[start] == run_id:
+        heappush(hp, (0, 0, False, start))
+    seen[start] = 0
     while hp:
-        # time.sleep(0.0001)
+        # time.sleep(0.0001)1
         if rc.get_cpu_time_elapsed() > TIME_CUTOFF:
             return None
         iter += 1
@@ -145,7 +154,7 @@ def a_star(avoid_p: set[Position] = None) -> list[Position] | None:
             continue
         rc.draw_indicator_dot(Position(pos%width, pos//width), 255, 0, 0)
         g *= -1
-        if start[pos] == run_id:
+        if (not adjacent and pos == start) or (adjacent and (pos == left or pos == right or pos == up or pos == down)):
             path = []
             while pos != -1:
                 path.append(Position(pos%width, pos//width))
@@ -182,15 +191,25 @@ def moves_through_impassible(path: list[Position], avoid: set[Position] = None) 
             return True
     return False
 def move_to(target: Position):
+    global path, path_idx
     avoid = map_info.get_avoid(False, True)
     if len(heap) == 0:
         init_a_star(rc.get_position(), target)
-    path = a_star(avoid)
-    if path is not None and moves_through_impassible(path, avoid):
+    next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None and moves_through_impassible(next_path, avoid):
         init_a_star(rc.get_position(), target)
-        path = a_star(avoid)
-    if path is None or len(path) < 2:
+        next_path = a_star(rc.get_position(), avoid)
+    if next_path is not None:
+        path = next_path
+        path_idx = 0
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 255, 0)
+    elif path is not None and len(path) > 1:
+        for i in range(len(path)-1):
+            rc.draw_indicator_line(path[i], path[i+1], 0, 0, 255)
+    if path is None or len(path) < path_idx+2:
         return False
-    dir = path[0].direction_to(path[1])
-    move(dir)
+    dir = path[path_idx].direction_to(path[path_idx+1])
+    if move(dir):
+        path_idx += 1
     return True

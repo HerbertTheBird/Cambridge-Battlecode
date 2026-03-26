@@ -33,7 +33,7 @@ def init(c : Controller):
 def run():
     global mode
     run_pre() # preliminary calculations
-    pathing.move_to(Position(1, 1))
+    pathing.move_to(Position(40, 49))
     print(f"CHECKING STATE: {mode.desc}")
     globals()[f"check_{mode.name.lower()}"]()
     print(f"NEW STATE: {mode.desc}")
