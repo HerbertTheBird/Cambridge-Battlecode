@@ -1,39 +1,63 @@
 from cambc import Controller, Position, EntityType, GameError
-import math
-rc = None
+
 LAUNCHER_BIT = 31
 ID_BITS = 12
+_ID_MASK = (1 << ID_BITS) - 1
+
+rc = None
+
+
 def init(c: Controller):
     global rc
     rc = c
+
+
 def get_messages():
+    # get_nearby_buildings() returns all building IDs in vision in one C-level call,
+    # eliminating ~65K Position constructions, ~61K get_tile_building_id calls,
+    # ~30K is_in_vision calls, and all GameError try/excepts from the tile loop.
+    get_team = rc.get_team
+    get_entity_type = rc.get_entity_type
+    get_position = rc.get_position
+    get_marker_value = rc.get_marker_value
+    my_team = get_team()
+    marker_type = EntityType.MARKER
+
     messages = []
-    pos = rc.get_position()
-    r = int(math.sqrt(rc.get_vision_radius_sq()))
-    for x in range(pos.x-r, pos.x+r+1):
-        for y in range(pos.y-r, pos.y+r+1):
-            p = Position(x, y)
-            if not rc.is_in_vision(p):
-                continue
-            try:
-                id = rc.get_tile_building_id(p)
-            except GameError:
-                id = None
-            if id and rc.get_team(id) == rc.get_team() and rc.get_entity_type(id) == EntityType.MARKER:
-                messages.append((p, rc.get_marker_value(id)))
+    append = messages.append
+
+    for id in rc.get_nearby_buildings():
+        # Check entity type first: markers are rarer than same-team buildings,
+        # so this order minimises total API calls in most game states.
+        # Swap the two conditions if markers are common in your game.
+        if get_entity_type(id) == marker_type and get_team(id) == my_team:
+            append((get_position(id), get_marker_value(id)))
+
     return messages
+
+
 def decode_location(v):
-    return Position((v>>ID_BITS)&63, (v>>(6+ID_BITS))&63)
+    return Position((v >> ID_BITS) & 63, (v >> (6 + ID_BITS)) & 63)
+
+
 def decode_id(v):
-    return v&((1<<ID_BITS)-1)
+    return v & _ID_MASK
+
+
 def decode_launch():
+    is_in_vision = rc.is_in_vision
+    id_mask = _ID_MASK
     out = []
-    messages = get_messages()
-    for p, v in messages:
-        if (v >> LAUNCHER_BIT)&1:
-            target = decode_location(v)
-            if rc.is_in_vision(target):
-                out.append((target, decode_id(v), p))
+    append = out.append
+
+    for p, v in get_messages():
+        if (v >> LAUNCHER_BIT) & 1:
+            target = Position((v >> ID_BITS) & 63, (v >> (6 + ID_BITS)) & 63)
+            if is_in_vision(target):
+                append((target, v & id_mask, p))
+
     return out
+
+
 def encode_launch(target):
-    return rc.get_id() + (target.x<<ID_BITS) + (target.y<<(ID_BITS+6)) + (1<<LAUNCHER_BIT)
+    return rc.get_id() + (target.x << ID_BITS) + (target.y << (ID_BITS + 6)) + (1 << LAUNCHER_BIT)

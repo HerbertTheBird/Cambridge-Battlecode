@@ -1,0 +1,57 @@
+         163534 function calls in 0.164 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      245    0.004    0.000    0.158    0.001 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\turret_launcher.py:15(run)
+      245    0.046    0.000    0.110    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:217(update)
+      245    0.002    0.000    0.042    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\comms.py:47(decode_launch)
+      245    0.012    0.000    0.040    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\comms.py:15(get_messages)
+      245    0.011    0.000    0.027    0.000 {method 'get_nearby_tiles' of 'builtins.Controller' objects}
+    24827    0.010    0.000    0.019    0.000 <string>:1(<lambda>)
+    27570    0.017    0.000    0.017    0.000 {method 'get_entity_type' of 'builtins.Controller' objects}
+    21825    0.011    0.000    0.011    0.000 {method 'get_tile_building_id' of 'builtins.Controller' objects}
+    24827    0.009    0.000    0.009    0.000 {built-in method __new__ of type object at 0x00007FFA75E228A0}
+    14389    0.007    0.000    0.009    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\enum.py:199(__get__)
+     2952    0.004    0.000    0.008    0.000 {method 'get_position' of 'builtins.Controller' objects}
+      245    0.007    0.000    0.007    0.000 {method 'get_nearby_buildings' of 'builtins.Controller' objects}
+    14389    0.007    0.000    0.007    0.000 {method 'get_hp' of 'builtins.Controller' objects}
+      245    0.003    0.000    0.003    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+     4249    0.003    0.000    0.003    0.000 {method 'get_team' of 'builtins.Controller' objects}
+    14389    0.002    0.000    0.002    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\enum.py:1333(value)
+     2950    0.002    0.000    0.002    0.000 {method 'get_marker_value' of 'builtins.Controller' objects}
+      245    0.001    0.000    0.001    0.000 {method 'get_nearby_units' of 'builtins.Controller' objects}
+     2993    0.001    0.000    0.001    0.000 {method 'append' of 'list' objects}
+      245    0.001    0.000    0.001    0.000 {built-in method builtins.print}
+     1961    0.001    0.000    0.001    0.000 {method 'get_stored_resource_id' of 'builtins.Controller' objects}
+     1961    0.001    0.000    0.001    0.000 {method 'get_stored_resource' of 'builtins.Controller' objects}
+      490    0.001    0.000    0.001    0.000 {built-in method time.perf_counter}
+      246    0.000    0.000    0.000    0.000 {method 'get_current_round' of 'builtins.Controller' objects}
+      245    0.000    0.000    0.000    0.000 {method 'get_action_cooldown' of 'builtins.Controller' objects}
+      249    0.000    0.000    0.000    0.000 {method 'get_vision_radius_sq' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\turret_launcher.py:9(init)
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:92(init)
+      268    0.000    0.000    0.000    0.000 {method 'discard' of 'set' objects}
+      128    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:216(distance_squared)
+       89    0.000    0.000    0.000    0.000 {method 'get_tile_env' of 'builtins.Controller' objects}
+       67    0.000    0.000    0.000    0.000 {method 'get_max_hp' of 'builtins.Controller' objects}
+       67    0.000    0.000    0.000    0.000 <string>:2(__init__)
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:152(core_center)
+      107    0.000    0.000    0.000    0.000 {method 'add' of 'set' objects}
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:168(_rebuild_core_areas)
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:128(seed)
+        4    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:153(empty)
+       39    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:164(is_conveyor)
+       18    0.000    0.000    0.000    0.000 {method 'get_tile_builder_bot_id' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 {function Random.seed at 0x0000027C6EE344A0}
+        9    0.000    0.000    0.000    0.000 {method 'get_direction' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 {method 'can_launch' of 'builtins.Controller' objects}
+        4    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:90(in_bounds)
+        4    0.000    0.000    0.000    0.000 {method 'is_in_vision' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 {method 'launch' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 {method 'get_map_width' of 'builtins.Controller' objects}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+        1    0.000    0.000    0.000    0.000 {method 'get_map_height' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\comms.py:10(init)
+
+
