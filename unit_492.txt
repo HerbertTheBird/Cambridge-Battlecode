@@ -1,0 +1,42 @@
+         1025592 function calls in 0.506 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      224    0.028    0.000    0.425    0.002 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\turret_sentinel.py:65(run)
+     7350    0.085    0.000    0.365    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\turret_sentinel.py:17(priority)
+    29400    0.023    0.000    0.203    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:211(add)
+    29400    0.072    0.000    0.161    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:150(delta)
+   294000    0.057    0.000    0.088    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\enum.py:1308(__hash__)
+      757    0.078    0.000    0.078    0.000 {built-in method builtins.print}
+    58819    0.020    0.000    0.037    0.000 <string>:1(<lambda>)
+   294000    0.031    0.000    0.031    0.000 {built-in method builtins.hash}
+    87806    0.030    0.000    0.030    0.000 {method 'get_team' of 'builtins.Controller' objects}
+    58819    0.016    0.000    0.016    0.000 {built-in method __new__ of type object at 0x00007FFA8E3828A0}
+    35910    0.013    0.000    0.013    0.000 {method 'get_tile_building_id' of 'builtins.Controller' objects}
+    29400    0.011    0.000    0.011    0.000 {method 'is_in_vision' of 'builtins.Controller' objects}
+    25410    0.010    0.000    0.010    0.000 {method 'can_fire' of 'builtins.Controller' objects}
+    20932    0.009    0.000    0.009    0.000 {method 'get_entity_type' of 'builtins.Controller' objects}
+    29400    0.008    0.000    0.008    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:67(in_bounds)
+     7338    0.003    0.000    0.003    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:163(is_conveyor)
+     7350    0.003    0.000    0.003    0.000 {method 'get_tile_builder_bot_id' of 'builtins.Controller' objects}
+      224    0.003    0.000    0.003    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+     7320    0.002    0.000    0.002    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:167(is_turret)
+      210    0.001    0.000    0.002    0.000 {method 'get_position' of 'builtins.Controller' objects}
+      210    0.000    0.000    0.000    0.000 {built-in method math.sqrt}
+      448    0.000    0.000    0.000    0.000 {built-in method time.perf_counter}
+      224    0.000    0.000    0.000    0.000 {method 'get_action_cooldown' of 'builtins.Controller' objects}
+      210    0.000    0.000    0.000    0.000 {method 'get_vision_radius_sq' of 'builtins.Controller' objects}
+      210    0.000    0.000    0.000    0.000 {method 'get_ammo_amount' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\turret_sentinel.py:5(init)
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:71(init)
+      100    0.000    0.000    0.000    0.000 {method 'get_current_round' of 'builtins.Controller' objects}
+       99    0.000    0.000    0.000    0.000 {method 'get_id' of 'builtins.Controller' objects}
+       14    0.000    0.000    0.000    0.000 {method 'fire' of 'builtins.Controller' objects}
+        1    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:128(seed)
+        1    0.000    0.000    0.000    0.000 {function Random.seed at 0x0000024DB8B55440}
+        1    0.000    0.000    0.000    0.000 {method 'get_map_width' of 'builtins.Controller' objects}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+        1    0.000    0.000    0.000    0.000 {method 'get_map_height' of 'builtins.Controller' objects}
+
+
