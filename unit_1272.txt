@@ -1,0 +1,169 @@
+         599366 function calls (599357 primitive calls) in 1042176.602 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      506 7025.802   13.885 857259.102 1694.188 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:75(run)
+      506 38306.399   75.704 443880.299  877.234 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:108(run_pre)
+      506 129272.105  255.478 318285.000  629.022 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:217(update)
+      445 5594.800   12.573 317947.201  714.488 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:311(run_explore)
+  463/456 30272.602   65.384 313527.699  687.561 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:267(move_to)
+      512 125576.605  245.267 183724.900  358.838 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:149(a_star)
+      629 169810.500  269.969 169810.500  269.969 {built-in method builtins.print}
+     1012 53675.697   53.039 128484.300  126.961 {method 'get_nearby_tiles' of 'builtins.Controller' objects}
+    95850 68577.097    0.715 113373.603    1.183 <string>:1(<lambda>)
+      512 23848.700   46.579 53248.700  104.001 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:467(get_avoid)
+    95851 44797.906    0.467 44797.906    0.467 {built-in method __new__ of type object at 0x00007FFA558B28A0}
+    30437 29732.499    0.977 39922.096    1.312 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\enum.py:199(__get__)
+      506 15505.697   30.644 39616.799   78.294 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:202(run_post)
+    40413 36538.695    0.904 36538.695    0.904 {method 'get_entity_type' of 'builtins.Controller' objects}
+     8991 15258.998    1.697 32323.998    3.595 {method 'get_position' of 'builtins.Controller' objects}
+    39979 29740.400    0.744 29740.400    0.744 {method 'get_tile_building_id' of 'builtins.Controller' objects}
+       49  510.700   10.422 25322.100  516.778 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:282(check_build_harvester)
+       49  994.600   20.298 24570.200  501.433 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:349(calculate_path)
+      455 5326.799   11.707 24172.400   53.126 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:96(move)
+    34417 22459.198    0.653 22459.198    0.653 {method 'get_tile_env' of 'builtins.Controller' objects}
+    29802 19752.803    0.663 19752.803    0.663 {method 'get_hp' of 'builtins.Controller' objects}
+    42510 18778.499    0.442 18778.499    0.442 {built-in method builtins.max}
+    49466 16396.496    0.331 16396.496    0.331 {built-in method builtins.abs}
+      512 12376.901   24.174 12376.901   24.174 {method 'get_nearby_units' of 'builtins.Controller' objects}
+    30437 10189.597    0.335 10189.597    0.335 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\enum.py:1333(value)
+      512 7235.700   14.132 10008.301   19.547 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:115(init_a_star)
+      455 4445.900    9.771 9121.700   20.048 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:150(delta)
+      506 8739.999   17.273 8739.999   17.273 {method 'disable' of '_lsprof.Profiler' objects}
+       11 1724.701  156.791 7891.100  717.373 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:622(run_sabotage)
+     5717 4796.800    0.839 7206.000    1.260 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\enum.py:1308(__hash__)
+      456 5505.799   12.074 6920.800   15.177 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:222(direction_to)
+    11501 6840.999    0.595 6840.999    0.595 {built-in method _heapq.heappush}
+       50 4033.500   80.670 6564.200  131.284 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:336(run_build_harvester)
+      446 3036.801    6.809 6410.300   14.373 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:264(check_explore)
+     5004 5410.700    1.081 5410.700    1.081 {method 'draw_indicator_line' of 'builtins.Controller' objects}
+     5938 4056.400    0.683 4056.400    0.683 {built-in method _heapq.heappop}
+      455 2706.100    5.947 4025.899    8.848 {method 'can_move' of 'builtins.Controller' objects}
+     4053 3298.498    0.814 3298.498    0.814 {method 'can_place_marker' of 'builtins.Controller' objects}
+     5938 3244.300    0.546 3244.300    0.546 {method 'get_cpu_time_elapsed' of 'builtins.Controller' objects}
+     3269 2994.900    0.916 2994.900    0.916 {built-in method builtins.len}
+     2907 2848.601    0.980 2848.601    0.980 {method 'get_team' of 'builtins.Controller' objects}
+      121  642.100    5.307 2832.200   23.407 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:89(generate_encoded_int)
+      322  598.400    1.858 2757.000    8.562 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:336(randint)
+     4597 2709.901    0.589 2709.901    0.589 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:90(in_bounds)
+      512 2257.999    4.410 2486.600    4.857 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:258(moves_through_impassible)
+     5338 2478.803    0.464 2478.803    0.464 {method 'append' of 'list' objects}
+     5717 2409.200    0.421 2409.200    0.421 {built-in method builtins.hash}
+     1012 2184.901    2.159 2184.901    2.159 {built-in method time.perf_counter}
+      322 1024.801    3.183 2158.601    6.704 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:295(randrange)
+     3748 1989.002    0.531 1989.002    0.531 {method 'add' of 'set' objects}
+     3749 1822.900    0.486 1822.900    0.486 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:5(is_on_map)
+     2319 1669.999    0.720 1669.999    0.720 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:216(distance_squared)
+     1642 1663.501    1.013 1663.501    1.013 {method 'get_current_round' of 'builtins.Controller' objects}
+     1737 1423.799    0.820 1423.799    0.820 {method 'get_stored_resource_id' of 'builtins.Controller' objects}
+      456 1415.001    3.103 1415.001    3.103 {built-in method math.atan2}
+     1737 1393.800    0.802 1393.800    0.802 {method 'get_stored_resource' of 'builtins.Controller' objects}
+      443  902.900    2.038 1378.699    3.112 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:245(_randbelow_with_getrandbits)
+     1848 1343.401    0.727 1343.401    0.727 {method 'discard' of 'set' objects}
+     1024 1234.000    1.205 1234.000    1.205 {method 'clear' of 'list' objects}
+      506 1181.700    2.335 1181.700    2.335 {method 'can_heal' of 'builtins.Controller' objects}
+      121  464.701    3.841 1125.700    9.303 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:345(choice)
+        1   34.500   34.500  884.300  884.300 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:58(init)
+      177  629.000    3.554  866.300    4.894 {method 'move' of 'builtins.Controller' objects}
+      455  775.301    1.704  775.301    1.704 {method 'can_build_road' of 'builtins.Controller' objects}
+       18  184.200   10.233  773.900   42.994 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:242(force_generate_explore_target)
+      904  699.801    0.774  699.801    0.774 {method 'is_tile_passable' of 'builtins.Controller' objects}
+        1   35.600   35.600  550.600  550.600 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\pathing.py:82(init)
+      445  530.201    1.191  530.201    1.191 {method 'get_global_resources' of 'builtins.Controller' objects}
+      506  521.200    1.030  521.200    1.030 {method 'items' of 'dict' objects}
+        1   26.100   26.100  510.100  510.100 <frozen importlib._bootstrap>:1349(_find_and_load)
+      514  507.201    0.987  507.201    0.987 {built-in method builtins.isinstance}
+      751  480.900    0.640  480.900    0.640 {method 'get_id' of 'builtins.Controller' objects}
+      442  433.100    0.980  433.100    0.980 {method 'get_map_width' of 'builtins.Controller' objects}
+      895  432.400    0.483  432.400    0.483 {method 'is_in_vision' of 'builtins.Controller' objects}
+      445  426.800    0.959  426.800    0.959 {method 'get_bridge_cost' of 'builtins.Controller' objects}
+      442  386.800    0.875  386.800    0.875 {method 'get_map_height' of 'builtins.Controller' objects}
+      444  379.200    0.854  379.200    0.854 {method 'get_max_hp' of 'builtins.Controller' objects}
+      445  351.300    0.789  351.300    0.789 <string>:2(__init__)
+        1   15.500   15.500  349.300  349.300 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+      122  325.100    2.665  325.100    2.665 {method 'place_marker' of 'builtins.Controller' objects}
+      966  323.600    0.335  323.600    0.335 {built-in method _operator.index}
+       11  146.800   13.345  292.400   26.582 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\builder.py:576(check_sabotage)
+      404  285.600    0.707  285.600    0.707 {method 'get_vision_radius_sq' of 'builtins.Controller' objects}
+        1  281.800  281.800  284.700  284.700 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:92(init)
+      698  275.300    0.394  275.300    0.394 {method 'getrandbits' of '_random.Random' objects}
+        1   23.200   23.200  267.900  267.900 <frozen importlib._bootstrap>:911(_load_unlocked)
+       99  128.700    1.300  258.299    2.609 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:120(rot_flip)
+       54  225.900    4.183  225.900    4.183 {method 'heal' of 'builtins.Controller' objects}
+       35  121.500    3.471  216.400    6.183 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:465(is_tile_empty)
+        2    7.100    3.550  202.500  101.250 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+      443  200.500    0.453  200.500    0.453 {method 'bit_length' of 'int' objects}
+        1    2.600    2.600  181.200  181.200 <frozen importlib._bootstrap>:997(exec_module)
+        1  136.200  136.200  175.000  175.000 {built-in method _imp.exec_builtin}
+        1    9.600    9.600  102.500  102.500 <frozen importlib._bootstrap>:416(__enter__)
+       26   87.900    3.381   87.900    3.381 {method 'build_road' of 'builtins.Controller' objects}
+       50   81.100    1.622   81.100    1.622 {method 'draw_indicator_dot' of 'builtins.Controller' objects}
+        1   23.100   23.100   69.800   69.800 <frozen importlib._bootstrap>:304(acquire)
+        1   17.500   17.500   68.000   68.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:152(core_center)
+       50   67.300    1.346   67.300    1.346 {method 'can_build_barrier' of 'builtins.Controller' objects}
+        1   20.000   20.000   64.600   64.600 <frozen importlib._bootstrap>:1240(_find_spec)
+        1   11.200   11.200   60.000   60.000 <frozen importlib._bootstrap>:806(module_from_spec)
+        1   34.300   34.300   59.200   59.200 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:168(_rebuild_core_areas)
+       27   41.700    1.544   41.700    1.544 {method 'get_direction' of 'builtins.Controller' objects}
+        1    4.700    4.700   38.800   38.800 <frozen abc>:110(register)
+        1   27.000   27.000   38.800   38.800 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:128(seed)
+        4   20.900    5.225   38.300    9.575 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:153(empty)
+       47   35.800    0.762   35.800    0.762 {method 'can_destroy' of 'builtins.Controller' objects}
+        1    8.600    8.600   34.900   34.900 <frozen importlib._bootstrap>:982(find_spec)
+        1    4.400    4.400   34.100   34.100 {built-in method _abc._abc_register}
+        1    8.900    8.900   30.900   30.900 <frozen importlib._bootstrap>:162(__enter__)
+      2/1    5.400    2.700   29.700   29.700 <frozen abc>:121(__subclasscheck__)
+        1    5.200    5.200   29.100   29.100 <frozen importlib._bootstrap>:989(create_module)
+      2/1   21.600   10.800   26.300   26.300 {built-in method _abc._abc_subclasscheck}
+       35   25.600    0.731   25.600    0.731 {method 'is_tile_empty' of 'builtins.Controller' objects}
+        1   13.400   13.400   24.800   24.800 <frozen importlib._bootstrap>:662(spec_from_loader)
+        1   14.200   14.200   23.100   23.100 <frozen importlib._bootstrap>:426(_get_module_lock)
+        1    4.500    4.500   22.000   22.000 <frozen importlib._bootstrap>:420(__exit__)
+        1    8.100    8.100   20.900   20.900 <frozen importlib._bootstrap>:124(setdefault)
+        3   14.700    4.900   20.800    6.933 {method 'can_build_sentinel' of 'builtins.Controller' objects}
+        1   20.400   20.400   20.400   20.400 {built-in method _imp.create_builtin}
+        3   10.300    3.433   19.300    6.433 {method 'get_bridge_target' of 'builtins.Controller' objects}
+        1   11.100   11.100   18.700   18.700 <frozen importlib._bootstrap>:733(_init_module_attrs)
+        1   11.800   11.800   17.500   17.500 <frozen importlib._bootstrap>:372(release)
+       12   14.600    1.217   14.600    1.217 {built-in method math.sqrt}
+        1    4.400    4.400   10.700   10.700 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\map_info.py:142(flip)
+        1    7.800    7.800    9.200    9.200 <frozen importlib._bootstrap>:74(__new__)
+        1    8.900    8.900    8.900    8.900 {function Random.seed at 0x000001A926958540}
+        1    7.500    7.500    8.300    8.300 <frozen importlib._bootstrap>:501(_requires_builtin_wrapper)
+        1    6.000    6.000    7.000    7.000 <frozen importlib._bootstrap>:232(__init__)
+        1    4.100    4.100    6.700    6.700 <frozen importlib._bootstrap>:445(cb)
+        1    4.900    4.900    6.500    6.500 <frozen importlib._bootstrap>:82(remove)
+        1    3.300    3.300    5.000    5.000 <frozen importlib._bootstrap>:173(__exit__)
+        4    4.200    1.050    4.200    1.050 {built-in method builtins.getattr}
+        2    2.800    1.400    4.100    2.050 <frozen importlib._bootstrap>:1222(__enter__)
+        1    3.500    3.500    3.900    3.900 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\comms.py:62(encode_launch)
+        2    2.600    1.300    3.800    1.900 <frozen importlib._bootstrap>:1226(__exit__)
+        1    3.600    3.600    3.600    3.600 <frozen importlib._bootstrap>:79(__init__)
+        3    3.600    1.200    3.600    1.200 {built-in method builtins.hasattr}
+        3    3.500    1.167    3.500    1.167 {method 'get' of 'dict' objects}
+        4    3.100    0.775    3.100    0.775 {built-in method _imp.acquire_lock}
+        4    2.900    0.725    2.900    0.725 {built-in method _imp.release_lock}
+        1    2.000    2.000    2.800    2.800 <frozen importlib._bootstrap>:645(parent)
+        2    2.700    1.350    2.700    1.350 <frozen _collections_abc>:345(__subclasshook__)
+        2    2.200    1.100    2.200    1.100 {method '__exit__' of '_thread.RLock' objects}
+        2    2.100    1.050    2.100    1.050 {method 'rpartition' of 'str' objects}
+        2    2.000    1.000    2.000    1.000 {built-in method _thread.get_ident}
+        1    1.800    1.800    1.800    1.800 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\_virtualenv.py:52(find_spec)
+        1    1.700    1.700    1.700    1.700 {method 'remove' of 'list' objects}
+        1    1.600    1.600    1.600    1.600 {method 'fire' of 'builtins.Controller' objects}
+        1    1.600    1.600    1.600    1.600 {built-in method _weakref._remove_dead_weakref}
+        1    1.500    1.500    1.500    1.500 {built-in method _imp.is_builtin}
+        1    1.500    1.500    1.500    1.500 {method 'pop' of 'dict' objects}
+        1    1.400    1.400    1.400    1.400 <frozen importlib._bootstrap>:599(__init__)
+        1    1.300    1.300    1.300    1.300 {method 'can_fire' of 'builtins.Controller' objects}
+        1    1.200    1.200    1.200    1.200 <frozen importlib._bootstrap>:158(__init__)
+        1    1.200    1.200    1.200    1.200 {method 'pop' of 'list' objects}
+        1    1.100    1.100    1.100    1.100 <frozen importlib._bootstrap>:491(_verbose_message)
+        1    1.100    1.100    1.100    1.100 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\comms.py:10(init)
+        1    1.000    1.000    1.000    1.000 <frozen importlib._bootstrap>:412(__init__)
+        1    1.000    1.000    1.000    1.000 {built-in method _thread.allocate_lock}
+        1    0.800    0.800    0.800    0.800 <frozen importlib._bootstrap>:1014(is_package)
+        1    0.600    0.600    0.600    0.600 <frozen importlib._bootstrap>:653(has_location)
+
+
