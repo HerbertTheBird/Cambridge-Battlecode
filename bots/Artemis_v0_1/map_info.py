@@ -522,16 +522,26 @@ def best_sentinel_dir(pos: Position):
         harvesters = conveyors = other = 0
         base = 0
         pew = pos
+        seen = set()  # Reintroduce a set to track deduplication
+
         for i in range(1, 6):
             pew = pew.add(dir)
             for d in _ALL_DIRECTIONS:
                 s = pew.add(d)
+
+                # Check if we've already counted this tile's building
+                if s in seen:
+                    continue
+                seen.add(s)
+
                 sx, sy = s.x, s.y
                 if not (0 <= sx < w and 0 <= sy < h):
                     continue
+
                 b = building_local[sx][sy]
                 if not (b and b.team != my_team):
                     continue
+
                 t = b.type
                 if t is _ET_HARVESTER:
                     harvesters += 1
