@@ -13,6 +13,7 @@ class Mode(Enum):
     EXPLORE = (0, 255, 0, "explore")
     BUILD_HARVESTER = (0, 180, 180, "build harvester")
     ROUTE = (255, 255, 0, "route to core")
+    SABOTAGE = (200, 10, 10, "attack harvester")
 
     def __init__(self, r, g, b, desc):
         self.r = r
@@ -28,6 +29,7 @@ blocked_ores = {}
 explore_target = None
 turns_since_last_explore_target = 0
 target_ore = None
+opponent_ore = None
 sabotage_ore = None
 
 #route state
@@ -74,7 +76,7 @@ def generate_encoded_int(builder_id: int) -> int:
 
 # invariant calculations
 def run_pre():
-    global target_ore, blocked_ores, sabotage_ore
+    global target_ore, blocked_ores, sabotage_ore, opponent_ore
     map_info.update()
     if rc.get_hp() < rc.get_max_hp() and rc.can_heal(rc.get_position()):
         rc.heal(rc.get_position())
@@ -90,6 +92,8 @@ def run_pre():
     closest_ore = None
     min_dist_sq = float('inf')
     min_dist_sq_sabotage = float('inf')
+    closest_opponent_ore = None
+    min_dist_sq_opponent = float('inf')
 
     # Find all visible titanium ores without an allied harvester on them
     for pos in rc.get_nearby_tiles():
@@ -97,6 +101,7 @@ def run_pre():
             continue
             
         env = rc.get_tile_env(pos)
+        
         if env == Environment.ORE_TITANIUM:
             building_id = rc.get_tile_building_id(pos)
             
@@ -110,6 +115,33 @@ def run_pre():
                         blocked = True
                     if building_type != EntityType.MARKER and building_team != rc.get_team():
                         occupied_opponent = True
+                except GameError:
+                    pass
+                
+            if building_id is not None:
+                try:
+                    building_type = rc.get_entity_type(building_id)
+                    building_team = rc.get_team(building_id)
+
+                    if building_type == EntityType.HARVESTER and building_team != rc.get_team():
+                        # Check for at least one passable adjacent tile
+                        has_passable_adjacent = False
+                        for d in Direction:
+                            if d == Direction.CENTRE:
+                                continue
+                            adj = pos.add(d)
+                            try:
+                                if map_info.is_on_map(adj) and rc.is_tile_passable(adj):
+                                    has_passable_adjacent = True
+                                    break
+                            except GameError:
+                                pass
+
+                        if has_passable_adjacent:
+                            dist_sq = pos.distance_squared(rc.get_position())
+                            if dist_sq < min_dist_sq_opponent:
+                                min_dist_sq_opponent = dist_sq
+                                closest_opponent_ore = pos
                 except GameError:
                     pass
 
@@ -133,6 +165,8 @@ def run_pre():
             current_target_dist_sq = target_ore.distance_squared(map_info.my_core)
             if min_dist_sq < current_target_dist_sq:
                 target_ore = closest_ore
+    
+    opponent_ore = closest_opponent_ore
     
     if target_ore:
         rc.draw_indicator_dot(target_ore, 255, 255, 0)
@@ -172,6 +206,8 @@ def check_explore_athena():
 def check_explore():
     global mode, explore_target, turns_since_last_explore_target
     
+    if opponent_ore:
+        mode = Mode.SABOTAGE
     if target_ore:
         mode = Mode.BUILD_HARVESTER
     
@@ -451,3 +487,128 @@ def run_route():
                     route_idx += 1
             next = ore_path[route_idx]
             pathing.move_to(next)
+
+def check_sabotage():
+    global mode, opponent_ore
+
+    # safety
+    if opponent_ore is None:
+        mode = Mode.EXPLORE
+        return
+
+    building_id = rc.get_tile_building_id(opponent_ore)
+
+    # harvester died
+    if building_id is None:
+        mode = Mode.EXPLORE
+        opponent_ore = None
+        return
+
+    try:
+        building_type = rc.get_entity_type(building_id)
+        building_team = rc.get_team(building_id)
+
+        if not (building_type == EntityType.HARVESTER and building_team != rc.get_team()):
+            mode = Mode.EXPLORE
+            opponent_ore = None
+            return
+    except GameError:
+        mode = Mode.EXPLORE
+        opponent_ore = None
+        return
+
+    # we already put a turret
+    for d in Direction:
+        if d == Direction.CENTRE:
+            continue
+
+        adj = opponent_ore.add(d)
+
+        # Only consider tiles on map AND in vision
+        if not map_info.is_on_map(adj):
+            continue
+        if rc.get_position().distance_squared(adj) > rc.get_vision_radius_sq():
+            continue
+
+        try:
+            building_id = rc.get_tile_building_id(adj)
+            if building_id is None:
+                continue
+            if (rc.get_entity_type(building_id) == EntityType.SENTINEL and
+                rc.get_team(building_id) == rc.get_team()):
+                # Successfully sabotaged → leave
+                mode = Mode.EXPLORE
+                opponent_ore = None
+                return
+        except GameError:
+            # Safety: shouldn't happen now, but skip just in case
+            continue
+
+def run_sabotage():
+    global opponent_ore, mode
+    
+    adjacent_tiles = []
+    for d in Direction:
+        if d == Direction.CENTRE:
+            continue
+        adj = opponent_ore.add(d)
+        if map_info.is_on_map(adj):
+            adjacent_tiles.append(adj)
+
+    empty_tile = None
+    for pos in adjacent_tiles:
+        if rc.get_position().distance_squared(pos) <= rc.get_vision_radius_sq():
+            if map_info.is_tile_empty(pos):
+                empty_tile = pos
+                break
+
+    # case 1, empty tile exists
+    if empty_tile:
+        dist_sq = rc.get_position().distance_squared(empty_tile)
+
+        # If we're standing on it, move off
+        if rc.get_position() == empty_tile and not rc.get_tile_building_id(empty_tile):
+            for d in random.sample(list(Direction), len(list(Direction))):
+                if rc.can_move(d):
+                    rc.move(d)
+                    break
+            return
+
+        # Move toward it if not close enough
+        if dist_sq > 2:
+            pathing.move_to(empty_tile)
+
+        # We are within distance ≤ 2 → try placing turret
+        direction = map_info.best_sentinel_dir(empty_tile)
+        if direction:
+            if rc.can_build_sentinel(empty_tile, direction):
+                rc.build_sentinel(empty_tile, direction)
+
+        return
+
+    # case 2, passable
+    passable_tile = None
+    for pos in adjacent_tiles:
+        try:
+            if rc.is_tile_passable(pos):
+                passable_tile = pos
+                break
+        except GameError:
+            pass
+
+    if passable_tile:
+        # Move toward it
+        if rc.get_position() != passable_tile:
+            pathing.move_to(passable_tile)
+
+        # We're on it → destroy or fire
+        if rc.can_destroy(passable_tile):
+            rc.destroy(passable_tile)
+        elif rc.get_position() == passable_tile:
+            rc.fire(rc.get_position())
+
+        return
+
+    # should never come here?
+    print(" | FATAL, potential infinite loop")
+    mode = Mode.EXPLORE
