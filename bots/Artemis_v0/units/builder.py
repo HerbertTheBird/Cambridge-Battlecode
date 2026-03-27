@@ -273,6 +273,8 @@ def run_build_harvester():
             perimeter_secure = False
 
     if opponent_sabotaged:
+        if rc.can_destroy(target_ore):
+            rc.destroy(target_ore)
         if rc.can_build_barrier(target_ore):
             global blocked_ores
             rc.build_barrier(target_ore)
