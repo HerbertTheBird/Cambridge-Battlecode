@@ -26,6 +26,9 @@ indicator = []
 blocked_ores = {}
 defended_ores = set()
 cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
+all_dirs = list(Direction)
+OUR_BUILDINGS = {EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER,
+                 EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SENTINEL}
 
 # explore state
 explore_target = None
@@ -177,7 +180,7 @@ def run_post():
     # pick a random empty tile surrounding the builder and place a marker
     if (rc.get_current_round() - rc.get_id() % 3):
         surrounding_tiles = []
-        for d in list(Direction):
+        for d in all_dirs:
             if d == Direction.CENTRE:
                 continue
             
@@ -339,7 +342,7 @@ def run_build_harvester():
         building_id = rc.get_tile_building_id(pos)
         is_barrier = False
         if building_id is not None:
-            if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SENTINEL] and rc.get_team(building_id) == rc.get_team():
+            if rc.get_entity_type(building_id) in OUR_BUILDINGS and rc.get_team(building_id) == rc.get_team():
                 is_barrier = True
             if rc.get_team(building_id) != rc.get_team():
                 print(" | Opponent sabotaged")
@@ -374,7 +377,7 @@ def run_build_harvester():
                 is_our_barrier = False
                 if building_id:
                     try:
-                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SENTINEL]:
+                        if rc.get_entity_type(building_id) in OUR_BUILDINGS:
                             is_our_barrier = True
                     except GameError: pass
 
@@ -404,13 +407,13 @@ def run_build_harvester():
                 rc.fire()
                 return
             moved = False
-            for d in random.sample(list(Direction), len(list(Direction))):
+            for d in random.sample(all_dirs, len(all_dirs)):
                 if rc.can_move(d):
                     rc.move(d)
                     moved = True
             # nowhere to move
             if not moved:
-                for d in random.sample(list(Direction), len(list(Direction))):
+                for d in random.sample(all_dirs, len(all_dirs)):
                     if map_info.is_tile_empty(rc.get_position().add(d)):
                         pathing.move(d)
                         moved = True
@@ -642,7 +645,7 @@ def run_sabotage():
 
         # If we're standing on it, move off
         if rc.get_position() == empty_tile and not rc.get_tile_building_id(empty_tile):
-            for d in random.sample(list(Direction), len(list(Direction))):
+            for d in random.sample(all_dirs, len(all_dirs)):
                 if rc.can_move(d):
                     rc.move(d)
                     break

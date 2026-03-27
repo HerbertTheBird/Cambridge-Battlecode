@@ -13,10 +13,18 @@ import units.turret_breach as breach
 import units.turret_launcher as launcher
 import traceback
 import sys
+import cProfile
+import pstats
+import pathlib
+
+profiler = cProfile.Profile()
+
 class Player:
     def __init__(self):
         self.initialized = False
     def run(self, c: Controller) -> None:
+        profiler_path = pathlib.Path(f"unit_{c.get_id()}.txt")
+        profiler.enable()
         try:
             start_time = time.perf_counter()
             etype = c.get_entity_type()
@@ -45,3 +53,7 @@ class Player:
             print("Error:", e)
             c.draw_indicator_line(Position(-100, -100), c.get_position(), 255, 0, 0)
             traceback.print_exc(file=sys.stdout)
+        profiler.disable()
+        with open(profiler_path, "w") as f:
+            ps = pstats.Stats(profiler, stream=f).sort_stats("cumulative")
+            ps.print_stats()
