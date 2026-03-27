@@ -1,4 +1,4 @@
-         4123 function calls in 0.010 seconds
+         4123 function calls in 0.009 seconds
 
    Ordered by: cumulative time
 
@@ -8,30 +8,30 @@
       361    0.001    0.000    0.001    0.000 {built-in method builtins.print}
       361    0.001    0.000    0.001    0.000 {method 'get_entity_type' of 'builtins.Controller' objects}
       722    0.000    0.000    0.000    0.000 {built-in method time.perf_counter}
-        3    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\core.py:7(random_spawn_tile)
       723    0.000    0.000    0.000    0.000 {method 'get_current_round' of 'builtins.Controller' objects}
+        3    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\core.py:7(random_spawn_tile)
       358    0.000    0.000    0.000    0.000 {method 'get_global_resources' of 'builtins.Controller' objects}
       358    0.000    0.000    0.000    0.000 {method 'get_scale_percent' of 'builtins.Controller' objects}
-        3    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:354(shuffle)
         1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\core.py:22(get_closest_titanium_tile)
-       21    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:245(_randbelow_with_getrandbits)
-       40    0.000    0.000    0.000    0.000 {method 'getrandbits' of '_random.Random' objects}
+        3    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:354(shuffle)
       143    0.000    0.000    0.000    0.000 <string>:1(<lambda>)
         1    0.000    0.000    0.000    0.000 {method 'get_nearby_tiles' of 'builtins.Controller' objects}
+       21    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:245(_randbelow_with_getrandbits)
       143    0.000    0.000    0.000    0.000 {built-in method __new__ of type object at 0x00007FFA75E228A0}
-      113    0.000    0.000    0.000    0.000 {method 'get_tile_env' of 'builtins.Controller' objects}
         5    0.000    0.000    0.000    0.000 {method 'get_position' of 'builtins.Controller' objects}
+      113    0.000    0.000    0.000    0.000 {method 'get_tile_env' of 'builtins.Controller' objects}
         1    0.000    0.000    0.000    0.000 C:\Users\panti\AppData\Local\Programs\Python\Python313\Lib\random.py:128(seed)
         4    0.000    0.000    0.000    0.000 {method 'spawn_builder' of 'builtins.Controller' objects}
+       40    0.000    0.000    0.000    0.000 {method 'getrandbits' of '_random.Random' objects}
         4    0.000    0.000    0.000    0.000 {method 'can_spawn' of 'builtins.Controller' objects}
        21    0.000    0.000    0.000    0.000 {method 'bit_length' of 'int' objects}
-        1    0.000    0.000    0.000    0.000 {function Random.seed at 0x000001C888C8C680}
+        1    0.000    0.000    0.000    0.000 {function Random.seed at 0x0000027C6926DB20}
         3    0.000    0.000    0.000    0.000 {built-in method builtins.len}
         2    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\.venv\Lib\site-packages\cambc\_types.py:216(distance_squared)
         2    0.000    0.000    0.000    0.000 {method 'get_tile_building_id' of 'builtins.Controller' objects}
-        2    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
         1    0.000    0.000    0.000    0.000 C:\Users\panti\PycharmProjects\Cambridge-Battlecode\bots\Artemis_v0_1\units\core.py:79(init)
-        2    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
         2    0.000    0.000    0.000    0.000 {built-in method builtins.min}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.max}
 
 
