@@ -24,6 +24,8 @@ class Mode(Enum):
 mode = Mode.EXPLORE
 indicator = []
 blocked_ores = {}
+defended_ores = set()
+cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
 
 # explore state
 explore_target = None
@@ -92,7 +94,7 @@ def run_pre():
     closest_ore = None
     min_dist_sq = float('inf')
     min_dist_sq_sabotage = float('inf')
-    closest_opponent_ore = None
+    opponent_ore = None
     min_dist_sq_opponent = float('inf')
 
     # Find all visible titanium ores without an allied harvester on them
@@ -118,7 +120,7 @@ def run_pre():
                 except GameError:
                     pass
                 
-            if building_id is not None:
+            if building_id is not None and pos not in defended_ores:
                 try:
                     building_type = rc.get_entity_type(building_id)
                     building_team = rc.get_team(building_id)
@@ -141,7 +143,7 @@ def run_pre():
                             dist_sq = pos.distance_squared(rc.get_position())
                             if dist_sq < min_dist_sq_opponent:
                                 min_dist_sq_opponent = dist_sq
-                                closest_opponent_ore = pos
+                                opponent_ore = pos
                 except GameError:
                     pass
 
@@ -165,8 +167,6 @@ def run_pre():
             current_target_dist_sq = target_ore.distance_squared(map_info.my_core)
             if min_dist_sq < current_target_dist_sq:
                 target_ore = closest_ore
-    
-    opponent_ore = closest_opponent_ore
     
     if target_ore:
         rc.draw_indicator_dot(target_ore, 255, 255, 0)
@@ -281,7 +281,6 @@ def run_build_harvester():
             rc.build_barrier(sabotage_ore)
             return
 
-    cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
     adjacent_tiles = [target_ore.add(d) for d in cardinal_dirs]
     
     perimeter_secure = True
@@ -299,7 +298,7 @@ def run_build_harvester():
         building_id = rc.get_tile_building_id(pos)
         is_barrier = False
         if building_id is not None:
-            if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE] and rc.get_team(building_id) == rc.get_team():
+            if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SENTINEL] and rc.get_team(building_id) == rc.get_team():
                 is_barrier = True
             if rc.get_team(building_id) != rc.get_team():
                 print(" | Opponent sabotaged")
@@ -333,7 +332,7 @@ def run_build_harvester():
                 is_our_barrier = False
                 if building_id:
                     try:
-                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE]:
+                        if rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SENTINEL]:
                             is_our_barrier = True
                     except GameError: pass
 
@@ -539,6 +538,8 @@ def check_sabotage():
                 # Successfully sabotaged → leave
                 mode = Mode.EXPLORE
                 opponent_ore = None
+                defended_ores.add(opponent_ore)
+                blocked_ores[opponent_ore] = rc.get_current_round() + 100
                 return
         except GameError:
             # Safety: shouldn't happen now, but skip just in case
@@ -548,9 +549,7 @@ def run_sabotage():
     global opponent_ore, mode
     
     adjacent_tiles = []
-    for d in Direction:
-        if d == Direction.CENTRE:
-            continue
+    for d in cardinal_dirs:
         adj = opponent_ore.add(d)
         if map_info.is_on_map(adj):
             adjacent_tiles.append(adj)
@@ -564,6 +563,7 @@ def run_sabotage():
 
     # case 1, empty tile exists
     if empty_tile:
+        rc.draw_indicator_dot(empty_tile, mode.r, mode.g, mode.b)
         dist_sq = rc.get_position().distance_squared(empty_tile)
 
         # If we're standing on it, move off
@@ -572,7 +572,6 @@ def run_sabotage():
                 if rc.can_move(d):
                     rc.move(d)
                     break
-            return
 
         # Move toward it if not close enough
         if dist_sq > 2:
@@ -589,14 +588,13 @@ def run_sabotage():
     # case 2, passable
     passable_tile = None
     for pos in adjacent_tiles:
-        try:
+        if rc.get_position().distance_squared(pos) <= rc.get_vision_radius_sq():
             if rc.is_tile_passable(pos):
                 passable_tile = pos
                 break
-        except GameError:
-            pass
 
     if passable_tile:
+        rc.draw_indicator_line(rc.get_position(), passable_tile, mode.r, mode.g, mode.b)
         # Move toward it
         if rc.get_position() != passable_tile:
             pathing.move_to(passable_tile)
