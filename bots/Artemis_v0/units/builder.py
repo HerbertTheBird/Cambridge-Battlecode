@@ -21,6 +21,7 @@ class Mode(Enum):
 
 mode = Mode.EXPLORE
 indicator = []
+blocked_ores = {}
 
 # explore state
 explore_target = None
@@ -49,7 +50,7 @@ def run():
     globals()[f"check_{mode.name.lower()}"]()
     print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
     globals()[f"run_{mode.name.lower()}"]()
-    run_post() # cleanup
+    # run_post() # cleanup
 
 def generate_encoded_int(builder_id: int) -> int:
     if not (0 <= builder_id <= 31):
@@ -70,8 +71,14 @@ def generate_encoded_int(builder_id: int) -> int:
 
 # invariant calculations
 def run_pre():
-    global target_ore
+    global target_ore, blocked_ores
     map_info.update()
+
+    # Clean up expired blocks
+    current_round = rc.get_current_round()
+    for ore, unblock_round in list(blocked_ores.items()):
+        if current_round >= unblock_round:
+            del blocked_ores[ore]
 
     if map_info.my_core is None:
         return
@@ -81,6 +88,9 @@ def run_pre():
 
     # Find all visible titanium ores without an allied harvester on them
     for pos in rc.get_nearby_tiles():
+        if pos in blocked_ores:
+            continue
+            
         env = rc.get_tile_env(pos)
         if env == Environment.ORE_TITANIUM:
             building_id = rc.get_tile_building_id(pos)
@@ -175,6 +185,14 @@ def check_build_harvester():
         print(" | Path to mine found")
     else:
         print(" | Can't reach mine")
+        current_distance = rc.get_position().distance_squared(target_ore)
+        if current_distance > 2:
+            global blocked_ores
+            print(f" | Blocking mine at {target_ore}")
+            blocked_ores[target_ore] = rc.get_current_round() + 150
+            target_ore = None
+            mode = Mode.EXPLORE
+            return
         
 
 
@@ -204,7 +222,7 @@ def run_explore():
         rc.draw_indicator_line(rc.get_position(), explore_target, mode.r, mode.g, mode.b)
 
 def run_build_harvester():
-    global mode, target_ore
+    global mode, target_ore, blocked_ores
 
     if target_ore is None:
         mode = Mode.EXPLORE
@@ -294,11 +312,29 @@ def run_build_harvester():
                     rc.destroy(target_ore)
             
             if rc.get_tile_building_id(target_ore) is None and rc.can_build_harvester(target_ore):
+                my_core = map_info.my_core
+                if my_core:
+                    manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
+                    harvester_cost = rc.get_harvester_cost()[0]
+                    conveyor_cost = rc.get_conveyor_cost()[0]
+                    scale = 1.1
+                    
+                    required_titanium = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost)
+                    current_titanium = rc.get_global_resources()[0]
+
+                    if current_titanium < required_titanium:
+                        print(f" | Not enough titanium for harvester.")
+                        print(f" | Estimate: {current_titanium} / {required_titanium}")
+                        blocked_ores[target_ore] = rc.get_current_round() + 50
+                        target_ore = None
+                        mode = Mode.EXPLORE
+                        return
+
                 rc.build_harvester(target_ore)
                 global routed_ore
                 routed_ore = target_ore
                 target_ore = None
-                mode = Mode.ROUTE # works really well, but we want to avoid changing states in run code, refactor later
+                mode = Mode.ROUTE
                 return
         else:
             print(" | Moving to harvester loc")
