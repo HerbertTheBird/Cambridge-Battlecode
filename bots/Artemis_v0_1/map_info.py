@@ -431,12 +431,8 @@ def update() -> None:
                 type=_ET_CORE,
                 hp=500,
                 maxhp=500,
-<<<<<<< t
-                team=rc.get_team() + 1,
-                is_conveyor_type=False,
-=======
                 team=None,
->>>>>>> main
+                is_conveyor_type=False,
                 direction=None,
                 vision_sq=36,
             )
