@@ -59,8 +59,7 @@ def run():
     print("run run", mode.name, rc.get_cpu_time_elapsed())
     globals()[f"run_{mode.name.lower()}"]()
     print("done", mode.name, rc.get_cpu_time_elapsed())
-
-    # run_post() # cleanup
+    run_post() # cleanup
 
 def generate_encoded_int(builder_id: int) -> int:
     if not (0 <= builder_id <= 31):
@@ -83,7 +82,7 @@ def generate_encoded_int(builder_id: int) -> int:
 def run_pre():
     global target_ore, blocked_ores, sabotage_ore, opponent_ore
     map_info.update()
-    if rc.get_hp() < rc.get_max_hp() and rc.can_heal(rc.get_position()):
+    if rc.can_heal(rc.get_position()):
         rc.heal(rc.get_position())
     # Clean up expired blocks
     current_round = rc.get_current_round()
@@ -175,24 +174,40 @@ def run_pre():
         rc.draw_indicator_dot(target_ore, 255, 255, 0)
 
 def run_post():
-    # # pick a random empty tile surrounding the builder and place a marker
-    # surrounding_tiles = []
-    # for d in list(Direction):
-    #     if d == Direction.CENTRE:
-    #         continue
-        
-    #     pos = rc.get_position().add(d)
-    #     try:
-    #         if rc.can_place_marker(pos):
-    #             surrounding_tiles.append(pos)
-    #     except GameError:
-    #         # position is off map
-    #         pass
+    # pick a random empty tile surrounding the builder and place a marker
+    if (rc.get_current_round() - rc.get_id() % 3):
+        surrounding_tiles = []
+        for d in list(Direction):
+            if d == Direction.CENTRE:
+                continue
+            
+            pos = rc.get_position().add(d)
+            try:
+                if rc.can_place_marker(pos):
+                    # not within 2 distance squared of a mine
+                    is_safe_from_mines = True
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            mine_check_pos = Position(pos.x + dx, pos.y + dy)
+                            if not map_info.is_on_map(mine_check_pos):
+                                continue
+                            
+                            if map_info.ground[mine_check_pos.x][mine_check_pos.y] == Environment.ORE_TITANIUM:
+                                is_safe_from_mines = False
+                                break
+                        if not is_safe_from_mines:
+                            break
+                    
+                    if is_safe_from_mines:
+                        surrounding_tiles.append(pos)
+            except GameError:
+                # position is off map
+                pass
 
-    # if surrounding_tiles:
-    #     target_pos = random.choice(surrounding_tiles)
-    #     value = generate_encoded_int(rc.get_id())
-    #     rc.place_marker(target_pos, value)
+    if surrounding_tiles:
+        target_pos = random.choice(surrounding_tiles)
+        value = generate_encoded_int(rc.get_id())
+        rc.place_marker(target_pos, value)
     pass
 
 def force_generate_explore_target():
@@ -224,8 +239,11 @@ def check_explore():
     if opponent_ore and opponent_ore not in defended_ores:
         print(f" | Triggering {opponent_ore}")
         mode = Mode.SABOTAGE
+        return
+    
     if target_ore:
         mode = Mode.BUILD_HARVESTER
+        return
     
     if explore_target and rc.get_position().distance_squared(explore_target) <= 18:
         force_generate_explore_target()
@@ -475,11 +493,32 @@ def run_route():
                     pathing.move_to(launcher)
                     if rc.get_position() == launcher and rc.can_fire(launcher):
                         rc.fire(launcher)
-                elif nearby_conv:
+                elif nearby_conv and nearby_conv != launcher:
                     pathing.move_to(nearby_conv)
                     if rc.can_destroy(launcher):
                         rc.destroy(launcher)
                     id = rc.get_tile_building_id(rc.get_position())
+                    if rc.get_position() == launcher:
+                        if route_idx < len(ore_path)-1:
+                            to_build = ore_path[route_idx]
+                            bridge = ore_path[route_idx].distance_squared(ore_path[route_idx+1]) > 1
+                            dir = ore_path[route_idx].direction_to(ore_path[route_idx+1])
+                            if to_build.distance_squared(rc.get_position()) <= 2:
+                                if to_build == rc.get_position():
+                                    id = rc.get_tile_building_id(rc.get_position())
+                                    if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
+                                        rc.fire(rc.get_position())
+                                if rc.can_destroy(to_build):
+                                    rc.destroy(to_build)
+                                if bridge and rc.can_build_bridge(to_build, ore_path[route_idx+1]):
+                                    rc.build_bridge(to_build, ore_path[route_idx+1])
+                                    route_idx += 1
+                                elif not bridge and rc.can_build_conveyor(to_build, dir):
+                                    rc.build_conveyor(to_build, dir)
+                                    route_idx += 1
+                            next = ore_path[route_idx]
+                            if route_idx < len(ore_path)-1:
+                                pathing.move_to(next)
                     if rc.can_build_launcher(launcher):
                         rc.build_launcher(launcher)
                 return
@@ -504,6 +543,7 @@ def run_route():
             next = ore_path[route_idx]
             if route_idx < len(ore_path)-1:
                 pathing.move_to(next)
+
 def check_sabotage():
     global mode, opponent_ore, defended_ores
 

@@ -5,6 +5,7 @@ rc = None
 def init(c: Controller):
     global rc
     rc = c
+    map_info.init(c)
  
 CARDINALS = [
     Direction.NORTH,
@@ -26,8 +27,12 @@ def priority(tile: Position):
     adjacent_sentinel = False
     for dir in CARDINALS:
         pos = tile.add(dir)
+
         if not map_info.in_bounds(pos):
             continue
+        if not rc.is_in_vision(pos):
+            continue
+
         id = rc.get_tile_building_id(pos)
         if id and rc.get_team(id) == rc.get_team() and rc.get_entity_type(id) == EntityType.SENTINEL:
             adjacent_sentinel = True
@@ -58,10 +63,12 @@ def priority(tile: Position):
     
     
 def run():
+    print("i am a sentinel")
     if rc.get_action_cooldown() > 0:
         return
     if rc.get_ammo_amount() < 5:
         return
+    print("i am a shooting sentinel")
     vision_r = int(math.sqrt(rc.get_vision_radius_sq()))
     pos = rc.get_position()
     best = None
