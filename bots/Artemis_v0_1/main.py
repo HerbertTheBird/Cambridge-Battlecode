@@ -17,7 +17,12 @@ import cProfile
 import pstats
 import pathlib
 
-profiler = cProfile.Profile()
+_BASE_TIME = time.perf_counter()
+
+def custom_micro_timer():
+    return (time.perf_counter() - _BASE_TIME) * 1_000
+
+profiler = cProfile.Profile(timer=custom_micro_timer)
 
 class Player:
     def __init__(self):
