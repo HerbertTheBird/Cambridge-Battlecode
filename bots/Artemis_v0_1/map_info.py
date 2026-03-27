@@ -376,7 +376,7 @@ def update() -> None:
                 type=EntityType.CORE,
                 hp=500,
                 maxhp=500,
-                team=rc.get_team()+1,
+                team=None,
                 direction=None,
                 vision_sq=36,
             )
