@@ -78,7 +78,7 @@ def run():
                 pos = Position(x, y)
                 if b.type == EntityType.ROAD:
                     all_roads.append(pos)
-                elif map_info.is_conveyor(b.type) or b.type == EntityType.BRIDGE:
+                elif map_info.is_conveyor(b.type) or b.type == EntityType.LAUNCHER and b.team != rc.get_team():
                     all_conveyances.append(pos)
 
     valid_destinations = []

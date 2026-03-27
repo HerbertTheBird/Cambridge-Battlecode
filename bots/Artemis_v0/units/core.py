@@ -56,7 +56,7 @@ def run():
         max_spawn = 2
 
     # Spawn towards titanium on turn 1
-    if rc.get_current_round() < 1:
+    if rc.get_current_round() == 1:
         titanium_pos = get_closest_titanium_tile()
         if titanium_pos is not None:
             # Pick the tile adjacent to core towards the ore
