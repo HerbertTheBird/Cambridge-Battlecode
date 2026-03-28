@@ -295,7 +295,7 @@ class Pathing:
         seen[start] = 0
         ZIG_LENGTH_L = ZIG_LENGTH
         start_cpu_time = rc.get_cpu_time_elapsed()
-        c = 0
+        # c = 0
         while hp:
             # c += 1
             # if c > 20:
