@@ -6,10 +6,10 @@ import math
 from array import array
 import time
 import units.builder as builder
-WEIGHT = 1.5
-MIN_WEIGHT = 1.2
+WEIGHT = 1.8
+MIN_WEIGHT = 1.1
 TIME_CUTOFF = 1600
-MAX_TIME = 300
+MAX_TIME = 400
 ZIG_LENGTH = 2
 
 ALL_DIRS = list(Direction)
@@ -102,7 +102,7 @@ class Pathing:
         self.target  = array('I', [0]) * (self.width * self.height)
         self.avoid   = array('I', [0]) * (self.width * self.height)
         self.best_g  = array('I', [0]) * (self.width * self.height)
-        self.MAX_ITER = int(math.sqrt(self.width * self.height)) * 4
+        self.MAX_ITER = int(math.sqrt(self.width * self.height)) * 10
         self.heap = []
         self.path = []
         self.dist_to_target = {}
@@ -307,8 +307,7 @@ class Pathing:
                         h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
                     else:
                         h0 = abs_local(nx - tx) + abs_local(ny - ty)
-
-                    new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - g / h0)
+                    new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
                 new_f = ng + h0 * new_h
 
                 if ng + h0 > max_length:
@@ -324,6 +323,8 @@ class Pathing:
                     hp,
                     (new_f, -ng, card, not new_zigged, new_zig_time, n)
                 )
+        end_time = time.perf_counter_ns()
+        builder.log("a star time: " + str(end_time-start_time)) 
         hp.clear()
         return []
 
