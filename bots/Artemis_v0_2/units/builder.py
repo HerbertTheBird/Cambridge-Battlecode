@@ -543,8 +543,13 @@ def run_route():
                     rc.build_bridge(to_build, ore_path[route_idx + 1])
                     route_idx += 1
                 elif not bridge and rc.can_build_conveyor(to_build, dir):
-                    rc.build_conveyor(to_build, dir)
-                    route_idx += 1
+                    if route_idx == len(ore_path)-2 and route_idx != 0 and ore_path[route_idx + 1].distance_squared(map_info.my_core) <= 2:
+                        if rc.can_build_splitter(to_build, ore_path[route_idx-1].direction_to(ore_path[route_idx])):
+                            rc.build_splitter(to_build, ore_path[route_idx-1].direction_to(ore_path[route_idx]))
+                            route_idx += 1
+                    else:
+                        rc.build_conveyor(to_build, dir)
+                        route_idx += 1
             next = ore_path[route_idx]
             if route_idx < len(ore_path) - 1:
                 nav.move_to(next)
