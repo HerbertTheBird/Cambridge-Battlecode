@@ -7,7 +7,7 @@ from array import array
 import time
 import units.builder as builder
 WEIGHT = 1.8
-MIN_WEIGHT = 1.1
+MIN_WEIGHT = 1.6
 TIME_CUTOFF = 1600
 MAX_TIME = 400
 ZIG_LENGTH = 2
