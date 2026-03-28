@@ -21,7 +21,7 @@ import units.turret_launcher as launcher
 
 
 # PROFILE_DIR = pathlib.Path("profiles")
-SPAWN_TURN = -1
+SPAWN_TURN = -2
 
 
 class Player:
@@ -80,11 +80,12 @@ class Player:
                 # )
 
     def run(self, c: Controller) -> None:
+        global SPAWN_TURN
         # if not self.initialized:
         #     self._prepare_profile_dir(c)
         
-        if SPAWN_TURN == -1:
-            SPAWN_TURN = c.get_current_round()
+        if SPAWN_TURN == -2:
+            SPAWN_TURN = c.get_current_round() - 1
 
         # profiler_path = PROFILE_DIR / f"unit_{c.get_id()}.txt"
         # profiler = cProfile.Profile()

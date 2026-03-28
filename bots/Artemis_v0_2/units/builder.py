@@ -20,7 +20,9 @@ class Mode(Enum):
         self.g = g
         self.b = b
         self.desc = desc
-
+        
+def log(text : str):
+    print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {text}")
 
 mode = Mode.EXPLORE
 indicator = []
@@ -65,12 +67,12 @@ def init(c: Controller):
 def run():
     global mode
     run_pre()  # preliminary calculations
-    print(f"CHECKING STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
-    print("run check", mode.name, rc.get_cpu_time_elapsed())
+    print(f"CHECK STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
     globals()[f"check_{mode.name.lower()}"]()
-    print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
-    print("run run", mode.name, rc.get_cpu_time_elapsed())
+    log(f"check runtime: {rc.get_cpu_time_elapsed()}")
+    print(f"EXEC. STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
     globals()[f"run_{mode.name.lower()}"]()
+    log(f"exec. runtime: {rc.get_cpu_time_elapsed()}")
     run_post()  # cleanup
 
 
