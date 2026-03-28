@@ -259,7 +259,6 @@ class Pathing:
             if rc.get_cpu_time_elapsed() > TIME_CUTOFF or rc.get_cpu_time_elapsed()-start_cpu_time > MAX_TIME:
                 return None
             MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
-            builder.log("min weight " + str(MIN_WEIGHT_L))
             self.iter += 1
             if self.iter > self.MAX_ITER:
                 break
