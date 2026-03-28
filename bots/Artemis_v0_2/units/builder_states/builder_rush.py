@@ -160,20 +160,175 @@ def run_prepare_launcher():
                     best_restrict = pos
                     best_restrict_dist = dist
 
+    launcher_pos = None
+
     # try placing on best empty tile
-    if best_empty is not None:
-        if rc.can_build_launcher(best_empty):
-            rc.build_launcher(best_empty)
-            return
+    if best_empty is not None and rc.can_build_launcher(best_empty):
+        rc.build_launcher(best_empty)
+        launcher_pos = best_empty
 
     # otherwise clear restrictive tile and place
-    if best_restrict is not None:
+    elif best_restrict is not None:
         if rc.can_destroy(best_restrict):
             rc.destroy(best_restrict)
 
         if rc.can_build_launcher(best_restrict):
             rc.build_launcher(best_restrict)
-            return
+            launcher_pos = best_restrict
+
+    # --- Place marker on a second empty tile surrounding the launcher ---
+    if launcher_pos is not None:
+        second_tile = None
+        second_dist = float('inf')
+
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+
+                pos = Position(launcher_pos.x + dx, launcher_pos.y + dy)
+
+                # skip the launcher tile itself
+                if pos == launcher_pos:
+                    continue
+
+                if not map_info.is_on_map(pos):
+                    continue
+
+                if not map_info.is_tile_empty(pos):
+                    continue
+
+                # choose the closest one to the launcher (or first one found)
+                dist = pos.distance_squared(launcher_pos)
+                if dist < second_dist:
+                    second_tile = pos
+                    second_dist = dist
+
+        # place marker if found
+        if second_tile is not None and rc.can_place_marker(second_tile):
+            rc.place_marker(second_tile, comms.encode_centralized_launch())
+
+def check_attack():
+    pass
+
+def run_attack():
+    # place down sentinel if possible
+    my_pos = rc.get_position()
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            candidate = Position(my_pos.x + dx, my_pos.y + dy)
+            if not map_info.is_on_map(candidate):
+                continue
+            if my_pos.distance_squared(candidate) > 2:
+                continue
+
+            # Check all 4 cardinal neighbors of this candidate for enemy harvester
+            adjacent_enemy_harvester = False
+            for d, (n_dx, n_dy) in CARDINAL_DELTAS:
+                neighbor = Position(candidate.x + n_dx, candidate.y + n_dy)
+                if not map_info.is_on_map(neighbor):
+                    continue
+                neighbor_id = rc.get_tile_building_id(neighbor)
+                if neighbor_id is not None and rc.get_entity_type(neighbor_id) == EntityType.HARVESTER:
+                    if rc.get_team(neighbor_id) != rc.get_team():
+                        adjacent_enemy_harvester = True
+                        break
+
+            if adjacent_enemy_harvester and rc.can_build_sentinel(candidate, Direction.NORTH):
+                direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
+                if rc.can_build_sentinel(candidate, direction):
+                    rc.build_sentinel(candidate, direction)
+                    rc.draw_indicator_dot(candidate, mode.r, mode.g, mode.b)
+                    return  # override done, skip normal sabotage logic
+        # Helper: find adjacent empty tiles
+    adjacent_empty = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if map_info.is_on_map(adj) and map_info.is_tile_empty(adj):
+                adjacent_empty.append(adj)
+
+    # Helper: find adjacent empty tiles
+    adjacent_empty = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if map_info.is_on_map(adj) and map_info.is_tile_empty(adj):
+                adjacent_empty.append(adj)
+
+    # Case 1: Standing on an empty tile that an enemy conveyor/bridge leads into
+    if map_info.is_tile_empty(my_pos):
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                adj = Position(my_pos.x + dx, my_pos.y + dy)
+                b_id = rc.get_tile_building_id(adj)
+                if b_id is None:
+                    continue
+                if rc.get_team(b_id) == rc.get_team():
+                    continue
+                b_type = rc.get_entity_type(b_id)
+                # Check if this building points at our tile
+                points_at_tile = False
+                if b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
+                    dir = rc.get_direction(b_id)
+                    b_pos = rc.get_position(b_id)
+                    if b_pos.add(dir) == my_pos:
+                        points_at_tile = True
+                elif b_type == EntityType.BRIDGE:
+                    if rc.get_bridge_target(b_id) == my_pos:
+                        points_at_tile = True
+
+                if points_at_tile and adjacent_empty:
+                    rc.move(random.choice(adjacent_empty))
+                    return
+
+    # --- Case 2: Place sentinel on empty tile an enemy conveyor/bridge leads into ---
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if not map_info.is_on_map(adj) or not map_info.is_tile_empty(adj):
+                continue
+            for ddx in (-1, 0, 1):
+                for ddy in (-1, 0, 1):
+                    if ddx == 0 and ddy == 0:
+                        continue
+                    check_pos = Position(adj.x + ddx, adj.y + ddy)
+                    b_id = rc.get_tile_building_id(check_pos)
+                    if b_id is None:
+                        continue
+                    if rc.get_team(b_id) == rc.get_team():
+                        continue
+                    b_type = rc.get_entity_type(b_id)
+                    points_at_tile = False
+                    if b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
+                        dir = rc.get_direction(b_id)
+                        b_pos = rc.get_position(b_id)
+                        if b_pos.add(dir) == adj:
+                            points_at_tile = True
+                    elif b_type == EntityType.BRIDGE:
+                        if rc.get_bridge_target(b_id) == adj:
+                            points_at_tile = True
+
+                    if points_at_tile and rc.can_build_sentinel(adj):
+                        rc.build_sentinel(adj)
+                        return
+
+    # Case 3: Standing on an enemy conveyor/bridge, fire
+    building_id = rc.get_tile_building_id(my_pos)
+    if building_id is not None:
+        if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
+            EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE
+        ):
+            if rc.can_fire(my_pos):
+                rc.fire(my_pos)
+                return
+    
 
 def run_pre():
     map_info.update()

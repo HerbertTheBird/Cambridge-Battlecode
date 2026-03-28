@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
 from dataclasses import dataclass
+from collections import deque
 
 def is_on_map(pos: Position):
     return 0 <= pos.x < width and 0 <= pos.y < height
@@ -172,6 +173,65 @@ def is_conveyor(type: EntityType):
     return type is _ET_CONVEYOR or type is _ET_ARMOURED_CONVEYOR or type is _ET_BRIDGE or type is _ET_SPLITTER
 def is_turret(type: EntityType):
     return type is _ET_GUNNER or type is _ET_SENTINEL or type is _ET_BREACH
+def leads_to_friendly_turret(start_building_id, max_depth=20):
+    """
+    Returns True if following the outputs of this enemy bridge/conveyor
+    eventually reaches a friendly turret.
+    max_depth prevents infinite loops in cycles.
+    """
+    visited = set()
+    queue = deque()
+    queue.append((start_building_id, 0))
+
+    while queue:
+        b_id, depth = queue.popleft()
+        if depth > max_depth:
+            continue
+        if b_id in visited:
+            continue
+        visited.add(b_id)
+
+        try:
+            b_type = rc.get_entity_type(b_id)
+        except GameError:
+            continue
+
+        # Stop if we reach a friendly turret
+        if b_type == EntityType.GUNNER and rc.get_team(b_id) == rc.get_team():
+            return True
+        if b_type == EntityType.SENTINEL and rc.get_team(b_id) == rc.get_team():
+            return True
+
+        # Follow outputs
+        neighbors = []
+
+        # For bridges, enqueue the target tile's building
+        if b_type == EntityType.BRIDGE:
+            try:
+                target_pos = rc.get_bridge_target(b_id)
+                target_building_id = rc.get_tile_building_id(target_pos)
+                if target_building_id is not None:
+                    neighbors.append(target_building_id)
+            except GameError:
+                pass
+
+        # For conveyors/splitters, follow adjacent tiles in their direction
+        elif b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER):
+            try:
+                dir = rc.get_direction(b_id)
+                # Output tile in direction
+                out_pos = rc.get_position(b_id).add(dir)
+                out_id = rc.get_tile_building_id(out_pos)
+                if out_id is not None:
+                    neighbors.append(out_id)
+            except GameError:
+                pass
+
+        for n_id in neighbors:
+            if n_id not in visited:
+                queue.append((n_id, depth + 1))
+
+    return False
 def _rebuild_core_areas() -> None:
     global my_core_area, their_core_area
     my_core_area = set()
