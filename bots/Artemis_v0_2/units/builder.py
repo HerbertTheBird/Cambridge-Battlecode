@@ -101,7 +101,7 @@ def run_pre():
     my_pos = rc.get_position()
 
     # --- Step 0: Heal self if possible (fallback) ---
-    if map_info.building[map_info.my_core.x][map_info.my_core.y] and map_info.building[map_info.my_core.x][map_info.my_core.y].hp < 500 and rc.get_position().distance_squared(map_info.my_core) <= 2:
+    if map_info.my_core and map_info.building[map_info.my_core.x][map_info.my_core.y] and map_info.building[map_info.my_core.x][map_info.my_core.y].hp < 500 and rc.get_position().distance_squared(map_info.my_core) <= 2:
         if rc.can_heal(my_pos):
             rc.heal(my_pos)
         mode = Mode.HEAL_CORE
