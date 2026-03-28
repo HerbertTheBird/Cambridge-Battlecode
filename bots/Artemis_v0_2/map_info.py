@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
 from dataclasses import dataclass
+
 def is_on_map(pos: Position):
     return 0 <= pos.x < width and 0 <= pos.y < height
 CARDINALS = [
@@ -61,11 +62,13 @@ past_filled: list[list[int]] = []
 last_seen: list[list[int]] = []
 my_core: Position | None = None
 their_core: Position | None = None
+predicted_enemy_core: Position | None = None
 core_id: int | None = None
 hor_sym = True
 ver_sym = True
 rot_sym = True
 solved_sym = False
+rush_tiebroken = 0
 ground_blocked_all: set[Position] = set()
 ground_blocked_no_ore: set[Position] = set()
 building_blocked_all: set[Position] = set()
@@ -219,11 +222,14 @@ def _update_building_blocked_at(pos: Position) -> None:
     if not is_barrier and not is_conv:
         building_blocked_no_barrier_no_conveyors.add(pos)
 def update() -> None:
+    from units.builder import log
     global my_core, their_core, core_id, solved_sym
     global hor_sym, ver_sym, rot_sym
+    global rush_tiebroken, predicted_enemy_core
     current_round = rc.get_current_round()
     visible_tiles = rc.get_nearby_tiles()
     my_team       = rc.get_team()
+    my_pos        = rc.get_position()
     # Pull frequently-used globals into locals (LOAD_FAST vs LOAD_GLOBAL).
     ground_local      = ground
     ground_seen_local = ground_seen
@@ -369,6 +375,10 @@ def update() -> None:
         # --- FIX 15: reuse Building object when entity_id is unchanged.
         # Same entity => same type, team, maxhp, direction, vision_sq, bridge_target.
         # This skips 5+ rc.get_*() C-API calls and a Building() allocation per tile.
+        
+        team = rc_get_team(entity_id)
+        # if entity_type == _ET_CORE and team != my_team:
+        #     # do smth
         if prev_building is not None and prev_building.id == entity_id:
             prev_building.hp = rc_get_hp(entity_id)
             prev_building.stored_resource_id = stored_resource_id
@@ -380,7 +390,6 @@ def update() -> None:
             direction     = rc_get_direction(entity_id)        if etv in hdir_vals else None
             vision_sq     = rc_get_vision_radius_sq(entity_id) if etv in hvis_vals else None
             bridge_target = rc_get_bridge_target(entity_id)    if etv in hbt_vals  else None
-            team = rc_get_team(entity_id)
             new_building = Building(
                 id=entity_id,
                 type=entity_type,
@@ -466,8 +475,39 @@ def update() -> None:
                             gb_all_add(flipped)
                             if env is not _ENV_ORE_TI:
                                 gb_nore_add(flipped)
+    if my_core:
+        if their_core:
+            predicted_enemy_core = their_core
+        else:
+            if rot_sym_local:
+                predicted_enemy_core = rot_flip(my_core)
+            else:
+                hsym_core = hor_flip(my_core)
+                vsym_core = ver_flip(my_core)
+                if rush_tiebroken == 1 and ver_sym_local:
+                    predicted_enemy_core = vsym_core
+                elif rush_tiebroken == 2 and hor_sym_local:
+                    predicted_enemy_core = hsym_core
+                elif ver_sym_local and hor_sym_local:
+                    if abs(my_pos.x - hsym_core.x) + abs(my_pos.y - hsym_core.y) < abs(my_pos.x - vsym_core.x) + abs(my_pos.y - vsym_core.y):
+                        predicted_enemy_core = hsym_core
+                        rush_tiebroken = 2
+                        log("Tiebreaking enemy core sym - HORIZONTAL")
+                    else:
+                        predicted_enemy_core = vsym_core
+                        rush_tiebroken = 1
+                        log("Tiebreaking enemy core sym - VERTICAL")
+                elif ver_sym_local:
+                    predicted_enemy_core = vsym_core
+                else:
+                    predicted_enemy_core = hsym_core
+
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) is _ET_MARKER))
+
+def can_place_at_restrictive(pos: Position):
+    return is_tile_empty(pos) or in_bounds(pos) and rc.can_destroy(pos) and (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) is _ET_ROAD)
+
 def get_avoid(
     avoid_conveyors: bool,
     avoid_builders: bool,
