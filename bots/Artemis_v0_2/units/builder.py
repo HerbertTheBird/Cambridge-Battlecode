@@ -719,9 +719,9 @@ def run_build_harvester():
                     manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
                     harvester_cost = rc.get_harvester_cost()[0]
                     conveyor_cost = rc.get_conveyor_cost()[0]
-                    scale = 1.1
+                    scale = 1
                     expected_finish = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost) < rc.get_global_resources()[0]
-                    if routed >= 1 and pos.x % 2 == 0 and expected_finish:
+                    if routed >= 0 and (pos.x//2) % 2 == 0 and expected_finish:
                         if rc.can_build_sentinel(pos, pos.direction_to(target_ore).rotate_right()):
                             rc.build_sentinel(pos, pos.direction_to(target_ore).rotate_right())
                             return
