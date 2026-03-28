@@ -104,7 +104,7 @@ class Pathing:
         self.target  = array('I', [0]) * (self.width * self.height)
         self.avoid   = array('I', [0]) * (self.width * self.height)
         self.best_g  = array('I', [0]) * (self.width * self.height)
-        self.MAX_ITER = self.width * self.height
+        self.MAX_ITER = int(math.sqrt(self.width * self.height))*10
         self.heap = []
         self.path = []
         self.dist_to_target = {}
@@ -169,6 +169,7 @@ class Pathing:
             self.run_id += 1
             self.iter = 0
             for p in target_p:
+                self.rc.draw_indicator_line(start_p, p, 255, 255, 255)
                 t  = p.y * width_l + p.x
                 self.target[t] = self.run_id
                 if insert_heap:
@@ -179,10 +180,12 @@ class Pathing:
                     
                     heappush(self.heap, (h0*WEIGHT, 0, True, False, 0, t, 0))
                     self.seen[t] = self.run_id
+                    # print("pushing", p, start_p)
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
         builder.log("a* start")
+        
         width_l = self.width
         run_id = self.run_id
         seen = self.seen
@@ -284,7 +287,7 @@ class Pathing:
         seen[start] = 0
         ZIG_LENGTH_L = ZIG_LENGTH
         start_cpu_time = rc.get_cpu_time_elapsed()
-        # c = 0
+        c = 0
         while hp:
             # c += 1
             # if c > 20:
@@ -293,8 +296,8 @@ class Pathing:
                 return None
             self.iter += 1
             MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/100, 1)*(WEIGHT-MIN_WEIGHT)
-            # if self.iter > self.MAX_ITER:
-            #     break
+            if self.iter > self.MAX_ITER:
+                break
             _, g, card, _, zig_time, pos, _ = heappop(hp)
             g *= -1
             if (not adjacent and pos == start) or (adjacent and (pos == left or pos == right or pos == up or pos == down)):
@@ -312,7 +315,8 @@ class Pathing:
 
             px_cache = pos % width_l
             py_cache = pos // width_l
-            rc.draw_indicator_dot(Position(px_cache, py_cache), 255, 0, 0)
+            print(Position(px_cache, py_cache), start_p, self.iter, self.run_id)
+            rc.draw_indicator_dot(Position(px_cache, py_cache), min(255, self.iter*255//625), 0, 0)
             for dx, dy, cost in dirs:
                 nx = px_cache + dx
                 ny = py_cache + dy
