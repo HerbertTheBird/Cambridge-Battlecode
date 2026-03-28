@@ -6,6 +6,7 @@ import math
 from array import array
 import time
 import units.builder as builder
+import sys
 WEIGHT = 1.8
 MIN_WEIGHT = 1.2
 TIME_CUTOFF = 1600
@@ -164,7 +165,7 @@ class Pathing:
         insert_heap = False
         if len(self.heap) == 0:
             insert_heap = True
-        self.run_id += 1
+            self.run_id += 1
         for p in target_p:
             t  = p.y * width_l + p.x
             self.target[t] = self.run_id
@@ -265,7 +266,6 @@ class Pathing:
             _, g, card, _, zig_time, pos = heappop(hp)
             if avoid[pos] == avoid_id:
                 continue
-
             g *= -1
             if g > best_g[pos]:
                 continue
