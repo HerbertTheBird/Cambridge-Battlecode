@@ -5,7 +5,7 @@ import random
 import sys
 
 import map_info
-import pathing
+from pathing import Pathing
 import comms
 
 indicator = []
@@ -26,7 +26,7 @@ turns_since_last_explore_target = 0
 
 rc = None
 MODE_ACTIONS = None
-
+nav = None
 class Mode(Enum):
     RUSH_CORE = (255, 165, 0, "rush opponent core")
     PREPARE_LAUNCHER = (0, 180, 180, "build launcher")
@@ -44,7 +44,7 @@ def init(c: Controller):
     rc = c
     map_info.init(c)
     comms.init(c)
-    pathing.init(c)
+    nav = Pathing(c)
 
 def run():
     global mode
@@ -94,7 +94,7 @@ def check_rush_core():
                 return
 
     # route to core
-    path = pathing.calculate_path(map_info.predicted_enemy_core)
+    path = nav.calculate_path(map_info.predicted_enemy_core)
     if path:
         if len(path) > 0:
             log("Path to core found.")
@@ -104,7 +104,7 @@ def check_rush_core():
         log("A* TLE - assuming safe state, ignoring")
         
 def run_rush_core():
-    pathing.execute_path()
+    nav.execute_path()
 
 def check_prepare_launcher():
     global mode

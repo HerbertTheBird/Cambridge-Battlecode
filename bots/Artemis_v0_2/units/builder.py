@@ -5,7 +5,7 @@ import random
 import sys
 
 import map_info
-import pathing
+from pathing import Pathing
 import comms
 
 
@@ -30,6 +30,8 @@ blocked_ores = {}
 defended_ores = set()
 cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
 all_dirs = list(Direction)
+nav = None
+ore_nav = None
 
 # Cache deltas directly to bypass `Enum` and `.add()` overhead
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in all_dirs]
@@ -61,7 +63,8 @@ def init(c: Controller):
     rc = c
     map_info.init(c)
     comms.init(c)
-    pathing.init(c)
+    nav = Pathing(c)
+    ore_nav = Pathing(c)
 
 
 def run():
@@ -251,7 +254,7 @@ def check_build_harvester():
             target_ore = None
             mode = Mode.EXPLORE
             return
-    if pathing.calculate_path(target_ore):
+    if nav.calculate_path(target_ore):
         pass
     else:
         current_distance = rc.get_position().distance_squared(target_ore)
@@ -281,7 +284,7 @@ def run_explore():
     moved = False
     attempts = 0
     while not moved and attempts < 1:
-        if pathing.move_to(explore_target):
+        if nav.move_to(explore_target):
             moved = True
         else:
             force_generate_explore_target()  # generates new target for next attempt
@@ -377,7 +380,7 @@ def run_build_harvester():
             if not rc.is_tile_passable(target_ore) and rc.get_entity_type(
                     rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
                 rc.destroy(target_ore)
-        pathing.execute_path()
+        nav.execute_path()
         return
 
     # State 2: Perimeter is secure (or all walls). Let's build the harvester.
@@ -399,7 +402,7 @@ def run_build_harvester():
                 for d in random.sample(all_dirs, len(all_dirs)):
                     dx, dy = d.delta()
                     if map_info.is_tile_empty(Position(my_pos.x + dx, my_pos.y + dy)):
-                        pathing.move(d)
+                        nav.move(d)
                         moved = True
 
         # If adjacent to the ore, clear it and build.
@@ -439,16 +442,16 @@ def run_build_harvester():
                 if not rc.is_tile_passable(target_ore) and rc.get_entity_type(
                         rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
                     rc.destroy(target_ore)
-            pathing.execute_path()
+            nav.execute_path()
 
 
 def check_route():
     global ore_path, launcher_position, route_idx, mode
     if not ore_path:
-        ore_path = pathing.calculate_conveyor_path(routed_ore)
+        ore_path = ore_nav.calculate_conveyor_path(routed_ore)
         route_idx = 0
     if ore_path:
-        launcher_position = pathing.calculate_launcher_position(ore_path, routed_ore)
+        launcher_position = ore_nav.calculate_launcher_position(ore_path, routed_ore)
     if ore_path and route_idx >= len(ore_path) - 1 and not launcher_position:
         mode = Mode.EXPLORE
         ore_path = None
@@ -458,7 +461,7 @@ def run_route():
     global route_idx, ore_path, launcher_position
     if ore_path:
         if route_idx < len(ore_path) - 1:
-            new_path = pathing.calculate_conveyor_path(ore_path[route_idx], True)
+            new_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
                 ore_path = ore_path[:route_idx] + new_path
         for i in range(len(ore_path) - 1):
@@ -478,11 +481,11 @@ def run_route():
             if place:
                 if map_info.building[launcher.x][launcher.y] and map_info.building[launcher.x][
                     launcher.y].team != rc.get_team():
-                    pathing.move_to(launcher)
+                    nav.move_to(launcher)
                     if rc.get_position() == launcher and rc.can_fire(launcher):
                         rc.fire(launcher)
                 elif nearby_conv and nearby_conv != launcher:
-                    pathing.move_to(nearby_conv)
+                    nav.move_to(nearby_conv)
                     if rc.can_destroy(launcher):
                         rc.destroy(launcher)
                     id = rc.get_tile_building_id(rc.get_position())
@@ -506,7 +509,7 @@ def run_route():
                                     route_idx += 1
                             next = ore_path[route_idx]
                             if route_idx < len(ore_path) - 1:
-                                pathing.move_to(next)
+                                nav.move_to(next)
                     if rc.can_build_launcher(launcher):
                         rc.build_launcher(launcher)
                 return
@@ -530,7 +533,7 @@ def run_route():
                     route_idx += 1
             next = ore_path[route_idx]
             if route_idx < len(ore_path) - 1:
-                pathing.move_to(next)
+                nav.move_to(next)
 
 
 def check_sabotage():
@@ -637,7 +640,7 @@ def run_sabotage():
 
         # Move toward it if not close enough
         if dist_sq > 2:
-            pathing.move_to(empty_tile)
+            nav.move_to(empty_tile)
 
         # We are within distance ≤ 2 → try placing turret
         dist_sq = rc.get_position().distance_squared(empty_tile)
@@ -665,7 +668,7 @@ def run_sabotage():
         rc.draw_indicator_line(rc.get_position(), passable_tile, mode.r, mode.g, mode.b)
         # Move toward it
         if rc.get_position() != passable_tile:
-            pathing.move_to(passable_tile)
+            nav.move_to(passable_tile)
 
         # We're on it → destroy or fire
         if rc.can_destroy(passable_tile):
