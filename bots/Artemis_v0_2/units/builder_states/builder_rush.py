@@ -160,6 +160,8 @@ def check_prepare_launcher():
             return
 
 def run_prepare_launcher():
+    print("Prepare launcher ran", file=sys.stderr)
+    log("Setup")
     global mode
     my_pos = rc.get_position()
     
@@ -178,39 +180,40 @@ def run_prepare_launcher():
 
     # If already adjacent to a launcher, continue with normal logic
     if not launcher_adjacent_tiles:
+        log("Looking for close launcher")
         # Try moving to a tile surrounding an allied launcher
         nearest_launcher_tile = None
         nearest_dist = float('inf')
-        for x in range(map_info.width):
-            for y in range(map_info.height):
-                pos = Position(x, y)
-                if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
-                    continue
-                b_id = rc.get_tile_building_id(pos)
-                if b_id is None or rc.get_team(b_id) != rc.get_team() or rc.get_entity_type(b_id) != EntityType.LAUNCHER:
-                    continue
+        for pos in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
+            # pos = Position(x, y)
+            if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                continue
+            b_id = rc.get_tile_building_id(pos)
+            if b_id is None or rc.get_team(b_id) != rc.get_team() or rc.get_entity_type(b_id) != EntityType.LAUNCHER:
+                continue
 
-                # For each launcher, check surrounding tiles
-                for dx in (-1, 0, 1):
-                    for dy in (-1, 0, 1):
-                        if dx == 0 and dy == 0:
-                            continue
-                        adj = Position(pos.x + dx, pos.y + dy)
-                        
-                        if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
-                            continue
-                        if not map_info.is_on_map(adj) or (not map_info.is_tile_empty(adj) and not rc.is_tile_passable(adj)):
-                            continue
-                        dist = my_pos.distance_squared(adj)
-                        if dist < nearest_dist:
-                            nearest_dist = dist
-                            nearest_launcher_tile = adj
+            # For each launcher, check surrounding tiles
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    adj = Position(pos.x + dx, pos.y + dy)
+                    
+                    if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                        continue
+                    if not map_info.is_on_map(adj) or (not map_info.is_tile_empty(adj) and not rc.is_tile_passable(adj)):
+                        continue
+                    dist = my_pos.distance_squared(adj)
+                    if dist < nearest_dist:
+                        nearest_dist = dist
+                        nearest_launcher_tile = adj
 
         # Move to nearest empty tile surrounding an allied launcher
         if nearest_launcher_tile and (rc.is_tile_passable(nearest_launcher_tile) or map_info.is_tile_empty(nearest_launcher_tile)):
             path = nav.calculate_path(nearest_launcher_tile)
             if path and len(path) > 0:
-                if len(path) <= 4:
+                if len(path) <= 2:
+                    log("Choosing existing launcher")
                     nav.execute_path()
                     if rc.get_position() == nearest_launcher_tile:
                         mode = Mode.ATTACK
@@ -221,6 +224,7 @@ def run_prepare_launcher():
 
     best_restrict = None
     best_restrict_dist = float('inf')
+    log("Building new launcher")
 
     # check all 8 surrounding tiles
     for dx in (-1, 0, 1):

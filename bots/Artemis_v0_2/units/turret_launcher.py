@@ -83,6 +83,29 @@ def run():
                                 return
 
             for target_tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
+                
+                
+                # Empty tile that an enemy conveyor/bridge leads into
+                if rc.is_tile_empty(target_tile):
+                    for dx in (-1,0,1):
+                        for dy2 in (-1,0,1):
+                            if dx == 0 and dy2 == 0:
+                                continue
+                            adj = Position(target_tile.x + dx, target_tile.y + dy2)
+                            if not map_info.in_bounds(adj) or adj.distance_squared(pos) > rc.get_vision_radius_sq():
+                                continue
+                            building_id = rc.get_tile_building_id(adj)
+                            if building_id is None:
+                                continue
+                            if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
+                                EntityType.CONVEYOR,
+                                EntityType.ARMOURED_CONVEYOR,
+                                EntityType.BRIDGE,
+                            ):
+                                if rc.can_launch(bot_pos, target_tile):
+                                    rc.launch(bot_pos, target_tile)
+                                    return
+                
                 # --- New: Enemy conveyor next to enemy harvester ---
                 building_id = rc.get_tile_building_id(target_tile)
                 if building_id is not None and rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
@@ -103,28 +126,9 @@ def run():
                                 continue
                             if rc.get_team(adj_id) != rc.get_team() and rc.get_entity_type(adj_id) == EntityType.HARVESTER:
                                 if rc.is_tile_passable(target_tile):
-                                    candidates.append((2, target_tile))  # prioritize conveyor next to harvester
-                                    break  # no need to check other neighbors
-
-                # Empty tile that an enemy conveyor/bridge leads into
-                if rc.is_tile_empty(target_tile):
-                    for dx in (-1,0,1):
-                        for dy2 in (-1,0,1):
-                            if dx == 0 and dy2 == 0:
-                                continue
-                            adj = Position(target_tile.x + dx, target_tile.y + dy2)
-                            if not map_info.in_bounds(adj) or adj.distance_squared(pos) > rc.get_vision_radius_sq():
-                                continue
-                            building_id = rc.get_tile_building_id(adj)
-                            if building_id is None:
-                                continue
-                            if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
-                                EntityType.CONVEYOR,
-                                EntityType.ARMOURED_CONVEYOR,
-                                EntityType.BRIDGE,
-                            ):
-                                if rc.is_tile_passable(target_tile):
-                                    candidates.append((1, target_tile))
+                                    if rc.can_launch(bot_pos, target_tile):
+                                        rc.launch(bot_pos, target_tile)
+                                        return
 
                 # Enemy bridge/conveyor that doesn't eventually lead to a friendly turret
                 building_id = rc.get_tile_building_id(target_tile)
@@ -138,7 +142,9 @@ def run():
                         print("Conveyer target")
                         if not map_info.leads_to_friendly_turret(building_id):  # custom helper
                             if rc.is_tile_passable(target_tile):
-                                candidates.append((3, target_tile))
+                                if rc.can_launch(bot_pos, target_tile):
+                                    rc.launch(bot_pos, target_tile)
+                                    return
 
             # === Sort by priority (lowest number = highest priority) ===
             candidates.sort(key=lambda x: x[0])
