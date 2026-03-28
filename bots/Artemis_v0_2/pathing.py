@@ -167,6 +167,8 @@ class Pathing:
         if len(self.heap) == 0:
             insert_heap = True
             self.run_id += 1
+            self.iter = 0
+
         for p in target_p:
             t  = p.y * width_l + p.x
             self.target[t] = self.run_id
@@ -176,9 +178,8 @@ class Pathing:
                 else:
                     h0 = abs_local(p.x - start_p.x) + abs_local(p.y - start_p.y)
                 
-                heappush(self.heap, (h0, 0, True, False, 0, t, 0))
+                heappush(self.heap, (h0*WEIGHT, 0, True, False, 0, t, 0))
                 self.seen[t] = self.run_id
-        self.iter = 0
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
@@ -245,6 +246,8 @@ class Pathing:
             self.reference_path = []
         if self.changed:
             self.dist_to_target = {}
+        if self.changed or avoid_changed:
+            self.dist_to_target = {}
         print("max length", max_length)
         WEIGHT_L = WEIGHT
         new_hp = []
@@ -254,19 +257,21 @@ class Pathing:
             nx = pos%width_l
             ny = pos//width_l
             MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT-MIN_WEIGHT)
-            # if pos in self.dist_to_target:
-            #     h0 = self.dist_to_target[pos]
-            #     new_h = 1
-            # else:
-            if is_dirs:
-                h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
+            if pos in self.dist_to_target:
+                h0 = self.dist_to_target[pos]
+                new_h = 1
             else:
-                h0 = abs_local(nx - tx) + abs_local(ny - ty)
-            new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
+                if is_dirs:
+                    h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
+                else:
+                    h0 = abs_local(nx - tx) + abs_local(ny - ty)
+                new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
             new_f = g + h0 * new_h
-            rc.draw_indicator_dot(Position(nx, ny), 0, 255, 255)
+            # rc.draw_indicator_dot(Position(nx, ny), 0, 255, 255)
+            # print("after ", pos, self.dist_to_target.get(pos), max_local(0, 1 - (g) / h0) if h0 != 0 else 0, g, MIN_WEIGHT_L, h0, new_h, new_f, is_dirs, nx, ny, tx, ty)
+
             if f != new_f:
-                print("oh no", f, new_f)
+                print("oh no", pos, f, new_f)
             heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos, iter))
         self.heap = new_hp
         hp = self.heap
@@ -332,13 +337,13 @@ class Pathing:
                 seen[n]   = run_id
                 parent[n] = pos
 
-                # if n in self.dist_to_target:
-                #     h0 = self.dist_to_target[n]
-                #     new_h = 1
-                # else:
-                new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (ng) / h0)
-                new_f = ng + h0 * new_h
-
+                if n in self.dist_to_target:
+                    h0 = self.dist_to_target[n]
+                    new_h = 1
+                else:
+                    new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (ng) / h0)
+                    new_f = ng + h0 * new_h
+                # print("before ", n, self.dist_to_target.get(n), max_local(0, 1 - (ng) / h0) if h0 != 0 else 0, ng, MIN_WEIGHT_L, h0, new_h, new_f, is_dirs, nx, ny, tx, ty)
 
                 card = dx == 0 or dy == 0
                 new_zigged = (zig_time%(ZIG_LENGTH_L*2) < ZIG_LENGTH_L)^(dx>0)^(dy>0)
