@@ -295,8 +295,8 @@ class Pathing:
                 ng = g + cost
                 if ng >= best_g[n] and seen[n] == run_id:
                     continue
-                if abs_local(dx) > 1 or abs_local(dy) > 1 and abs_local(nx-my_core.x) <= 1 and abs_local(ny-my_core.y) <= 1:  #this is so i can place a splitter at the end
-                    continue
+                # if abs_local(dx) > 1 or abs_local(dy) > 1 and abs_local(nx-my_core.x) <= 1 and abs_local(ny-my_core.y) <= 1:  #this is so i can place a splitter at the end
+                #     continue
                 best_g[n] = ng
                 seen[n]   = run_id
                 parent[n] = pos
