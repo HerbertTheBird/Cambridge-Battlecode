@@ -64,6 +64,29 @@ def run():
                                 if map_info.is_tile_empty(target_tile):
                                     candidates.append((0, target_tile))  # highest priority
 
+                # --- New: Enemy conveyor next to enemy harvester ---
+                building_id = rc.get_tile_building_id(target_tile)
+                if building_id is not None and rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
+                    EntityType.CONVEYOR,
+                    EntityType.ARMOURED_CONVEYOR,
+                ):
+                    for dx in (-1, 0, 1):
+                        for dy in (-1, 0, 1):
+                            if dx == 0 and dy == 0:
+                                continue
+                            adj = Position(target_tile.x + dx, target_tile.y + dy)
+                            if adj.distance_squared(pos) > rc.get_vision_radius_sq():
+                                continue
+                            if not map_info.is_on_map(adj):
+                                continue
+                            adj_id = rc.get_tile_building_id(adj)
+                            if adj_id is None:
+                                continue
+                            if rc.get_team(adj_id) != rc.get_team() and rc.get_entity_type(adj_id) == EntityType.HARVESTER:
+                                if rc.is_tile_passable(target_tile):
+                                    candidates.append((2, target_tile))  # prioritize conveyor next to harvester
+                                    break  # no need to check other neighbors
+
                 # Empty tile that an enemy conveyor/bridge leads into
                 if rc.is_tile_empty(target_tile):
                     for dx in (-1,0,1):
@@ -83,9 +106,6 @@ def run():
                             ):
                                 if rc.is_tile_passable(target_tile):
                                     candidates.append((1, target_tile))
-
-                # tile 2 chebyshev units from above candidates
-                # this will be added below after we sort priority
 
                 # Enemy bridge/conveyor that doesn't eventually lead to a friendly turret
                 building_id = rc.get_tile_building_id(target_tile)
