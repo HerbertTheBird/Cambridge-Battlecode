@@ -41,7 +41,7 @@ class Mode(Enum):
 mode = Mode.RUSH_CORE
 
 def init(c: Controller):
-    global rc, MODE_ACTIONS
+    global rc, MODE_ACTIONS, nav
     rc = c
     map_info.init(c)
     comms.init(c)

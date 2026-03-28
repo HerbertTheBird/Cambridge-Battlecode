@@ -59,7 +59,7 @@ MODE_ACTIONS = None
 
 
 def init(c: Controller):
-    global rc, MODE_ACTIONS
+    global rc, MODE_ACTIONS, nav, ore_nav
     rc = c
     map_info.init(c)
     comms.init(c)
