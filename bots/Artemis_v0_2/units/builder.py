@@ -466,8 +466,9 @@ def run_route():
     global route_idx, ore_path, launcher_position
     if ore_path:
         if route_idx < len(ore_path) - 1:
-            new_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], True)
+            new_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], ore_path[:route_idx], True)
             if new_path:
+                print("new path", new_path, ore_path[:route_idx])
                 ore_path = ore_path[:route_idx] + new_path
         # for i in range(len(ore_path)):
         #     if route_idx == i:
