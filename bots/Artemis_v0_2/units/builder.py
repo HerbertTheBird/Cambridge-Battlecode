@@ -16,7 +16,7 @@ class Mode(Enum):
     ROUTE = (255, 255, 0, "route to core")
     SABOTAGE = (200, 10, 10, "attack harvester")
     BUILD_TRAP = (193, 154, 107, "launcher trap")
-
+    HEAL_CORE = (255, 165, 0, "heal core")
     def __init__(self, r, g, b, desc):
         self.r = r
         self.g = g
@@ -101,6 +101,11 @@ def run_pre():
     my_pos = rc.get_position()
 
     # --- Step 0: Heal self if possible (fallback) ---
+    if map_info.building[map_info.my_core.x][map_info.my_core.y] and map_info.building[map_info.my_core.x][map_info.my_core.y].hp < 500 and rc.get_position().distance_squared(map_info.my_core) <= 2:
+        if rc.can_heal(my_pos):
+            rc.heal(my_pos)
+        mode = Mode.HEAL_CORE
+        return
     if rc.can_heal(my_pos):
         rc.heal(my_pos)
 
@@ -1046,3 +1051,8 @@ def run_sabotage():
                 rc.fire(rc.get_position())
 
         return
+
+def check_heal_core():
+    pass
+def run_heal_core():
+    pass
