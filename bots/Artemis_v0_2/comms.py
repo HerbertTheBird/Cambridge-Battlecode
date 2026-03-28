@@ -1,6 +1,7 @@
 from cambc import Controller, Position, EntityType, GameError
 
 LAUNCHER_BIT = 31
+CENTRALIZED_LAUNCHER_BIT = 30
 ID_BITS = 12
 _ID_MASK = (1 << ID_BITS) - 1
 
@@ -61,3 +62,6 @@ def decode_launch():
 
 def encode_launch(target):
     return rc.get_id() + (target.x << ID_BITS) + (target.y << (ID_BITS + 6)) + (1 << LAUNCHER_BIT)
+
+def encode_centralized_launch(target):
+    return rc.get_id() + (1 << CENTRALIZED_LAUNCHER_BIT)

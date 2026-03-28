@@ -30,6 +30,7 @@ MODE_ACTIONS = None
 class Mode(Enum):
     RUSH_CORE = (255, 165, 0, "rush opponent core")
     PREPARE_LAUNCHER = (0, 180, 180, "build launcher")
+    ATTACK = (200, 10, 10, "attack harvester")
 
     def __init__(self, r, g, b, desc):
         self.r = r
