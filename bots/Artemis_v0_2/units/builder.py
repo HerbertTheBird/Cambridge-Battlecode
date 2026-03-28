@@ -105,7 +105,7 @@ def run_pre():
 
     allied_builders = []
     for uid in nearby_units:
-        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT and rc.get_team(uid) == rc.get_team():
+        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT and rc.get_team(uid) == rc.get_team() and uid > 4:
             allied_builders.append(uid)
             
     def am_closest_builder(pos):

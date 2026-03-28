@@ -18,9 +18,14 @@ def run():
     
     messages = comms.decode_launch()
     rush_messages = comms.decode_centralized_launch()
+    
+    nearby_units = rc.get_nearby_units(dist_sq=2)
+    for unit in nearby_units:
+        if rc.get_team(unit) == rc.get_team() and rc.get_entity_type(unit) == EntityType.BUILDER_BOT and unit <= 4:
+            rush_messages.append((unit, rc.get_position(unit)))
+    pos = rc.get_position()
     for target, id, p in messages:
         r = int(math.sqrt(rc.get_vision_radius_sq()))
-        pos = rc.get_position()
         try:
             bot_pos = rc.get_position(id)
         except GameError:
@@ -29,20 +34,18 @@ def run():
             rc.launch(bot_pos, target)
             if rc.can_place_marker(p):
                 rc.place_marker(p, 0)
-    for id, p in messages:
+    for id, p in rush_messages:
         try:
             bot_pos = rc.get_position(id)
         except GameError:
             bot_pos = None
         if bot_pos and bot_pos.distance_squared(pos) <= 2:
+            print(f"Attempting launch bot {id} at {bot_pos}")
             # candidate positions
             candidates = []
 
             # scan vision for high-priority targets
-            for target_tile in rc.get_nearby_tiles():
-                if not rc.is_in_vision(target_tile):
-                    continue
-
+            for target_tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
                 # Empty tile next to enemy harvester on titanium
                 for dx in (-1, 0, 1):
                     for dy in (-1, 0, 1):
@@ -51,21 +54,25 @@ def run():
                         adj = Position(target_tile.x + dx, target_tile.y + dy)
                         if not map_info.is_on_map(adj):
                             continue
+                        if adj.distance_squared(pos) > rc.get_vision_radius_sq():
+                            continue
                         building_id = rc.get_tile_building_id(adj)
                         if building_id is None:
                             continue
                         if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) == EntityType.HARVESTER:
-                            if map_info.ground[adj] == map_info._ENV_ORE_TI:
+                            if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
                                 if rc.is_tile_passable(target_tile):
                                     candidates.append((0, target_tile))  # highest priority
 
                 # Empty tile that an enemy conveyor/bridge leads into
                 if rc.is_tile_empty(target_tile):
-                    for dx, dy in (-1,0,1):
+                    for dx in (-1,0,1):
                         for dy2 in (-1,0,1):
                             if dx == 0 and dy2 == 0:
                                 continue
                             adj = Position(target_tile.x + dx, target_tile.y + dy2)
+                            if adj.distance_squared(pos) > rc.get_vision_radius_sq():
+                                continue
                             building_id = rc.get_tile_building_id(adj)
                             if building_id is None:
                                 continue
@@ -97,6 +104,7 @@ def run():
 
             # === Attempt launch at best candidate ===
             for _, target_pos in candidates:
+                print(f"Checking candidate {target_pos}")
                 if rc.can_launch(bot_pos, target_pos):
                     rc.launch(bot_pos, target_pos)
                     break
@@ -110,11 +118,6 @@ def run():
     # --- Find Targets ---
     primary_targets = []
     secondary_targets = []
-
-    try:
-        nearby_units = rc.get_nearby_units(dist_sq=2)
-    except GameError:
-        nearby_units = []
 
     for unit_id in nearby_units:
         try:

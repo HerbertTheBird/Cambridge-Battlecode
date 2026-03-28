@@ -74,5 +74,5 @@ def decode_centralized_launch():
 def encode_launch(target):
     return rc.get_id() + (target.x << ID_BITS) + (target.y << (ID_BITS + 6)) + (1 << LAUNCHER_BIT)
 
-def encode_centralized_launch(target):
+def encode_centralized_launch():
     return rc.get_id() + (1 << CENTRALIZED_LAUNCHER_BIT)

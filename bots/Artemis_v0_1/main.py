@@ -46,15 +46,15 @@ class Player:
     #     else:
     #         PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
-    def _write_profile(self, profiler: cProfile.Profile, profiler_path: pathlib.Path) -> None:
-        stats = pstats.Stats(profiler)
+    # def _write_profile(self, profiler: cProfile.Profile, profiler_path: pathlib.Path) -> None:
+    #     stats = pstats.Stats(profiler)
 
-        # stats.stats:
-        # key   = (filename, lineno, funcname)
-        # value = (cc, nc, tt, ct, callers)
-        # tt = tottime, ct = cumtime
-        rows = list(stats.stats.items())
-        rows.sort(key=lambda item: item[1][2], reverse=True)  # sort by tottime
+    #     # stats.stats:
+    #     # key   = (filename, lineno, funcname)
+    #     # value = (cc, nc, tt, ct, callers)
+    #     # tt = tottime, ct = cumtime
+    #     rows = list(stats.stats.items())
+    #     rows.sort(key=lambda item: item[1][2], reverse=True)  # sort by tottime
 
     #     total_calls = sum(v[1] for _, v in rows)
     #     total_tottime = sum(v[2] for _, v in rows)
@@ -87,10 +87,10 @@ class Player:
         # if not self.initialized:
         #     self._prepare_profile_dir(c)
 
-        profiler_path = PROFILE_DIR / f"unit_{c.get_id()}.txt"
-        profiler = cProfile.Profile()
+        # profiler_path = PROFILE_DIR / f"unit_{c.get_id()}.txt"
+        # profiler = cProfile.Profile()
 
-        profiler.enable()
+        # profiler.enable()
         try:
             start_time = time.perf_counter()
             etype = c.get_entity_type()
@@ -135,6 +135,6 @@ class Player:
             c.draw_indicator_line(Position(-100, -100), c.get_position(), 255, 0, 0)
             traceback.print_exc(file=sys.stdout)
 
-        finally:
-            profiler.disable()
-            self._write_profile(profiler, profiler_path)
+        # finally:
+        #     profiler.disable()
+        #     self._write_profile(profiler, profiler_path)
