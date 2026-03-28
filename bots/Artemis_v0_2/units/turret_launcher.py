@@ -41,6 +41,8 @@ def run():
             bot_pos = None
         if bot_pos and bot_pos.distance_squared(pos) <= 2:
             print(f"Attempting launch bot {id} at {bot_pos}")
+            if map_info.building[bot_pos.x][bot_pos.y] and map_info.is_conveyor(map_info.building[bot_pos.x][bot_pos.y].type) and map_info.building[bot_pos.x][bot_pos.y].team != rc.get_team():
+                continue
             # candidate positions
             candidates = []
 
@@ -66,6 +68,8 @@ def run():
                 for direction in map_info.CARDINALS:
                     target_tile = tile.add(direction)
                     if not map_info.is_on_map(target_tile):
+                        continue
+                    if target_tile.distance_squared(pos) > rc.get_vision_radius_sq():
                         continue
                     if not map_info.is_tile_empty(target_tile):
                         continue

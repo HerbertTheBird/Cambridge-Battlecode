@@ -24,6 +24,7 @@ OUR_BUILDINGS = {EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER,
 explore_target = None
 turns_since_last_explore_target = 0
 next_attack_tile = None
+attack_ore = None
 
 rc = None
 MODE_ACTIONS = None
@@ -32,6 +33,7 @@ class Mode(Enum):
     RUSH_CORE = (255, 165, 0, "rush opponent core")
     PREPARE_LAUNCHER = (0, 180, 180, "set up for launcher")
     ATTACK = (200, 10, 10, "attack opponent")
+    ATTACK_CORE = (200, 10, 200, "attack opponent core directly")
 
     def __init__(self, r, g, b, desc):
         self.r = r
@@ -60,9 +62,105 @@ def run():
 def log(text : str):
     print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {text}")
 
-def check_rush_core():
-    global mode
 
+def check_attack_core():
+    """
+    Monitors current ATTACK_CORE target. 
+    If the attack_ore is no longer valid (all adjacent tiles blocked and visible), 
+    fall back to rush/prep mode.
+    """
+    global mode, attack_ore
+
+    if attack_ore is None:
+        return  # nothing to check
+
+    if map_info.their_core is None:
+        # No enemy core known, revert
+        attack_ore = None
+        mode = Mode.PREPARE_LAUNCHER
+        log("Lost enemy core, reverting to PREPARE_LAUNCHER")
+        return
+
+    core_pos = map_info.their_core
+    mine_pos = attack_ore
+
+    # Count empty adjacent tiles within 32 distance² of core
+    empty_adjacent_found = False
+    all_adjacent_visible = True
+
+    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        adj = Position(mine_pos.x + dx, mine_pos.y + dy)
+
+        # Skip tiles out of map bounds
+        if not map_info.is_on_map(adj):
+            continue
+
+        # If any tile is out of vision, we cannot invalidate yet
+        if adj.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
+            all_adjacent_visible = False
+            continue
+
+        # Check empty & within 32 distance²
+        if map_info.is_tile_empty(adj) and adj.distance_squared(core_pos) <= 32:
+            empty_adjacent_found = True
+            break
+
+    if empty_adjacent_found:
+        # Still valid, nothing changes
+        return
+
+    if all_adjacent_visible and not empty_adjacent_found:
+        # No valid adjacent tile left, fallback
+        log("ATTACK_CORE no longer valid")
+        attack_ore = None
+        mode = Mode.RUSH_CORE
+        
+
+
+def check_rush_core():
+    global mode, attack_ore
+    # --- Core rush trigger: titanium near enemy core ---
+    if map_info.their_core is not None:
+        core_pos = map_info.their_core
+
+        for pos in rc.get_nearby_tiles():
+            # Must be titanium
+            if map_info.ground[pos.x][pos.y] != Environment.ORE_TITANIUM:
+                continue
+
+            building_id = rc.get_tile_building_id(pos)
+
+            # Must be empty OR enemy harvester
+            valid_tile = False
+            if building_id is None:
+                valid_tile = True
+            else:
+                if (
+                    rc.get_team(building_id) != rc.get_team()
+                    and rc.get_entity_type(building_id) == EntityType.HARVESTER
+                ):
+                    valid_tile = True
+
+            if not valid_tile:
+                continue
+
+            # Check adjacent tiles: must be EMPTY and within 32 of core
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                adj = Position(pos.x + dx, pos.y + dy)
+                if not map_info.is_on_map(adj):
+                    continue
+                
+                if adj.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
+                    continue
+                if not map_info.is_tile_empty(adj):
+                    continue
+                
+                if adj.distance_squared(core_pos) <= 32:
+                    attack_ore = pos
+                    mode = Mode.ATTACK_CORE
+                    log("Switching to ATTACK_CORE via titanium near core (empty adj)")
+                    return
+                
     # find stuff to sabotage
     for pos in rc.get_nearby_tiles():
         building_id = rc.get_tile_building_id(pos)
@@ -137,6 +235,82 @@ def check_rush_core():
     else:
         log("A* TLE - assuming safe state, ignoring")
         
+                
+def run_attack_core():
+    """
+    Execute ATTACK_CORE behavior:
+    1. Move toward attack_ore mine.
+    2. Move off the mine if standing on it before placing a harvester.
+    3. Place a harvester if the mine is empty.
+    4. Place sentinels on cardinal adjacent tiles, starting with the ones closest to the enemy core.
+    """
+    global attack_ore, mode
+
+    if attack_ore is None or map_info.their_core is None:
+        log("Fatal error")
+        return
+
+    my_pos = rc.get_position()
+    core_pos = map_info.their_core
+    mine_pos = attack_ore
+
+    # --- Step 1: Move toward the mine ---
+    building_id = rc.get_tile_building_id(mine_pos)
+    if my_pos.distance_squared(mine_pos) > 2 and not building_id:
+        path = nav.calculate_path(mine_pos)
+        if path and len(path) > 0:
+            nav.execute_path(path)
+
+    # --- Step 1a: Move off the mine if standing on it before building harvester ---
+    if building_id is None and my_pos == mine_pos:
+        # Find adjacent empty tile to step onto
+        adjacent_empty = []
+        for dx, dy in [(-1,-1), (1,1), (1,-1), (-1,1)]:
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                continue
+            if map_info.is_on_map(adj) and (map_info.is_tile_empty(adj) or rc.is_tile_passable(adj)):
+                adjacent_empty.append(adj)
+
+        if adjacent_empty:
+            # Move to the empty tile closest to enemy core
+            adjacent_empty.sort(key=lambda p: p.distance_squared(core_pos))
+            nav.move(adjacent_empty[0])
+
+    # --- Step 2: Place harvester if needed ---
+    building_id = rc.get_tile_building_id(mine_pos)
+    if building_id is None:
+        if rc.can_build_harvester(mine_pos):
+            rc.build_harvester(mine_pos)
+            log(f"Placed harvester on attack_ore at {mine_pos}")
+        return  # wait next turn for harvester to appear
+
+    # --- Step 3: Place sentinels on cardinal adjacent tiles ---
+    cardinal_neighbors = []
+    for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+        adj = Position(mine_pos.x + dx, mine_pos.y + dy)
+        if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
+            continue
+        if map_info.is_on_map(adj) and map_info.is_tile_empty(adj):
+            cardinal_neighbors.append(adj)
+
+    # Sort neighbors by distance to enemy core (closest first)
+    cardinal_neighbors.sort(key=lambda p: p.distance_squared(core_pos))
+
+    # Try placing a sentinel on each empty neighbor
+    for adj in cardinal_neighbors:
+        if rc.can_build_sentinel(adj, Direction.NORTH):
+            direction = map_info.best_sentinel_dir(adj) or Direction.NORTH
+            if rc.can_build_sentinel(adj, direction):
+                rc.build_sentinel(adj, direction)
+                log(f"Placed sentinel at {adj} facing {direction}")
+                # Optional: mark visually
+                rc.draw_indicator_dot(adj, 255, 0, 0)
+                return  # only build one sentinel per turn
+    if cardinal_neighbors and my_pos.distance_squared(cardinal_neighbors[0]) > 2:
+        nav.move_to(cardinal_neighbors[0])
+    
+    
 def run_rush_core():
     nav.execute_path()
 
@@ -352,34 +526,37 @@ def check_attack():
         check_rush_core()
 
 def run_attack():
-    # place down sentinel if possible
+    # --- Optimized sentinel placement: scan for enemy harvesters first ---
     my_pos = rc.get_position()
-    for dx in range(-2, 3):
-        for dy in range(-2, 3):
-            candidate = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.is_on_map(candidate):
-                continue
-            if my_pos.distance_squared(candidate) > 2:
-                continue
 
-            # Check all 4 cardinal neighbors of this candidate for enemy harvester
-            adjacent_enemy_harvester = False
-            for d, (n_dx, n_dy) in CARDINAL_DELTAS:
-                neighbor = Position(candidate.x + n_dx, candidate.y + n_dy)
-                if not map_info.is_on_map(neighbor):
+    # Get all enemy harvesters in vision
+    for pos in rc.get_nearby_tiles():
+        building_id = rc.get_tile_building_id(pos)
+        if building_id is None:
+            continue
+        if rc.get_team(building_id) == rc.get_team():
+            continue
+        if rc.get_entity_type(building_id) != EntityType.HARVESTER:
+            continue
+
+        # For each enemy harvester, consider cardinally adjacent tiles within distance 2
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                candidate = Position(pos.x + dx, pos.y + dy)
+
+                if not map_info.is_on_map(candidate):
                     continue
-                neighbor_id = rc.get_tile_building_id(neighbor)
-                if neighbor_id is not None and rc.get_entity_type(neighbor_id) == EntityType.HARVESTER:
-                    if rc.get_team(neighbor_id) != rc.get_team():
-                        adjacent_enemy_harvester = True
-                        break
+                if my_pos.distance_squared(candidate) > 2:
+                    continue
+                if not map_info.is_tile_empty(candidate):
+                    continue  # Only place sentinels on empty tiles
 
-            if adjacent_enemy_harvester and rc.can_build_sentinel(candidate, Direction.NORTH):
+                # Build sentinel if possible
                 direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
                 if rc.can_build_sentinel(candidate, direction):
                     rc.build_sentinel(candidate, direction)
                     rc.draw_indicator_dot(candidate, mode.r, mode.g, mode.b)
-                    return  # override done, skip normal sabotage logic
+                    return  # only build one sentinel per turn
                 
     # If there's a next_attack_tile set, move to it first
     target_tile = next_attack_tile
@@ -388,16 +565,6 @@ def run_attack():
         return  # wait until we reach the tile before continuing
     
     # Helper: find adjacent empty tile
-    adjacent_empty = []
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            if dx == 0 and dy == 0:
-                continue
-            adj = Position(my_pos.x + dx, my_pos.y + dy)
-            if map_info.is_on_map(adj) and map_info.is_tile_empty(adj):
-                adjacent_empty.append(adj)
-
-    # Helper: find adjacent empty tiles
     adjacent_empty = []
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
@@ -433,7 +600,6 @@ def run_attack():
 
                 if points_at_tile and adjacent_empty:
                     rc.move(random.choice(adjacent_empty))
-                    return
 
     # --- Case 2: Place sentinel on empty tile an enemy conveyor/bridge leads into ---
     for dx in (-1, 0, 1):
@@ -469,12 +635,53 @@ def run_attack():
                         rc.build_sentinel(adj, direction)
                         return
 
-    # Case 3: Standing on an enemy conveyor/bridge, fire
     building_id = rc.get_tile_building_id(my_pos)
     if building_id is not None:
         if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
             EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE
         ):
+            
+            for unit in rc.get_nearby_units(2):
+                enemy_pos = rc.get_position(unit)
+                enemy_id = rc.get_tile_builder_bot_id(enemy_pos)
+                if enemy_id is None:
+                    continue
+
+                # Check it's an enemy builder
+                if rc.get_team(enemy_id) == rc.get_team():
+                    continue
+
+                # Check if there's a friendly launcher near the builder
+                protected = False
+                builder_adjacent_tiles = []
+                for bdx in (-1, 0, 1):
+                    for bdy in (-1, 0, 1):
+                        if bdx == 0 and bdy == 0:
+                            continue
+
+                        check = Position(enemy_pos.x + bdx, enemy_pos.y + bdy)
+                        if not map_info.is_on_map(check):
+                            continue
+
+                        builder_adjacent_tiles.append(check)
+
+                        check_id = rc.get_tile_robot(check)
+                        if check_id is not None:
+                            if rc.get_team(check_id) == rc.get_team() and rc.get_entity_type(check_id) == EntityType.LAUNCHER:
+                                protected = True
+                                break
+                    if protected:
+                        break
+
+                # If not protected, try to build launcher near builder
+                if not protected:
+                    for tile in builder_adjacent_tiles:
+                        if map_info.is_tile_empty(tile):
+                            direction = my_pos.direction_to(tile)
+                            if rc.can_build_launcher(tile, direction):
+                                rc.build_launcher(tile, direction)
+                                return
+
             if rc.can_fire(my_pos):
                 rc.fire(my_pos)
                 return
@@ -482,6 +689,14 @@ def run_attack():
 
 def run_pre():
     map_info.update()
+    my_pos = rc.get_position()
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
+                if rc.can_build_barrier(adj):
+                    rc.build_barrier(adj)
+    
 
 def run_post():
     pass

@@ -10,7 +10,8 @@ import comms
 
 
 class Mode(Enum):
-    EXPLORE = (0, 255, 0, "explore")
+    EXPLORE = (100, 100, 255, "explore")
+    HEAL = (0, 255, 0, "healing")
     BUILD_HARVESTER = (0, 180, 180, "build harvester")
     ROUTE = (255, 255, 0, "route to core")
     SABOTAGE = (200, 10, 10, "attack harvester")
@@ -80,11 +81,49 @@ def run():
 
 
 # invariant calculations
+# Global to track current repair target
+repair_target = None
+repair_override_turns = 2  # time window after a bot is spawned
+
 def run_pre():
-    global target_ore, blocked_ores, sabotage_ore, opponent_ore
+    """
+    Pre-turn logic:
+    - Update map info.
+    - If not already in HEAL mode, check for newly damaged ally conveyors/bridges.
+    - Once a damaged tile is found, set repair_target permanently and switch to HEAL mode.
+    - Self-healing is still performed as a fallback.
+    """
+    global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode
+
     map_info.update()
-    if rc.can_heal(rc.get_position()):
-        rc.heal(rc.get_position())
+    my_pos = rc.get_position()
+
+    # --- Step 0: Heal self if possible (fallback) ---
+    if rc.can_heal(my_pos):
+        rc.heal(my_pos)
+
+    # --- Step 1: If we already have a repair target, switch to HEAL mode ---
+    if repair_target is not None:
+        mode = Mode.HEAL
+        return  # permanent state, run() or run_heal() will handle movement/healing
+
+    # --- Step 2: Scan for damaged allied conveyors/bridges ---
+    for pos in rc.get_nearby_tiles():
+        building_id = rc.get_tile_building_id(pos)
+        if building_id is None:
+            continue
+        if rc.get_team(building_id) != rc.get_team():
+            continue
+        b_type = rc.get_entity_type(building_id)
+        if b_type not in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE):
+            continue
+        if rc.get_hp(building_id) < rc.get_max_hp(building_id):
+            # First damaged tile seen becomes permanent repair target
+            repair_target = pos
+            mode = Mode.HEAL
+            log(f"Repair target set at {repair_target}, switching to HEAL mode")
+            return
+
     # Clean up expired blocks
     current_round = rc.get_current_round()
     for ore, unblock_round in list(blocked_ores.items()):
@@ -201,6 +240,70 @@ def run_pre():
 def run_post():
     pass
 
+def check_heal():
+    pass
+
+def run_heal():
+    """
+    Permanent HEAL mode:
+    - Move toward the permanent repair_target.
+    - Heal the tile with the most missing HP in the surrounding area.
+    - Place roads on empty tiles around repair target.
+    - Attack enemy roads around repair target.
+    """
+    global repair_target
+    if repair_target is None:
+        return  # safety check
+
+    my_pos = rc.get_position()
+
+    # --- Step 1: Move toward the repair target ---
+    if my_pos != repair_target:
+        nav.move_to(repair_target)
+        return  # wait until reaching target
+
+    # --- Step 2: Scan surrounding tiles (including target) for most damaged ---
+    damaged_candidates = []
+    surrounding_tiles = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            pos = Position(repair_target.x + dx, repair_target.y + dy)
+            if not map_info.is_on_map(pos):
+                continue
+            if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                continue
+            surrounding_tiles.append(pos)
+            building_id = rc.get_tile_building_id(pos)
+            if building_id is None:
+                continue
+            if rc.get_team(building_id) != rc.get_team():
+                continue
+            if rc.get_hp(building_id) < rc.get_max_hp(building_id):
+                missing_hp = rc.get_max_hp(building_id) - rc.get_hp(building_id)
+                damaged_candidates.append((missing_hp, pos))
+
+    # --- Step 3: Heal the tile with the most missing HP ---
+    if damaged_candidates:
+        damaged_candidates.sort(reverse=True)  # highest missing HP first
+        _, target_pos = damaged_candidates[0]
+        if rc.can_heal(target_pos):
+            rc.heal(target_pos)
+            rc.draw_indicator_dot(target_pos, 0, 255, 0)  # optional visual indicator
+
+    # --- Step 4: Surrounding tile actions ---
+    for pos in surrounding_tiles:
+        # 1. Place road on empty tiles
+        if map_info.is_tile_empty(pos) and rc.can_build_road(pos):
+            rc.build_road(pos)
+        else:
+            building_id = rc.get_tile_building_id(pos)
+            if building_id is not None:
+                # 2. Attack enemy road
+                if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) == EntityType.ROAD:
+                    if my_pos != pos:
+                        nav.move_to(pos)
+                    if rc.can_fire(pos):
+                        rc.fire(pos)
 
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
