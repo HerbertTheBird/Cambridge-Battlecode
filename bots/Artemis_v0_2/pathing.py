@@ -160,21 +160,22 @@ class Pathing:
         width_l  = self.width
         if self.changed:
             self.heap.clear()
-        
+        insert_heap = False
         if len(self.heap) == 0:
-            self.run_id += 1
-            for p in target_p:
-                t  = p.y * width_l + p.x
-                self.target[t] = self.run_id
-
+            insert_heap = True
+        self.run_id += 1
+        for p in target_p:
+            t  = p.y * width_l + p.x
+            self.target[t] = self.run_id
+            if insert_heap:
                 if is_dirs:
                     h0 = max_local(abs_local(p.x - start_p.x), abs_local(p.y - start_p.y))
                 else:
                     h0 = abs_local(p.x - start_p.x) + abs_local(p.y - start_p.y)
-
+                
                 heappush(self.heap, (h0, 0, True, False, 0, t))
                 self.seen[t] = self.run_id
-            self.iter = 0
+        self.iter = 0
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
@@ -345,7 +346,12 @@ class Pathing:
         if not self.path or self.moves_through_impassible(self.path, avoid):
             self.init_a_star(start, target, dirs, adjacent)
             next_path = self.a_star(start, avoid)
-        if next_path is not None and self.moves_through_impassible(next_path, avoid):
+        elif self.path:
+            for i in range(len(self.path)):
+                if self.path[i] == start:
+                    self.path = self.path[i:]
+                    self.path_idx = 0
+                    return self.path
             self.init_a_star(start, target, dirs, adjacent)
             next_path = self.a_star(start, avoid)
         if next_path is not None:
