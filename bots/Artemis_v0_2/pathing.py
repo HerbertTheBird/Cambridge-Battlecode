@@ -226,7 +226,6 @@ class Pathing:
             if avoid[h] != avoid_id-1:
                 avoid_changed = True
             avoid[h] = avoid_id
-
         if not self.changed and not avoid_changed:
             max_length = len(self.path) - (1 if self.moved else 0)
         if self.changed:
@@ -481,11 +480,6 @@ class Pathing:
         for dir in CARD_DIR:
             dx, dy = dir.delta()
             pos = Position(ore.x + dx, ore.y + dy)
-
-            if map_info.in_bounds(pos):
-                b = building_cache[pos.x][pos.y]
-                if b and b.team == my_team and b.type == EntityType.BARRIER:
-                    avoid.discard(pos)
         next_path = self.calculate_path(target, avoid, ore, CONV, not update)
         if next_path:
             self.path = next_path
