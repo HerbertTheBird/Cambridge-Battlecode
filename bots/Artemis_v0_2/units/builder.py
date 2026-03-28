@@ -586,25 +586,20 @@ def run_explore():
     my_pos = rc.get_position()
 
     # === Launcher placement logic: spread launchers ===
-    for tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
-        if not rc.is_tile_empty(tile):
+    for other in rc.get_nearby_buildings():
+            if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
+                if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
+                    last_placed_launcher = rc.get_position(other)
+    for tile in rc.get_nearby_tiles(2):
+        if not map_info.is_tile_empty(tile):
             continue
 
-        # Build list of relevant launchers: last placed + visible allied launchers
-        launcher_positions = []
-        if last_placed_launcher is not None:
-            launcher_positions.append(last_placed_launcher)
-
-        for other in rc.get_nearby_buildings():
-            if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
-                launcher_positions.append(rc.get_position(other))
-
-        if not launcher_positions:
+        if not last_placed_launcher:
             # No known launchers? optional: skip placement
             continue
 
         # Find distance to closest launcher
-        closest_dist = min(tile.distance_squared(lp) for lp in launcher_positions)
+        closest_dist = tile.distance_squared(last_placed_launcher)
 
         # Condition: far enough (>16) but still within vision radius
         if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq():

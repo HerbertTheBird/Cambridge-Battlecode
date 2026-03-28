@@ -207,7 +207,7 @@ def run():
                     all_roads.append(pos)
                 elif map_info.is_conveyor(b.type):
                     all_conveyances.append(pos)
-                elif b.type == EntityType.LAUNCHER and b.team != rc.get_team() and b.id > rc.get_id():
+                elif b.type == EntityType.LAUNCHER and b.team != rc.get_team():
                     for dir in all_dirs:
                         all_conveyances.append(pos.add(dir))
 
@@ -228,6 +228,9 @@ def run():
                     allied_launchers.append((b.id, temppos))
                 else:
                     enemy_launchers.append((b.id, temppos))
+
+    best_score = -float('inf')
+    best_tile = None
 
     # --- Case 1: Around higher-ID allied launchers with no nearby bots ---
     for lid, lpos in allied_launchers:
@@ -250,57 +253,60 @@ def run():
                 if not rc.is_tile_passable(tile):
                     continue
                 
-                print("Considering higher ID launcher chain")
-
                 # No nearby bots in vision
                 has_bot = False
                 for unit_id in nearby_units:
                     if rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT and rc.get_position(unit_id).distance_squared(lpos) <= 8:
-                        print("Ruled out due to close bot")
                         has_bot = True
                         break
                 if has_bot:
                     continue
 
-                print("Location found")
-                priority_destinations.append(tile)
+                # Compute score for tiebreak
+                score = tile.distance_squared(rc.get_position()) - lid
+                if score > best_score:
+                    best_score = score
+                    best_tile = tile
 
-    # --- Case 2: Around lower-ID enemy launchers with spacing constraint ---
-    for lid, lpos in enemy_launchers:
-        if lid >= rc.get_id():
-            continue
+    if best_tile is not None:
+        priority_destinations.append(best_tile)
 
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx == 0 and dy == 0:
-                    continue
-                tile = Position(lpos.x + dx, lpos.y + dy)
+    # # --- Case 2: Around lower-ID enemy launchers with spacing constraint ---
+    # for lid, lpos in enemy_launchers:
+    #     if lid >= rc.get_id():
+    #         continue
+
+    #     for dx in (-1, 0, 1):
+    #         for dy in (-1, 0, 1):
+    #             if dx == 0 and dy == 0:
+    #                 continue
+    #             tile = Position(lpos.x + dx, lpos.y + dy)
                 
-                if tile.distance_squared(rc.get_position()) > action_radius_sq:
-                    continue
-                if not map_info.is_on_map(tile):
-                    continue
+    #             if tile.distance_squared(rc.get_position()) > action_radius_sq:
+    #                 continue
+    #             if not map_info.is_on_map(tile):
+    #                 continue
 
-                # Must be empty
-                if not rc.is_tile_passable(tile):
-                    continue
+    #             # Must be empty
+    #             if not rc.is_tile_passable(tile):
+    #                 continue
 
-                # Check distance from nearest allied conveyance or higher-ID allied launcher
-                too_close = False
+    #             # Check distance from nearest allied conveyance or higher-ID allied launcher
+    #             too_close = False
 
-                for conveyance_pos in all_conveyances:
-                    if tile.distance_squared(conveyance_pos) <= 8:
-                        too_close = True
-                        break
+    #             for conveyance_pos in all_conveyances:
+    #                 if tile.distance_squared(conveyance_pos) <= 8:
+    #                     too_close = True
+    #                     break
 
-                if not too_close:
-                    for aid, apos in allied_launchers:
-                        if aid > rc.get_id() and tile.distance_squared(apos) < 8:
-                            too_close = True
-                            break
+    #             if not too_close:
+    #                 for aid, apos in allied_launchers:
+    #                     if aid > rc.get_id() and tile.distance_squared(apos) < 8:
+    #                         too_close = True
+    #                         break
 
-                if not too_close:
-                    priority_destinations.append(tile)
+    #             if not too_close:
+    #                 priority_destinations.append(tile)
 
     valid_destinations = []
     for road_pos in all_roads:
