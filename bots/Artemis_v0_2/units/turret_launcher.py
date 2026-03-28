@@ -44,26 +44,45 @@ def run():
             # candidate positions
             candidates = []
 
-            # scan vision for high-priority targets
-            for target_tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
-                # Empty tile next to enemy harvester on titanium
-                for dx in (-1, 0, 1):
-                    for dy in (-1, 0, 1):
-                        if dx == 0 and dy == 0:
-                            continue
-                        adj = Position(target_tile.x + dx, target_tile.y + dy)
-                        if not map_info.is_on_map(adj):
-                            continue
-                        if adj.distance_squared(pos) > rc.get_vision_radius_sq():
-                            continue
-                        building_id = rc.get_tile_building_id(adj)
-                        if building_id is None:
-                            continue
-                        if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) == EntityType.HARVESTER:
-                            if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
-                                if map_info.is_tile_empty(target_tile):
-                                    candidates.append((0, target_tile))  # highest priority
+            # scan vision for high-priority targets (harvester-first)
+            for tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
+                building_id = rc.get_tile_building_id(tile)
+                if building_id is None:
+                    continue
 
+                # only care about enemy harvesters
+                if rc.get_team(building_id) == rc.get_team():
+                    continue
+                if rc.get_entity_type(building_id) != EntityType.HARVESTER:
+                    continue
+
+                # must be on titanium
+                if map_info.ground[tile.x][tile.y] != map_info._ENV_ORE_TI:
+                    continue
+
+                # now check adjacent tiles for launch positions
+                
+                print(building_id)
+                for direction in map_info.CARDINALS:
+                    target_tile = tile.add(direction)
+                    if not map_info.is_on_map(target_tile):
+                        continue
+                    if not map_info.is_tile_empty(target_tile):
+                        continue
+                    
+                    
+                    for ddx in (-1, 0, 1):
+                        for ddy in (-1, 0, 1):
+                            adj = Position(target_tile.x + ddx, target_tile.y + ddy)
+                            if adj.distance_squared(pos) > rc.get_vision_radius_sq():
+                                continue
+
+                            if rc.can_launch(bot_pos, adj):
+                                rc.launch(bot_pos, adj)
+                                print("Harvester launch")
+                                return
+
+            for target_tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
                 # --- New: Enemy conveyor next to enemy harvester ---
                 building_id = rc.get_tile_building_id(target_tile)
                 if building_id is not None and rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
@@ -109,12 +128,14 @@ def run():
 
                 # Enemy bridge/conveyor that doesn't eventually lead to a friendly turret
                 building_id = rc.get_tile_building_id(target_tile)
+                print("reached conveyer logic")
                 if building_id is not None:
                     if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
                         EntityType.CONVEYOR,
                         EntityType.ARMOURED_CONVEYOR,
                         EntityType.BRIDGE,
                     ):
+                        print("Conveyer target")
                         if not map_info.leads_to_friendly_turret(building_id):  # custom helper
                             if rc.is_tile_passable(target_tile):
                                 candidates.append((3, target_tile))
