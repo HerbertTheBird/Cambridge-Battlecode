@@ -255,7 +255,10 @@ def run_attack_core():
     mine_pos = attack_ore
 
     # --- Step 1: Move toward the mine ---
-    building_id = rc.get_tile_building_id(mine_pos)
+    if my_pos.distance_squared(mine_pos) <= rc.get_vision_radius_sq():
+        building_id = rc.get_tile_building_id(mine_pos)
+    else:
+        building_id = None
     if my_pos.distance_squared(mine_pos) > 2 and not building_id:
         path = nav.calculate_path(mine_pos)
         if path and len(path) > 0:
@@ -278,7 +281,6 @@ def run_attack_core():
             nav.move(adjacent_empty[0])
 
     # --- Step 2: Place harvester if needed ---
-    building_id = rc.get_tile_building_id(mine_pos)
     if building_id is None:
         if rc.can_build_harvester(mine_pos):
             rc.build_harvester(mine_pos)
@@ -312,6 +314,14 @@ def run_attack_core():
     
     
 def run_rush_core():
+    my_pos = rc.get_position()
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if (map_info.in_bounds(adj)):
+                if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
+                    if rc.can_build_barrier(adj):
+                        rc.build_barrier(adj)
     nav.execute_path()
 
 def check_prepare_launcher():
@@ -334,7 +344,7 @@ def check_prepare_launcher():
             return
 
 def run_prepare_launcher():
-    print("Prepare launcher ran", file=sys.stderr)
+    # print("Prepare launcher ran", file=sys.stderr)
     log("Setup")
     global mode
     my_pos = rc.get_position()
@@ -392,6 +402,8 @@ def run_prepare_launcher():
                     if rc.get_position() == nearest_launcher_tile:
                         mode = Mode.ATTACK
                     return  # Skip building a new launcher
+    else:
+        return
 
     best_empty = None
     best_empty_dist = float('inf')
@@ -540,23 +552,22 @@ def run_attack():
             continue
 
         # For each enemy harvester, consider cardinally adjacent tiles within distance 2
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                candidate = Position(pos.x + dx, pos.y + dy)
+        for cardinal in cardinal_dirs:
+            candidate = pos.add(cardinal)
 
-                if not map_info.is_on_map(candidate):
-                    continue
-                if my_pos.distance_squared(candidate) > 2:
-                    continue
-                if not map_info.is_tile_empty(candidate):
-                    continue  # Only place sentinels on empty tiles
+            if not map_info.is_on_map(candidate):
+                continue
+            if my_pos.distance_squared(candidate) > 2:
+                continue
+            if not map_info.is_tile_empty(candidate):
+                continue  # Only place sentinels on empty tiles
 
-                # Build sentinel if possible
-                direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
-                if rc.can_build_sentinel(candidate, direction):
-                    rc.build_sentinel(candidate, direction)
-                    rc.draw_indicator_dot(candidate, mode.r, mode.g, mode.b)
-                    return  # only build one sentinel per turn
+            # Build sentinel if possible
+            direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
+            if rc.can_build_sentinel(candidate, direction):
+                rc.build_sentinel(candidate, direction)
+                rc.draw_indicator_dot(candidate, mode.r, mode.g, mode.b)
+                return  # only build one sentinel per turn
                 
     # If there's a next_attack_tile set, move to it first
     target_tile = next_attack_tile
@@ -660,12 +671,14 @@ def run_attack():
                             continue
 
                         check = Position(enemy_pos.x + bdx, enemy_pos.y + bdy)
+                        if check.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                            continue
                         if not map_info.is_on_map(check):
                             continue
 
                         builder_adjacent_tiles.append(check)
 
-                        check_id = rc.get_tile_robot(check)
+                        check_id = rc.get_tile_building_id(check)
                         if check_id is not None:
                             if rc.get_team(check_id) == rc.get_team() and rc.get_entity_type(check_id) == EntityType.LAUNCHER:
                                 protected = True
@@ -677,9 +690,8 @@ def run_attack():
                 if not protected:
                     for tile in builder_adjacent_tiles:
                         if map_info.is_tile_empty(tile):
-                            direction = my_pos.direction_to(tile)
-                            if rc.can_build_launcher(tile, direction):
-                                rc.build_launcher(tile, direction)
+                            if rc.can_build_launcher(tile):
+                                rc.build_launcher(tile)
                                 return
 
             if rc.can_fire(my_pos):
@@ -690,12 +702,6 @@ def run_attack():
 def run_pre():
     map_info.update()
     my_pos = rc.get_position()
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            adj = Position(my_pos.x + dx, my_pos.y + dy)
-            if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
-                if rc.can_build_barrier(adj):
-                    rc.build_barrier(adj)
     
 
 def run_post():

@@ -135,8 +135,10 @@ class Player:
 
         except Exception as e:
             print("Error:", e)
+            print(f"Error: {e}", file=sys.stderr)
             c.draw_indicator_line(Position(-100, -100), c.get_position(), 255, 0, 0)
             traceback.print_exc(file=sys.stdout)
+            traceback.print_exc(file=sys.stderr)
 
         # finally:
         #     pass

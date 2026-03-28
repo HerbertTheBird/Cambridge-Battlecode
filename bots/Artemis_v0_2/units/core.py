@@ -53,9 +53,9 @@ def get_closest_titanium_tile() -> Position | None:
 def run():
     global num_spawned
 
-    max_spawn = 3
+    max_spawn = 4
     if rc.get_current_round() < 100:
-        max_spawn = 2
+        max_spawn = 3
 
     core_pos = rc.get_position()
 

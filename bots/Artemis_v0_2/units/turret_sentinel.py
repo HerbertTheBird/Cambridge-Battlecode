@@ -28,7 +28,7 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
     # Check builder
     builder_id = rc.get_tile_builder_bot_id(tile)
     enemy_builder = False
-    if get_team(builder_id) != my_team:
+    if builder_id and get_team(builder_id) != my_team:
         enemy_builder = True
 
     # Check building
@@ -36,31 +36,34 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
     building_type = None
     my_building = False
 
-    if building_id is not None:
-        if get_team(building_id) == my_team:
+    if building_id:
+        building_type = get_entity_type(building_id)
+        if get_team(building_id) == my_team and building_type != map_info._ET_ROAD and building_type != map_info._ET_MARKER:
             my_building = True
         else:
             building_type = get_entity_type(building_id)
 
+    if map_info.is_conveyor(building_type) and get_team(building_id) == my_team:
+        return 9
     # Resolve simplest priorities first
     if enemy_builder and building_type is not None and not my_building:
-        return 1
+        return 2
 
     if building_type is not None:
-        if map_info.is_conveyor(building_type):
-            return 2
-        if map_info.is_turret(building_type):
+        if map_info.is_conveyor(building_type) and not my_building:
             return 3
+        if map_info.is_turret(building_type) and not my_building:
+            return 0
 
     if enemy_builder and not my_building:
         return 4
 
-    if building_type == EntityType.CORE:
-        return 0
+    if building_type == EntityType.CORE and not my_building:
+        return 1
 
     # 2. Lazy Evaluation: Only check adjacent tiles IF it's an enemy harvester.
     # This avoids the 4-direction loop 95% of the time.
-    if building_type == EntityType.HARVESTER and my_pos.distance_squared(tile) > 1:
+    if building_type == EntityType.HARVESTER and my_pos.distance_squared(tile) > 1 and not my_building:
         adjacent_sentinel = False
         is_in_vision = rc.is_in_vision
         in_bounds = map_info.in_bounds
@@ -79,11 +82,11 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
 
         return 9 if adjacent_sentinel else 5
 
-    if building_type == EntityType.LAUNCHER:
+    if building_type == EntityType.LAUNCHER and not my_building:
         return 6
-    if building_type == EntityType.BARRIER:
+    if building_type == EntityType.BARRIER and not my_building:
         return 7
-    if building_type == EntityType.ROAD:
+    if building_type == EntityType.ROAD and not get_team(building_id) == my_team:
         return 8
 
     return 9
@@ -94,6 +97,7 @@ def run():
     if rc.get_action_cooldown() > 0:
         return
     if rc.get_ammo_amount() < 5:
+        print(f"Ammo: {rc.get_ammo_amount()}")
         return
     print("i am a shooting sentinel")
 

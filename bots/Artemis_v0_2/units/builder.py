@@ -15,6 +15,7 @@ class Mode(Enum):
     BUILD_HARVESTER = (0, 180, 180, "build harvester")
     ROUTE = (255, 255, 0, "route to core")
     SABOTAGE = (200, 10, 10, "attack harvester")
+    BUILD_TRAP = (193, 154, 107, "launcher trap")
 
     def __init__(self, r, g, b, desc):
         self.r = r
@@ -27,6 +28,7 @@ def log(text : str):
 
 mode = Mode.EXPLORE
 indicator = []
+routed = 0
 blocked_ores = {}
 defended_ores = set()
 cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
@@ -289,6 +291,31 @@ def run_heal():
         if rc.can_heal(target_pos):
             rc.heal(target_pos)
             rc.draw_indicator_dot(target_pos, 0, 255, 0)  # optional visual indicator
+    
+    max_missing_hp = 3
+
+    for tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
+        building_id = rc.get_tile_building_id(tile)
+        if building_id is None:
+            continue
+
+        # Only consider conveyors (and variants via your helper)
+        entity_type = rc.get_entity_type(building_id)
+        if not map_info.is_conveyor(entity_type):
+            continue
+
+        # Optional: only repair allies (usually what you want)
+        if rc.get_team(building_id) != rc.get_team():
+            continue
+
+        # Compute missing HP
+        hp = rc.get_hp(building_id)
+        max_hp = rc.get_max_hp(building_id)
+        missing_hp = max_hp - hp
+
+        if missing_hp > max_missing_hp:
+            max_missing_hp = missing_hp
+            repair_target = tile
 
     # --- Step 4: Surrounding tile actions ---
     for pos in surrounding_tiles:
@@ -326,10 +353,190 @@ def force_generate_explore_target():
 def check_explore_athena():
     pass
 
+def check_build_trap():
+    """
+    Check if the trap at trap_loc is complete.
+    - If all 8 surrounding tiles are impassable or out of vision, switch back to EXPLORE mode.
+    """
+    global mode, trap_loc
 
+    if trap_loc is None:
+        return
+
+    my_pos = rc.get_position()
+    completed = True
+
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            pos = Position(trap_loc.x + dx, trap_loc.y + dy)
+
+            # Skip tiles out of vision; only visible tiles can "fail" the check
+            if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                continue
+
+            # If a tile is passable, the trap is not yet complete
+            if rc.is_tile_passable(pos) or map_info.is_tile_empty(pos) or rc.get_tile_builder_bot_id(pos):
+                completed = False
+                break
+        if not completed:
+            break
+
+    if completed:
+        mode = Mode.EXPLORE
+        trap_loc = None  # reset trap location now that it’s done
+
+def run_build_trap():
+    """
+    Build a trap around trap_loc:
+    1. Pick an "escape tile" around the center (most open).
+    2. Place barriers on the other 7 tiles.
+    3. Move to the escape tile, then further out.
+    4. Place the final barrier on the escape tile.
+    """
+    global trap_loc
+    if trap_loc is None:
+        return
+
+    center = trap_loc
+    my_pos = rc.get_position()
+
+    # --- Step 1: Identify 8 surrounding tiles ---
+    surrounding = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            pos = Position(center.x + dx, center.y + dy)
+            if map_info.is_on_map(pos):
+                surrounding.append(pos)
+
+    if not surrounding:
+        return
+
+    # --- Step 2: Pick escape tile ---
+    # choose the tile with the most passable/empty tiles around it (excluding center and its ring)
+    def score_escape(tile):
+        score = 0
+        if not rc.is_tile_passable(tile) and not map_info.is_tile_empty(tile):
+            return score
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                neighbor = Position(tile.x + dx, tile.y + dy)
+                if not map_info.is_on_map(neighbor):
+                    continue
+                if neighbor == center or neighbor in surrounding:
+                    continue
+                if map_info.is_tile_empty(neighbor) or rc.is_tile_passable(neighbor):
+                    score += 1
+        return score
+
+    escape_tile = max(surrounding, key=score_escape)
+
+    # --- Step 3: Place barriers on the 7 remaining tiles ---
+    for tile in surrounding:
+        if tile == escape_tile:
+            continue
+        if map_info.is_tile_empty(tile) and rc.can_build_barrier(tile):
+            rc.build_barrier(tile)
+            return
+            rc.draw_indicator_dot(tile, 255, 0, 0)
+        elif rc.is_tile_passable(tile) and rc.can_destroy(tile):
+            rc.destroy(tile)
+            if (rc.can_build_barrier(tile)):
+                rc.build_barrier(tile)
+                return
+
+    # --- Step 4: Move to escape tile, then one more step further out ---
+    # if my_pos != escape_tile:
+    #     # move toward escape tile
+    #     nav.move_to(escape_tile)
+    #     return
+    
+    if rc.can_build_road(trap_loc):
+        rc.build_road(trap_loc)
+
+    # Step further out: pick a neighbor of escape_tile that is not center or already blocked
+    further_out_tile = None
+    best_score = -1
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            candidate = Position(escape_tile.x + dx, escape_tile.y + dy)
+            if not map_info.is_on_map(candidate):
+                continue
+            if candidate == center or candidate in surrounding:
+                continue
+            if not rc.is_tile_passable(candidate) and not map_info.is_tile_empty(candidate):
+                continue
+            # pick the tile with the most empty neighbors
+            score = 0
+            for ddx in (-1, 0, 1):
+                for ddy in (-1, 0, 1):
+                    if ddx == 0 and ddy == 0:
+                        continue
+                    neighbor = Position(candidate.x + ddx, candidate.y + ddy)
+                    if not map_info.is_on_map(neighbor):
+                        continue
+                    if map_info.is_tile_empty(neighbor) or rc.is_tile_passable(neighbor):
+                        score += 1
+            if score > best_score:
+                best_score = score
+                further_out_tile = candidate
+
+    if further_out_tile and my_pos != further_out_tile:
+        nav.move_to(further_out_tile)
+
+    # --- Step 5: Place final barrier on the escape tile ---
+    if rc.can_build_barrier(escape_tile):
+        rc.build_barrier(escape_tile)
+        rc.draw_indicator_dot(escape_tile, 255, 0, 0)
+    elif rc.is_tile_passable(escape_tile) and rc.can_destroy(escape_tile):
+            rc.destroy(escape_tile)
+            if (rc.can_build_barrier(escape_tile)):
+                rc.build_barrier(escape_tile)
+
+
+
+
+trap_loc = None
 def check_explore():
-    global mode, explore_target, turns_since_last_explore_target, defended_ores
+    global mode, explore_target, turns_since_last_explore_target, defended_ores, routed, trap_loc
 
+    my_pos = rc.get_position()
+
+    # # --- Step 0: Check trap condition ---
+    # if routed >= 1:
+    #     for dx in (-1, 0, 1):
+    #         for dy in (-1, 0, 1):
+    #             cpos = Position(my_pos.x + dx, my_pos.y + dy)
+    #             impassable_count = 0
+    #             building_id = rc.get_tile_building_id(cpos)
+    #             if not (building_id and map_info.is_conveyor(rc.get_entity_type(building_id))):
+    #                 for dx in (-1, 0, 1):
+    #                     for dy in (-1, 0, 1):
+    #                         if dx == 0 and dy == 0:
+    #                             continue
+    #                         pos = Position(cpos.x + dx, cpos.y + dy)
+    #                         if not map_info.is_on_map(pos):
+    #                             continue  # out-of-map tiles are ignored now
+    #                         building_id = rc.get_tile_building_id(pos)
+    #                         is_impassable_our_building = building_id is not None and rc.get_team(building_id) == rc.get_team() and not rc.is_tile_passable(pos)
+    #                         is_wall = map_info.ground[pos.x][pos.y] == Environment.WALL
+    #                         if building_id and map_info.is_conveyor(rc.get_entity_type(building_id)):
+    #                             impassable_count -= 1000
+    #                         if is_impassable_our_building or is_wall:
+    #                             impassable_count += 1
+    #                 if impassable_count >= 3:
+    #                     mode = Mode.BUILD_TRAP
+    #                     trap_loc = cpos  # store the current location for trap building
+    #                     return
+
+    # --- Step 1: Existing exploration logic ---
     if opponent_ore and opponent_ore not in defended_ores:
         mode = Mode.SABOTAGE
         return
@@ -338,7 +545,7 @@ def check_explore():
         mode = Mode.BUILD_HARVESTER
         return
 
-    if explore_target and rc.get_position().distance_squared(explore_target) <= 18:
+    if explore_target and my_pos.distance_squared(explore_target) <= 18:
         force_generate_explore_target()
 
     if turns_since_last_explore_target > (rc.get_map_width() + rc.get_map_height()) * 2:
@@ -373,9 +580,39 @@ def check_build_harvester():
 def run_explore_athena():
     pass
 
-
+last_placed_launcher = None
 def run_explore():
-    global explore_target, turns_since_last_explore_target
+    global explore_target, turns_since_last_explore_target, last_placed_launcher
+    my_pos = rc.get_position()
+
+    # === Launcher placement logic: spread launchers ===
+    for tile in rc.get_nearby_tiles(rc.get_vision_radius_sq()):
+        if not rc.is_tile_empty(tile):
+            continue
+
+        # Build list of relevant launchers: last placed + visible allied launchers
+        launcher_positions = []
+        if last_placed_launcher is not None:
+            launcher_positions.append(last_placed_launcher)
+
+        for other in rc.get_nearby_buildings():
+            if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
+                launcher_positions.append(rc.get_position(other))
+
+        if not launcher_positions:
+            # No known launchers? optional: skip placement
+            continue
+
+        # Find distance to closest launcher
+        closest_dist = min(tile.distance_squared(lp) for lp in launcher_positions)
+
+        # Condition: far enough (>16) but still within vision radius
+        if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq():
+            if rc.can_build_launcher(tile):
+                rc.build_launcher(tile)
+                last_placed_launcher = tile
+                log(f"Placed launcher at {tile}")
+                return  # only build one per turn
 
     if explore_target is None:
         force_generate_explore_target()
@@ -477,7 +714,18 @@ def run_build_harvester():
                         if rc.can_destroy(pos):
                             log("destroy2 " + str(pos))
                             rc.destroy(pos)
-                    if rc.can_build_barrier(pos):
+                    
+                    my_core = map_info.my_core
+                    manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
+                    harvester_cost = rc.get_harvester_cost()[0]
+                    conveyor_cost = rc.get_conveyor_cost()[0]
+                    scale = 1.1
+                    expected_finish = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost) < rc.get_global_resources()[0]
+                    if routed >= 1 and pos.x % 2 == 0 and expected_finish:
+                        if rc.can_build_sentinel(pos, pos.direction_to(target_ore).rotate_right()):
+                            rc.build_sentinel(pos, pos.direction_to(target_ore).rotate_right())
+                            return
+                    elif rc.can_build_barrier(pos):
                         rc.build_barrier(pos)
                         return
 
@@ -526,7 +774,7 @@ def run_build_harvester():
                     manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
                     harvester_cost = rc.get_harvester_cost()[0]
                     conveyor_cost = rc.get_conveyor_cost()[0]
-                    scale = 1.1
+                    scale = 1.0
 
                     required_titanium = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost)
                     current_titanium = rc.get_global_resources()[0]
@@ -554,7 +802,7 @@ def run_build_harvester():
 
 
 def check_route():
-    global ore_path, launcher_position, route_idx, mode
+    global ore_path, launcher_position, route_idx, mode, routed
     if not ore_path:
         ore_path = ore_nav.calculate_conveyor_path(routed_ore)
         route_idx = 0
@@ -562,6 +810,7 @@ def check_route():
         launcher_position = ore_nav.calculate_launcher_position(ore_path, routed_ore)
     if ore_path and route_idx >= len(ore_path) - 1 and not launcher_position:
         mode = Mode.EXPLORE
+        routed += 1
         ore_path = None
 
 
