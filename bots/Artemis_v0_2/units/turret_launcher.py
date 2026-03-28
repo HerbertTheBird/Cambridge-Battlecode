@@ -61,7 +61,7 @@ def run():
                             continue
                         if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) == EntityType.HARVESTER:
                             if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
-                                if rc.is_tile_passable(target_tile):
+                                if map_info.is_tile_empty(target_tile):
                                     candidates.append((0, target_tile))  # highest priority
 
                 # Empty tile that an enemy conveyor/bridge leads into
