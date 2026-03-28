@@ -184,6 +184,12 @@ class Pathing:
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
+        has_initial_move = False
+        for dx, dy, _ in self.dirs:
+            if Position(start_p.x+dx, start_p.y+dy) not in avoid_p:
+                has_initial_move = True
+        if not has_initial_move:
+            return []
         builder.log("a* start")
         
         width_l = self.width
