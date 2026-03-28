@@ -221,8 +221,31 @@ def _update_building_blocked_at(pos: Position) -> None:
         building_blocked_no_conveyors.add(pos)
     if not is_barrier and not is_conv:
         building_blocked_no_barrier_no_conveyors.add(pos)
+def mark_known_conveyors() -> None:
+    rc_draw_indicator_dot = rc.draw_indicator_dot
+    building_local = building
+
+    for x in range(width):
+        col = building_local[x]
+        for y in range(height):
+            b = col[y]
+            if b is None or not b.is_conveyor_type:
+                continue
+
+            load = b.load
+            if load is None:
+                r, g, bl = 0, 0, 0          # black
+            elif load == 4:
+                r, g, bl = 255, 0, 0        # red
+            elif load == 0:
+                r, g, bl = 0, 0, 255        # blue
+            else:
+                r, g, bl = 0, load * 80, 0  # green: 80, 160, 240 for 1,2,3
+
+            rc_draw_indicator_dot(Position(x, y), r, g, bl)
 def update() -> None:
     from units.builder import log
+    mark_known_conveyors()
     global my_core, their_core, core_id, solved_sym
     global hor_sym, ver_sym, rot_sym
     global rush_tiebroken, predicted_enemy_core
@@ -342,8 +365,11 @@ def update() -> None:
                 bb_nbnc_discard(tile)
             last_seen_local[x][y] = current_round
             continue
+        
         prev_building = building_local[x][y]
         seen_last_turn = last_seen_local[x][y] == prev_round
+        last_seen_local[x][y] = current_round
+
         entity_type = rc_get_entity_type(entity_id)
         etv = entity_type.value
         is_conv = etv in conv_vals
@@ -362,6 +388,8 @@ def update() -> None:
             stuck_turns_local[x][y] = 0
         load = None
         if is_conv:
+            if stored_resource is None:
+                load = 3
             if seen_last_turn and prev_is_conv:
                 pf = past_filled_local[x][y]
                 pf = ((pf & 15) << 1) | (pf & (~15))

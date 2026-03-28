@@ -277,7 +277,7 @@ class Pathing:
                     pos = parent[pos] if target[pos] != run_id else -1
                 hp.clear()
                 end_time = time.perf_counter_ns()
-                builder.log("a start time: " + str(end_time-start_time))
+                builder.log("a star time: " + str(end_time-start_time))
                 return path_out
 
             px_cache = pos % width_l
@@ -325,7 +325,6 @@ class Pathing:
                     hp,
                     (new_f, -ng, card, not new_zigged, new_zig_time, n)
                 )
-
         hp.clear()
         return []
 
@@ -339,17 +338,14 @@ class Pathing:
         return False
 
     def calculate_path(self, target: set[Position] | Position, avoid = None, start=None, dirs = DIRS, adjacent=False):
-        builder.log("calc path")
         rc = self.rc
         if start is None:
             start = rc.get_position()
-        if isinstance(target, Position):
-            rc.draw_indicator_line(start, target, 255, 255, 255)
 
         if avoid == None:
             avoid = map_info.get_avoid(False, True)
         next_path = None
-        on_path = self.path and len(self.path) >= 2 and (self.path[0] == start or self.path[1] == start) and self.path[-1] not in target
+        on_path = self.path and len(self.path) >= 2 and (self.path[0] == start or self.path[1] == start) and self.path[-1] in target
         if not self.path or self.moves_through_impassible(self.path, avoid) or not on_path:
             self.init_a_star(start, target, dirs, adjacent)
             next_path = self.a_star(start, avoid)
@@ -460,9 +456,10 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, ore: Position, update: bool = False):
+    def calculate_conveyor_path(self, ore: Position, avoid_extra: list[Position] = None, update: bool = False):
         core = map_info.my_core
-
+        if not avoid_extra:
+            avoid_extra = {}
         target = {Position(core.x + dx, core.y + dy) for _, (dx, dy) in ALL_DIRS_DELTAS}
 
         # FIX: cache frequently-used references for the loop
@@ -475,10 +472,12 @@ class Pathing:
         for x in range(width_l):
             for y in range(height_l):
                 b = building_cache[x][y]
-                if b and is_conveyor(b.type) and b.load and b.load < 3 and b.team == my_team:
+                if b and is_conveyor(b.type) and b.load and b.load < 4 and b.team == my_team and Position(x, y) not in avoid_extra:
                     target.add(Position(x, y))
 
         avoid = map_info.get_avoid(True, False, False, True)
+        for p in avoid_extra:
+            avoid.add(p)
         for dir in CARD_DIR:
             dx, dy = dir.delta()
             pos = Position(ore.x + dx, ore.y + dy)
