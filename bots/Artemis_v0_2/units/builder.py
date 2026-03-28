@@ -465,11 +465,6 @@ def check_route():
 def run_route():
     global route_idx, ore_path, launcher_position
     if ore_path:
-        for i in range(len(ore_path)):
-            if route_idx == i:
-                rc.draw_indicator_line(Position(i, -1), ore_path[i], 0, 0, 255)
-            else:
-                rc.draw_indicator_line(Position(i, -1), ore_path[i], 0, 255, 0)
         if route_idx < len(ore_path) - 1:
             new_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:

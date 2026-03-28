@@ -131,6 +131,7 @@ class Pathing:
 
 
     def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs:list[Direction]=DIRS, adjacent_in: bool = False):
+        builder.log("a* init")
         if isinstance(target_p, Position):
             target_p = {target_p}
         self.changed = False
@@ -179,6 +180,7 @@ class Pathing:
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
+        builder.log("a* start")
         start_time = time.perf_counter_ns()
         heappush  = heapq.heappush
         heappop   = heapq.heappop
@@ -280,7 +282,7 @@ class Pathing:
 
             px_cache = pos % width_l
             py_cache = pos // width_l
-
+            rc.draw_indicator_dot(Position(px_cache, py_cache), 255, 0, 0)
             for dx, dy, cost in dirs:
                 nx = px_cache + dx
                 ny = py_cache + dy
@@ -337,16 +339,21 @@ class Pathing:
         return False
 
     def calculate_path(self, target: set[Position] | Position, avoid = None, start=None, dirs = DIRS, adjacent=False):
+        builder.log("calc path")
         rc = self.rc
         if start is None:
             start = rc.get_position()
+        if isinstance(target, Position):
+            rc.draw_indicator_line(start, target, 255, 255, 255)
+
         if avoid == None:
             avoid = map_info.get_avoid(False, True)
         next_path = None
-        if not self.path or self.moves_through_impassible(self.path, avoid):
+        on_path = self.path and len(self.path) >= 2 and (self.path[0] == start or self.path[1] == start) and self.path[-1] not in target
+        if not self.path or self.moves_through_impassible(self.path, avoid) or not on_path:
             self.init_a_star(start, target, dirs, adjacent)
             next_path = self.a_star(start, avoid)
-        elif self.path:
+        elif on_path:
             for i in range(len(self.path)):
                 if self.path[i] == start:
                     self.path = self.path[i:]
