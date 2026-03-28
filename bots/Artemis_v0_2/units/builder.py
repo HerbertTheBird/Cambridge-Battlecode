@@ -10,7 +10,6 @@ import comms
 
 
 class Mode(Enum):
-    EXPLORE_ATHENA = (100, 255, 100, "preliminary explore (athena)")
     EXPLORE = (0, 255, 0, "explore")
     BUILD_HARVESTER = (0, 180, 180, "build harvester")
     ROUTE = (255, 255, 0, "route to core")
@@ -62,46 +61,17 @@ def init(c: Controller):
     comms.init(c)
     pathing.init(c)
 
-    # Initialize dictionary after functions are defined
-    MODE_ACTIONS = {
-        Mode.EXPLORE_ATHENA: (check_explore_athena, run_explore_athena),
-        Mode.EXPLORE: (check_explore, run_explore),
-        Mode.BUILD_HARVESTER: (check_build_harvester, run_build_harvester),
-        Mode.ROUTE: (check_route, run_route),
-        Mode.SABOTAGE: (check_sabotage, run_sabotage),
-    }
-
 
 def run():
     global mode
     run_pre()  # preliminary calculations
-
-    check_func, run_func = MODE_ACTIONS[mode]
-    check_func()
-
-    # Mode might change in check_func
-    check_func, run_func = MODE_ACTIONS[mode]
-    run_func()
-
+    print(f"CHECKING STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
+    print("run check", mode.name, rc.get_cpu_time_elapsed())
+    globals()[f"check_{mode.name.lower()}"]()
+    print(f"NEW STATE: <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>{mode.desc}</span>")
+    print("run run", mode.name, rc.get_cpu_time_elapsed())
+    globals()[f"run_{mode.name.lower()}"]()
     run_post()  # cleanup
-
-
-def generate_encoded_int(builder_id: int) -> int:
-    if not (0 <= builder_id <= 31):
-        builder_id %= 32
-
-    # Step 1: rightmost 3 bits
-    right_bits = random.randint(0, 6)  # 3 bits
-
-    # Step 2: next 5 bits for builder_id
-    builder_bits = builder_id & 0b11111  # ensure 5 bits
-
-    # Step 3: next 9 bits random number
-    random_bits = random.randint(0, 511)  # 9 bits
-
-    # Combine everything
-    encoded = (random_bits << (5 + 3)) | (builder_bits << 3) | right_bits
-    return encoded
 
 
 # invariant calculations
@@ -224,42 +194,6 @@ def run_pre():
 
 
 def run_post():
-    # pick a random empty tile surrounding the builder and place a marker
-    if (rc.get_current_round() - rc.get_id() % 3):
-        surrounding_tiles = []
-        my_pos = rc.get_position()
-
-        for d, (dx, dy) in ALL_DIRS_DELTAS:
-            if d == Direction.CENTRE:
-                continue
-
-            pos = Position(my_pos.x + dx, my_pos.y + dy)
-            try:
-                if rc.can_place_marker(pos):
-                    # not within 2 distance squared of a mine
-                    is_safe_from_mines = True
-                    for check_dx in range(-1, 2):
-                        for check_dy in range(-1, 2):
-                            mine_check_pos = Position(pos.x + check_dx, pos.y + check_dy)
-                            if not map_info.is_on_map(mine_check_pos):
-                                continue
-
-                            if map_info.ground[mine_check_pos.x][mine_check_pos.y] == Environment.ORE_TITANIUM:
-                                is_safe_from_mines = False
-                                break
-                        if not is_safe_from_mines:
-                            break
-
-                    if is_safe_from_mines:
-                        surrounding_tiles.append(pos)
-            except GameError:
-                # position is off map
-                pass
-
-    if surrounding_tiles:
-        target_pos = random.choice(surrounding_tiles)
-        value = generate_encoded_int(rc.get_id())
-        rc.place_marker(target_pos, value)
     pass
 
 

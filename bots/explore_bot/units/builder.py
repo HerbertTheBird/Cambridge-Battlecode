@@ -216,7 +216,7 @@ def run_build_harvester():
         
         building_id = rc.get_tile_building_id(pos)
         is_barrier = False
-        if building_id or rc.get_tile_builder_bot_id(pos):
+        if building_id or:
             try:
                 if rc.get_tile_builder_bot_id(pos) or rc.get_entity_type(building_id) in [EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER, EntityType.CONVEYOR, EntityType.BRIDGE] and rc.get_team(building_id) == rc.get_team():
                     is_barrier = True

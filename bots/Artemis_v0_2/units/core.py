@@ -1,5 +1,6 @@
 from cambc import Controller, Position, Environment, EntityType, GameError
 import random
+import map_info
 
 rc = None
 num_spawned = 0
@@ -51,12 +52,22 @@ def get_closest_titanium_tile() -> Position | None:
 def run():
     global num_spawned
 
-    max_spawn = 1
+    max_spawn = 3
     if rc.get_current_round() < 100:
-        max_spawn = 1
+        max_spawn = 2
+        
+    core_pos = rc.get_position()
 
     # Spawn towards titanium on turn 1
-    if rc.get_current_round() < 1:
+    if rc.get_current_round() == 0:
+        dx = max(-1, min(1, map_info.MAP_CENTER.x - core_pos.x))
+        dy = max(-1, min(1, map_info.MAP_CENTER.y - core_pos.y))
+        spawn_pos = Position(core_pos.x + dx, core_pos.y + dy)
+        if rc.can_spawn(spawn_pos):
+            rc.spawn_builder(spawn_pos)
+            num_spawned += 1
+            return  # Only spawn 1 builder for turn 0
+    if rc.get_current_round() == 1:
         titanium_pos = get_closest_titanium_tile()
         if titanium_pos is not None:
             # Pick the tile adjacent to core towards the ore
@@ -70,7 +81,7 @@ def run():
                 return  # Only spawn 1 builder for turn 1
 
     # Normal spawning logic
-    if num_spawned < max_spawn or rc.get_global_resources()[0] > 2000 + 0.5 * rc.get_scale_percent():
+    if num_spawned < max_spawn or rc.get_global_resources()[0] > 2000 + 5 * rc.get_scale_percent():
         spawn_pos = random_spawn_tile()
         if spawn_pos is not None:
             rc.spawn_builder(spawn_pos)
@@ -80,3 +91,4 @@ def init(c: Controller):
     global rc, num_spawned
     rc = c
     num_spawned = 0
+    map_info.init(c)

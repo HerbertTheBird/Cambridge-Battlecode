@@ -12,6 +12,7 @@ import sys
 import shutil
 
 import units.builder as builder
+import units.builder_states.builder_rush as builder_rush
 import units.core as core
 import units.turret_gunner as gunner
 import units.turret_sentinel as sentinel
@@ -20,12 +21,14 @@ import units.turret_launcher as launcher
 
 
 # PROFILE_DIR = pathlib.Path("profiles")
+SPAWN_TURN = -1
 
 
 class Player:
     def __init__(self):
         self.initialized = False
         self.me = None
+        
 
     # def _prepare_profile_dir(self, c: Controller) -> None:
     #     # Guaranteed: exactly one of unit 1 or 2 exists, and it runs first.
@@ -79,6 +82,9 @@ class Player:
     def run(self, c: Controller) -> None:
         # if not self.initialized:
         #     self._prepare_profile_dir(c)
+        
+        if SPAWN_TURN == -1:
+            SPAWN_TURN = c.get_current_round()
 
         # profiler_path = PROFILE_DIR / f"unit_{c.get_id()}.txt"
         # profiler = cProfile.Profile()
@@ -94,7 +100,10 @@ class Player:
                 if etype == EntityType.CORE:
                     self.me = core
                 elif etype == EntityType.BUILDER_BOT:
-                    self.me = builder
+                    if SPAWN_TURN == 0:
+                        self.me = builder_rush
+                    else:
+                        self.me = builder
                 elif etype == EntityType.GUNNER:
                     self.me = gunner
                 elif etype == EntityType.SENTINEL:
