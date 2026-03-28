@@ -180,7 +180,7 @@ def run_pre():
                 try:
                     building_type = rc.get_entity_type(building_id)
                     building_team = rc.get_team(building_id)
-                    if building_type == EntityType.HARVESTER and building_team == rc.get_team() or building_type == EntityType.BARRIER:
+                    if building_type == EntityType.HARVESTER and building_team == rc.get_team():
                         blocked = True
                     if building_type != EntityType.MARKER and building_team != rc.get_team():
                         occupied_opponent = True
@@ -602,7 +602,7 @@ def run_explore():
         closest_dist = tile.distance_squared(last_placed_launcher)
 
         # Condition: far enough (>16) but still within vision radius
-        if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq():
+        if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > rc.get_builder_bot_cost()[0]:
             if rc.can_build_launcher(tile):
                 rc.build_launcher(tile)
                 last_placed_launcher = tile
