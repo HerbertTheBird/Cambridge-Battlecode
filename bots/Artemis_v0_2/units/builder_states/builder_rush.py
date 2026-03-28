@@ -30,7 +30,7 @@ nav = None
 class Mode(Enum):
     RUSH_CORE = (255, 165, 0, "rush opponent core")
     PREPARE_LAUNCHER = (0, 180, 180, "build launcher")
-    ATTACK = (200, 10, 10, "attack harvester")
+    ATTACK = (200, 10, 10, "attack opponent")
 
     def __init__(self, r, g, b, desc):
         self.r = r
@@ -127,7 +127,58 @@ def check_prepare_launcher():
             return
 
 def run_prepare_launcher():
+    global mode
     my_pos = rc.get_position()
+    
+     # Check for nearby allied launchers
+    launcher_adjacent_tiles = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            check_pos = Position(my_pos.x + dx, my_pos.y + dy)
+            if not map_info.is_on_map(check_pos):
+                continue
+            b_id = rc.get_tile_building_id(check_pos)
+            if b_id is not None and rc.get_team(b_id) == rc.get_team() and rc.get_entity_type(b_id) == EntityType.LAUNCHER:
+                launcher_adjacent_tiles.append(check_pos)
+
+    # If already adjacent to a launcher, continue with normal logic
+    if not launcher_adjacent_tiles:
+        # Try moving to a tile surrounding an allied launcher
+        nearest_launcher_tile = None
+        nearest_dist = float('inf')
+        for x in range(map_info.width):
+            for y in range(map_info.height):
+                pos = Position(x, y)
+                if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                    continue
+                b_id = rc.get_tile_building_id(pos)
+                if b_id is None or rc.get_team(b_id) != rc.get_team() or rc.get_entity_type(b_id) != EntityType.LAUNCHER:
+                    continue
+
+                # For each launcher, check surrounding tiles
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        adj = Position(pos.x + dx, pos.y + dy)
+                        
+                        if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                            continue
+                        if not map_info.is_on_map(adj) or (not map_info.is_tile_empty(adj) and not rc.is_tile_passable(adj)):
+                            continue
+                        dist = my_pos.distance_squared(adj)
+                        if dist < nearest_dist:
+                            nearest_dist = dist
+                            nearest_launcher_tile = adj
+
+        # Move to nearest empty tile surrounding an allied launcher
+        if nearest_launcher_tile and (rc.is_tile_passable(nearest_launcher_tile) or map_info.is_tile_empty(nearest_launcher_tile)):
+            nav.move_to(nearest_launcher_tile)
+            if rc.get_position() == nearest_launcher_tile:
+                mode = Mode.ATTACK
+            return  # Skip building a new launcher
 
     best_empty = None
     best_empty_dist = float('inf')
@@ -209,7 +260,59 @@ def run_prepare_launcher():
             rc.place_marker(second_tile, comms.encode_centralized_launch())
 
 def check_attack():
-    pass
+    my_pos = rc.get_position()
+
+    # ase 1: Standing on an empty tile that an enemy conveyor/bridge leads into
+    if map_info.is_tile_empty(my_pos):
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                adj = Position(my_pos.x + dx, my_pos.y + dy)
+                b_id = rc.get_tile_building_id(adj)
+                if b_id is None or rc.get_team(b_id) == rc.get_team():
+                    continue
+                b_type = rc.get_entity_type(b_id)
+                if b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
+                    if rc.get_position(b_id).add(rc.get_direction(b_id)) == my_pos:
+                        return  # attack mode continues
+                elif b_type == EntityType.BRIDGE:
+                    if rc.get_bridge_target(b_id) == my_pos:
+                        return
+
+    # Case 2: Can place sentinel on empty tile an enemy conveyor/bridge leads into
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            adj = Position(my_pos.x + dx, my_pos.y + dy)
+            if not map_info.is_on_map(adj) or not map_info.is_tile_empty(adj):
+                continue
+            for ddx in (-1, 0, 1):
+                for ddy in (-1, 0, 1):
+                    check_pos = Position(my_pos.x + ddx, my_pos.y + ddy)
+                    b_id = rc.get_tile_building_id(check_pos)
+                    if b_id is None or rc.get_team(b_id) == rc.get_team():
+                        continue
+                    b_type = rc.get_entity_type(b_id)
+                    if b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
+                        if rc.get_position(b_id).add(rc.get_direction(b_id)) == adj:
+                            return
+                    elif b_type == EntityType.BRIDGE:
+                        if rc.get_bridge_target(b_id) == adj:
+                            return
+
+    # Case 3: Standing on an enemy conveyor/bridge, fire
+    building_id = rc.get_tile_building_id(my_pos)
+    log(f"Targeting {building_id}")
+    if building_id:
+        if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
+            EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE
+        ):
+            return  # attack mode continues
+
+    # None matched → switch to RUSH_CORE
+    global mode
+    mode = Mode.RUSH_CORE
+    check_rush_core() # BAD PRACTICE, but this is exception
 
 def run_attack():
     # place down sentinel if possible
@@ -315,8 +418,9 @@ def run_attack():
                         if rc.get_bridge_target(b_id) == adj:
                             points_at_tile = True
 
-                    if points_at_tile and rc.can_build_sentinel(adj):
-                        rc.build_sentinel(adj)
+                    if points_at_tile and rc.can_build_sentinel(adj, Direction.NORTH):
+                        direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
+                        rc.build_sentinel(adj, direction)
                         return
 
     # Case 3: Standing on an enemy conveyor/bridge, fire
