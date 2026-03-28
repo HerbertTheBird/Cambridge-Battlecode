@@ -184,12 +184,6 @@ class Pathing:
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
-        has_initial_move = False
-        for dx, dy, _ in self.dirs:
-            if Position(start_p.x+dx, start_p.y+dy) not in avoid_p:
-                has_initial_move = True
-        if not has_initial_move:
-            return []
         builder.log("a* start")
         
         width_l = self.width
@@ -248,6 +242,14 @@ class Pathing:
             if avoid[h] != avoid_id-1:
                 avoid_changed = True
             avoid[h] = avoid_id
+        has_initial_move = False
+        for dx, dy, _ in self.dirs:
+            if not map_info.in_bounds(Position(start_p.x+dx, start_p.y+dy)):
+                continue
+            if avoid[(start_p.x+dx+(start_p.y+dy)*width_l)] != avoid_id:
+                has_initial_move = True
+        if not has_initial_move:
+            return []
         if not self.changed and not avoid_changed and self.reference_path:
             max_length = len(self.reference_path) - (1 if self.moved else 0)
         else:
