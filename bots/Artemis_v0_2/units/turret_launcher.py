@@ -71,7 +71,7 @@ def run():
                             if dx == 0 and dy2 == 0:
                                 continue
                             adj = Position(target_tile.x + dx, target_tile.y + dy2)
-                            if adj.distance_squared(pos) > rc.get_vision_radius_sq():
+                            if not map_info.in_bounds(adj) or adj.distance_squared(pos) > rc.get_vision_radius_sq():
                                 continue
                             building_id = rc.get_tile_building_id(adj)
                             if building_id is None:

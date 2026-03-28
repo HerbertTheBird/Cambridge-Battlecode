@@ -96,7 +96,7 @@ def check_rush_core():
 
     # route to core
     path = nav.calculate_path(map_info.predicted_enemy_core)
-    if path:
+    if path is not None:
         if len(path) > 0:
             log("Path to core found.")
         else:
@@ -289,6 +289,8 @@ def check_attack():
             for ddx in (-1, 0, 1):
                 for ddy in (-1, 0, 1):
                     check_pos = Position(my_pos.x + ddx, my_pos.y + ddy)
+                    if not map_info.is_on_map(adj):
+                        continue
                     b_id = rc.get_tile_building_id(check_pos)
                     if b_id is None or rc.get_team(b_id) == rc.get_team():
                         continue
@@ -419,7 +421,7 @@ def run_attack():
                             points_at_tile = True
 
                     if points_at_tile and rc.can_build_sentinel(adj, Direction.NORTH):
-                        direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
+                        direction = map_info.best_sentinel_dir(adj) or Direction.NORTH
                         rc.build_sentinel(adj, direction)
                         return
 

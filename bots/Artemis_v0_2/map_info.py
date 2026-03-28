@@ -626,6 +626,7 @@ def get_avoid(
                 avoid.add(rc_get_position(unit))
     return avoid
 def best_sentinel_dir(pos: Position):
+    from units.builder_states.builder_rush import log
     valid = set()
     pos_x = pos.x
     pos_y = pos.y
@@ -638,10 +639,16 @@ def best_sentinel_dir(pos: Position):
         nx, ny = new_pos.x, new_pos.y
         if 0 <= nx < w and 0 <= ny < h:
             b = building_local[nx][ny]
-            if b and b.team != my_team and b.type is _ET_HARVESTER:
+            if b:
+                log(f"Checking {pos.direction_to(new_pos)}: {b.type}")
+            else:
+                log(f"Checking {pos.direction_to(new_pos)}: {b}")
+            if b and (b.type is _ET_HARVESTER or b.type is _ET_CONVEYOR and b.direction == new_pos.direction_to(pos)):
+                log(f"Validated {new_pos.direction_to(pos)}")
                 for dir2 in _ALL_DIRECTIONS:
                     if dir2 is not _DIR_CENTRE and dir2 is not dir:
                         valid.add(dir2)
+
     if not valid:
         return None
     mx_harvesters = 0
