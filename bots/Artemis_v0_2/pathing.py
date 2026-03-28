@@ -103,7 +103,7 @@ class Pathing:
         self.target  = array('I', [0]) * (self.width * self.height)
         self.avoid   = array('I', [0]) * (self.width * self.height)
         self.best_g  = array('I', [0]) * (self.width * self.height)
-        self.MAX_ITER = int(math.sqrt(self.width * self.height)) * 10
+        self.MAX_ITER = self.width * self.height
         self.heap = []
         self.path = []
         self.dist_to_target = {}
@@ -175,7 +175,7 @@ class Pathing:
                 else:
                     h0 = abs_local(p.x - start_p.x) + abs_local(p.y - start_p.y)
                 
-                heappush(self.heap, (h0, 0, True, False, 0, t))
+                heappush(self.heap, (h0, 0, True, False, 0, t, 0))
                 self.seen[t] = self.run_id
         self.iter = 0
 
@@ -234,10 +234,9 @@ class Pathing:
             self.dist_to_target = {}
 
         WEIGHT_L = WEIGHT
-        MIN_WEIGHT_L = MIN_WEIGHT
         new_hp = []
         while hp:
-            f, g, card, zig_flag, zig_time, pos = heappop(hp)
+            f, g, card, zig_flag, zig_time, pos, iter = heappop(hp)
             g *= -1
             nx = pos%width_l
             ny = pos//width_l
@@ -245,14 +244,15 @@ class Pathing:
                 h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
             else:
                 h0 = abs_local(nx - tx) + abs_local(ny - ty)
+            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
             new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - g / h0)
             new_f = g + h0 * new_h
-            heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos))
+            heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos, 0))
         self.heap = new_hp
         hp = self.heap
         #heap format = path length, estimated path length, cardinal?, zigzag flag, zigzag time, start id
         if seen[start] == run_id:
-            heappush(hp, (-1, 0, False, False, 0, start))
+            heappush(hp, (-1, 0, False, False, 0, start, 0))
         seen[start] = 0
         ZIG_LENGTH_L = ZIG_LENGTH
         start_cpu_time = rc.get_cpu_time_elapsed()
@@ -263,7 +263,7 @@ class Pathing:
             self.iter += 1
             if self.iter > self.MAX_ITER:
                 break
-            _, g, card, _, zig_time, pos = heappop(hp)
+            _, g, card, _, zig_time, pos, _ = heappop(hp)
             if avoid[pos] == avoid_id:
                 continue
             g *= -1
@@ -309,7 +309,7 @@ class Pathing:
                         h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
                     else:
                         h0 = abs_local(nx - tx) + abs_local(ny - ty)
-                    new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
+                    new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (ng) / h0)
                 new_f = ng + h0 * new_h
 
                 if ng + h0 > max_length:
@@ -323,7 +323,7 @@ class Pathing:
                     new_zig_time = ZIG_LENGTH_L if zig_time < ZIG_LENGTH_L else 0
                 heappush(
                     hp,
-                    (new_f, -ng, card, not new_zigged, new_zig_time, n)
+                    (new_f, -ng, card, not new_zigged, new_zig_time, n, self.iter)
                 )
         end_time = time.perf_counter_ns()
         builder.log("a star time: " + str(end_time-start_time)) 
