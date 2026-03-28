@@ -4,7 +4,8 @@ from cambc import Controller, Direction, Position, EntityType
 import comms
 import math
 from array import array
-
+import time
+import units.builder as builder
 WEIGHT = 1.5
 MIN_WEIGHT = 1.2
 TIME_CUTOFF = 1600
@@ -177,6 +178,7 @@ class Pathing:
 
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
+        start_time = time.perf_counter_ns()
         heappush  = heapq.heappush
         heappop   = heapq.heappop
         abs_local = abs
@@ -271,6 +273,8 @@ class Pathing:
                     self.dist_to_target[pos] = path_length-best_g[pos]
                     pos = parent[pos] if target[pos] != run_id else -1
                 hp.clear()
+                end_time = time.perf_counter_ns()
+                builder.log("a start time: " + str(end_time-start_time))
                 return path_out
 
             px_cache = pos % width_l
@@ -311,7 +315,7 @@ class Pathing:
                 card = dx == 0 or dy == 0
                 new_zigged = (zig_time%(ZIG_LENGTH_L*2) < ZIG_LENGTH_L)^(dx>0)^(dy>0)
                 if new_zigged:
-                    new_zig_time = (new_zig_time+1)%(ZIG_LENGTH_L*2)
+                    new_zig_time = (zig_time+1)%(ZIG_LENGTH_L*2)
                 else:
                     new_zig_time = ZIG_LENGTH_L if zig_time < ZIG_LENGTH_L else 0
                 heappush(
@@ -331,13 +335,16 @@ class Pathing:
                 return True
         return False
 
-    def calculate_path(self, target: set[Position] | Position, avoid, start=None, dirs = DIRS, adjacent=False):
+    def calculate_path(self, target: set[Position] | Position, avoid = None, start=None, dirs = DIRS, adjacent=False):
         rc = self.rc
         if start is None:
             start = rc.get_position()
-
-        self.init_a_star(start, target, dirs, adjacent)
-        next_path = self.a_star(start, avoid)
+        if avoid == None:
+            avoid = map_info.get_avoid(False, True)
+        next_path = None
+        if not self.path or self.moves_through_impassible(self.path, avoid):
+            self.init_a_star(start, target, dirs, adjacent)
+            next_path = self.a_star(start, avoid)
         if next_path is not None and self.moves_through_impassible(next_path, avoid):
             self.init_a_star(start, target, dirs, adjacent)
             next_path = self.a_star(start, avoid)
@@ -348,7 +355,7 @@ class Pathing:
                 rc.draw_indicator_line(self.path[i], self.path[i + 1], 0, 50, 0)
         elif self.path is not None and len(self.path) > 1:
             for i in range(len(self.path) - 1):
-                rc.draw_indicator_line(self.path[i], self.path[i + 1], 0, 0, 50)
+                rc.draw_indicator_line(self.path[i], self.path[i + 1], 0, 0, 255)
         return self.path
 
 
