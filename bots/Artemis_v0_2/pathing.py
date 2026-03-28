@@ -7,7 +7,7 @@ from array import array
 import time
 import units.builder as builder
 WEIGHT = 1.8
-MIN_WEIGHT = 1.6
+MIN_WEIGHT = 1.2
 TIME_CUTOFF = 1600
 MAX_TIME = 400
 ZIG_LENGTH = 2
@@ -257,6 +257,8 @@ class Pathing:
         while hp:
             if rc.get_cpu_time_elapsed() > TIME_CUTOFF or rc.get_cpu_time_elapsed()-start_cpu_time > MAX_TIME:
                 return None
+            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
+            builder.log("min weight " + str(MIN_WEIGHT_L))
             self.iter += 1
             if self.iter > self.MAX_ITER:
                 break
