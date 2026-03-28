@@ -7,7 +7,7 @@ from array import array
 import time
 import units.builder as builder
 import sys
-WEIGHT = 1.8
+WEIGHT = 3
 MIN_WEIGHT = 1.2
 TIME_CUTOFF = 1600
 MAX_TIME = 400
@@ -90,6 +90,7 @@ class Pathing:
     changed = False
     moved = False
 
+    reference_path = None
     width = height = 0
     rc = None
     
@@ -238,11 +239,13 @@ class Pathing:
             if avoid[h] != avoid_id-1:
                 avoid_changed = True
             avoid[h] = avoid_id
-        if not self.changed and not avoid_changed:
-            max_length = len(self.path) - (1 if self.moved else 0)
+        if not self.changed and not avoid_changed and self.reference_path:
+            max_length = len(self.reference_path) - (1 if self.moved else 0)
+        else:
+            self.reference_path = []
         if self.changed:
             self.dist_to_target = {}
-
+        print("max length", max_length)
         WEIGHT_L = WEIGHT
         new_hp = []
         while hp:
@@ -250,17 +253,18 @@ class Pathing:
             g *= -1
             nx = pos%width_l
             ny = pos//width_l
-            MIN_WEIGHT_L = MIN_WEIGHT+min(iter/40, 1)*(WEIGHT-MIN_WEIGHT)
-            if pos in self.dist_to_target:
-                h0 = self.dist_to_target[pos]
-                new_h = 1
+            MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT-MIN_WEIGHT)
+            # if pos in self.dist_to_target:
+            #     h0 = self.dist_to_target[pos]
+            #     new_h = 1
+            # else:
+            if is_dirs:
+                h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
             else:
-                if is_dirs:
-                    h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
-                else:
-                    h0 = abs_local(nx - tx) + abs_local(ny - ty)
-                new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
+                h0 = abs_local(nx - tx) + abs_local(ny - ty)
+            new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
             new_f = g + h0 * new_h
+            rc.draw_indicator_dot(Position(nx, ny), 0, 255, 255)
             if f != new_f:
                 print("oh no", f, new_f)
             heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos, iter))
@@ -272,11 +276,15 @@ class Pathing:
         seen[start] = 0
         ZIG_LENGTH_L = ZIG_LENGTH
         start_cpu_time = rc.get_cpu_time_elapsed()
+        c = 0
         while hp:
+            c += 1
+            if c > 20:
+                return None
             if rc.get_cpu_time_elapsed() > TIME_CUTOFF or rc.get_cpu_time_elapsed()-start_cpu_time > MAX_TIME:
                 return None
             self.iter += 1
-            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
+            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/100, 1)*(WEIGHT-MIN_WEIGHT)
             # if self.iter > self.MAX_ITER:
             #     break
             _, g, card, _, zig_time, pos, _ = heappop(hp)
@@ -295,6 +303,7 @@ class Pathing:
                 hp.clear()
                 end_time = time.perf_counter_ns()
                 builder.log("a star time: " + str(end_time-start_time))
+                self.reference_path = path_out[:]
                 return path_out
 
             px_cache = pos % width_l
@@ -313,23 +322,23 @@ class Pathing:
                     continue
                 # if abs_local(dx) > 1 or abs_local(dy) > 1 and abs_local(nx-my_core.x) <= 1 and abs_local(ny-my_core.y) <= 1:  #this is so i can place a splitter at the end
                 #     continue
+                if is_dirs:
+                    h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
+                else:
+                    h0 = abs_local(nx - tx) + abs_local(ny - ty)
+                if ng + h0 > max_length:
+                    continue
                 best_g[n] = ng
                 seen[n]   = run_id
                 parent[n] = pos
 
-                if n in self.dist_to_target:
-                    h0 = self.dist_to_target[n]
-                    new_h = 1
-                else:
-                    if is_dirs:
-                        h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
-                    else:
-                        h0 = abs_local(nx - tx) + abs_local(ny - ty)
-                    new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (ng) / h0)
+                # if n in self.dist_to_target:
+                #     h0 = self.dist_to_target[n]
+                #     new_h = 1
+                # else:
+                new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (ng) / h0)
                 new_f = ng + h0 * new_h
 
-                if ng + h0 > max_length:
-                    continue
 
                 card = dx == 0 or dy == 0
                 new_zigged = (zig_time%(ZIG_LENGTH_L*2) < ZIG_LENGTH_L)^(dx>0)^(dy>0)
