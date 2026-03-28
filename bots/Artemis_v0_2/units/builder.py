@@ -338,6 +338,7 @@ def run_build_harvester():
             if rc.get_tile_building_id(target_ore) and rc.get_tile_building_id(
                     target_ore) != EntityType.BARRIER and rc.can_destroy(target_ore) and rc.get_entity_type(
                     building_id) != EntityType.SENTINEL:
+                log("destroy1 " + str(target_ore))
                 rc.destroy(target_ore)
             if rc.can_build_barrier(target_ore):
                 global blocked_ores
@@ -371,6 +372,7 @@ def run_build_harvester():
                     if building_id and rc.get_team(building_id) == rc.get_team() and rc.get_entity_type(
                             building_id) != EntityType.SENTINEL:
                         if rc.can_destroy(pos):
+                            log("destroy2 " + str(pos))
                             rc.destroy(pos)
                     if rc.can_build_barrier(pos):
                         rc.build_barrier(pos)
@@ -379,6 +381,7 @@ def run_build_harvester():
         if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
             if not rc.is_tile_passable(target_ore) and rc.get_entity_type(
                     rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
+                log("destroy3 " + str(target_ore))
                 rc.destroy(target_ore)
         nav.execute_path()
         return
@@ -411,6 +414,7 @@ def run_build_harvester():
             if building_id and rc.get_team(building_id) == rc.get_team() and rc.get_entity_type(
                     building_id) != EntityType.HARVESTER:
                 if rc.can_destroy(target_ore):
+                    log("destroy4 " + str(target_ore))
                     rc.destroy(target_ore)
 
             if rc.get_tile_building_id(target_ore) is None:
@@ -441,6 +445,7 @@ def run_build_harvester():
             if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
                 if not rc.is_tile_passable(target_ore) and rc.get_entity_type(
                         rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
+                    log("destroy5 " + str(target_ore))
                     rc.destroy(target_ore)
             nav.execute_path()
 
@@ -464,9 +469,13 @@ def run_route():
             new_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], True)
             if new_path:
                 ore_path = ore_path[:route_idx] + new_path
-        for i in range(len(ore_path) - 1):
-            rc.draw_indicator_line(ore_path[i], ore_path[i + 1], 0, 255, 0)
-            rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
+        # for i in range(len(ore_path)):
+        #     if route_idx == i:
+        #         rc.draw_indicator_line(Position(i, -1), ore_path[i], 0, 0, 255)
+        #     else:
+        #         rc.draw_indicator_line(Position(i, -1), ore_path[i], 0, 255, 0)
+            # rc.draw_indicator_line(ore_path[i], ore_path[i + 1], 0, 255, 0)
+            # rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
         if launcher_position:
             launcher = launcher_position
             place = True
@@ -487,6 +496,7 @@ def run_route():
                 elif nearby_conv and nearby_conv != launcher:
                     nav.move_to(nearby_conv)
                     if rc.can_destroy(launcher):
+                        log("destroy6 " + str(launcher))
                         rc.destroy(launcher)
                     id = rc.get_tile_building_id(rc.get_position())
                     if rc.get_position() == launcher:
@@ -500,6 +510,7 @@ def run_route():
                                     if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
                                         rc.fire(rc.get_position())
                                 if rc.can_destroy(to_build):
+                                    log("destroy7 " + str(to_build))
                                     rc.destroy(to_build)
                                 if bridge and rc.can_build_bridge(to_build, ore_path[route_idx + 1]):
                                     rc.build_bridge(to_build, ore_path[route_idx + 1])
@@ -515,6 +526,7 @@ def run_route():
                 return
 
         if route_idx < len(ore_path) - 1:
+            
             to_build = ore_path[route_idx]
             bridge = ore_path[route_idx].distance_squared(ore_path[route_idx + 1]) > 1
             dir = ore_path[route_idx].direction_to(ore_path[route_idx + 1])
@@ -524,6 +536,7 @@ def run_route():
                     if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
                         rc.fire(rc.get_position())
                 if rc.can_destroy(to_build):
+                    log("destroy8 " + str(to_build))
                     rc.destroy(to_build)
                 if bridge and rc.can_build_bridge(to_build, ore_path[route_idx + 1]):
                     rc.build_bridge(to_build, ore_path[route_idx + 1])
@@ -650,6 +663,7 @@ def run_sabotage():
                 if rc.get_tile_building_id(empty_tile) and rc.get_entity_type(
                         rc.get_tile_building_id(empty_tile)) != EntityType.SENTINEL:
                     if rc.can_destroy(empty_tile):
+                        log("destroy9 " + str(empty_tile))
                         rc.destroy(empty_tile)
                 if rc.can_build_sentinel(empty_tile, direction):
                     rc.build_sentinel(empty_tile, direction)
@@ -672,6 +686,7 @@ def run_sabotage():
 
         # We're on it → destroy or fire
         if rc.can_destroy(passable_tile):
+            log("destroy10 " + str(passable_tile))
             rc.destroy(passable_tile)
         elif rc.get_position() == passable_tile:
             if rc.can_fire(rc.get_position()):
