@@ -59,6 +59,17 @@ def decode_launch():
 
     return out
 
+def decode_centralized_launch():
+    id_mask = _ID_MASK
+    out = []
+    append = out.append
+
+    for p, v in get_messages():
+        if (v >> CENTRALIZED_LAUNCHER_BIT) & 1:
+                append((v & id_mask, p))
+
+    return out
+
 
 def encode_launch(target):
     return rc.get_id() + (target.x << ID_BITS) + (target.y << (ID_BITS + 6)) + (1 << LAUNCHER_BIT)
