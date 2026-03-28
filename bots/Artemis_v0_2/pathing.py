@@ -182,6 +182,16 @@ class Pathing:
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
         builder.log("a* start")
+        width_l = self.width
+        run_id = self.run_id
+        seen = self.seen
+        draw_dot = self.rc.draw_indicator_dot
+        print(self.run_id, self.changed, len(self.heap))
+        for pos_idx in range(width_l * self.height):
+            if seen[pos_idx] == run_id:
+                x = pos_idx % width_l
+                y = pos_idx // width_l
+                draw_dot(Position(x, y), 0, 0, 255)
         my_core = map_info.my_core
         start_time = time.perf_counter_ns()
         heappush  = heapq.heappush
@@ -240,14 +250,20 @@ class Pathing:
             g *= -1
             nx = pos%width_l
             ny = pos//width_l
-            if is_dirs:
-                h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
+            MIN_WEIGHT_L = MIN_WEIGHT+min(iter/40, 1)*(WEIGHT-MIN_WEIGHT)
+            if pos in self.dist_to_target:
+                h0 = self.dist_to_target[pos]
+                new_h = 1
             else:
-                h0 = abs_local(nx - tx) + abs_local(ny - ty)
-            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
-            new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - g / h0)
+                if is_dirs:
+                    h0 = max_local(abs_local(nx - tx), abs_local(ny - ty))
+                else:
+                    h0 = abs_local(nx - tx) + abs_local(ny - ty)
+                new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max_local(0, 1 - (g) / h0)
             new_f = g + h0 * new_h
-            heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos, 0))
+            if f != new_f:
+                print("oh no", f, new_f)
+            heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos, iter))
         self.heap = new_hp
         hp = self.heap
         #heap format = path length, estimated path length, cardinal?, zigzag flag, zigzag time, start id
@@ -259,10 +275,10 @@ class Pathing:
         while hp:
             if rc.get_cpu_time_elapsed() > TIME_CUTOFF or rc.get_cpu_time_elapsed()-start_cpu_time > MAX_TIME:
                 return None
-            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
             self.iter += 1
-            if self.iter > self.MAX_ITER:
-                break
+            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/40, 1)*(WEIGHT-MIN_WEIGHT)
+            # if self.iter > self.MAX_ITER:
+            #     break
             _, g, card, _, zig_time, pos, _ = heappop(hp)
             if avoid[pos] == avoid_id:
                 continue
