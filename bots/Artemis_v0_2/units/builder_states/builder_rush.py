@@ -289,6 +289,8 @@ def check_attack():
             for ddx in (-1, 0, 1):
                 for ddy in (-1, 0, 1):
                     check_pos = Position(my_pos.x + ddx, my_pos.y + ddy)
+                    if not map_info.is_on_map(adj):
+                        continue
                     b_id = rc.get_tile_building_id(check_pos)
                     if b_id is None or rc.get_team(b_id) == rc.get_team():
                         continue
