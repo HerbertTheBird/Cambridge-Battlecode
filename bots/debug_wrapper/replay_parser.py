@@ -219,7 +219,11 @@ def _decode_update(data: bytes):
     """Return the decoded Update variant, or None for unneeded types."""
     f = _parse_fields(data)
     if 1 in f:                                  # placeEntity
-        return PlaceEntity(_decode_entity(f[1][0]))
+        # PlaceEntity is a wrapper: { entity: Entity (field 1) }
+        pe_fields = _parse_fields(f[1][0])
+        if 1 not in pe_fields:
+            return None
+        return PlaceEntity(_decode_entity(pe_fields[1][0]))
     if 2 in f:                                  # moveBuilderBot
         mf = _parse_fields(f[2][0])
         return MoveBuilderBot(
@@ -235,16 +239,21 @@ def _decode_update(data: bytes):
         hf = _parse_fields(f[5][0])
         return UpdateHp(id=hf.get(1, [0])[0], delta=_signed32(hf.get(2, [0])[0]))
     if 6 in f:                                  # updatePlayers
-        upf = _parse_fields(f[6][0])
+        # UpdatePlayers = { players: Players (field 1) }
+        # Players       = { a: Player (field 1), b: Player (field 2) }
+        # Player        = { titanium: int (field 1), axionite: int (field 2), ... }
+        upf = _parse_fields(f[6][0])            # { 1: Players_bytes }
         a_ti = a_ax = b_ti = b_ax = 0
         if 1 in upf:
-            ap   = _parse_fields(upf[1][0])
-            a_ti = ap.get(1, [0])[0]
-            a_ax = ap.get(2, [0])[0]
-        if 2 in upf:
-            bp   = _parse_fields(upf[2][0])
-            b_ti = bp.get(1, [0])[0]
-            b_ax = bp.get(2, [0])[0]
+            players = _parse_fields(upf[1][0])  # { 1: Player_A_bytes, 2: Player_B_bytes }
+            if 1 in players:
+                ap   = _parse_fields(players[1][0])
+                a_ti = ap.get(1, [0])[0]
+                a_ax = ap.get(2, [0])[0]
+            if 2 in players:
+                bp   = _parse_fields(players[2][0])
+                b_ti = bp.get(1, [0])[0]
+                b_ax = bp.get(2, [0])[0]
         return UpdatePlayers(a_titanium=a_ti, a_axionite=a_ax, b_titanium=b_ti, b_axionite=b_ax)
     if 7 in f:                                  # setActionCooldown
         cf = _parse_fields(f[7][0])
@@ -269,11 +278,18 @@ class GameTurn:
 
 
 @dataclass
+class CoreInfo:
+    id:   int
+    team: int   # 0 = Team A, 1 = Team B
+    pos:  Pos
+
+
+@dataclass
 class GameMap:
-    width:          int
-    height:         int
-    terrain:        list[list[int]]   # terrain[y][x] — ENV ints
-    core_positions: list[Pos]
+    width:  int
+    height: int
+    terrain: list[list[int]]   # terrain[y][x] — ENV ints
+    cores:   list[CoreInfo]    # one per team's core
 
 
 @dataclass
@@ -294,8 +310,15 @@ def _decode_map(data: bytes) -> GameMap:
         tiles = list(rf[1][0]) if 1 in rf else []   # packed bytes = env ints
         terrain.append(tiles)
 
-    core_positions = [_decode_pos(cp) for cp in f.get(4, [])]
-    return GameMap(width=width, height=height, terrain=terrain, core_positions=core_positions)
+    # CorePosition = { id: int (field 1), team: Team (field 2, absent=A), pos: Pos (field 3) }
+    cores: list[CoreInfo] = []
+    for cp in f.get(4, []):
+        cf = _parse_fields(cp)
+        core_id   = cf.get(1, [0])[0]
+        core_team = cf.get(2, [0])[0]   # absent = 0 (Team A)
+        core_pos  = _decode_pos(cf[3][0]) if 3 in cf else Pos(0, 0)
+        cores.append(CoreInfo(id=core_id, team=core_team, pos=core_pos))
+    return GameMap(width=width, height=height, terrain=terrain, cores=cores)
 
 
 def _decode_turn(data: bytes) -> GameTurn:
@@ -309,7 +332,7 @@ def parse_replay(path: str) -> GameReplay:
     with open(path, "rb") as fh:
         data = fh.read()
     f      = _parse_fields(data)
-    gmap   = _decode_map(f[1][0]) if 1 in f else GameMap(0, 0, [], [])
+    gmap   = _decode_map(f[1][0]) if 1 in f else GameMap(0, 0, [], [], [])
     turns  = [_decode_turn(t) for t in f.get(3, [])]
     winner = f[4][0] if 4 in f else -1
     return GameReplay(map=gmap, turns=turns, winner=winner)

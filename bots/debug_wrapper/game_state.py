@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from replay_parser import (
-    GameMap, Pos,
+    GameMap, Pos, CoreInfo,
     PlaceEntity, MoveBuilderBot, RemoveEntity, UpdateHp,
     UpdatePlayers, SetActionCooldown, SetMoveCooldown,
 )
@@ -68,6 +68,14 @@ class GameState:
         self.axionite: list[int] = [0, 0]
 
         self.current_round: int = 0
+
+        # Seed CORE entities from map metadata (cores are never placed via PlaceEntity)
+        _CORE_MAX_HP = 500
+        for core in game_map.cores:
+            self._add(EntityState(
+                id=core.id, entity_type="CORE", team=core.team,
+                pos=core.pos, hp=_CORE_MAX_HP, maxhp=_CORE_MAX_HP,
+            ))
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

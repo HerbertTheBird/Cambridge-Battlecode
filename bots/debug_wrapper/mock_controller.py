@@ -172,8 +172,11 @@ class MockController:
         ti, ax = self._gs.get_resources(self._me().team)
         return [ti, ax, 0]
 
-    def get_vision_radius_sq(self) -> int:
-        return _VISION_SQ.get(self._me().entity_type, 20)
+    def get_vision_radius_sq(self, entity_id: int = None) -> int:
+        if entity_id is None:
+            return _VISION_SQ.get(self._me().entity_type, 20)
+        e = self._gs.entities.get(entity_id)
+        return _VISION_SQ.get(e.entity_type, 20) if e else 20
 
     def get_scale_percent(self) -> int:
         area = self._gs.width * self._gs.height
@@ -213,6 +216,14 @@ class MockController:
 
     def is_tile_passable(self, position) -> bool:
         return self._gs.is_passable(position.x, position.y)
+
+    def is_tile_empty(self, position) -> bool:
+        """True if the tile has no building and no builder bot and is in bounds."""
+        x, y = position.x, position.y
+        if not (0 <= x < self._gs.width and 0 <= y < self._gs.height):
+            return False
+        return (self._gs.get_building_at(x, y) is None and
+                self._gs.get_builder_at(x, y) is None)
 
     def is_in_vision(self, position) -> bool:
         me = self._me()
@@ -283,9 +294,32 @@ class MockController:
 
     # ── Entity-specific queries ───────────────────────────────────────────────
 
+    def get_direction(self, entity_id: int = None):
+        from cambc import Direction
+        _dir_map = {
+            0: Direction.CENTRE,    1: Direction.NORTH,
+            2: Direction.NORTHEAST, 3: Direction.EAST,
+            4: Direction.SOUTHEAST, 5: Direction.SOUTH,
+            6: Direction.SOUTHWEST, 7: Direction.WEST,
+            8: Direction.NORTHWEST,
+        }
+        if entity_id is None:
+            d = self._me().direction
+        else:
+            e = self._gs.entities.get(entity_id)
+            d = e.direction if e else 0
+        return _dir_map.get(d, Direction.CENTRE)
+
     def get_marker_value(self, marker_id: int) -> int:
         e = self._gs.entities.get(marker_id)
         return e.marker_value if e and e.entity_type == "MARKER" else 0
+
+    def get_stored_resource(self, entity_id: int = None):
+        from cambc import ResourceType
+        _rmap = {0: None, 1: ResourceType.TITANIUM,
+                 2: ResourceType.RAW_AXIONITE, 3: ResourceType.REFINED_AXIONITE}
+        e = self._gs.entities.get(entity_id if entity_id is not None else self._unit_id)
+        return _rmap.get(e.stored_resource if e else 0)
 
     def get_stored_resource_id(self, entity_id: int = None) -> Optional[int]:
         e = self._gs.entities.get(entity_id if entity_id is not None else self._unit_id)

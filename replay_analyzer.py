@@ -33,8 +33,15 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import io
 import os
 import sys
+
+# ── Force stdout to UTF-8 so bot print() with unicode arrows/symbols works ────
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+else:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # ── Bootstrap: add wrapper directory to path ──────────────────────────────────
 
@@ -68,13 +75,14 @@ _BOT_MODULE_NAMES = [
 ]
 
 
-def _load_fresh_player(bot_path: str, unit_id: int) -> tuple:
+def _load_fresh_player(bot_path_abs: str, unit_id: int) -> tuple[object, dict]:
     """
     Load the bot's Player class in a completely isolated module environment.
 
-    Returns (player_instance, [module_refs]) where the list of modules
-    must be kept alive (via the caller) to prevent garbage collection of
-    the bot's module-level state.
+    Returns (player_instance, {module_name: module_object}).
+    The caller MUST install the returned module dict into sys.modules (and add
+    bot_path_abs to sys.path) before each player.run() invocation so that
+    any function-level dynamic imports inside the bot resolve correctly.
     """
     # 1. Save and remove any previously loaded bot modules from the cache.
     saved: dict = {}
@@ -84,12 +92,11 @@ def _load_fresh_player(bot_path: str, unit_id: int) -> tuple:
 
     # 2. Temporarily add the bot directory to sys.path so relative imports
     #    inside the bot (e.g. `import units.builder`) resolve correctly.
-    bot_path_abs = os.path.abspath(bot_path)
     prepended = bot_path_abs not in sys.path
     if prepended:
         sys.path.insert(0, bot_path_abs)
 
-    fresh_modules: list = []
+    fresh_modules: dict[str, object] = {}
     try:
         spec = importlib.util.spec_from_file_location(
             f"_bot_main_u{unit_id}",
@@ -101,17 +108,45 @@ def _load_fresh_player(bot_path: str, unit_id: int) -> tuple:
         spec.loader.exec_module(main_mod)
         player = main_mod.Player()
     finally:
-        # 3. Collect all freshly loaded bot modules (keep references alive).
+        # 3. Collect all freshly loaded bot modules as a name→module dict.
         for name in _BOT_MODULE_NAMES:
             m = sys.modules.pop(name, None)
             if m is not None:
-                fresh_modules.append(m)
+                fresh_modules[name] = m
         # 4. Restore the previously saved modules.
         sys.modules.update(saved)
         if prepended and bot_path_abs in sys.path:
             sys.path.remove(bot_path_abs)
 
     return player, fresh_modules
+
+
+def _run_player(player, mc, unit_mods: dict, bot_path_abs: str) -> None:
+    """
+    Call player.run(mc) with the unit's private modules installed in
+    sys.modules and bot_path in sys.path, then clean up afterwards.
+    This ensures any function-level dynamic imports (e.g. `from units.builder
+    import log` inside map_info.py) resolve to the correct unit's module.
+    """
+    # Save anything that's currently occupying those names.
+    displaced: dict = {}
+    for name in unit_mods:
+        if name in sys.modules:
+            displaced[name] = sys.modules[name]
+        sys.modules[name] = unit_mods[name]
+
+    path_prepended = bot_path_abs not in sys.path
+    if path_prepended:
+        sys.path.insert(0, bot_path_abs)
+    try:
+        player.run(mc)
+    finally:
+        # Remove this unit's modules; restore any displaced ones.
+        for name in unit_mods:
+            sys.modules.pop(name, None)
+        sys.modules.update(displaced)
+        if path_prepended and bot_path_abs in sys.path:
+            sys.path.remove(bot_path_abs)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -152,20 +187,21 @@ def main() -> None:
                         help="Optional file to write [DBG] lines into")
     args = parser.parse_args()
 
-    replay_path = _resolve(args.replay)
-    bot_path    = _resolve(args.bot)
-    team_int    = 0 if args.team == "A" else 1
+    replay_path  = _resolve(args.replay)
+    bot_path     = _resolve(args.bot)
+    bot_path_abs = os.path.abspath(bot_path)
+    team_int     = 0 if args.team == "A" else 1
 
     # ── Parse replay ──────────────────────────────────────────────────────────
-    print(f"[replay_analyzer] Parsing {replay_path} …", flush=True)
+    print(f"[replay_analyzer] Parsing {replay_path} ...", flush=True)
     replay = parse_replay(replay_path)
-    print(f"[replay_analyzer] Map {replay.map.width}×{replay.map.height}, "
+    print(f"[replay_analyzer] Map {replay.map.width}x{replay.map.height}, "
           f"{len(replay.turns)} turns.", flush=True)
 
     turn_lo, turn_hi = _parse_turn_range(args.turns, len(replay.turns))
-    print(f"[replay_analyzer] Analyzing turns {turn_lo}–{turn_hi} for team {args.team}.",
+    print(f"[replay_analyzer] Analyzing turns {turn_lo}-{turn_hi} for team {args.team}.",
           flush=True)
-    print(f"[replay_analyzer] Bot: {bot_path}", flush=True)
+    print(f"[replay_analyzer] Bot: {bot_path_abs}", flush=True)
     print()
 
     out_file = open(args.output, "w", encoding="utf-8") if args.output else None
@@ -173,31 +209,17 @@ def main() -> None:
     # ── Build initial game state ───────────────────────────────────────────────
     gs = GameState(replay.map)
 
-    # Per-unit storage: unit_id → (Player, MockController, [module_refs])
-    unit_players:  dict[int, tuple] = {}
-    unit_modules:  dict[int, list]  = {}
-
-    def _emit(line: str) -> None:
-        print(line, flush=True)
-        if out_file and line.startswith("[DBG]"):
-            out_file.write(line + "\n")
-
-    # Redirect stdout prints from the bot through _emit for file tee
-    # (MockController._log already prints; we capture via wrapping sys.stdout
-    # only if --output is given — simpler: let both go to stdout, then
-    # filter with the callback above by patching _log at runtime.)
-    # For simplicity we just let prints go to stdout normally; --output only
-    # captures lines that start with [DBG] by monkey-patching print inside the
-    # mock controller.
+    # Per-unit storage: unit_id -> (Player, MockController, {name: module})
+    unit_players: dict[int, tuple]       = {}
+    unit_modules: dict[int, dict]        = {}
 
     if out_file:
         # Replace MockController._log so we can tee to file
-        _original_log = MockController._log
-
         def _tee_log(self, msg: str) -> None:
             try:
                 me = self._gs.entities.get(self._unit_id)
-                label = f"{me.entity_type}#{self._unit_id}@{me.pos}" if me else f"UNIT#{self._unit_id}"
+                label = (f"{me.entity_type}#{self._unit_id}@{me.pos}"
+                         if me else f"UNIT#{self._unit_id}")
             except Exception:
                 label = f"UNIT#{self._unit_id}"
             line = f"[DBG][T{self._gs.current_round:04d}][{label}] {msg}"
@@ -239,7 +261,7 @@ def main() -> None:
             for unit_id in team_units:
                 # First time we see this unit: create isolated player + controller
                 if unit_id not in unit_players:
-                    player, fresh_mods = _load_fresh_player(bot_path, unit_id)
+                    player, fresh_mods = _load_fresh_player(bot_path_abs, unit_id)
                     mc = MockController(gs, unit_id)
                     unit_players[unit_id] = (player, mc)
                     unit_modules[unit_id] = fresh_mods
@@ -247,9 +269,9 @@ def main() -> None:
                 player, mc = unit_players[unit_id]
                 # mc._gs is shared — it already reflects the current turn
                 try:
-                    player.run(mc)
+                    _run_player(player, mc, unit_modules[unit_id], bot_path_abs)
                 except SystemExit:
-                    pass   # some bots call os._exit; catch gracefully
+                    pass   # some bots call sys.exit; catch gracefully
                 except Exception as exc:
                     e = gs.entities.get(unit_id)
                     label = f"{e.entity_type}#{unit_id}" if e else f"UNIT#{unit_id}"
