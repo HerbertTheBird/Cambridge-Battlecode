@@ -185,6 +185,8 @@ def main() -> None:
                         help="Turn range, e.g. '1-100' or '42' (default: all)")
     parser.add_argument("--output",  default=None,
                         help="Optional file to write [DBG] lines into")
+    parser.add_argument("--no-dbg", action="store_true",
+                        help="Suppress [DBG] action lines; show only bot print() output")
     args = parser.parse_args()
 
     replay_path  = _resolve(args.replay)
@@ -213,7 +215,11 @@ def main() -> None:
     unit_players: dict[int, tuple]       = {}
     unit_modules: dict[int, dict]        = {}
 
-    if out_file:
+    if args.no_dbg:
+        # Silence all [DBG] action lines — only bot print() output will appear
+        MockController._log = lambda self, msg: None
+
+    elif out_file:
         # Replace MockController._log so we can tee to file
         def _tee_log(self, msg: str) -> None:
             try:
@@ -273,9 +279,10 @@ def main() -> None:
                 except SystemExit:
                     pass   # some bots call sys.exit; catch gracefully
                 except Exception as exc:
-                    e = gs.entities.get(unit_id)
-                    label = f"{e.entity_type}#{unit_id}" if e else f"UNIT#{unit_id}"
-                    print(f"[DBG][T{turn_num:04d}][{label}] ERROR: {exc}", flush=True)
+                    if not args.no_dbg:
+                        e = gs.entities.get(unit_id)
+                        label = f"{e.entity_type}#{unit_id}" if e else f"UNIT#{unit_id}"
+                        print(f"[DBG][T{turn_num:04d}][{label}] ERROR: {exc}", flush=True)
 
             # Prune dead units from our tables
             dead = [uid for uid in list(unit_players) if uid not in gs.entities]
