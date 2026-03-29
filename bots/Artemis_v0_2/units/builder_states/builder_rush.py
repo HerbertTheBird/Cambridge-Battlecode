@@ -419,7 +419,7 @@ def run_attack():
                             points_at_tile = True
 
                     if points_at_tile and rc.can_build_sentinel(adj, Direction.NORTH):
-                        direction = map_info.best_sentinel_dir(candidate) or Direction.NORTH
+                        direction = map_info.best_sentinel_dir(adj) or Direction.NORTH
                         rc.build_sentinel(adj, direction)
                         return
 

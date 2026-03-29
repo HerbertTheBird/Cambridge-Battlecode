@@ -43,20 +43,20 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
             building_type = get_entity_type(building_id)
 
     # Resolve simplest priorities first
-    if enemy_builder and building_type is not None:
-        return 0
+    if enemy_builder and building_type is not None and not my_building:
+        return 1
 
     if building_type is not None:
         if map_info.is_conveyor(building_type):
-            return 1
-        if map_info.is_turret(building_type):
             return 2
+        if map_info.is_turret(building_type):
+            return 3
 
     if enemy_builder and not my_building:
-        return 3
+        return 4
 
     if building_type == EntityType.CORE:
-        return 4
+        return 0
 
     # 2. Lazy Evaluation: Only check adjacent tiles IF it's an enemy harvester.
     # This avoids the 4-direction loop 95% of the time.
