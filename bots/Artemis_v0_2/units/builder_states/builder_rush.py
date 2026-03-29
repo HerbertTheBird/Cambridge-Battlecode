@@ -96,7 +96,7 @@ def check_rush_core():
 
     # route to core
     path = nav.calculate_path(map_info.predicted_enemy_core)
-    if path:
+    if path is not None:
         if len(path) > 0:
             log("Path to core found.")
         else:
