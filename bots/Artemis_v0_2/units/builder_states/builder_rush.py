@@ -23,13 +23,14 @@ OUR_BUILDINGS = {EntityType.BARRIER, EntityType.HARVESTER, EntityType.LAUNCHER,
 # explore state
 explore_target = None
 turns_since_last_explore_target = 0
+next_attack_tile = None
 
 rc = None
 MODE_ACTIONS = None
 nav = None
 class Mode(Enum):
     RUSH_CORE = (255, 165, 0, "rush opponent core")
-    PREPARE_LAUNCHER = (0, 180, 180, "build launcher")
+    PREPARE_LAUNCHER = (0, 180, 180, "set up for launcher")
     ATTACK = (200, 10, 10, "attack opponent")
 
     def __init__(self, r, g, b, desc):
@@ -77,9 +78,41 @@ def check_rush_core():
         # Case 1: Enemy harvester on titanium ore
         if entity_type == EntityType.HARVESTER:
             if map_info.ground[pos.x][pos.y] == Environment.ORE_TITANIUM:
-                log("Prepare launcher: titanium harvester detected")
-                mode = Mode.PREPARE_LAUNCHER
-                return
+                
+                # Check for cardinally adjacent passable tiles
+                passable_found = False
+                empty_adjacent_found = False
+
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    adj = Position(pos.x + dx, pos.y + dy)
+                    if adj.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
+                        continue
+                    if rc.is_tile_passable(adj):
+                        passable_found = True
+                        break  # No need to check further
+
+                # If no passable tile, check empty-adjacent tiles that have passable neighbors
+                if not passable_found:
+                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        adj = Position(pos.x + dx, pos.y + dy)
+                        if adj.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
+                            continue
+                        if map_info.is_tile_empty(adj):
+                            # Check if this empty tile has any passable neighbor
+                            for ddx, ddy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                                neighbor = Position(adj.x + ddx, adj.y + ddy)
+                                if neighbor.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
+                                    continue
+                                if rc.is_tile_passable(neighbor):
+                                    empty_adjacent_found = True
+                                    break
+                            if empty_adjacent_found:
+                                break
+
+                if passable_found or empty_adjacent_found:
+                    log("Prepare launcher: titanium harvester detected")
+                    mode = Mode.PREPARE_LAUNCHER
+                    return
 
         # Case 2: Enemy conveyor carrying titanium
         elif entity_type in (
@@ -175,10 +208,13 @@ def run_prepare_launcher():
 
         # Move to nearest empty tile surrounding an allied launcher
         if nearest_launcher_tile and (rc.is_tile_passable(nearest_launcher_tile) or map_info.is_tile_empty(nearest_launcher_tile)):
-            nav.move_to(nearest_launcher_tile)
-            if rc.get_position() == nearest_launcher_tile:
-                mode = Mode.ATTACK
-            return  # Skip building a new launcher
+            path = nav.calculate_path(nearest_launcher_tile)
+            if path and len(path) > 0:
+                if len(path) <= 4:
+                    nav.execute_path()
+                    if rc.get_position() == nearest_launcher_tile:
+                        mode = Mode.ATTACK
+                    return  # Skip building a new launcher
 
     best_empty = None
     best_empty_dist = float('inf')
@@ -260,36 +296,25 @@ def run_prepare_launcher():
             rc.place_marker(second_tile, comms.encode_centralized_launch())
 
 def check_attack():
+    global next_attack_tile
     my_pos = rc.get_position()
 
-    # ase 1: Standing on an empty tile that an enemy conveyor/bridge leads into
-    if map_info.is_tile_empty(my_pos):
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx == 0 and dy == 0:
-                    continue
-                adj = Position(my_pos.x + dx, my_pos.y + dy)
-                b_id = rc.get_tile_building_id(adj)
-                if b_id is None or rc.get_team(b_id) == rc.get_team():
-                    continue
-                b_type = rc.get_entity_type(b_id)
-                if b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
-                    if rc.get_position(b_id).add(rc.get_direction(b_id)) == my_pos:
-                        return  # attack mode continues
-                elif b_type == EntityType.BRIDGE:
-                    if rc.get_bridge_target(b_id) == my_pos:
-                        return
+    # List of nearby valid attack tiles
+    attack_tiles = []
 
-    # Case 2: Can place sentinel on empty tile an enemy conveyor/bridge leads into
+    # Check adjacent tiles for enemy conveyors/bridges (Case 2)
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
             adj = Position(my_pos.x + dx, my_pos.y + dy)
             if not map_info.is_on_map(adj) or not map_info.is_tile_empty(adj):
                 continue
+
             for ddx in (-1, 0, 1):
                 for ddy in (-1, 0, 1):
-                    check_pos = Position(my_pos.x + ddx, my_pos.y + ddy)
-                    if not map_info.is_on_map(adj):
+                    check_pos = Position(adj.x + ddx, adj.y + ddy)
+                    if not map_info.is_on_map(check_pos):
                         continue
                     b_id = rc.get_tile_building_id(check_pos)
                     if b_id is None or rc.get_team(b_id) == rc.get_team():
@@ -297,24 +322,30 @@ def check_attack():
                     b_type = rc.get_entity_type(b_id)
                     if b_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
                         if rc.get_position(b_id).add(rc.get_direction(b_id)) == adj:
-                            return
+                            attack_tiles.append(adj)
                     elif b_type == EntityType.BRIDGE:
                         if rc.get_bridge_target(b_id) == adj:
-                            return
+                            attack_tiles.append(adj)
 
-    # Case 3: Standing on an enemy conveyor/bridge, fire
+    # Case 3: standing on enemy conveyor/bridge
     building_id = rc.get_tile_building_id(my_pos)
-    log(f"Targeting {building_id}")
-    if building_id:
-        if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
-            EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE
-        ):
-            return  # attack mode continues
+    if building_id and rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
+        EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE
+    ):
+        attack_tiles.append(my_pos)
 
-    # None matched → switch to RUSH_CORE
+    # If at least one attack tile is nearby or on current tile → stay in ATTACK
     global mode
-    mode = Mode.RUSH_CORE
-    check_rush_core() # BAD PRACTICE, but this is exception
+    if attack_tiles:
+        # store the closest attack tile for run_attack to move to
+        next_attack_tile = min(attack_tiles, key=lambda t: my_pos.distance_squared(t))
+        path = nav.calculate_path(next_attack_tile)
+        if not path:
+            mode = Mode.RUSH_CORE
+            check_rush_core()
+    else:
+        mode = Mode.RUSH_CORE
+        check_rush_core()
 
 def run_attack():
     # place down sentinel if possible
@@ -345,7 +376,14 @@ def run_attack():
                     rc.build_sentinel(candidate, direction)
                     rc.draw_indicator_dot(candidate, mode.r, mode.g, mode.b)
                     return  # override done, skip normal sabotage logic
-        # Helper: find adjacent empty tiles
+                
+    # If there's a next_attack_tile set, move to it first
+    target_tile = next_attack_tile
+    if target_tile and my_pos != target_tile:
+        nav.execute_path()
+        return  # wait until we reach the tile before continuing
+    
+    # Helper: find adjacent empty tile
     adjacent_empty = []
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
@@ -404,6 +442,8 @@ def run_attack():
                     if ddx == 0 and ddy == 0:
                         continue
                     check_pos = Position(adj.x + ddx, adj.y + ddy)
+                    if not map_info.is_on_map(check_pos):
+                        continue
                     b_id = rc.get_tile_building_id(check_pos)
                     if b_id is None:
                         continue
