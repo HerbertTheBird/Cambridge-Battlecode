@@ -263,7 +263,7 @@ def run():
                     continue
 
                 # Compute score for tiebreak
-                score = tile.distance_squared(rc.get_position()) - lid
+                score = -lid
                 if score > best_score:
                     best_score = score
                     best_tile = tile
@@ -332,10 +332,36 @@ def run():
 
     for dest_pos in valid_destinations:
         min_dist_sq_to_conveyance = sys.maxsize
-        for conveyance_pos in all_conveyances:
-            dist_sq = abs(dest_pos.x - conveyance_pos.x) + abs(dest_pos.y - conveyance_pos.y)
-            if dist_sq < min_dist_sq_to_conveyance:
-                min_dist_sq_to_conveyance = dist_sq
+        # closest_conveyance_pos = None
+        # for conveyance_pos in all_conveyances:
+        #     dist_sq = abs(dest_pos.x - conveyance_pos.x) + abs(dest_pos.y - conveyance_pos.y)
+        #     if dist_sq < min_dist_sq_to_conveyance:
+        #         min_dist_sq_to_conveyance = dist_sq
+        #         # Get the building ID at that conveyance tile
+        #     # Find closest conveyance
+        #     for conveyance_pos in all_conveyances:
+        #         dist_sq = abs(dest_pos.x - conveyance_pos.x) + abs(dest_pos.y - conveyance_pos.y)
+        #         if dist_sq < min_dist_sq_to_conveyance:
+        #             min_dist_sq_to_conveyance = dist_sq
+        #             closest_conveyance_pos = conveyance_pos
+
+        #     # If no conveyance found, skip (optional safety)
+        #     if closest_conveyance_pos is None:
+        #         continue
+            
+        #     if closest_conveyance_pos.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
+        #         continue
+        #     conveyance_id = rc.get_tile_building_id(closest_conveyance_pos)
+        #     if conveyance_id is None:
+        #         continue
+
+        #     # Check HP condition
+        #     hp = rc.get_hp(conveyance_id)
+        #     max_hp = rc.get_max_hp(conveyance_id)
+
+        #     # Skip this destination if closest conveyance is under half HP
+        #     if hp * 2 < max_hp:
+        #         min_dist_sq_to_conveyance *= 100
         
         if min_dist_sq_to_conveyance > max_min_dist_sq:
             max_min_dist_sq = min_dist_sq_to_conveyance

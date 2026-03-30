@@ -185,7 +185,7 @@ def run_pre():
                 try:
                     building_type = rc.get_entity_type(building_id)
                     building_team = rc.get_team(building_id)
-                    if building_type == EntityType.HARVESTER and building_team == rc.get_team():
+                    if building_type == EntityType.HARVESTER and building_team == rc.get_team() or building_type == EntityType.BARRIER:
                         blocked = True
                     if building_type != EntityType.MARKER and building_team != rc.get_team():
                         occupied_opponent = True
@@ -607,7 +607,7 @@ def run_explore():
         closest_dist = tile.distance_squared(last_placed_launcher)
 
         # Condition: far enough (>16) but still within vision radius
-        if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > rc.get_builder_bot_cost()[0]:
+        if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > 0:
             if rc.can_build_launcher(tile):
                 rc.build_launcher(tile)
                 last_placed_launcher = tile
@@ -719,7 +719,7 @@ def run_build_harvester():
                     manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
                     harvester_cost = rc.get_harvester_cost()[0]
                     conveyor_cost = rc.get_conveyor_cost()[0]
-                    scale = 1
+                    scale = 100
                     expected_finish = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost) < rc.get_global_resources()[0]
                     if routed >= 0 and (pos.x//2) % 2 == 0 and expected_finish:
                         if rc.can_build_sentinel(pos, pos.direction_to(target_ore).rotate_right()):
@@ -776,7 +776,7 @@ def run_build_harvester():
                     conveyor_cost = rc.get_conveyor_cost()[0]
                     scale = 1.0
 
-                    required_titanium = scale * (harvester_cost + (manhattan_dist - 3) * conveyor_cost)
+                    required_titanium = scale * (harvester_cost + (manhattan_dist) * conveyor_cost - 10 * manhattan_dist)
                     current_titanium = rc.get_global_resources()[0]
 
                     if current_titanium < required_titanium:

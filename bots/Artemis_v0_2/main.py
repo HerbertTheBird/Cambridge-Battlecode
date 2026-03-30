@@ -102,7 +102,10 @@ class Player:
                     self.me = core
                 elif etype == EntityType.BUILDER_BOT:
                     if SPAWN_TURN == 0:
-                        self.me = builder_rush
+                        if (max(abs(c.get_map_width() / 2 - c.get_position().x), abs(c.get_map_height() / 2 - c.get_position().y)) > 40):
+                            self.me = builder
+                        else:
+                            self.me = builder_rush
                     else:
                         self.me = builder
                 elif etype == EntityType.GUNNER:
@@ -124,14 +127,14 @@ class Player:
 
             print(f"{elapsed_us:.3f} μs")
 
-            if end_time - start_time > 0.002:
-                print(
-                    "timed out",
-                    c.get_id(),
-                    c.get_current_round(),
-                    f"{elapsed_us:.3f} μs",
-                    file=sys.stderr,
-                )
+            # if end_time - start_time > 0.002:
+            #     print(
+            #         "timed out",
+            #         c.get_id(),
+            #         c.get_current_round(),
+            #         f"{elapsed_us:.3f} μs",
+            #         file=sys.stderr,
+            #     )
 
         except Exception as e:
             print("Error:", e)

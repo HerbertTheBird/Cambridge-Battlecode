@@ -315,13 +315,14 @@ def run_attack_core():
     
 def run_rush_core():
     my_pos = rc.get_position()
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            adj = Position(my_pos.x + dx, my_pos.y + dy)
-            if (map_info.in_bounds(adj)):
-                if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
-                    if rc.can_build_barrier(adj):
-                        rc.build_barrier(adj)
+    if rc.get_current_round() > 20:
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                adj = Position(my_pos.x + dx, my_pos.y + dy)
+                if (map_info.in_bounds(adj)):
+                    if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
+                        if rc.can_build_barrier(adj):
+                            rc.build_barrier(adj)
     nav.execute_path()
 
 def check_prepare_launcher():

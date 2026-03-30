@@ -81,7 +81,7 @@ def run():
                 return  # Only spawn 1 builder for turn 1
     
     # Normal spawning logic
-    if num_spawned < max_spawn or rc.get_global_resources()[0] > 1500 + 5 * rc.get_scale_percent() or rc.get_hp() < 500:
+    if num_spawned < max_spawn or rc.get_global_resources()[0] > 8000 + 4 * rc.get_scale_percent() or rc.get_hp() < 500:
         spawn_pos = random_spawn_tile()
         if spawn_pos is not None:
             rc.spawn_builder(spawn_pos)
