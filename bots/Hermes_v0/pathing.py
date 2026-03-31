@@ -37,7 +37,7 @@ DIRS = [
     (1, 1, 1),
 ]
 
-bridge_cost = 10
+bridge_cost = 15
 CONV = [
     (0, -1, 1),
     (0, 1, 1),
