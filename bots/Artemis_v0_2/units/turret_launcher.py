@@ -21,7 +21,7 @@ def run():
     
     nearby_units = rc.get_nearby_units(dist_sq=2)
     for unit in nearby_units:
-        if rc.get_team(unit) == rc.get_team() and rc.get_entity_type(unit) == EntityType.BUILDER_BOT and unit <= 4:
+        if rc.get_team(unit) == rc.get_team() and rc.get_entity_type(unit) == EntityType.BUILDER_BOT and (unit <= 4 or rc.get_current_round() > 1050 and unit % 2 == 0):
             rush_messages.append((unit, rc.get_position(unit)))
     pos = rc.get_position()
     for target, id, p in messages:

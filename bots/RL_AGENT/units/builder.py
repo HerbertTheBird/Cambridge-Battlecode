@@ -663,33 +663,36 @@ def run_explore_athena():
     pass
 
 last_placed_launcher = None
+launcher_count = 0
 def run_explore():
-    global explore_target, turns_since_last_explore_target, last_placed_launcher
+    global explore_target, turns_since_last_explore_target, last_placed_launcher, launcher_count
     my_pos = rc.get_position()
 
     # === Launcher placement logic: spread launchers ===
-    for other in rc.get_nearby_buildings():
-            if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
-                if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
-                    last_placed_launcher = rc.get_position(other)
-    for tile in rc.get_nearby_tiles(2):
-        if not map_info.is_tile_empty(tile):
-            continue
+    if (launcher_count < 3):
+        for other in rc.get_nearby_buildings():
+                if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
+                    if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
+                        last_placed_launcher = rc.get_position(other)
+        for tile in rc.get_nearby_tiles(2):
+            if not map_info.is_tile_empty(tile):
+                continue
 
-        if not last_placed_launcher:
-            # No known launchers? optional: skip placement
-            continue
+            if not last_placed_launcher:
+                # No known launchers? optional: skip placement
+                continue
 
-        # Find distance to closest launcher
-        closest_dist = tile.distance_squared(last_placed_launcher)
+            # Find distance to closest launcher
+            closest_dist = tile.distance_squared(last_placed_launcher)
 
-        # Condition: far enough (>16) but still within vision radius
-        if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > 0:
-            if rc.can_build_launcher(tile):
-                rc.build_launcher(tile)
-                last_placed_launcher = tile
-                log(f"Placed launcher at {tile}")
-                return  # only build one per turn
+            # Condition: far enough (>16) but still within vision radius
+            if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > launcher_count * 100:
+                if rc.can_build_launcher(tile):
+                    rc.build_launcher(tile)
+                    last_placed_launcher = tile
+                    launcher_count += 1
+                    log(f"Placed launcher at {tile}")
+                    return  # only build one per turn
 
     if explore_target is None:
         force_generate_explore_target()

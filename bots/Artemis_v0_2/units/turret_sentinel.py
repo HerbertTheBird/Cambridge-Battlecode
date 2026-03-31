@@ -93,6 +93,9 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
 
 
 def run():
+    get_tile_building_id = rc.get_tile_building_id
+    get_hp = rc.get_hp
+    get_tile_builder_bot_id = rc.get_tile_builder_bot_id
     print("i am a sentinel")
     if rc.get_action_cooldown() > 0:
         return
@@ -110,22 +113,33 @@ def run():
     best_priority = 999  # 3. Cache the best priority score
 
     pos_x, pos_y = my_pos.x, my_pos.y
+    best_hp = math.inf  # NEW
 
     for x in range(pos_x - vision_r, pos_x + vision_r + 1):
         for y in range(pos_y - vision_r, pos_y + vision_r + 1):
             p = Position(x, y)
             if can_fire(p):
-                # Only calculate priority once per valid tile
                 current_priority = priority(p, my_pos, my_team)
 
-                if current_priority < best_priority:
+                # Get target id (prefer builder if exists, else building)
+                target_id = get_tile_builder_bot_id(p)
+                if not target_id:
+                    target_id = get_tile_building_id(p)
+
+                current_hp = get_hp(target_id) if target_id else math.inf
+
+                # Compare
+                if (
+                    current_priority < best_priority or
+                    (current_priority == best_priority and current_hp < best_hp)
+                ):
                     best_priority = current_priority
                     best_target = p
+                    best_hp = current_hp
 
-                    # 4. Early exit: 0 is the highest priority, no need to keep searching
-                    if best_priority == 0:
+                    if best_priority == 0 and best_hp == 0:
                         break
-        if best_priority == 0:
+        if best_priority == 0 and best_hp == 0:
             break
 
     if best_priority == 9 or best_target is None:

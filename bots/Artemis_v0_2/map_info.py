@@ -279,7 +279,7 @@ def _update_building_blocked_at(pos: Position) -> None:
         building_blocked_no_barrier.add(pos)
     if not is_conv:
         building_blocked_no_conveyors.add(pos)
-    if not is_barrier and not is_conv:
+    if not is_barrier and not is_conv and not t is _ET_GUNNER:
         building_blocked_no_barrier_no_conveyors.add(pos)
 def mark_known_conveyors() -> None:
     rc_draw_indicator_dot = rc.draw_indicator_dot
@@ -357,6 +357,7 @@ def update() -> None:
     env_ore_ax = _ENV_ORE_AX
     env_ore_ti = _ENV_ORE_TI
     et_road    = _ET_ROAD
+    et_gunner    = _ET_GUNNER
     et_marker  = _ET_MARKER
     et_barrier = _ET_BARRIER
     et_core    = _ET_CORE
@@ -504,7 +505,7 @@ def update() -> None:
                 if t is not et_road and t is not et_marker:
                     is_barrier = t is et_barrier
                     bb_all_add(tile)
-                    if not is_barrier:
+                    if not is_barrier and t is not et_gunner:
                         bb_nbar_add(tile)
                     if not is_conv:
                         bb_nconv_add(tile)

@@ -95,19 +95,24 @@ class Player:
             start_time = time.perf_counter()
             etype = c.get_entity_type()
 
-            if not self.initialized:
+            if not self.initialized: 
                 random.seed(c.get_current_round())
 
                 if etype == EntityType.CORE:
                     self.me = core
                 elif etype == EntityType.BUILDER_BOT:
                     if SPAWN_TURN == 0:
-                        if (max(abs(c.get_map_width() / 2 - c.get_position().x), abs(c.get_map_height() / 2 - c.get_position().y)) > 40):
+                        if (max(abs(c.get_map_width() / 2 - c.get_position().x), abs(c.get_map_height() / 2 - c.get_position().y)) > 20):
                             self.me = builder
                         else:
                             self.me = builder_rush
                     else:
-                        self.me = builder
+                        if (c.get_current_round() > 1000 and c.get_id() % 2 == 0):
+                            if (self.me == builder):
+                                self.initialized = False
+                            self.me = builder_rush
+                        else:
+                            self.me = builder
                 elif etype == EntityType.GUNNER:
                     self.me = gunner
                 elif etype == EntityType.SENTINEL:
