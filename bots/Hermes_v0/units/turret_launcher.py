@@ -15,13 +15,14 @@ _height = 0
 _visible_passable = []
 _search_seen = []
 _search_dist = []
+_search_start_edge = []
 _heap = []
 _visible_run_id = 0
 _search_run_id = 0
 _BEST_TILE_MAX_US = 1800
 
 def init(c: Controller):
-    global rc, _width, _height, _visible_passable, _search_seen, _search_dist
+    global rc, _width, _height, _visible_passable, _search_seen, _search_dist, _search_start_edge
     rc = c
     _width = c.get_map_width()
     _height = c.get_map_height()
@@ -29,6 +30,7 @@ def init(c: Controller):
     _visible_passable = [0] * grid_size
     _search_seen = [0] * grid_size
     _search_dist = [0] * grid_size
+    _search_start_edge = [0] * grid_size
     comms.init(c)
     map_info.init(c)
 
@@ -76,6 +78,7 @@ def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visi
     passable = _visible_passable
     seen = _search_seen
     dist = _search_dist
+    start_edge = _search_start_edge
     heap = _heap
     heap.clear()
 
@@ -98,8 +101,9 @@ def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visi
 
     target_x = target.x
     target_y = target.y
+    target_in_vision = rc.is_in_vision(target)
 
-    if rc.is_in_vision(target):
+    if target_in_vision:
         target_idx = target_y * width + target_x
         if passable[target_idx] != visible_run_id:
             return None
@@ -122,8 +126,11 @@ def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visi
             step_y = y + (target_y > y) - (target_y < y)
             if is_in_vision(Position(step_x, step_y)):
                 continue
+            start_edge[idx] = run_id
 
-            d0 = max(abs(target_x - x), abs(target_y - y))
+            dx0 = abs(target_x - x)
+            dy0 = abs(target_y - y)
+            d0 = max(dx0, dy0) + dx0 + dy0
             if seen[idx] != run_id or d0 < dist[idx]:
                 seen[idx] = run_id
                 dist[idx] = d0
@@ -139,7 +146,10 @@ def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visi
 
         tile = candidates.get(idx)
         if tile is not None:
-            return tile
+            if (not target_in_vision) and start_edge[idx] == run_id:
+                tile = None
+            else:
+                return tile
 
         x = idx % width
         y = idx // width

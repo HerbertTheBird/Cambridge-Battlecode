@@ -7,10 +7,8 @@ from array import array
 import time
 import units.builder as builder
 import sys
-WEIGHT = 3
-MIN_WEIGHT = 1.2
-TIME_CUTOFF = 1600
-MAX_TIME = 400
+WEIGHT = 2
+MIN_WEIGHT = 1.5
 ZIG_LENGTH = 2
 
 ALL_DIRS = list(Direction)
@@ -61,6 +59,10 @@ CONV = [
     (1, -2, bridge_cost),
     (-1, 2, bridge_cost),
     (-1, -2, bridge_cost),
+    (-2, 0, bridge_cost),
+    (2, 0, bridge_cost),
+    (0, 2, bridge_cost),
+    (0, -2, bridge_cost),
 ]
 
 class Pathing:
@@ -107,7 +109,7 @@ class Pathing:
         self.start  = array('I', [0]) * (self.width * self.height)
         self.avoid   = array('I', [0]) * (self.width * self.height)
         self.best_g  = array('I', [0]) * (self.width * self.height)
-        self.MAX_ITER = int(math.sqrt(self.width * self.height))*100
+        self.MAX_ITER = int(math.sqrt(self.width * self.height))*10
         self.heap = []
         self.path = []
         self.path_idx = 0
@@ -184,6 +186,7 @@ class Pathing:
             path_out.append(Position(pos % self.width, pos // self.width))
             pos = self.parent[pos] if self.target[pos] != self.run_id else -1
         return path_out
+
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
         builder.log("a* start")
         if avoid_p is None:
@@ -252,7 +255,7 @@ class Pathing:
             g *= -1
             nx = pos%width
             ny = pos//width
-            MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT-MIN_WEIGHT)
+            MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT_L-MIN_WEIGHT)
             if avoid[pos] == avoid_id:
                 continue
             if g > best_g[pos]:
@@ -271,16 +274,13 @@ class Pathing:
             path_out = self.reconstruct_path(sx+sy*width)
             heap.clear()
             return path_out
-        start_cpu_time = rc.get_cpu_time_elapsed()
         # c = 0
         while heap:
             # c += 1
             # if c > 20:
             #     return None
-            if rc.get_cpu_time_elapsed() > TIME_CUTOFF or rc.get_cpu_time_elapsed()-start_cpu_time > MAX_TIME:
-                return None
             self.iter += 1
-            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/100, 1)*(WEIGHT-MIN_WEIGHT)
+            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/100, 1)*(WEIGHT_L-MIN_WEIGHT)
             if self.iter > self.MAX_ITER:
                 break
             _, g, card, _, zig_time, pos, _ = heappop(heap)
@@ -464,7 +464,7 @@ class Pathing:
         for x in range(width_l):
             for y in range(height_l):
                 b = building_cache[x][y]
-                if b and is_conveyor(b.type) and b.load and b.load <= 3 and b.team == my_team and Position(x, y) not in avoid_extra:
+                if b and is_conveyor(b.type) and b.load and b.load < 3 and b.team == my_team and Position(x, y) not in avoid_extra and b.load_confirmed:
                     self.rc.draw_indicator_line(Position(0, 0), Position(x, y), 0, 255, 0)
                     target.add(Position(x, y))
 

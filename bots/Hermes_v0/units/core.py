@@ -61,7 +61,7 @@ def run():
     max_spawn = 1
     core_pos = rc.get_position()
 
-    if rc.get_current_round() <= 1:
+    if rc.get_current_round() <= 2:
         dx = max(-1, min(1, map_info.MAP_CENTER.x - core_pos.x))
         dy = max(-1, min(1, map_info.MAP_CENTER.y - core_pos.y))
         spawn_pos = Position(core_pos.x + dx, core_pos.y + dy)

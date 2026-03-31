@@ -84,7 +84,7 @@ def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
     turns_since_last_explore_target = 0
 
-    for _ in range(10):  # slightly more aggressive
+    for _ in range(50):  # slightly more aggressive
         random_x = random.randint(0, map_info.width - 1)
         random_y = random.randint(0, map_info.height - 1)
         if map_info.ground[random_x][random_y] is None:
@@ -109,10 +109,13 @@ def update_target_ore():
                 continue
             blocked_ores[new_pos] = max(blocked_ores.get(new_pos, 0), turn+10)
     prev_target_ore = target_ore
+    target_ore = None
     for pos in rc.get_nearby_tiles():
         if map_info.ground[pos.x][pos.y] == Environment.ORE_TITANIUM:
             if not target_ore or my_pos.distance_squared(pos) < my_pos.distance_squared(target_ore) or pos == prev_target_ore:
                 if map_info.building[pos.x][pos.y]:
+                    if pos == prev_target_ore:
+                        print(map_info.building[pos.x][pos.y].team, rc.get_team(), map_info.building[pos.x][pos.y].type)
                     if map_info.building[pos.x][pos.y].team == rc.get_team() and map_info.building[pos.x][pos.y].type == EntityType.HARVESTER:
                         if pos == prev_target_ore:
                             prev_target_ore = None
@@ -260,23 +263,71 @@ def run_build_harvester():
     else:
         # If we are on the ore, move off.
         if rc.get_position() == target_ore:
+            def is_blocking_neighbor(pos: Position) -> bool:
+                if pos == target_ore:
+                    return True
+                if not map_info.is_on_map(pos):
+                    return True
+                if rc.get_tile_env(pos) == Environment.WALL:
+                    return True
+
+                building_id = rc.get_tile_building_id(pos)
+                if building_id is None:
+                    return False
+
+                building_type = rc.get_entity_type(building_id)
+                building_team = rc.get_team(building_id)
+                if building_team == rc.get_team():
+                    return (
+                        building_type is EntityType.HARVESTER
+                        or building_type is EntityType.FOUNDRY
+                        or map_info.is_turret(building_type)
+                    )
+
+                if map_info.is_conveyor(building_type):
+                    return False
+                return building_type is not EntityType.ROAD and building_type is not EntityType.MARKER
+
+            def is_fully_surrounded(pos: Position) -> bool:
+                for d in all_dirs:
+                    if d is Direction.CENTRE:
+                        continue
+                    dx, dy = d.delta()
+                    neighbor = Position(pos.x + dx, pos.y + dy)
+                    if not is_blocking_neighbor(neighbor):
+                        return False
+                return True
+
             building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_team(building_id) != rc.get_team():
                 rc.fire()
                 return
             moved = False
             for d in random.sample(all_dirs, len(all_dirs)):
+                if d is Direction.CENTRE:
+                    continue
+                dx, dy = d.delta()
+                next_pos = Position(rc.get_position().x + dx, rc.get_position().y + dy)
+                if is_fully_surrounded(next_pos):
+                    continue
                 if rc.can_move(d):
                     rc.move(d)
                     moved = True
+                    break
             # nowhere to move
             if not moved:
                 my_pos = rc.get_position()
                 for d in random.sample(all_dirs, len(all_dirs)):
+                    if d is Direction.CENTRE:
+                        continue
                     dx, dy = d.delta()
-                    if map_info.is_tile_empty(Position(my_pos.x + dx, my_pos.y + dy)):
+                    next_pos = Position(my_pos.x + dx, my_pos.y + dy)
+                    if is_fully_surrounded(next_pos):
+                        continue
+                    if map_info.is_tile_empty(next_pos):
                         nav.move(d)
                         moved = True
+                        break
 
         # If adjacent to the ore, clear it and build.
         if rc.get_position().distance_squared(target_ore) <= 2:
@@ -345,6 +396,7 @@ def check_route():
 def run_route():
     global route_idx, ore_path, launcher_position, mode
     if ore_path:
+        print(ore_path)
         if launcher_position:
             place = True
             nearby_conv = None
@@ -398,4 +450,3 @@ def run_route():
                     mode = Mode.EXPLORE
                     return
                 
-
