@@ -19,8 +19,8 @@ class Mode(Enum):
         self.b = b
         self.desc = desc
         
-def log(text : str):
-    print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {text}")
+def log(text):
+    print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {str(text)}")
 
 mode = Mode.EXPLORE
 blocked_ores = {}
