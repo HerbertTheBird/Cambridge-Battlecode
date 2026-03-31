@@ -435,13 +435,13 @@ class Pathing:
 
         if marked:
             return
+        if path is None:
+            return None
         if len(path) < 1:
             if destroy_barrier:
                 return False
             else:
                 return self.child_pathing.move_to(target, True)
-        if path is None:
-            return None
         self.execute_path()
         return True
 

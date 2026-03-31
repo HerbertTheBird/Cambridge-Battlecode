@@ -6,113 +6,165 @@ import comms
 import math
 rc: Controller | None = None
 all_dirs = list(Direction)
+_DIRS_8 = (
+    (1, 0), (-1, 0), (0, 1), (0, -1),
+    (1, 1), (1, -1), (-1, 1), (-1, -1),
+)
+_width = 0
+_height = 0
+_visible_passable = []
+_search_seen = []
+_search_dist = []
+_heap = []
+_visible_run_id = 0
+_search_run_id = 0
+_BEST_TILE_MAX_US = 1800
 
 def init(c: Controller):
-    global rc
+    global rc, _width, _height, _visible_passable, _search_seen, _search_dist
     rc = c
+    _width = c.get_map_width()
+    _height = c.get_map_height()
+    grid_size = _width * _height
+    _visible_passable = [0] * grid_size
+    _search_seen = [0] * grid_size
+    _search_dist = [0] * grid_size
     comms.init(c)
     map_info.init(c)
 
-from collections import deque
 import heapq
 
-def launch_distance_map(target):
-    my_team = rc.get_team()
+def prepare_visible_passability(nearby_tiles):
+    global _visible_run_id
+    _visible_run_id += 1
+    run_id = _visible_run_id
 
-    def key(pos):
-        return (pos.x, pos.y)
+    passable = _visible_passable
+    get_tile_env = rc.get_tile_env
+    get_tile_building_id = rc.get_tile_building_id
+    get_entity_type = rc.get_entity_type
 
-    def chebyshev(a, b):
-        return max(abs(a.x - b.x), abs(a.y - b.y))
-
-    def is_passable(pos):
-        if not map_info.in_bounds(pos):
-            return False
-        if not rc.is_in_vision(pos):
-            return False
-        if rc.get_tile_env(pos) == Environment.WALL:
-            return False
-
-        building_id = rc.get_tile_building_id(pos)
-        if building_id is not None:
-            team = rc.get_team(building_id)
-            entity_type = rc.get_entity_type(building_id)
-
-            # Enemy building
-            if team != my_team:
-                if entity_type != EntityType.ROAD and not map_info.is_conveyor(entity_type):
-                    return False
-
-            # Friendly building
-            else:
-                if (
-                    entity_type != EntityType.ROAD
-                    and not map_info.is_conveyor(entity_type)
-                ):
-                    return False
-
-        return True
-
-    directions = [
-        (1, 0), (-1, 0), (0, 1), (0, -1),
-        (1, 1), (1, -1), (-1, 1), (-1, -1),
-    ]
-
-    dist = {}
-    pq = []
-
-    if rc.is_in_vision(target):
-        if not is_passable(target):
-            return dist
-        k = key(target)
-        dist[k] = 0
-        heapq.heappush(pq, (0, target.x, target.y, target))
-    else:
-        # Seed with visible frontier tiles that step toward the target leaves vision
-        for pos in rc.get_nearby_tiles():
-            if not map_info.in_bounds(pos):
-                continue
-            if not rc.is_in_vision(pos):
-                continue
-            if not is_passable(pos):
-                continue
-
-            step = pos.add(pos.direction_to(target))
-            if rc.is_in_vision(step):
-                continue
-
-            d0 = chebyshev(pos, target)
-            k = key(pos)
-
-            if k not in dist or d0 < dist[k]:
-                dist[k] = d0
-                heapq.heappush(pq, (d0, pos.x, pos.y, pos))
-
-    while pq:
-        cur_d, _, _, cur = heapq.heappop(pq)
-        cur_k = key(cur)
-
-        if cur_d != dist[cur_k]:
+    for pos in nearby_tiles:
+        x = pos.x
+        y = pos.y
+        if get_tile_env(pos) == Environment.WALL:
             continue
 
-        for dx, dy in directions:
-            nxt = Position(cur.x + dx, cur.y + dy)
-            nxt_k = key(nxt)
+        building_id = get_tile_building_id(pos)
+        if building_id is None:
+            passable[y * _width + x] = run_id
+            continue
 
-            if not is_passable(nxt):
+        b_type = get_entity_type(building_id)
+        if b_type == EntityType.ROAD or map_info.is_conveyor(b_type):
+            passable[y * _width + x] = run_id
+
+    return run_id
+
+
+def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visible_run_id: int):
+    global _search_run_id
+    _search_run_id += 1
+    run_id = _search_run_id
+    start_us = rc.get_cpu_time_elapsed()
+
+    def over_budget() -> bool:
+        return rc.get_cpu_time_elapsed() - start_us >= _BEST_TILE_MAX_US
+
+    width = _width
+    height = _height
+    passable = _visible_passable
+    seen = _search_seen
+    dist = _search_dist
+    heap = _heap
+    heap.clear()
+
+    candidates = {}
+
+    for i, tile in enumerate(nearby_tiles):
+        if (i & 15) == 0 and over_budget():
+            return None
+
+        idx = tile.y * width + tile.x
+        if passable[idx] != visible_run_id:
+            continue
+        if rc.can_launch(builder_pos, tile):
+            candidates[idx] = tile
+
+    if not candidates:
+        return None
+    if over_budget():
+        return None
+
+    target_x = target.x
+    target_y = target.y
+
+    if rc.is_in_vision(target):
+        target_idx = target_y * width + target_x
+        if passable[target_idx] != visible_run_id:
+            return None
+        seen[target_idx] = run_id
+        dist[target_idx] = 0
+        heapq.heappush(heap, (0, target_idx))
+    else:
+        is_in_vision = rc.is_in_vision
+        for i, pos in enumerate(nearby_tiles):
+            if (i & 15) == 0 and over_budget():
+                return None
+
+            x = pos.x
+            y = pos.y
+            idx = y * width + x
+            if passable[idx] != visible_run_id:
+                continue
+
+            step_x = x + (target_x > x) - (target_x < x)
+            step_y = y + (target_y > y) - (target_y < y)
+            if is_in_vision(Position(step_x, step_y)):
+                continue
+
+            d0 = max(abs(target_x - x), abs(target_y - y))
+            if seen[idx] != run_id or d0 < dist[idx]:
+                seen[idx] = run_id
+                dist[idx] = d0
+                heapq.heappush(heap, (d0, idx))
+
+    while heap:
+        if over_budget():
+            return None
+
+        cur_d, idx = heapq.heappop(heap)
+        if seen[idx] != run_id or cur_d != dist[idx]:
+            continue
+
+        tile = candidates.get(idx)
+        if tile is not None:
+            return tile
+
+        x = idx % width
+        y = idx // width
+        for dx, dy in _DIRS_8:
+            nx = x + dx
+            ny = y + dy
+            if nx < 0 or nx >= width or ny < 0 or ny >= height:
+                continue
+
+            nidx = ny * width + nx
+            if passable[nidx] != visible_run_id:
                 continue
 
             nd = cur_d + 1
-            if nxt_k not in dist or nd < dist[nxt_k]:
-                dist[nxt_k] = nd
-                heapq.heappush(pq, (nd, nxt.x, nxt.y, nxt))
+            if seen[nidx] != run_id or nd < dist[nidx]:
+                seen[nidx] = run_id
+                dist[nidx] = nd
+                heapq.heappush(heap, (nd, nidx))
 
-    return dist
+    return None
 def run():
-    map_info.update()
-
     messages = comms.decode_launch()
     pos = rc.get_position()
+    nearby_tiles = rc.get_nearby_tiles()
+    visible_run_id = prepare_visible_passability(nearby_tiles)
 
     for target, launch_id, turn, p in messages:
         if rc.get_action_cooldown() != 0:
@@ -130,39 +182,15 @@ def run():
             if not map_info.in_bounds(adj):
                 continue
             builder_id = rc.get_tile_builder_bot_id(adj)
-            if builder_id and (builder_id & comms._ID_MASK):
+            if builder_id and ((builder_id & comms._ID_MASK) == launch_id):
                 builder_pos = adj
                 break
 
         if not builder_pos:
             continue
 
-        dist = launch_distance_map(target)
-
-        best = None
-        best_d = None
-
-        for tile in rc.get_nearby_tiles():
-            if not rc.is_tile_passable(tile):
-                continue
-            if not rc.can_launch(builder_pos, tile):
-                continue
-
-            k = (tile.x, tile.y)
-            if k not in dist:
-                continue
-
-            d = dist[k]
-            if best is None or d < best_d:
-                best = tile
-                best_d = d
-
-        if (
-            best
-            and rc.can_launch(builder_pos, best)
-            and best in dist
-            and dist[best] < dist.get(builder_pos, 10000)
-        ):
+        best = best_launch_tile(target, builder_pos, nearby_tiles, visible_run_id)
+        if best:
             rc.launch(builder_pos, best)
     
     nearby_units = rc.get_nearby_units(dist_sq=2)
@@ -177,10 +205,14 @@ def run():
         try:
             if rc.get_team(unit_id) != my_team and rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT:
                 bot_pos = rc.get_position(unit_id)
-                building_on_tile = map_info.building[bot_pos.x][bot_pos.y]
+                building_id = rc.get_tile_building_id(bot_pos)
                 
                 # Primary Target: opponent bot on our conveyor/bridge
-                if building_on_tile and building_on_tile.team == my_team and map_info.is_conveyor(building_on_tile.type):
+                if (
+                    building_id is not None
+                    and rc.get_team(building_id) == my_team
+                    and map_info.is_conveyor(rc.get_entity_type(building_id))
+                ):
                     primary_targets.append(unit_id)
                 else:
                     secondary_targets.append(unit_id)
@@ -200,37 +232,32 @@ def run():
     # --- Find Best Launch Destination ---
     all_roads = []
     all_conveyances = []
-
-    for x in range(map_info.width):
-        for y in range(map_info.height):
-            b = map_info.building[x][y]
-            if b:
-                pos = Position(x, y)
-                if b.type == EntityType.ROAD:
-                    all_roads.append(pos)
-                elif map_info.is_conveyor(b.type):
-                    all_conveyances.append(pos)
-                elif b.type == EntityType.LAUNCHER and b.team != rc.get_team():
-                    for dir in all_dirs:
-                        all_conveyances.append(pos.add(dir))
-
-    # --- Priority launch destinations (launcher-based) ---
-    priority_destinations = []
-
     allied_launchers = []
     enemy_launchers = []
 
-    for x in range(map_info.width):
-        for y in range(map_info.height):
-            b = map_info.building[x][y]
-            if not b:
-                continue
-            temppos = Position(x, y)
-            if b.type == EntityType.LAUNCHER:
-                if b.team == my_team:
-                    allied_launchers.append((b.id, temppos))
+    for building_id in rc.get_nearby_buildings():
+        try:
+            b_type = rc.get_entity_type(building_id)
+            b_pos = rc.get_position(building_id)
+            if b_type == EntityType.ROAD:
+                all_roads.append(b_pos)
+            elif map_info.is_conveyor(b_type):
+                all_conveyances.append(b_pos)
+            elif b_type == EntityType.LAUNCHER:
+                b_team = rc.get_team(building_id)
+                if b_team == my_team:
+                    allied_launchers.append((building_id, b_pos))
                 else:
-                    enemy_launchers.append((b.id, temppos))
+                    enemy_launchers.append((building_id, b_pos))
+                    for dir in all_dirs:
+                        around = b_pos.add(dir)
+                        if map_info.in_bounds(around):
+                            all_conveyances.append(around)
+        except GameError:
+            continue
+
+    # --- Priority launch destinations (launcher-based) ---
+    priority_destinations = []
 
     best_score = -float('inf')
     best_tile = None

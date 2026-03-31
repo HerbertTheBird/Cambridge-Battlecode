@@ -149,6 +149,7 @@ def check_build_harvester():
     update_target_ore()
     if not target_ore:
         mode = Mode.EXPLORE
+        return
     if nav.calculate_path(target_ore) == []:
         blocked_ores[target_ore] = rc.get_current_round() + 150
         target_ore = None
@@ -166,7 +167,7 @@ def run_explore():
         return
 
     # loop until we find a target we can path to and move.
-    if nav.move_to(explore_target) == []:
+    if nav.move_to(explore_target) == False:
         force_generate_explore_target()  # generates new target for next attempt
 
     turns_since_last_explore_target += 1
