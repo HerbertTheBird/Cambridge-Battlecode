@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import deque
-
+import time
 def is_on_map(pos: Position):
     return 0 <= pos.x < width and 0 <= pos.y < height
 CARDINALS = [
@@ -37,9 +37,12 @@ _ET_SPLITTER          = EntityType.SPLITTER
 _ET_CORE              = EntityType.CORE
 _ET_BUILDER_BOT       = EntityType.BUILDER_BOT
 _ET_HARVESTER         = EntityType.HARVESTER
+_ET_LAUNCHER          = EntityType.LAUNCHER
 _ET_GUNNER            = EntityType.GUNNER
 _ET_SENTINEL          = EntityType.SENTINEL
 _ET_BREACH            = EntityType.BREACH
+_RT_AXIONITE          = ResourceType.RAW_AXIONITE
+_RT_TITANIUM          = ResourceType.TITANIUM
 _ENV_EMPTY   = Environment.EMPTY
 _ENV_ORE_AX  = Environment.ORE_AXIONITE
 _ENV_ORE_TI  = Environment.ORE_TITANIUM
@@ -52,6 +55,7 @@ _CARDINAL_OFFSETS = {
     Direction.WEST:  (-1, 0),
     Direction.EAST:  (1, 0),
 }
+_DIRECTION_DELTAS = {d: d.delta() for d in Direction}
 rc = None
 width = height = 0
 MAP_CENTER = None
@@ -78,6 +82,23 @@ building_blocked_no_conveyors: set[Position] = set()
 building_blocked_no_barrier_no_conveyors: set[Position] = set()
 my_core_area: set[Position] = set()
 their_core_area: set[Position] = set()
+_load_next_idx: list[int] = []
+_load_indegree: list[int] = []
+_load_accum: list[float] = []
+_load_final: list[float] = []
+_load_touched: list[bool] = []
+_load_harvester_fed: list[bool] = []
+_load_cycle_seen: list[bool] = []
+_load_snapshot_conveyor: list[bool] = []
+_load_snapshot_next_raw: list[int] = []
+_load_snapshot_seed: list[float | None] = []
+_load_terminal_confirm: list[bool] = []
+_load_confirmed: list[bool] = []
+_load_ore_code: list[int] = []
+_load_queue: list[int] = []
+_load_order: list[int] = []
+_load_recompute_state = None
+_CYCLE_DEFAULT_LOAD = 4.0
 # --- FIX 3: slots=True eliminates per-instance __dict__.
 @dataclass(slots=True)
 class Building:
@@ -92,7 +113,9 @@ class Building:
     bridge_target: Position | None = None
     conveyor_speed: int | None = None
     stored_resource_id: int | None = None
-    load: int | None = None
+    load: float | None = None
+    load_confirmed: bool = True
+    transporting_ore: Environment | None = None
 def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < width and 0 <= pos.y < height
 def init(c: Controller):
@@ -102,6 +125,12 @@ def init(c: Controller):
     global building_blocked_all, building_blocked_no_barrier
     global building_blocked_no_conveyors, building_blocked_no_barrier_no_conveyors
     global my_core_area, their_core_area
+    global _load_next_idx, _load_indegree, _load_accum, _load_final
+    global _load_touched, _load_harvester_fed, _load_cycle_seen
+    global _load_snapshot_conveyor, _load_snapshot_next_raw, _load_snapshot_seed
+    global _load_terminal_confirm, _load_confirmed, _load_ore_code
+    global _load_queue, _load_order
+    global _load_recompute_state
     global MAP_CENTER
     rc = c
     width = rc.get_map_width()
@@ -121,6 +150,23 @@ def init(c: Controller):
     building_blocked_no_barrier_no_conveyors = set()
     my_core_area = set()
     their_core_area = set()
+    grid_size = width * height
+    _load_next_idx = [-1] * grid_size
+    _load_indegree = [0] * grid_size
+    _load_accum = [0.0] * grid_size
+    _load_final = [0.0] * grid_size
+    _load_touched = [False] * grid_size
+    _load_harvester_fed = [False] * grid_size
+    _load_cycle_seen = [False] * grid_size
+    _load_snapshot_conveyor = [False] * grid_size
+    _load_snapshot_next_raw = [-1] * grid_size
+    _load_snapshot_seed = [None] * grid_size
+    _load_terminal_confirm = [False] * grid_size
+    _load_confirmed = [False] * grid_size
+    _load_ore_code = [0] * grid_size
+    _load_queue = []
+    _load_order = []
+    _load_recompute_state = None
 def hor_flip(pos: Position):
     return Position(width - 1 - pos.x, pos.y)
 def ver_flip(pos: Position):
@@ -172,7 +218,7 @@ def core_center(core_id: int, tile: Position) -> Position:
 def is_conveyor(type: EntityType):
     return type is _ET_CONVEYOR or type is _ET_ARMOURED_CONVEYOR or type is _ET_BRIDGE or type is _ET_SPLITTER
 def is_turret(type: EntityType):
-    return type is _ET_GUNNER or type is _ET_SENTINEL or type is _ET_BREACH
+    return type is _ET_LAUNCHER or type is _ET_GUNNER or type is _ET_SENTINEL or type is _ET_BREACH
 def leads_to_friendly_turret(start_building_id, max_depth=20):
     """
     Returns True if following the outputs of this enemy bridge/conveyor
@@ -436,6 +482,7 @@ def update() -> None:
         has_sr  = etv in hsr_vals
         stored_resource_id = rc_get_stored_resource_id(entity_id) if has_sr else None
         stored_resource = rc_get_stored_resource(entity_id) if (is_conv and has_sr) else None
+        transporting_ore = _ore_env_from_code(_ore_code_from_resource(stored_resource)) if is_conv else None
         prev_is_conv = prev_building is not None and prev_building.is_conveyor_type
         speed = None
         if seen_last_turn and is_conv and prev_is_conv:
@@ -472,6 +519,9 @@ def update() -> None:
             prev_building.stored_resource_id = stored_resource_id
             prev_building.conveyor_speed = speed
             prev_building.load = load
+            prev_building.transporting_ore = transporting_ore
+            if not is_conv:
+                prev_building.load_confirmed = True
             new_building = prev_building
             # Type unchanged => blocked sets unchanged; skip entirely.
         else:
@@ -491,6 +541,8 @@ def update() -> None:
                 stored_resource_id=stored_resource_id,
                 conveyor_speed=speed,
                 load=load,
+                load_confirmed=not is_conv,
+                transporting_ore=transporting_ore,
             )
             building_local[x][y] = new_building
             # --- FIX 16: inlined _update_building_blocked_at, only when type changed.
@@ -716,110 +768,71 @@ def next_conveyor_pos(pos: Position, b: Building) -> Position | None:
 
     return None
 
+def _ore_code_from_env(env: Environment | None) -> int:
+    if env is _ENV_ORE_AX:
+        return 2
+    if env is _ENV_ORE_TI:
+        return 1
+    return 0
 
-def can_accept_load(
-    start_pos: Position,
-    max_load: int = 3,
-    chain_len: int = 10,
-) -> bool:
-    """
-    Returns True if this conveyor and the next `chain_len` conveyors
-    can accept more load.
+def _ore_code_from_resource(resource: ResourceType | None) -> int:
+    if resource is _RT_AXIONITE:
+        return 2
+    if resource is _RT_TITANIUM:
+        return 1
+    return 0
 
-    Rules:
-    - If any known load >= max_load → return False
-    - If a future conveyor load is None → stop early and return True
-    - If chain ends → return True
-    - Prevent infinite loops
-    """
-    if not in_bounds(start_pos):
-        return False
-    if not building[start_pos.x][start_pos.y] or building[start_pos.x][start_pos.y].team != rc.get_team() or not is_conveyor(building[start_pos.x][start_pos.y].type):
-        return False
-    visited: set[tuple[int, int]] = set()
-    pos = start_pos
-
-    for _ in range(chain_len + 1):
-        key = (pos.x, pos.y)
-        if key in visited:
-            return False  # cycle
-        visited.add(key)
-
-        b = building[pos.x][pos.y]
-        if b.type == EntityType.CORE and b.team == rc.get_team():
-            return True
-        if b is None or not b.is_conveyor_type:
-            return False
-
-        # --- Load check ---
-        if b.load is None:
-            return True  # unknown future load → assume OK
-        if b.load >= max_load:
-            return False
-
-        # --- Move to next conveyor ---
-        nxt = next_conveyor_pos(pos, b)
-        if nxt is None or not in_bounds(nxt):
-            return True  # chain ended
-
-        pos = nxt
-
-    return True
-from collections import defaultdict
-from dataclasses import dataclass, field
-
-# Persistent state across turns/calls.
-_load_recompute_state = None
-
-
-@dataclass(slots=True)
-class _SeedWork:
-    seed_value: float
-    pos: Position | None
-    seen: set[tuple[int, int]] = field(default_factory=set)
-    path: list[tuple[int, int]] = field(default_factory=list)
-    done: bool = False
-
-
-@dataclass(slots=True)
-class _Pass2Work:
-    path: list[tuple[int, int]]
-    idx: int = 0
-    path_max: float | None = None
-    phase: int = 0  # 0 = scan max, 1 = write final_loads
-    done: bool = False
+def _ore_env_from_code(code: int) -> Environment | None:
+    if code >= 2:
+        return _ENV_ORE_AX
+    if code == 1:
+        return _ENV_ORE_TI
+    return None
 
 
 @dataclass(slots=True)
 class _LoadRecomputeState:
-    phase: int  # 0 build seeds, 1 propagate, 2 flatten, 3 apply, 4 done
+    phase: int
     my_team: Team
     default_initial_load: float
     harvester_output: float
-
-    # Snapshot
-    conveyor_keys: list[tuple[int, int]]
-    old_loads: dict[tuple[int, int], float | None]
-    next_map: dict[tuple[int, int], tuple[int, int] | None]
-    is_friendly_conveyor_keys: set[tuple[int, int]]
-    seeded_items: list[tuple[tuple[int, int], float]]
-
-    # Working data
-    seed_idx: int = 0
-    seed_work: _SeedWork | None = None
-    temp_loads: dict[tuple[int, int], float] = field(default_factory=dict)
-    seeded_paths: list[list[tuple[int, int]]] = field(default_factory=list)
-
-    pass2_idx: int = 0
-    pass2_work: _Pass2Work | None = None
-    final_loads: dict[tuple[int, int], float] = field(default_factory=dict)
-
+    round_started: int
+    scan_idx: int = 0
+    edge_idx: int = 0
+    harvest_idx: int = 0
+    root_seed_idx: int = 0
+    queue_init_idx: int = 0
+    queue_head: int = 0
+    cycle_idx: int = 0
+    reverse_idx: int = -1
     apply_idx: int = 0
+    conveyor_indices: list[int] = field(default_factory=list)
+    harvester_indices: list[int] = field(default_factory=list)
+    cycle_active: bool = False
+    cycle_node: int = -1
+    cycle_nodes: list[int] = field(default_factory=list)
+    cycle_total: float = 0.0
+    cycle_touched: bool = False
+    cycle_ore: int = 0
 
 
-def _reset_load_recompute_state() -> None:
-    global _load_recompute_state
-    _load_recompute_state = None
+def _cleanup_load_state(st: _LoadRecomputeState | None) -> None:
+    if st is None:
+        return
+
+    snapshot_conveyor = _load_snapshot_conveyor
+    snapshot_next_raw = _load_snapshot_next_raw
+    snapshot_seed = _load_snapshot_seed
+    terminal_confirm = _load_terminal_confirm
+    confirmed = _load_confirmed
+    ore_code = _load_ore_code
+    for idx in st.conveyor_indices:
+        snapshot_conveyor[idx] = False
+        snapshot_next_raw[idx] = -1
+        snapshot_seed[idx] = None
+        terminal_confirm[idx] = False
+        confirmed[idx] = False
+        ore_code[idx] = 0
 
 
 def recompute_all_conveyor_loads(
@@ -827,22 +840,7 @@ def recompute_all_conveyor_loads(
     default_initial_load: float = 1.0,
     max_cpu_us: int = 300,
 ) -> bool:
-    """
-    Incremental, resumable conveyor-load recomputation.
-
-    Returns:
-        True if the full recomputation finished on this call.
-        False if paused due to CPU budget and should be called again next turn.
-
-    Behavior:
-    - Takes a snapshot when starting and uses only that snapshot until complete.
-    - Pass 1: for each seeded conveyor, add its seed load to every conveyor on its path.
-    - Pass 2: for each seeded path, compute the max temp load on that path and assign
-      that same max to everyone on the path (using max across overlapping paths).
-    - Final apply: tiles touched in the snapshot get their computed load; snapshot
-      conveyors untouched by any seeded path get None.
-    - At apply time, only writes if the current tile is still a friendly conveyor.
-    """
+    start_time = time.perf_counter_ns()
     global _load_recompute_state
 
     start_us = rc.get_cpu_time_elapsed()
@@ -850,245 +848,355 @@ def recompute_all_conveyor_loads(
     def over_budget() -> bool:
         return rc.get_cpu_time_elapsed() - start_us >= max_cpu_us
 
-    def next_conveyor_key_from_snapshot(
-        pos_key: tuple[int, int],
-        b: Building,
-    ) -> tuple[int, int] | None:
-        x, y = pos_key
-        pos = Position(x, y)
-
-        if b.type is _ET_BRIDGE:
-            if b.bridge_target is None:
-                return None
-            nxt = b.bridge_target
-        elif b.type is _ET_CONVEYOR or b.type is _ET_ARMOURED_CONVEYOR or b.type is _ET_SPLITTER:
-            if b.direction is None:
-                return None
-            nxt = pos.add(b.direction)
-        else:
-            return None
-
-        if not in_bounds(nxt):
-            return None
-        return (nxt.x, nxt.y)
-
-    def is_current_friendly_conveyor_at_key(key: tuple[int, int], team: Team) -> bool:
-        x, y = key
-        b = building[x][y]
-        return b is not None and b.team == team and b.is_conveyor_type
-
-    # ------------------------------------------------------------------
-    # INIT / SNAPSHOT
-    # ------------------------------------------------------------------
-    if _load_recompute_state is None or _load_recompute_state.phase == 4:
-        my_team = rc.get_team()
-
-        conveyor_keys: list[tuple[int, int]] = []
-        harvester_positions: list[Position] = []
-        old_loads: dict[tuple[int, int], float | None] = {}
-        snapshot_buildings: dict[tuple[int, int], Building] = {}
-
-        for x in range(width):
-            for y in range(height):
-                b = building[x][y]
-                if b is None or b.team != my_team:
-                    continue
-                key = (x, y)
-                snapshot_buildings[key] = b
-                if b.is_conveyor_type:
-                    conveyor_keys.append(key)
-                    old_loads[key] = b.load
-                elif b.type is _ET_HARVESTER:
-                    harvester_positions.append(Position(x, y))
-
-        conveyor_key_set = set(conveyor_keys)
-
-        def old_load_or_default(key: tuple[int, int]) -> float:
-            val = old_loads.get(key)
-            return default_initial_load if val is None else float(val)
-
-        next_map: dict[tuple[int, int], tuple[int, int] | None] = {}
-        reverse_count: dict[tuple[int, int], int] = defaultdict(int)
-
-        for key in conveyor_keys:
-            b = snapshot_buildings[key]
-            nxt = next_conveyor_key_from_snapshot(key, b)
-            next_map[key] = nxt
-            if nxt in conveyor_key_set:
-                reverse_count[nxt] += 1
-
-        seeded: dict[tuple[int, int], float] = defaultdict(float)
-        harvester_fed: set[tuple[int, int]] = set()
-
-        # Harvester seeds
-        for hpos in harvester_positions:
-            adjacent: list[tuple[int, int]] = []
-            for d in CARDINALS:
-                npos = hpos.add(d)
-                if not in_bounds(npos):
-                    continue
-                nkey = (npos.x, npos.y)
-                if nkey in conveyor_key_set:
-                    adjacent.append(nkey)
-
-            if adjacent:
-                share = harvester_output / len(adjacent)
-                for key in adjacent:
-                    seeded[key] += share
-                    harvester_fed.add(key)
-
-        # No-upstream seeds, but not if harvester-fed.
-        for key in conveyor_keys:
-            if key in harvester_fed:
-                continue
-            if reverse_count.get(key, 0) == 0:
-                seeded[key] += old_load_or_default(key)
-
-        seeded_items = [(key, val) for key, val in seeded.items() if val != 0]
-
-        _load_recompute_state = _LoadRecomputeState(
-            phase=1,
-            my_team=my_team,
-            default_initial_load=default_initial_load,
-            harvester_output=harvester_output,
-            conveyor_keys=conveyor_keys,
-            old_loads=old_loads,
-            next_map=next_map,
-            is_friendly_conveyor_keys=conveyor_key_set,
-            seeded_items=seeded_items,
-        )
-
-        if over_budget():
-            return False
+    width_l = width
+    height_l = height
+    total_tiles = width_l * height_l
+    building_local = building
+    ground_local = ground
+    next_idx = _load_next_idx
+    indegree = _load_indegree
+    accum = _load_accum
+    final = _load_final
+    touched = _load_touched
+    harvester_fed = _load_harvester_fed
+    cycle_seen = _load_cycle_seen
+    snapshot_conveyor = _load_snapshot_conveyor
+    snapshot_next_raw = _load_snapshot_next_raw
+    snapshot_seed = _load_snapshot_seed
+    terminal_confirm = _load_terminal_confirm
+    confirmed = _load_confirmed
+    ore_code = _load_ore_code
+    dir_deltas = _DIRECTION_DELTAS
+    queue = _load_queue
+    order = _load_order
 
     st = _load_recompute_state
+    current_team = rc.get_team()
+    current_round = rc.get_current_round()
+    if st is None:
+        st = _LoadRecomputeState(
+            phase=0,
+            my_team=current_team,
+            default_initial_load=default_initial_load,
+            harvester_output=harvester_output,
+            round_started=current_round,
+        )
+        _load_recompute_state = st
+    elif (
+        st.round_started != current_round
+        or
+        st.my_team != current_team
+        or st.default_initial_load != default_initial_load
+        or st.harvester_output != harvester_output
+    ):
+        _cleanup_load_state(st)
+        st = _LoadRecomputeState(
+            phase=0,
+            my_team=current_team,
+            default_initial_load=default_initial_load,
+            harvester_output=harvester_output,
+            round_started=current_round,
+        )
+        _load_recompute_state = st
 
-    # ------------------------------------------------------------------
-    # PASS 1: propagate seed values, adding into temp_loads
-    # ------------------------------------------------------------------
-    while st.phase == 1:
-        if st.seed_work is None:
-            if st.seed_idx >= len(st.seeded_items):
-                st.phase = 2
-                break
+    while True:
+        if st.phase == 0:
+            while st.scan_idx < total_tiles:
+                if (st.scan_idx & 15) == 0 and over_budget():
+                    return False
 
-            (sx, sy), seed_value = st.seeded_items[st.seed_idx]
-            st.seed_work = _SeedWork(
-                seed_value=seed_value,
-                pos=Position(sx, sy),
-            )
+                idx = st.scan_idx
+                st.scan_idx += 1
+                x = idx % width_l
+                y = idx // width_l
+                b = building_local[x][y]
+                if b is None or b.team != st.my_team:
+                    continue
 
-        work = st.seed_work
-        assert work is not None
+                if b.is_conveyor_type:
+                    st.conveyor_indices.append(idx)
+                    next_idx[idx] = -1
+                    indegree[idx] = 0
+                    accum[idx] = 0.0
+                    final[idx] = 0.0
+                    touched[idx] = False
+                    harvester_fed[idx] = False
+                    cycle_seen[idx] = False
+                    terminal_confirm[idx] = False
+                    confirmed[idx] = False
+                    ore_code[idx] = 0
+                    snapshot_conveyor[idx] = True
+                    snapshot_seed[idx] = float(b.load) if b.load is not None else None
 
-        while not work.done:
-            if over_budget():
-                return False
+                    raw_next = -1
+                    if b.type is _ET_BRIDGE:
+                        bridge_target = b.bridge_target
+                        if (
+                            bridge_target is not None
+                            and 0 <= bridge_target.x < width_l
+                            and 0 <= bridge_target.y < height_l
+                        ):
+                            raw_next = bridge_target.y * width_l + bridge_target.x
+                    else:
+                        direction = b.direction
+                        if direction is not None:
+                            dx, dy = dir_deltas[direction]
+                            nx = x + dx
+                            ny = y + dy
+                            if 0 <= nx < width_l and 0 <= ny < height_l:
+                                raw_next = ny * width_l + nx
+                    snapshot_next_raw[idx] = raw_next
 
-            if work.pos is None:
-                work.done = True
-                break
+                elif b.type is _ET_HARVESTER:
+                    st.harvester_indices.append(idx)
 
-            key = (work.pos.x, work.pos.y)
-            if key in work.seen:
-                work.done = True
-                break
-            work.seen.add(key)
+            if not st.conveyor_indices:
+                _cleanup_load_state(st)
+                _load_recompute_state = None
+                return True
 
-            if key not in st.is_friendly_conveyor_keys:
-                work.done = True
-                break
+            st.phase = 1
+            continue
 
-            work.path.append(key)
-            st.temp_loads[key] = st.temp_loads.get(key, 0.0) + work.seed_value
+        if st.phase == 1:
+            conveyors = st.conveyor_indices
+            while st.edge_idx < len(conveyors):
+                if (st.edge_idx & 31) == 0 and over_budget():
+                    return False
 
-            nxt = st.next_map.get(key)
-            if nxt is None:
-                work.done = True
-                break
+                idx = conveyors[st.edge_idx]
+                st.edge_idx += 1
+                raw_next = snapshot_next_raw[idx]
+                if raw_next != -1 and snapshot_conveyor[raw_next]:
+                    next_idx[idx] = raw_next
+                    indegree[raw_next] += 1
+                else:
+                    next_idx[idx] = -1
+                    if raw_next != -1:
+                        tx = raw_next % width_l
+                        ty = raw_next // width_l
+                        terminal_confirm[idx] = building_local[tx][ty] is not None
+                    else:
+                        terminal_confirm[idx] = False
 
-            # Stop before stepping into anything that was not a snapshot conveyor.
-            if nxt not in st.is_friendly_conveyor_keys:
-                work.done = True
-                break
+            st.phase = 2
+            continue
 
-            work.pos = Position(nxt[0], nxt[1])
+        if st.phase == 2:
+            harvesters = st.harvester_indices
+            while st.harvest_idx < len(harvesters):
+                if (st.harvest_idx & 15) == 0 and over_budget():
+                    return False
 
-        if work.done:
-            if work.path:
-                st.seeded_paths.append(work.path)
-            st.seed_work = None
-            st.seed_idx += 1
+                hidx = harvesters[st.harvest_idx]
+                st.harvest_idx += 1
+                x = hidx % width_l
+                y = hidx // width_l
+                adjacent: list[int] = []
+                for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                    nx = x + dx
+                    ny = y + dy
+                    if nx < 0 or nx >= width_l or ny < 0 or ny >= height_l:
+                        continue
+                    nidx = ny * width_l + nx
+                    if snapshot_conveyor[nidx]:
+                        adjacent.append(nidx)
 
-    # ------------------------------------------------------------------
-    # PASS 2: for each seeded path, set everyone on that path to that path's max
-    # ------------------------------------------------------------------
-    while st.phase == 2:
-        if st.pass2_work is None:
-            if st.pass2_idx >= len(st.seeded_paths):
-                st.phase = 3
-                break
-            st.pass2_work = _Pass2Work(path=st.seeded_paths[st.pass2_idx])
+                if not adjacent:
+                    continue
 
-        work = st.pass2_work
-        assert work is not None
+                share = st.harvester_output / len(adjacent)
+                if share == 0:
+                    continue
+                h_ore = _ore_code_from_env(ground_local[x][y])
+                for nidx in adjacent:
+                    accum[nidx] += share
+                    touched[nidx] = True
+                    harvester_fed[nidx] = True
+                    if h_ore > ore_code[nidx]:
+                        ore_code[nidx] = h_ore
 
-        while not work.done:
-            if over_budget():
-                return False
+            st.phase = 3
+            continue
 
-            if work.phase == 0:
-                # Scan the path max from temp_loads.
-                while work.idx < len(work.path):
-                    key = work.path[work.idx]
-                    val = st.temp_loads.get(key)
-                    if val is not None and (work.path_max is None or val > work.path_max):
-                        work.path_max = val
-                    work.idx += 1
-                    if over_budget():
-                        return False
-                work.phase = 1
-                work.idx = 0
+        if st.phase == 3:
+            conveyors = st.conveyor_indices
+            while st.root_seed_idx < len(conveyors):
+                if (st.root_seed_idx & 31) == 0 and over_budget():
+                    return False
 
-            else:
-                # Write this path's max to everyone on the path, using max.
-                if work.path_max is None:
-                    work.done = True
-                    break
+                idx = conveyors[st.root_seed_idx]
+                st.root_seed_idx += 1
+                if indegree[idx] != 0 or harvester_fed[idx]:
+                    continue
 
-                while work.idx < len(work.path):
-                    key = work.path[work.idx]
-                    prev = st.final_loads.get(key)
-                    if prev is None or work.path_max > prev:
-                        st.final_loads[key] = work.path_max
-                    work.idx += 1
-                    if over_budget():
-                        return False
-                work.done = True
+                x = idx % width_l
+                y = idx // width_l
+                b = building_local[x][y]
+                if b is not None and b.is_conveyor_type:
+                    source_ore = _ore_code_from_env(b.transporting_ore)
+                    if source_ore > ore_code[idx]:
+                        ore_code[idx] = source_ore
 
-        if work.done:
-            st.pass2_work = None
-            st.pass2_idx += 1
+                seed = snapshot_seed[idx]
+                seed_value = st.default_initial_load if seed is None else seed
+                if seed_value == 0:
+                    continue
+                accum[idx] += seed_value
+                touched[idx] = True
 
-    # ------------------------------------------------------------------
-    # APPLY
-    # ------------------------------------------------------------------
-    while st.phase == 3:
-        while st.apply_idx < len(st.conveyor_keys):
-            if over_budget():
-                return False
+            queue.clear()
+            order.clear()
+            st.queue_head = 0
+            st.phase = 4
+            continue
 
-            key = st.conveyor_keys[st.apply_idx]
-            st.apply_idx += 1
+        if st.phase == 4:
+            conveyors = st.conveyor_indices
+            while st.queue_init_idx < len(conveyors):
+                if (st.queue_init_idx & 63) == 0 and over_budget():
+                    return False
 
-            if not is_current_friendly_conveyor_at_key(key, st.my_team):
-                continue
+                idx = conveyors[st.queue_init_idx]
+                st.queue_init_idx += 1
+                if indegree[idx] == 0:
+                    queue.append(idx)
 
-            x, y = key
-            building[x][y].load = st.final_loads.get(key)
+            st.phase = 5
+            continue
 
-        st.phase = 4
-        _reset_load_recompute_state()
+        if st.phase == 5:
+            while st.queue_head < len(queue):
+                if (st.queue_head & 63) == 0 and over_budget():
+                    return False
+
+                idx = queue[st.queue_head]
+                st.queue_head += 1
+                order.append(idx)
+
+                nxt = next_idx[idx]
+                if nxt == -1:
+                    continue
+
+                if ore_code[idx] > ore_code[nxt]:
+                    ore_code[nxt] = ore_code[idx]
+
+                if touched[idx]:
+                    accum[nxt] += accum[idx]
+                    touched[nxt] = True
+
+                new_indegree = indegree[nxt] - 1
+                indegree[nxt] = new_indegree
+                if new_indegree == 0:
+                    queue.append(nxt)
+
+            st.phase = 6
+            st.cycle_idx = 0
+            st.cycle_active = False
+            continue
+
+        if st.phase == 6:
+            conveyors = st.conveyor_indices
+            while True:
+                if over_budget():
+                    return False
+
+                if not st.cycle_active:
+                    if st.cycle_idx >= len(conveyors):
+                        st.phase = 7
+                        st.reverse_idx = len(order) - 1
+                        break
+
+                    idx = conveyors[st.cycle_idx]
+                    st.cycle_idx += 1
+                    if indegree[idx] == 0 or cycle_seen[idx]:
+                        continue
+
+                    st.cycle_active = True
+                    st.cycle_node = idx
+                    st.cycle_nodes.clear()
+                    st.cycle_total = 0.0
+                    st.cycle_touched = False
+                    st.cycle_ore = 0
+
+                node = st.cycle_node
+                if cycle_seen[node]:
+                    cycle_value = st.cycle_total
+                    if cycle_value < _CYCLE_DEFAULT_LOAD:
+                        cycle_value = _CYCLE_DEFAULT_LOAD
+                    cycle_ore = st.cycle_ore
+                    for n in st.cycle_nodes:
+                        final[n] = cycle_value
+                        touched[n] = True
+                        if cycle_ore > ore_code[n]:
+                            ore_code[n] = cycle_ore
+                    st.cycle_active = False
+                    continue
+
+                cycle_seen[node] = True
+                st.cycle_nodes.append(node)
+                st.cycle_total += accum[node]
+                if touched[node]:
+                    st.cycle_touched = True
+                if ore_code[node] > st.cycle_ore:
+                    st.cycle_ore = ore_code[node]
+
+                nxt = next_idx[node]
+                if nxt == -1:
+                    st.cycle_node = node
+                else:
+                    st.cycle_node = nxt
+            continue
+
+        if st.phase == 7:
+            while st.reverse_idx >= 0:
+                if (st.reverse_idx & 63) == 0 and over_budget():
+                    return False
+
+                idx = order[st.reverse_idx]
+                st.reverse_idx -= 1
+                nxt = next_idx[idx]
+                if nxt == -1:
+                    confirmed[idx] = terminal_confirm[idx]
+                else:
+                    confirmed[idx] = confirmed[nxt]
+                if not touched[idx]:
+                    continue
+
+                value = accum[idx]
+                if nxt != -1 and touched[nxt] and final[nxt] > value:
+                    value = final[nxt]
+                final[idx] = value
+
+            st.phase = 8
+            st.apply_idx = 0
+            continue
+
+        if st.phase == 8:
+            conveyors = st.conveyor_indices
+            while st.apply_idx < len(conveyors):
+                if (st.apply_idx & 63) == 0 and over_budget():
+                    return False
+
+                idx = conveyors[st.apply_idx]
+                st.apply_idx += 1
+                x = idx % width_l
+                y = idx // width_l
+                b = building_local[x][y]
+                if b is not None and b.team == st.my_team and b.is_conveyor_type:
+                    b.load = final[idx] if touched[idx] else None
+                    b.load_confirmed = confirmed[idx]
+                    b.transporting_ore = _ore_env_from_code(ore_code[idx])
+
+            _cleanup_load_state(st)
+            _load_recompute_state = None
+            end_time = time.perf_counter_ns()
+            print("converyor loads", (end_time-start_time))
+            return True
+
+        # Defensive fallback if phase ever gets corrupted.
+        _cleanup_load_state(st)
+        _load_recompute_state = None
+        print("converyor loads, fail?", (end_time-start_time))
+
         return True
-
-    return st.phase == 4
