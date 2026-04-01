@@ -12,6 +12,7 @@ import sys
 import shutil
 
 import units.builder as builder
+import units.builder_states.builder_rush as builder_rush
 import units.core as core
 import units.turret_gunner as gunner
 import units.turret_sentinel as sentinel
@@ -100,10 +101,10 @@ class Player:
                 if etype == EntityType.CORE:
                     self.me = core
                 elif etype == EntityType.BUILDER_BOT:
-                    # if SPAWN_TURN == 0:
-                    #     self.me = builder_rush
-                    # else:
-                    self.me = builder
+                    if SPAWN_TURN == 0:
+                        self.me = builder_rush
+                    else:
+                        self.me = builder
                 elif etype == EntityType.GUNNER:
                     self.me = gunner
                 elif etype == EntityType.SENTINEL:

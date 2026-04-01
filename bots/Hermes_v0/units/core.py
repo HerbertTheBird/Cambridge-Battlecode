@@ -53,15 +53,14 @@ def get_closest_titanium_tile() -> Position | None:
 def run():
     global num_spawned
 
-    max_spawn = 4
-    if rc.get_current_round() < 100:
-        max_spawn = 3
+    max_spawn = 3
+    if rc.get_current_round() < 70:
+        max_spawn = 2
 
 
-    max_spawn = 1
     core_pos = rc.get_position()
 
-    if rc.get_current_round() <= 2:
+    if rc.get_current_round() == 0:
         dx = max(-1, min(1, map_info.MAP_CENTER.x - core_pos.x))
         dy = max(-1, min(1, map_info.MAP_CENTER.y - core_pos.y))
         spawn_pos = Position(core_pos.x + dx, core_pos.y + dy)
@@ -70,23 +69,23 @@ def run():
             num_spawned += 1
             return  # Only spawn 1 builder for turn 0
 
-    # # --- Spawn towards closest titanium on turn 1 ---
-    # if rc.get_current_round() == 1:
-    #     titanium_pos = get_closest_titanium_tile()
-    #     if titanium_pos is not None:
-    #         dx = max(-1, min(1, titanium_pos.x - core_pos.x))
-    #         dy = max(-1, min(1, titanium_pos.y - core_pos.y))
-    #         spawn_pos = Position(core_pos.x + dx, core_pos.y + dy)
-    #         if rc.can_spawn(spawn_pos):
-    #             rc.spawn_builder(spawn_pos)
-    #             num_spawned += 1
-    #             return  # Only spawn 1 builder for turn 1
+    # --- Spawn towards closest titanium on turn 1 ---
+    if rc.get_current_round() == 1:
+        titanium_pos = get_closest_titanium_tile()
+        if titanium_pos is not None:
+            dx = max(-1, min(1, titanium_pos.x - core_pos.x))
+            dy = max(-1, min(1, titanium_pos.y - core_pos.y))
+            spawn_pos = Position(core_pos.x + dx, core_pos.y + dy)
+            if rc.can_spawn(spawn_pos):
+                rc.spawn_builder(spawn_pos)
+                num_spawned += 1
+                return  # Only spawn 1 builder for turn 1
     # Normal spawning logic
-    # if num_spawned < max_spawn or rc.get_global_resources()[0] > 1500 + 5 * rc.get_scale_percent() or rc.get_hp() < 500:
-    #     spawn_pos = random_spawn_tile()
-    #     if spawn_pos is not None:
-    #         rc.spawn_builder(spawn_pos)
-    #         num_spawned += 1
+    if num_spawned < max_spawn or rc.get_global_resources()[0] > 900 + 2 * rc.get_scale_percent():
+        spawn_pos = random_spawn_tile()
+        if spawn_pos is not None:
+            rc.spawn_builder(spawn_pos)
+            num_spawned += 1
 
     # # --- Spawn builders to repair damaged ally conveyors/bridges ---
     # for pos in rc.get_nearby_tiles():

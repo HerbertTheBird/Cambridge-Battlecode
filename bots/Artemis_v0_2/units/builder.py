@@ -628,10 +628,11 @@ def run_explore():
     moved = False
     attempts = 0
     while not moved and attempts < 1:
-        if nav.move_to(explore_target):
-            moved = True
-        else:
-            force_generate_explore_target()  # generates new target for next attempt
+        has_moved = nav.move_to(explore_target)
+        if has_moved == False:
+            force_generate_explore_target() 
+        elif has_moved:
+            break
         attempts += 1
 
     turns_since_last_explore_target += 1
