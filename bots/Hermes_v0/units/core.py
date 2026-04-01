@@ -57,7 +57,6 @@ def run():
     if rc.get_current_round() < 100:
         max_spawn = 3
 
-
     max_spawn = 1
     core_pos = rc.get_position()
 
