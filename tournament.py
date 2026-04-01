@@ -7,10 +7,9 @@ ratings, and produce a ranked leaderboard. Essential for measuring
 incremental progress across bot iterations.
 
 Usage:
-    python tournament.py bots/Artemis_v0 bots/Artemis_v0_1 bots/Artemis_v0_2
-    python tournament.py bots/Artemis_v0 bots/Artemis_v0_2 --maps-dir maps --threads 4
-    python tournament.py bots/* --seed 42 --maps-filter arena
-    python tournament.py bots/Artemis_v0 bots/baseline --rounds 3  # repeat 3 seeds
+    python tournament.py Artemis_v0 Artemis_v0_1 Artemis_v0_2
+    python tournament.py Artemis_v0 Artemis_v0_2 --maps-dir maps --threads 4
+    python tournament.py bots/Artemis_v0 bots/baseline --rounds 3 --map-filter arena  # repeat 3 seeds
 """
 
 from __future__ import annotations
