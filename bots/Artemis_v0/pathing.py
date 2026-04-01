@@ -7,7 +7,7 @@ import sys
 from array import array
 import time
 import math
-weight = 1.5
+weight = 1.5  # opt: float(1.0, 2.0)
 MAX_ITER = None
 TIME_CUTOFF = 1200
 # 4-direction movement

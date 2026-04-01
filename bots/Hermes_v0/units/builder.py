@@ -110,21 +110,26 @@ def update_target_ore():
             blocked_ores[new_pos] = max(blocked_ores.get(new_pos, 0), turn+10)
     prev_target_ore = target_ore
     target_ore = None
+    core = map_info.my_core
     for pos in rc.get_nearby_tiles():
         if map_info.ground[pos.x][pos.y] == Environment.ORE_TITANIUM:
-            if not target_ore or my_pos.distance_squared(pos) < my_pos.distance_squared(target_ore) or pos == prev_target_ore:
+            if not target_ore or core.distance_squared(pos) < core.distance_squared(target_ore) or pos == prev_target_ore:
+                fail = False
                 if map_info.building[pos.x][pos.y]:
                     if pos == prev_target_ore:
                         print(map_info.building[pos.x][pos.y].team, rc.get_team(), map_info.building[pos.x][pos.y].type)
                     if map_info.building[pos.x][pos.y].team == rc.get_team() and map_info.building[pos.x][pos.y].type == EntityType.HARVESTER:
-                        if pos == prev_target_ore:
-                            prev_target_ore = None
-                        continue
+                        fail = True
                     if map_info.building[pos.x][pos.y].team != rc.get_team():
-                        if pos == prev_target_ore:
-                            prev_target_ore = None
-                        continue
+                        fail = True
+                card_d = [[0, 1], [0, -1], [1, 0], [-1, 0]]
+                for d in card_d:
+                    b = map_info.building[pos.x+d[0]][pos.y+d[1]]
+                    if b and b.type != EntityType.ROAD and b.team != rc.get_team():
+                        fail = True
                 if pos in blocked_ores and blocked_ores[pos] > rc.get_current_round():
+                    fail = True
+                if fail:
                     if pos == prev_target_ore:
                         prev_target_ore = None
                     continue
@@ -181,6 +186,8 @@ def run_explore():
 
 def run_build_harvester():
     global mode, target_ore, blocked_ores
+    log("i want to build on " + str(target_ore))
+
     if target_ore is None or rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2 + rc.get_barrier_cost()[0]*8:
         mode = Mode.EXPLORE
         return
@@ -204,7 +211,11 @@ def run_build_harvester():
         if building_id is not None:
             if rc.get_entity_type(building_id) in OUR_BUILDINGS and rc.get_team(building_id) == rc.get_team():
                 is_barrier = True
-
+            if rc.get_entity_type(building_id) == EntityType.ROAD and rc.get_team(building_id) != rc.get_team():
+                if rc.can_move(rc.get_position().direction_to(pos)):
+                    rc.move(rc.get_position().direction_to(pos))
+                if rc.get_position() == pos and rc.can_fire(rc.get_position()):
+                    rc.fire(rc.get_position())
 
         if not is_barrier:
             perimeter_secure = False
@@ -395,8 +406,14 @@ def check_route():
 
 def run_route():
     global route_idx, ore_path, launcher_position, mode
+    log(str(ore_path))
+    if not ore_path:
+        ore_path = ore_nav.calculate_conveyor_path(routed_ore)
+        if ore_path == []:
+            mode = Mode.EXPLORE
+            return
+        route_idx = 0
     if ore_path:
-        print(ore_path)
         if launcher_position:
             place = True
             nearby_conv = None

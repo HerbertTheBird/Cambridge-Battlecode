@@ -149,6 +149,8 @@ class Pathing:
             self.changed = True
         if self.start_p and self.start_p.distance_squared(start_p) > 2:
             self.changed = True
+        if input_dirs == CONV and self.moved:
+            self.changed = True
         if self.target_p != target_p:
             self.changed = True
         
@@ -164,6 +166,8 @@ class Pathing:
         width_l  = self.width
         if self.changed:
             self.heap.clear()
+        if self == builder.ore_nav:
+            print("changed? " + str(self.changed) + " " + str(len(self.heap)))
         if len(self.heap) == 0:
             is_dirs  = (input_dirs is DIRS)
 
@@ -189,6 +193,8 @@ class Pathing:
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
         builder.log("a* start")
+        if self == builder.ore_nav:
+            builder.log("CONV A STAR")
         if avoid_p is None:
             avoid_p = set()
         self.avoid_id += 1
@@ -230,13 +236,10 @@ class Pathing:
                 start[p.x+p.y*width] = run_id
         else:
             start[sx+sy*width] = run_id
-        avoid_added = False
         for a in avoid_p:
             h = a.y * width + a.x
             if (h == sx+sy*width and not adjacent) or target[h] == run_id:
                 continue
-            if avoid[h] != avoid_id-1:
-                avoid_added = True
             avoid[h] = avoid_id
         if not adjacent:
             has_initial_move = False
@@ -250,6 +253,8 @@ class Pathing:
             
         WEIGHT_L = WEIGHT
         new_hp = []
+        if self == builder.ore_nav:
+            builder.log(str(len(heap)))
         while heap:
             f, g, card, zig_flag, zig_time, pos, iter = heappop(heap)
             g *= -1
@@ -257,8 +262,12 @@ class Pathing:
             ny = pos//width
             MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT_L-MIN_WEIGHT)
             if avoid[pos] == avoid_id:
+                if self == builder.ore_nav:
+                    builder.log(str(nx) + " " + str(ny))
                 continue
             if g > best_g[pos]:
+                if self == builder.ore_nav:
+                    builder.log(str(nx) + " " + str(ny))
                 continue
             if is_dirs:
                 h0 = max(abs(nx - sx), abs(ny - sy))
@@ -275,6 +284,8 @@ class Pathing:
             heap.clear()
             return path_out
         # c = 0
+        if self == builder.ore_nav:
+            builder.log(str(len(heap)))
         while heap:
             # c += 1
             # if c > 20:
@@ -285,6 +296,8 @@ class Pathing:
                 break
             _, g, card, _, zig_time, pos, _ = heappop(heap)
             g *= -1
+            if self == builder.ore_nav:
+                builder.log(str(g) + " " + str(pos) + " " + str(run_id))
             if start[pos] == run_id:
                 path_out = self.reconstruct_path(pos)
                 heap.clear()
@@ -332,6 +345,7 @@ class Pathing:
                     (new_f, -ng, card, not new_zigged, new_zig_time, n, self.iter)
                 )
         end_time = time.perf_counter_ns()
+        heap.clear()
         builder.log("a star time: " + str(end_time-start_time)) 
         return []
 
@@ -465,7 +479,6 @@ class Pathing:
             for y in range(height_l):
                 b = building_cache[x][y]
                 if b and is_conveyor(b.type) and b.load and b.load < 3 and b.team == my_team and Position(x, y) not in avoid_extra and b.load_confirmed:
-                    self.rc.draw_indicator_line(Position(0, 0), Position(x, y), 0, 255, 0)
                     target.add(Position(x, y))
 
         avoid = map_info.get_avoid(True, False, False, True)

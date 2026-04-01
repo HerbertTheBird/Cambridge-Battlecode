@@ -348,7 +348,7 @@ def mark_known_conveyors() -> None:
             else:
                 r, g, bl = 0, min(255, int(load * 60)), 0  # green: 80, 160, 240 for 1,2,3
 
-            rc_draw_indicator_dot(Position(x, y), r, g, bl)
+            # rc_draw_indicator_dot(Position(x, y), r, g, bl)
 def update() -> None:
     from units.builder import log
     mark_known_conveyors()
