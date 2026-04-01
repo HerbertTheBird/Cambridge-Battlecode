@@ -23,6 +23,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import random
 import re
 import shutil
 import sys
@@ -205,6 +206,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=1, help="Starting seed.")
     parser.add_argument("--rounds", type=int, default=1, help="Number of seeds/rounds per trial.")
     parser.add_argument("--threads", type=int, default=1, help="Parallel match threads (for tournament, not Optuna).")
+    parser.add_argument("--map-count", type=int, default=None, help="Randomly select N maps instead of using all.")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print each match result.")
     parser.add_argument("--study-name", default=None, help="Optuna study name (default: tune-<bot>).")
     args = parser.parse_args()
@@ -236,6 +238,8 @@ def main() -> int:
         if not maps:
             print(f"No maps match filter '{args.map_filter}'.", file=sys.stderr)
             return 1
+    if args.map_count and args.map_count < len(maps):
+        maps = sorted(random.sample(maps, args.map_count))
 
     seeds = list(range(args.seed, args.seed + args.rounds))
 
