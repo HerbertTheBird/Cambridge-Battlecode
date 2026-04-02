@@ -74,14 +74,14 @@ def check_attack_core():
     if attack_ore is None:
         return  # nothing to check
 
-    if map_info.their_core is None:
+    if map_info._their_core is None:
         # No enemy core known, revert
         attack_ore = None
         mode = Mode.PREPARE_LAUNCHER
         log("Lost enemy core, reverting to PREPARE_LAUNCHER")
         return
 
-    core_pos = map_info.their_core
+    core_pos = map_info._their_core
     mine_pos = attack_ore
 
     # Count empty adjacent tiles within 32 distance² of core
@@ -92,7 +92,7 @@ def check_attack_core():
         adj = Position(mine_pos.x + dx, mine_pos.y + dy)
 
         # Skip tiles out of map bounds
-        if not map_info.is_on_map(adj):
+        if not map_info.in_bounds(adj):
             continue
 
         # If any tile is out of vision, we cannot invalidate yet
@@ -120,12 +120,12 @@ def check_attack_core():
 def check_rush_core():
     global mode, attack_ore
     # --- Core rush trigger: titanium near enemy core ---
-    if map_info.their_core is not None:
-        core_pos = map_info.their_core
+    if map_info._their_core is not None:
+        core_pos = map_info._their_core
 
         for pos in rc.get_nearby_tiles():
             # Must be titanium
-            if map_info.ground[pos.x][pos.y] != Environment.ORE_TITANIUM:
+            if map_info.ground_at(pos.x, pos.y) != Environment.ORE_TITANIUM:
                 continue
 
             building_id = rc.get_tile_building_id(pos)
@@ -147,7 +147,7 @@ def check_rush_core():
             # Check adjacent tiles: must be EMPTY and within 32 of core
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 adj = Position(pos.x + dx, pos.y + dy)
-                if not map_info.is_on_map(adj):
+                if not map_info.in_bounds(adj):
                     continue
                 
                 if adj.distance_squared(rc.get_position()) > rc.get_vision_radius_sq():
@@ -175,7 +175,7 @@ def check_rush_core():
 
         # Case 1: Enemy harvester on titanium ore
         if entity_type == EntityType.HARVESTER:
-            if map_info.ground[pos.x][pos.y] == Environment.ORE_TITANIUM:
+            if map_info.ground_at(pos.x, pos.y) == Environment.ORE_TITANIUM:
                 
                 # Check for cardinally adjacent passable tiles
                 passable_found = False
@@ -226,7 +226,7 @@ def check_rush_core():
                 return
 
     # route to core
-    path = nav.calculate_path(map_info.predicted_enemy_core)
+    path = nav.calculate_path(map_info._predicted_enemy_core)
     if path is not None:
         if len(path) > 0:
             log("Path to core found.")
@@ -246,12 +246,12 @@ def run_attack_core():
     """
     global attack_ore, mode
 
-    if attack_ore is None or map_info.their_core is None:
+    if attack_ore is None or map_info._their_core is None:
         log("Fatal error")
         return
 
     my_pos = rc.get_position()
-    core_pos = map_info.their_core
+    core_pos = map_info._their_core
     mine_pos = attack_ore
 
     # --- Step 1: Move toward the mine ---
@@ -272,7 +272,7 @@ def run_attack_core():
             adj = Position(my_pos.x + dx, my_pos.y + dy)
             if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
                 continue
-            if map_info.is_on_map(adj) and (map_info.is_tile_empty(adj) or rc.is_tile_passable(adj)):
+            if map_info.in_bounds(adj) and (map_info.is_tile_empty(adj) or rc.is_tile_passable(adj)):
                 adjacent_empty.append(adj)
 
         if adjacent_empty:
@@ -293,7 +293,7 @@ def run_attack_core():
         adj = Position(mine_pos.x + dx, mine_pos.y + dy)
         if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
             continue
-        if map_info.is_on_map(adj) and map_info.is_tile_empty(adj):
+        if map_info.in_bounds(adj) and map_info.is_tile_empty(adj):
             cardinal_neighbors.append(adj)
 
     # Sort neighbors by distance to enemy core (closest first)
@@ -320,7 +320,7 @@ def run_rush_core():
             for dy in (-1, 0, 1):
                 adj = Position(my_pos.x + dx, my_pos.y + dy)
                 if (map_info.in_bounds(adj)):
-                    if map_info.ground[adj.x][adj.y] == map_info._ENV_ORE_TI:
+                    if map_info.ground_at(adj.x, adj.y) == map_info._ENV_ORE_TI:
                         if rc.can_build_barrier(adj):
                             rc.build_barrier(adj)
     nav.execute_path()
@@ -357,7 +357,7 @@ def run_prepare_launcher():
             if dx == 0 and dy == 0:
                 continue
             check_pos = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.is_on_map(check_pos):
+            if not map_info.in_bounds(check_pos):
                 continue
             b_id = rc.get_tile_building_id(check_pos)
             if b_id is not None and rc.get_team(b_id) == rc.get_team() and rc.get_entity_type(b_id) == EntityType.LAUNCHER:
@@ -386,7 +386,7 @@ def run_prepare_launcher():
                     
                     if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
                         continue
-                    if not map_info.is_on_map(adj) or (not map_info.is_tile_empty(adj) and not rc.is_tile_passable(adj)):
+                    if not map_info.in_bounds(adj) or (not map_info.is_tile_empty(adj) and not rc.is_tile_passable(adj)):
                         continue
                     dist = my_pos.distance_squared(adj)
                     if dist < nearest_dist:
@@ -421,10 +421,10 @@ def run_prepare_launcher():
 
             pos = Position(my_pos.x + dx, my_pos.y + dy)
 
-            if not map_info.is_on_map(pos):
+            if not map_info.in_bounds(pos):
                 continue
 
-            dist = pos.distance_squared(map_info.predicted_enemy_core)
+            dist = pos.distance_squared(map_info._predicted_enemy_core)
 
             # Priority 1: empty tiles
             if map_info.is_tile_empty(pos):
@@ -470,7 +470,7 @@ def run_prepare_launcher():
                 if pos == launcher_pos:
                     continue
 
-                if not map_info.is_on_map(pos):
+                if not map_info.in_bounds(pos):
                     continue
 
                 if not map_info.is_tile_empty(pos):
@@ -499,13 +499,13 @@ def check_attack():
             if dx == 0 and dy == 0:
                 continue
             adj = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.is_on_map(adj) or not map_info.is_tile_empty(adj):
+            if not map_info.in_bounds(adj) or not map_info.is_tile_empty(adj):
                 continue
 
             for ddx in (-1, 0, 1):
                 for ddy in (-1, 0, 1):
                     check_pos = Position(adj.x + ddx, adj.y + ddy)
-                    if not map_info.is_on_map(check_pos):
+                    if not map_info.in_bounds(check_pos):
                         continue
                     b_id = rc.get_tile_building_id(check_pos)
                     if b_id is None or rc.get_team(b_id) == rc.get_team():
@@ -556,7 +556,7 @@ def run_attack():
         for cardinal in cardinal_dirs:
             candidate = pos.add(cardinal)
 
-            if not map_info.is_on_map(candidate):
+            if not map_info.in_bounds(candidate):
                 continue
             if my_pos.distance_squared(candidate) > 2:
                 continue
@@ -583,7 +583,7 @@ def run_attack():
             if dx == 0 and dy == 0:
                 continue
             adj = Position(my_pos.x + dx, my_pos.y + dy)
-            if map_info.is_on_map(adj) and map_info.is_tile_empty(adj):
+            if map_info.in_bounds(adj) and map_info.is_tile_empty(adj):
                 adjacent_empty.append(adj)
 
     # Case 1: Standing on an empty tile that an enemy conveyor/bridge leads into
@@ -617,14 +617,14 @@ def run_attack():
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
             adj = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.is_on_map(adj) or not map_info.is_tile_empty(adj):
+            if not map_info.in_bounds(adj) or not map_info.is_tile_empty(adj):
                 continue
             for ddx in (-1, 0, 1):
                 for ddy in (-1, 0, 1):
                     if ddx == 0 and ddy == 0:
                         continue
                     check_pos = Position(adj.x + ddx, adj.y + ddy)
-                    if not map_info.is_on_map(check_pos):
+                    if not map_info.in_bounds(check_pos):
                         continue
                     b_id = rc.get_tile_building_id(check_pos)
                     if b_id is None:
@@ -674,7 +674,7 @@ def run_attack():
                         check = Position(enemy_pos.x + bdx, enemy_pos.y + bdy)
                         if check.distance_squared(my_pos) > rc.get_vision_radius_sq():
                             continue
-                        if not map_info.is_on_map(check):
+                        if not map_info.in_bounds(check):
                             continue
 
                         builder_adjacent_tiles.append(check)

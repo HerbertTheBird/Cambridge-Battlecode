@@ -56,13 +56,11 @@ def run():
     max_spawn = 4
     if rc.get_current_round() < 100:
         max_spawn = 3
-    if rc.get_current_round() == 100:
-        rc.resign()
     core_pos = rc.get_position()
     rc.convert(rc.get_global_resources()[1])
     if rc.get_current_round() == 0:
-        dx = max(-1, min(1, map_info.MAP_CENTER.x - core_pos.x))
-        dy = max(-1, min(1, map_info.MAP_CENTER.y - core_pos.y))
+        dx = max(-1, min(1, map_info._MAP_CENTER.x - core_pos.x))
+        dy = max(-1, min(1, map_info._MAP_CENTER.y - core_pos.y))
         spawn_pos = Position(core_pos.x + dx, core_pos.y + dy)
         if rc.can_spawn(spawn_pos):
             rc.spawn_builder(spawn_pos)

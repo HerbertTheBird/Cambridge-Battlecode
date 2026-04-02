@@ -38,8 +38,8 @@ DIRS = [
 ]
 
 bridge_cost = 10
-barrier_cost = 15
-adj_launch_cost = 20
+barrier_cost = 5
+adj_launch_cost = 10
 CONV = [
     (0, -1, 1),
     (0, 1, 1),
@@ -150,6 +150,8 @@ class Pathing:
 
     def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs:list[Direction]=DIRS, adjacent_in: bool = False):
         builder.log("a* init")
+        if self == builder.nav:
+            print(start_p, target_p)
         if isinstance(target_p, Position):
             target_p = {target_p}
         self.changed = False
@@ -234,8 +236,8 @@ class Pathing:
         start_time = time.perf_counter_ns()
         heappush  = heapq.heappush
         heappop   = heapq.heappop
-        cx = map_info.my_core.x
-        cy = map_info.my_core.y
+        cx = map_info._my_core.x
+        cy = map_info._my_core.y
 
         
         
@@ -254,9 +256,9 @@ class Pathing:
             if (h == sx+sy*width and not adjacent) or target[h] == run_id:
                 continue
             avoid[h] = avoid_id
-        for b in map_info.barrier_tiles:
+        for b in map_info._my_barriers:
             barriers[b.y * width + b.x] = avoid_id
-        for p in map_info.enemy_launcher_adjacent_tiles:
+        for p in map_info._enemy_launch_adj:
             adj_launch[p.y * width + p.x] = avoid_id
         
         if not adjacent:
@@ -271,8 +273,6 @@ class Pathing:
             
         WEIGHT_L = WEIGHT
         new_hp = []
-        if self == builder.ore_nav:
-            builder.log(str(len(heap)))
         while heap:
             f, g, card, zig_flag, zig_time, pos, iter = heappop(heap)
             g *= -1
@@ -280,12 +280,8 @@ class Pathing:
             ny = pos//width
             MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT_L-MIN_WEIGHT)
             if avoid[pos] == avoid_id:
-                if self == builder.ore_nav:
-                    builder.log(str(nx) + " " + str(ny))
                 continue
             if g > best_g[pos]:
-                if self == builder.ore_nav:
-                    builder.log(str(nx) + " " + str(ny))
                 continue
             if is_dirs:
                 h0 = max(abs(nx - sx), abs(ny - sy))
@@ -314,8 +310,6 @@ class Pathing:
                 break
             _, g, card, _, zig_time, pos, _ = heappop(heap)
             g *= -1
-            if self == builder.ore_nav:
-                builder.log(str(g) + " " + str(pos) + " " + str(run_id))
             if start[pos] == run_id:
                 path_out = self.reconstruct_path(pos)
                 heap.clear()
@@ -325,7 +319,8 @@ class Pathing:
 
             px = pos % width
             py = pos // width
-            rc.draw_indicator_dot(Position(px, py), min(255, self.iter*255//625), 0, 0)
+            if self == builder.nav:
+                rc.draw_indicator_dot(Position(px, py), min(255, self.iter*255//625), 0, 0)
             for dx, dy, cost in dirs:
                 nx = px + dx
                 ny = py + dy
@@ -428,6 +423,8 @@ class Pathing:
             self.forget_launcher.clear()
         print("move to ", target)
         avoid = map_info.get_avoid(False, True, False)
+        # for a in avoid:
+            # self.rc.draw_indicator_dot(a, 255, 0, 0)
         my_pos = self.rc.get_position()
 
         path = self.calculate_path(target, avoid)
@@ -482,25 +479,23 @@ class Pathing:
 
     def calculate_conveyor_path(self, ore: Position, avoid_extra: list[Position] = None, update: bool = False):
         print("conveyors from ", ore)
-        core = map_info.my_core
+        core = map_info._my_core
         if not avoid_extra:
             avoid_extra = {}
         target = {Position(core.x + dx, core.y + dy) for _, (dx, dy) in ALL_DIRS_DELTAS}
 
         # FIX: cache frequently-used references for the loop
-        building_cache = map_info.building
-        width_l        = map_info.width
-        height_l       = map_info.height
+        width_l        = map_info._width
+        height_l       = map_info._height
         my_team        = self.rc.get_team()
         is_conveyor    = map_info.is_conveyor
 
         for x in range(width_l):
             for y in range(height_l):
-                b = building_cache[x][y]
-                if b and is_conveyor(b.type) and b.load and b.load <= 3 and b.team == my_team and Position(x, y) not in avoid_extra and b.load_confirmed:
+                if map_info.id_at(x, y) != 0 and is_conveyor(map_info.type_at(x, y)) and map_info.can_route(x, y) and map_info.load_at(x, y) <= 3 and map_info.team_at(x, y) == my_team and Position(x, y) not in avoid_extra:
                     target.add(Position(x, y))
         adding_foundry = False
-        if builder.target_foundry not in target and (not map_info.building[builder.target_foundry.x][builder.target_foundry.y] or not map_info.is_conveyor(map_info.building[builder.target_foundry.x][builder.target_foundry.y].type)):
+        if builder.target_foundry not in target and (not map_info.id_at(builder.target_foundry.x, builder.target_foundry.y) != 0 or not map_info.is_conveyor(map_info.type_at(builder.target_foundry.x, builder.target_foundry.y))):
             adding_foundry = True
             target.add(builder.target_foundry)
         avoid = map_info.get_avoid(True, False, True)
@@ -524,9 +519,8 @@ class Pathing:
         avoid.update(path)
 
         current_pos  = self.rc.get_position()
-        width_local  = map_info.width
-        height_local = map_info.height
-        building     = map_info.building
+        width_local  = map_info._width
+        height_local = map_info._height
         team         = self.rc.get_team()
         path_len     = len(path)
 
@@ -552,8 +546,7 @@ class Pathing:
                     candidate = Position(x, y)
                     here.add(candidate)
 
-                    b = building[x][y]
-                    if b and b.team == team and b.type == EntityType.LAUNCHER:
+                    if map_info.id_at(x, y) != 0 and map_info.team_at(x, y) == team and map_info.type_at(x, y) == EntityType.LAUNCHER:
                         has_launcher = True
 
                 if has_launcher:

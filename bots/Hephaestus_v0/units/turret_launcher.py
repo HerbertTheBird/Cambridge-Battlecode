@@ -219,7 +219,7 @@ def run():
             bot_pos = None
         if bot_pos and bot_pos.distance_squared(pos) <= 2:
             print(f"Attempting launch bot {id} at {bot_pos}")
-            if map_info.building[bot_pos.x][bot_pos.y] and map_info.is_conveyor(map_info.building[bot_pos.x][bot_pos.y].type) and map_info.building[bot_pos.x][bot_pos.y].team != rc.get_team():
+            if map_info.id_at(bot_pos.x, bot_pos.y) and map_info.is_conveyor(map_info.type_at(bot_pos.x, bot_pos.y)) and map_info.team_at(bot_pos.x, bot_pos.y) != rc.get_team():
                 continue
             # candidate positions
             candidates = []
@@ -237,15 +237,15 @@ def run():
                     continue
 
                 # must be on titanium
-                if map_info.ground[tile.x][tile.y] != map_info._ENV_ORE_TI:
+                if map_info.ground_at(tile.x, tile.y) != map_info._ENV_ORE_TI:
                     continue
 
                 # now check adjacent tiles for launch positions
                 
                 print(building_id)
-                for direction in map_info.CARDINALS:
+                for direction in map_info._CARDINAL:
                     target_tile = tile.add(direction)
-                    if not map_info.is_on_map(target_tile):
+                    if not map_info.in_bounds(target_tile):
                         continue
                     if target_tile.distance_squared(pos) > rc.get_vision_radius_sq():
                         continue
@@ -301,7 +301,7 @@ def run():
                             adj = Position(target_tile.x + dx, target_tile.y + dy)
                             if adj.distance_squared(pos) > rc.get_vision_radius_sq():
                                 continue
-                            if not map_info.is_on_map(adj):
+                            if not map_info.in_bounds(adj):
                                 continue
                             adj_id = rc.get_tile_building_id(adj)
                             if adj_id is None:
@@ -322,11 +322,11 @@ def run():
                         EntityType.BRIDGE,
                     ):
                         print("Conveyer target")
-                        if not map_info.leads_to_friendly_turret(building_id):  # custom helper
-                            if rc.is_tile_passable(target_tile):
-                                if rc.can_launch(bot_pos, target_tile):
-                                    rc.launch(bot_pos, target_tile)
-                                    return
+                        # if not map_info.leads_to_friendly_turret(building_id):  # custom helper
+                        if rc.is_tile_passable(target_tile):
+                            if rc.can_launch(bot_pos, target_tile):
+                                rc.launch(bot_pos, target_tile)
+                                return
 
             # === Sort by priority (lowest number = highest priority) ===
             candidates.sort(key=lambda x: x[0])
@@ -352,10 +352,9 @@ def run():
         try:
             if rc.get_team(unit_id) != my_team and rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT:
                 bot_pos = rc.get_position(unit_id)
-                building_on_tile = map_info.building[bot_pos.x][bot_pos.y]
                 
                 # Primary Target: opponent bot on our conveyor/bridge
-                if building_on_tile and building_on_tile.team == my_team and map_info.is_conveyor(building_on_tile.type):
+                if map_info.id_at(bot_pos.x, bot_pos.y) != 0 and map_info.team_at(bot_pos.x, bot_pos.y) == my_team and map_info.is_conveyor(map_info.type_at(bot_pos.x, bot_pos.y)):
                     primary_targets.append(unit_id)
                 else:
                     secondary_targets.append(unit_id)
@@ -376,16 +375,15 @@ def run():
     all_roads = []
     all_conveyances = []
 
-    for x in range(map_info.width):
-        for y in range(map_info.height):
-            b = map_info.building[x][y]
-            if b:
+    for x in range(map_info._width):
+        for y in range(map_info._height):
+            if map_info.id_at(x, y) != 0:
                 pos = Position(x, y)
-                if b.type == EntityType.ROAD:
+                if map_info.type_at(x, y) == EntityType.ROAD:
                     all_roads.append(pos)
-                elif map_info.is_conveyor(b.type):
+                elif map_info.is_conveyor(map_info.type_at(x, y)):
                     all_conveyances.append(pos)
-                elif b.type == EntityType.LAUNCHER and b.team != rc.get_team():
+                elif map_info.type_at(x, y) == EntityType.LAUNCHER and map_info.team_at(x, y) != rc.get_team():
                     for dir in all_dirs:
                         all_conveyances.append(pos.add(dir))
 
@@ -395,17 +393,16 @@ def run():
     allied_launchers = []
     enemy_launchers = []
 
-    for x in range(map_info.width):
-        for y in range(map_info.height):
-            b = map_info.building[x][y]
-            if not b:
+    for x in range(map_info._width):
+        for y in range(map_info._height):
+            if map_info.id_at(x, y) == 0:
                 continue
             temppos = Position(x, y)
-            if b.type == EntityType.LAUNCHER:
-                if b.team == my_team:
-                    allied_launchers.append((b.id, temppos))
+            if map_info.type_at(x, y) == EntityType.LAUNCHER:
+                if map_info.team_at(x, y) == my_team:
+                    allied_launchers.append((map_info.id_at(x, y), temppos))
                 else:
-                    enemy_launchers.append((b.id, temppos))
+                    enemy_launchers.append((map_info.id_at(x, y), temppos))
 
     best_score = -float('inf')
     best_tile = None
@@ -422,7 +419,7 @@ def run():
                 tile = Position(lpos.x + dx, lpos.y + dy)
                 if tile.distance_squared(rc.get_position()) > action_radius_sq:
                     continue
-                if not map_info.is_on_map(tile):
+                if not map_info.in_bounds(tile):
                     continue
 
                 # Must be empty
