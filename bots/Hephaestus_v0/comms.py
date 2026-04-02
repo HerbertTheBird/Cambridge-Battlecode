@@ -2,7 +2,10 @@ from cambc import Controller, Position, EntityType, GameError
 
 LAUNCHER_BIT = 31
 CENTRALIZED_LAUNCHER_BIT = 30
-ID_BITS = 12
+ORE_CLAIM_BIT = 29
+TURN_BITS = 11
+_TURN_MASK = (1<<TURN_BITS)-1
+ID_BITS = 6 # mod 64
 _ID_MASK = (1 << ID_BITS) - 1
 
 rc = None
@@ -36,29 +39,32 @@ def get_messages():
 
     return messages
 
-
+def decode_turn(v):
+    return (v>>ID_BITS)&_TURN_MASK
 def decode_location(v):
-    return Position((v >> ID_BITS) & 63, (v >> (6 + ID_BITS)) & 63)
-
-
+    return Position((v >> ID_BITS + TURN_BITS) & 63, (v >> (6 + ID_BITS + TURN_BITS)) & 63)
 def decode_id(v):
     return v & _ID_MASK
 
 
 def decode_launch():
-    is_in_vision = rc.is_in_vision
-    id_mask = _ID_MASK
     out = []
     append = out.append
 
     for p, v in get_messages():
         if (v >> LAUNCHER_BIT) & 1:
-            target = Position((v >> ID_BITS) & 63, (v >> (6 + ID_BITS)) & 63)
-            if is_in_vision(target):
-                append((target, v & id_mask, p))
+            target = decode_location(v)
+            append((target, decode_id(v), decode_turn(v), p))
 
     return out
+def decode_claim():
+    out = []
+    append = out.append
 
+    for p, v in get_messages():
+        if (v >> ORE_CLAIM_BIT) & 1:
+            append((decode_location(v), decode_turn(v), decode_id(v)))
+    return out
 def decode_centralized_launch():
     id_mask = _ID_MASK
     out = []
@@ -70,9 +76,10 @@ def decode_centralized_launch():
 
     return out
 
-
+def encode_claim(target):
+    return (rc.get_id()&_ID_MASK) + (rc.get_current_round()<<ID_BITS) + (target.x << (ID_BITS+TURN_BITS)) + (target.y << (ID_BITS + TURN_BITS + 6)) + (1 << ORE_CLAIM_BIT)
 def encode_launch(target):
-    return rc.get_id() + (target.x << ID_BITS) + (target.y << (ID_BITS + 6)) + (1 << LAUNCHER_BIT)
+    return (rc.get_id()&_ID_MASK) + (rc.get_current_round()<<ID_BITS) + (target.x << (ID_BITS+TURN_BITS)) + (target.y << (ID_BITS + TURN_BITS + 6)) + (1 << LAUNCHER_BIT)
 
 def encode_centralized_launch():
     return rc.get_id() + (1 << CENTRALIZED_LAUNCHER_BIT)

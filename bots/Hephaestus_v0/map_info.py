@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import deque
-
+import time
 def is_on_map(pos: Position):
     return 0 <= pos.x < width and 0 <= pos.y < height
 CARDINALS = [
@@ -16,12 +16,10 @@ has_direction = {EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CON
 has_vision = {EntityType.BREACH, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.SENTINEL}
 
 has_bridge_target = {EntityType.BRIDGE}
-has_stored_resource = {EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.FOUNDRY, EntityType.SPLITTER}
 # --- FIX 1: pre-compute integer-value frozensets for enum membership tests.
 _has_direction_vals    = frozenset(e.value for e in has_direction)
 _has_vision_vals       = frozenset(e.value for e in has_vision)
 _has_bridge_target_vals = frozenset(e.value for e in has_bridge_target)
-_has_stored_resource_vals = frozenset(e.value for e in has_stored_resource)
 _CONVEYOR_TYPE_VALS = frozenset(
     e.value for e in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR,
                       EntityType.BRIDGE, EntityType.SPLITTER)
@@ -37,9 +35,13 @@ _ET_SPLITTER          = EntityType.SPLITTER
 _ET_CORE              = EntityType.CORE
 _ET_BUILDER_BOT       = EntityType.BUILDER_BOT
 _ET_HARVESTER         = EntityType.HARVESTER
+_ET_FOUNDRY           = EntityType.FOUNDRY
+_ET_LAUNCHER          = EntityType.LAUNCHER
 _ET_GUNNER            = EntityType.GUNNER
 _ET_SENTINEL          = EntityType.SENTINEL
 _ET_BREACH            = EntityType.BREACH
+_RT_AXIONITE          = ResourceType.RAW_AXIONITE
+_RT_TITANIUM          = ResourceType.TITANIUM
 _ENV_EMPTY   = Environment.EMPTY
 _ENV_ORE_AX  = Environment.ORE_AXIONITE
 _ENV_ORE_TI  = Environment.ORE_TITANIUM
@@ -52,13 +54,18 @@ _CARDINAL_OFFSETS = {
     Direction.WEST:  (-1, 0),
     Direction.EAST:  (1, 0),
 }
+_ADJ_OFFSETS_8 = (
+    (-1, -1), (0, -1), (1, -1),
+    (-1, 0),            (1, 0),
+    (-1, 1),  (0, 1),   (1, 1),
+)
+_DIRECTION_DELTAS = {d: d.delta() for d in Direction}
 rc = None
 width = height = 0
 MAP_CENTER = None
 ground: list[list[Environment | None]] = []
 ground_seen: list[list[bool]] = []
 building: list[list["Building | None"]] = []
-stuck_turns: list[list[int]] = []
 past_filled: list[list[int]] = []
 last_seen: list[list[int]] = []
 my_core: Position | None = None
@@ -76,6 +83,12 @@ building_blocked_all: set[Position] = set()
 building_blocked_no_barrier: set[Position] = set()
 building_blocked_no_conveyors: set[Position] = set()
 building_blocked_no_barrier_no_conveyors: set[Position] = set()
+avoid_base_tiles: set[Position] = set()
+avoid_conveyor_tiles: set[Position] = set()
+avoid_ore_tiles: set[Position] = set()
+barrier_tiles: set[Position] = set()
+enemy_launcher_adjacent_tiles: set[Position] = set()
+_enemy_launcher_positions: set[Position] = set()
 my_core_area: set[Position] = set()
 their_core_area: set[Position] = set()
 # --- FIX 3: slots=True eliminates per-instance __dict__.
@@ -90,17 +103,19 @@ class Building:
     direction: Direction | None = None
     vision_sq: int | None = None
     bridge_target: Position | None = None
-    conveyor_speed: int | None = None
-    stored_resource_id: int | None = None
-    load: int | None = None
+    load: float | None = None
+    load_confirmed: bool = True
+    transporting_ore: Environment | None = None
 def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < width and 0 <= pos.y < height
 def init(c: Controller):
     global rc, width, height
-    global ground, ground_seen, building, stuck_turns, past_filled, last_seen
+    global ground, ground_seen, building, past_filled, last_seen
     global ground_blocked_all, ground_blocked_no_ore
     global building_blocked_all, building_blocked_no_barrier
     global building_blocked_no_conveyors, building_blocked_no_barrier_no_conveyors
+    global avoid_base_tiles, avoid_conveyor_tiles, avoid_ore_tiles, barrier_tiles
+    global enemy_launcher_adjacent_tiles, _enemy_launcher_positions
     global my_core_area, their_core_area
     global MAP_CENTER
     rc = c
@@ -110,7 +125,6 @@ def init(c: Controller):
     ground = [[None for _ in range(height)] for _ in range(width)]
     ground_seen = [[False for _ in range(height)] for _ in range(width)]
     building = [[None for _ in range(height)] for _ in range(width)]
-    stuck_turns = [[0 for _ in range(height)] for _ in range(width)]
     past_filled = [[0 for _ in range(height)] for _ in range(width)]
     last_seen = [[-2 for _ in range(height)] for _ in range(width)]
     ground_blocked_all = set()
@@ -119,6 +133,12 @@ def init(c: Controller):
     building_blocked_no_barrier = set()
     building_blocked_no_conveyors = set()
     building_blocked_no_barrier_no_conveyors = set()
+    avoid_base_tiles = set()
+    avoid_conveyor_tiles = set()
+    avoid_ore_tiles = set()
+    barrier_tiles = set()
+    enemy_launcher_adjacent_tiles = set()
+    _enemy_launcher_positions = set()
     my_core_area = set()
     their_core_area = set()
 def hor_flip(pos: Position):
@@ -172,7 +192,7 @@ def core_center(core_id: int, tile: Position) -> Position:
 def is_conveyor(type: EntityType):
     return type is _ET_CONVEYOR or type is _ET_ARMOURED_CONVEYOR or type is _ET_BRIDGE or type is _ET_SPLITTER
 def is_turret(type: EntityType):
-    return type is _ET_GUNNER or type is _ET_SENTINEL or type is _ET_BREACH
+    return type is _ET_LAUNCHER or type is _ET_GUNNER or type is _ET_SENTINEL or type is _ET_BREACH
 def leads_to_friendly_turret(start_building_id, max_depth=20):
     """
     Returns True if following the outputs of this enemy bridge/conveyor
@@ -246,41 +266,6 @@ def _rebuild_core_areas() -> None:
             for y in range(their_core.y - 1, their_core.y + 2):
                 if 0 <= x < width and 0 <= y < height:
                     their_core_area.add(Position(x, y))
-# Kept for external callers; update() uses inlined versions.
-def _update_ground_blocked_at(pos: Position) -> None:
-    x, y = pos.x, pos.y
-    env = ground[x][y]
-    ground_blocked_all.discard(pos)
-    ground_blocked_no_ore.discard(pos)
-    if env is None:
-        return
-    if env is _ENV_EMPTY or env is _ENV_ORE_AX:
-        return
-    ground_blocked_all.add(pos)
-    if env is not _ENV_ORE_TI:
-        ground_blocked_no_ore.add(pos)
-# Kept for external callers; update() uses inlined versions.
-def _update_building_blocked_at(pos: Position) -> None:
-    x, y = pos.x, pos.y
-    b = building[x][y]
-    building_blocked_all.discard(pos)
-    building_blocked_no_barrier.discard(pos)
-    building_blocked_no_conveyors.discard(pos)
-    building_blocked_no_barrier_no_conveyors.discard(pos)
-    if b is None:
-        return
-    t = b.type
-    if t is _ET_ROAD or t is _ET_MARKER:
-        return
-    is_barrier = t is _ET_BARRIER
-    is_conv    = b.is_conveyor_type
-    building_blocked_all.add(pos)
-    if not is_barrier:
-        building_blocked_no_barrier.add(pos)
-    if not is_conv:
-        building_blocked_no_conveyors.add(pos)
-    if not is_barrier and not is_conv and not t is _ET_GUNNER:
-        building_blocked_no_barrier_no_conveyors.add(pos)
 def mark_known_conveyors() -> None:
     rc_draw_indicator_dot = rc.draw_indicator_dot
     building_local = building
@@ -295,14 +280,14 @@ def mark_known_conveyors() -> None:
             load = b.load
             if load is None:
                 r, g, bl = 0, 0, 0          # black
-            elif load == 4:
+            elif load > 4:
                 r, g, bl = 255, 0, 0        # red
-            elif load == 0:
+            elif load < 0.999:
                 r, g, bl = 0, 0, 255        # blue
             else:
-                r, g, bl = 0, load * 80, 0  # green: 80, 160, 240 for 1,2,3
-
-            rc_draw_indicator_dot(Position(x, y), r, g, bl)
+                r, g, bl = 0, min(255, int(load * 60)), 0  # green: 80, 160, 240 for 1,2,3
+            print(str(x) + " " + str(y) + " = " + str(load) + " " + str(b.load_confirmed))
+            # rc_draw_indicator_dot(Position(x, y), r, g, bl)
 def update() -> None:
     from units.builder import log
     mark_known_conveyors()
@@ -317,7 +302,6 @@ def update() -> None:
     ground_local      = ground
     ground_seen_local = ground_seen
     building_local    = building
-    stuck_turns_local = stuck_turns
     past_filled_local = past_filled
     last_seen_local   = last_seen
     solved_sym_local = solved_sym
@@ -335,7 +319,6 @@ def update() -> None:
     rc_get_direction          = rc.get_direction
     rc_get_vision_radius_sq   = rc.get_vision_radius_sq
     rc_get_bridge_target      = rc.get_bridge_target
-    rc_get_stored_resource_id = rc.get_stored_resource_id
     rc_get_stored_resource    = rc.get_stored_resource
     rc_draw_indicator_dot     = rc.draw_indicator_dot
     rc_get_tile_env           = rc.get_tile_env
@@ -352,19 +335,29 @@ def update() -> None:
     bb_nconv_discard = building_blocked_no_conveyors.discard
     bb_nbnc_add      = building_blocked_no_barrier_no_conveyors.add
     bb_nbnc_discard  = building_blocked_no_barrier_no_conveyors.discard
+    avoid_base_add   = avoid_base_tiles.add
+    avoid_base_discard = avoid_base_tiles.discard
+    avoid_conv_add   = avoid_conveyor_tiles.add
+    avoid_conv_discard = avoid_conveyor_tiles.discard
+    avoid_ore_add    = avoid_ore_tiles.add
+    avoid_barrier_add = barrier_tiles.add
+    avoid_barrier_discard = barrier_tiles.discard
+    enemy_launcher_pos_add = _enemy_launcher_positions.add
+    enemy_launcher_pos_discard = _enemy_launcher_positions.discard
     # --- FIX 10: local-cache enum singletons for identity comparisons in loop.
     env_empty  = _ENV_EMPTY
     env_ore_ax = _ENV_ORE_AX
     env_ore_ti = _ENV_ORE_TI
     et_road    = _ET_ROAD
-    et_gunner    = _ET_GUNNER
     et_marker  = _ET_MARKER
     et_barrier = _ET_BARRIER
+    et_harvester = _ET_HARVESTER
+    et_foundry = _ET_FOUNDRY
+    et_launcher = _ET_LAUNCHER
     et_core    = _ET_CORE
     prev_round = current_round - 1
     # --- FIX 11: keep frozenset references local.
     conv_vals  = _CONVEYOR_TYPE_VALS
-    hsr_vals   = _has_stored_resource_vals
     hdir_vals  = _has_direction_vals
     hvis_vals  = _has_vision_vals
     hbt_vals   = _has_bridge_target_vals
@@ -381,6 +374,10 @@ def update() -> None:
                 gb_all_add(tile)
                 if env is not env_ore_ti:
                     gb_nore_add(tile)
+            if env is env_ore_ax or env is env_ore_ti:
+                avoid_ore_add(tile)
+            elif env is not None and env is not env_empty:
+                avoid_base_add(tile)
             # --- FIX 5 (kept): inline symmetry update with raw ints.
             if hor_sym_local:
                 hx = width_m1 - x
@@ -415,15 +412,29 @@ def update() -> None:
                     gb_all_add(flipped)
                     if env is not env_ore_ti:
                         gb_nore_add(flipped)
+                if env is env_ore_ax or env is env_ore_ti:
+                    avoid_ore_add(Position(fx, fy))
+                elif env is not None and env is not env_empty:
+                    avoid_base_add(Position(fx, fy))
         entity_id = rc_get_tile_building_id(tile)
         if entity_id is None:
-            if building_local[x][y] is not None:
+            prev_building = building_local[x][y]
+            if prev_building is not None:
                 building_local[x][y] = None
                 # --- FIX 14: inlined _update_building_blocked_at for None building.
                 bb_all_discard(tile)
                 bb_nbar_discard(tile)
                 bb_nconv_discard(tile)
                 bb_nbnc_discard(tile)
+                if prev_building.is_conveyor_type:
+                    avoid_conv_discard(tile)
+                prev_type = prev_building.type
+                if prev_type is et_barrier:
+                    avoid_barrier_discard(tile)
+                if prev_type is et_harvester or prev_type is et_foundry or is_turret(prev_type):
+                    avoid_base_discard(tile)
+                if prev_type is et_launcher and prev_building.team != my_team:
+                    enemy_launcher_pos_discard(tile)
             last_seen_local[x][y] = current_round
             continue
         
@@ -434,19 +445,9 @@ def update() -> None:
         entity_type = rc_get_entity_type(entity_id)
         etv = entity_type.value
         is_conv = etv in conv_vals
-        has_sr  = etv in hsr_vals
-        stored_resource_id = rc_get_stored_resource_id(entity_id) if has_sr else None
-        stored_resource = rc_get_stored_resource(entity_id) if (is_conv and has_sr) else None
+        stored_resource = rc_get_stored_resource(entity_id) if is_conv else None
+        transporting_ore = _ore_env_from_code(_ore_code_from_resource(stored_resource)) if is_conv else None
         prev_is_conv = prev_building is not None and prev_building.is_conveyor_type
-        speed = None
-        if seen_last_turn and is_conv and prev_is_conv:
-            if stored_resource_id == prev_building.stored_resource_id and stored_resource_id is not None:
-                stuck_turns_local[x][y] += 1
-            else:
-                speed = stuck_turns_local[x][y] + 1
-                stuck_turns_local[x][y] = 0
-        else:
-            stuck_turns_local[x][y] = 0
         load = None
         if is_conv:
             if stored_resource is None:
@@ -470,9 +471,10 @@ def update() -> None:
         #     # do smth
         if prev_building is not None and prev_building.id == entity_id:
             prev_building.hp = rc_get_hp(entity_id)
-            prev_building.stored_resource_id = stored_resource_id
-            prev_building.conveyor_speed = speed
             prev_building.load = load
+            prev_building.transporting_ore = transporting_ore
+            if not is_conv:
+                prev_building.load_confirmed = True
             new_building = prev_building
             # Type unchanged => blocked sets unchanged; skip entirely.
         else:
@@ -489,11 +491,29 @@ def update() -> None:
                 direction=direction,
                 vision_sq=vision_sq,
                 bridge_target=bridge_target,
-                stored_resource_id=stored_resource_id,
-                conveyor_speed=speed,
                 load=load,
+                load_confirmed=not is_conv,
+                transporting_ore=transporting_ore,
             )
             building_local[x][y] = new_building
+            if prev_building is not None:
+                prev_type = prev_building.type
+                if prev_building.is_conveyor_type:
+                    avoid_conv_discard(tile)
+                if prev_type is et_barrier:
+                    avoid_barrier_discard(tile)
+                if prev_type is et_harvester or prev_type is et_foundry or is_turret(prev_type):
+                    avoid_base_discard(tile)
+                if prev_type is et_launcher and prev_building.team != my_team:
+                    enemy_launcher_pos_discard(tile)
+            if is_conv:
+                avoid_conv_add(tile)
+            if entity_type is et_barrier:
+                avoid_barrier_add(tile)
+            if entity_type is et_harvester or entity_type is et_foundry or is_turret(entity_type):
+                avoid_base_add(tile)
+            if entity_type is et_launcher and team != my_team:
+                enemy_launcher_pos_add(tile)
             # --- FIX 16: inlined _update_building_blocked_at, only when type changed.
             if prev_building is None or prev_building.type is not entity_type:
                 # Discard old entries (no-op if prev was None).
@@ -505,14 +525,12 @@ def update() -> None:
                 if t is not et_road and t is not et_marker:
                     is_barrier = t is et_barrier
                     bb_all_add(tile)
-                    if not is_barrier and t is not et_gunner:
+                    if not is_barrier:
                         bb_nbar_add(tile)
                     if not is_conv:
                         bb_nconv_add(tile)
                     if not is_barrier and not is_conv:
                         bb_nbnc_add(tile)
-        if load is not None:
-            rc_draw_indicator_dot(tile, 0, 0, 50 * load)
         if my_core is None and entity_type is et_core:
             if new_building.team == my_team:
                 my_core = core_center(entity_id, tile)
@@ -564,6 +582,10 @@ def update() -> None:
                             gb_all_add(flipped)
                             if env is not _ENV_ORE_TI:
                                 gb_nore_add(flipped)
+                        if env is _ENV_ORE_AX or env is _ENV_ORE_TI:
+                            avoid_ore_add(flipped)
+                        elif env is not None and env is not _ENV_EMPTY:
+                            avoid_base_add(flipped)
     if my_core:
         if their_core:
             predicted_enemy_core = their_core
@@ -590,7 +612,15 @@ def update() -> None:
                     predicted_enemy_core = vsym_core
                 else:
                     predicted_enemy_core = hsym_core
-
+    enemy_launcher_adjacent_tiles.clear()
+    for launcher_pos in _enemy_launcher_positions:
+        lx = launcher_pos.x
+        ly = launcher_pos.y
+        for dx, dy in _ADJ_OFFSETS_8:
+            nx = lx + dx
+            ny = ly + dy
+            if 0 <= nx < width and 0 <= ny < height:
+                enemy_launcher_adjacent_tiles.add(Position(nx, ny))
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) is _ET_MARKER))
 
@@ -600,20 +630,14 @@ def can_place_at_restrictive(pos: Position):
 def get_avoid(
     avoid_conveyors: bool,
     avoid_builders: bool,
-    avoid_barrier: bool = True,
-    avoid_ore: bool = True,
+    avoid_ore: bool,
 ) -> set[Position]:
     avoid_core = rc.get_tile_building_id(rc.get_position()) != core_id
-    if avoid_ore:
-        ground_set = ground_blocked_all
-    else:
-        ground_set = ground_blocked_no_ore
+    avoid = set(avoid_base_tiles)
     if avoid_conveyors:
-        building_set = building_blocked_all if avoid_barrier else building_blocked_no_barrier
-    else:
-        building_set = building_blocked_no_conveyors if avoid_barrier else building_blocked_no_barrier_no_conveyors
-    # Use | to create the union in one C-level operation.
-    avoid = ground_set | building_set
+        avoid |= avoid_conveyor_tiles
+    if avoid_ore:
+        avoid |= avoid_ore_tiles
     if avoid_core:
         avoid |= my_core_area
     avoid |= their_core_area
@@ -627,7 +651,8 @@ def get_avoid(
                 avoid.add(rc_get_position(unit))
     return avoid
 def best_sentinel_dir(pos: Position):
-    from units.builder_states.builder_rush import log
+    # from units.builder_states.builder_rush import log
+    from units.builder import log
     valid = set()
     pos_x = pos.x
     pos_y = pos.y
@@ -706,3 +731,35 @@ def best_sentinel_dir(pos: Position):
             mx_other      = other
             best_dir      = dir
     return best_dir
+def next_conveyor_pos(pos: Position, b: Building) -> Position | None:
+    """Return the next position in the conveyor chain."""
+    if b.type is _ET_BRIDGE:
+        return b.bridge_target
+
+    if b.type is _ET_CONVEYOR or b.type is _ET_ARMOURED_CONVEYOR or b.type is _ET_SPLITTER:
+        if b.direction is None:
+            return None
+        return pos.add(b.direction)
+
+    return None
+
+def _ore_code_from_env(env: Environment | None) -> int:
+    if env is _ENV_ORE_AX:
+        return 2
+    if env is _ENV_ORE_TI:
+        return 1
+    return 0
+
+def _ore_code_from_resource(resource: ResourceType | None) -> int:
+    if resource is _RT_AXIONITE:
+        return 2
+    if resource is _RT_TITANIUM:
+        return 1
+    return 0
+
+def _ore_env_from_code(code: int) -> Environment | None:
+    if code >= 2:
+        return _ENV_ORE_AX
+    if code == 1:
+        return _ENV_ORE_TI
+    return None

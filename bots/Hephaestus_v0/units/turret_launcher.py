@@ -1,18 +1,175 @@
 
-from cambc import Controller, EntityType, Position, GameError, Direction
+from cambc import Controller, EntityType, Position, GameError, Direction, Environment
 import map_info
 import sys
 import comms
 import math
 rc: Controller | None = None
 all_dirs = list(Direction)
+_DIRS_8 = (
+    (1, 0), (-1, 0), (0, 1), (0, -1),
+    (1, 1), (1, -1), (-1, 1), (-1, -1),
+)
+_width = 0
+_height = 0
+_visible_passable = []
+_search_seen = []
+_search_dist = []
+_search_start_edge = []
+_heap = []
+_visible_run_id = 0
+_search_run_id = 0
+_BEST_TILE_MAX_US = 1800
 
 def init(c: Controller):
-    global rc
+    global rc, _width, _height, _visible_passable, _search_seen, _search_dist, _search_start_edge
     rc = c
+    _width = c.get_map_width()
+    _height = c.get_map_height()
+    grid_size = _width * _height
+    _visible_passable = [0] * grid_size
+    _search_seen = [0] * grid_size
+    _search_dist = [0] * grid_size
+    _search_start_edge = [0] * grid_size
     comms.init(c)
     map_info.init(c)
 
+import heapq
+
+def prepare_visible_passability(nearby_tiles):
+    global _visible_run_id
+    _visible_run_id += 1
+    run_id = _visible_run_id
+
+    passable = _visible_passable
+    get_tile_env = rc.get_tile_env
+    get_tile_building_id = rc.get_tile_building_id
+    get_entity_type = rc.get_entity_type
+
+    for pos in nearby_tiles:
+        x = pos.x
+        y = pos.y
+        if get_tile_env(pos) == Environment.WALL:
+            continue
+
+        building_id = get_tile_building_id(pos)
+        if building_id is None:
+            passable[y * _width + x] = run_id
+            continue
+
+        b_type = get_entity_type(building_id)
+        if b_type == EntityType.ROAD or map_info.is_conveyor(b_type):
+            passable[y * _width + x] = run_id
+
+    return run_id
+
+
+def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visible_run_id: int):
+    global _search_run_id
+    _search_run_id += 1
+    run_id = _search_run_id
+    start_us = rc.get_cpu_time_elapsed()
+
+    def over_budget() -> bool:
+        return rc.get_cpu_time_elapsed() - start_us >= _BEST_TILE_MAX_US
+
+    width = _width
+    height = _height
+    passable = _visible_passable
+    seen = _search_seen
+    dist = _search_dist
+    start_edge = _search_start_edge
+    heap = _heap
+    heap.clear()
+
+    candidates = {}
+
+    for i, tile in enumerate(nearby_tiles):
+        if (i & 15) == 0 and over_budget():
+            return None
+
+        idx = tile.y * width + tile.x
+        if passable[idx] != visible_run_id:
+            continue
+        if rc.can_launch(builder_pos, tile):
+            candidates[idx] = tile
+
+    if not candidates:
+        return None
+    if over_budget():
+        return None
+
+    target_x = target.x
+    target_y = target.y
+    target_in_vision = rc.is_in_vision(target)
+
+    if target_in_vision:
+        target_idx = target_y * width + target_x
+        if passable[target_idx] != visible_run_id:
+            return None
+        seen[target_idx] = run_id
+        dist[target_idx] = 0
+        heapq.heappush(heap, (0, target_idx))
+    else:
+        is_in_vision = rc.is_in_vision
+        for i, pos in enumerate(nearby_tiles):
+            if (i & 15) == 0 and over_budget():
+                return None
+
+            x = pos.x
+            y = pos.y
+            idx = y * width + x
+            if passable[idx] != visible_run_id:
+                continue
+
+            step_x = x + (target_x > x) - (target_x < x)
+            step_y = y + (target_y > y) - (target_y < y)
+            if is_in_vision(Position(step_x, step_y)):
+                continue
+            start_edge[idx] = run_id
+
+            dx0 = abs(target_x - x)
+            dy0 = abs(target_y - y)
+            d0 = max(dx0, dy0) + dx0 + dy0
+            if seen[idx] != run_id or d0 < dist[idx]:
+                seen[idx] = run_id
+                dist[idx] = d0
+                heapq.heappush(heap, (d0, idx))
+
+    while heap:
+        if over_budget():
+            return None
+
+        cur_d, idx = heapq.heappop(heap)
+        if seen[idx] != run_id or cur_d != dist[idx]:
+            continue
+
+        tile = candidates.get(idx)
+        if tile is not None:
+            if (not target_in_vision) and start_edge[idx] == run_id:
+                tile = None
+            else:
+                return tile
+
+        x = idx % width
+        y = idx // width
+        for dx, dy in _DIRS_8:
+            nx = x + dx
+            ny = y + dy
+            if nx < 0 or nx >= width or ny < 0 or ny >= height:
+                continue
+
+            nidx = ny * width + nx
+            if passable[nidx] != visible_run_id:
+                continue
+
+            nd = cur_d + 1
+            if seen[nidx] != run_id or nd < dist[nidx]:
+                seen[nidx] = run_id
+                dist[nidx] = nd
+                heapq.heappush(heap, (nd, nidx))
+
+    return None
 def run():
     map_info.update()
     
@@ -23,17 +180,38 @@ def run():
     for unit in nearby_units:
         if rc.get_team(unit) == rc.get_team() and rc.get_entity_type(unit) == EntityType.BUILDER_BOT and (unit <= 4 or rc.get_current_round() > 1050 and unit % 2 == 0):
             rush_messages.append((unit, rc.get_position(unit)))
+    
+    messages = comms.decode_launch()
     pos = rc.get_position()
-    for target, id, p in messages:
-        r = int(math.sqrt(rc.get_vision_radius_sq()))
-        try:
-            bot_pos = rc.get_position(id)
-        except GameError:
-            bot_pos = None
-        if target and bot_pos and bot_pos.distance_squared(pos) <= 2 and rc.can_launch(bot_pos, target):
-            rc.launch(bot_pos, target)
-            if rc.can_place_marker(p):
-                rc.place_marker(p, 0)
+    nearby_tiles = rc.get_nearby_tiles()
+    visible_run_id = prepare_visible_passability(nearby_tiles)
+
+    for target, launch_id, turn, p in messages:
+        if rc.get_action_cooldown() != 0:
+            break
+
+        if not (
+            (turn == rc.get_current_round() and rc.get_id() > launch_id)
+            or (turn == rc.get_current_round() - 1 and rc.get_id() < launch_id)
+        ):
+            continue
+
+        builder_pos = None
+        for dir in all_dirs:
+            adj = pos.add(dir)
+            if not map_info.in_bounds(adj):
+                continue
+            builder_id = rc.get_tile_builder_bot_id(adj)
+            if builder_id and ((builder_id & comms._ID_MASK) == launch_id):
+                builder_pos = adj
+                break
+
+        if not builder_pos:
+            continue
+
+        best = best_launch_tile(target, builder_pos, nearby_tiles, visible_run_id)
+        if best:
+            rc.launch(builder_pos, best)
     for id, p in rush_messages:
         try:
             bot_pos = rc.get_position(id)
