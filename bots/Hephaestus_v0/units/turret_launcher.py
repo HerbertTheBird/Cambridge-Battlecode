@@ -19,7 +19,7 @@ _search_start_edge = []
 _heap = []
 _visible_run_id = 0
 _search_run_id = 0
-_BEST_TILE_MAX_US = 1800
+_BEST_TILE_MAX_US = 1500
 
 def init(c: Controller):
     global rc, _width, _height, _visible_passable, _search_seen, _search_dist, _search_start_edge
@@ -58,13 +58,14 @@ def prepare_visible_passability(nearby_tiles):
             continue
 
         b_type = get_entity_type(building_id)
-        if b_type == EntityType.ROAD or map_info.is_conveyor(b_type):
+        if b_type == EntityType.ROAD or map_info.is_conveyor(b_type) or b_type == EntityType.MARKER:
             passable[y * _width + x] = run_id
 
     return run_id
 
 
 def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visible_run_id: int):
+    print("attemping to path to ", target, builder_pos)
     global _search_run_id
     _search_run_id += 1
     run_id = _search_run_id
@@ -121,7 +122,7 @@ def best_launch_tile(target: Position, builder_pos: Position, nearby_tiles, visi
             idx = y * width + x
             if passable[idx] != visible_run_id:
                 continue
-
+            rc.draw_indicator_dot(Position(x, y), 0, 255, 0)
             step_x = x + (target_x > x) - (target_x < x)
             step_y = y + (target_y > y) - (target_y < y)
             if is_in_vision(Position(step_x, step_y)):
@@ -314,7 +315,7 @@ def run():
 
                 # Enemy bridge/conveyor that doesn't eventually lead to a friendly turret
                 building_id = rc.get_tile_building_id(target_tile)
-                print("reached conveyer logic")
+                # print("reached conveyer logic")
                 if building_id is not None:
                     if rc.get_team(building_id) != rc.get_team() and rc.get_entity_type(building_id) in (
                         EntityType.CONVEYOR,

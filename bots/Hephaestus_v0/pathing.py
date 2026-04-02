@@ -437,20 +437,18 @@ class Pathing:
                 continue
             id = rc.get_tile_building_id(pos)
             if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team() and pos not in self.forget_launcher:
-                print("see launcher at", pos)
                 for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
-                    p2 = Position(pos.x + dx2, pos.y + dy2)
+                    p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
                     if not map_info.in_bounds(p2):
                         continue
                     if rc.can_place_marker(p2):
-                        print("can place at", pos)
                         rc.place_marker(p2, comms.encode_launch(target))
                         self.forget_launcher.add(pos)
                         marked = True
                         break
                 if not marked:
                     for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
-                        p2 = Position(pos.x + dx2, pos.y + dy2)
+                        p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
                         if not map_info.in_bounds(p2):
                             continue
                         id2 = rc.get_tile_building_id(p2)
@@ -458,14 +456,12 @@ class Pathing:
                                 id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
                             rc.destroy(p2)
                         if rc.can_place_marker(p2):
-                            print("can place at", pos)
                             rc.place_marker(p2, comms.encode_launch(target))
                             self.forget_launcher.add(pos)
                             marked = True
                             break
             if marked:
                 break
-
         if marked:
             return
         if path is None:
