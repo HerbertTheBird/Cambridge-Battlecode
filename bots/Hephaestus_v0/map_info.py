@@ -4,6 +4,7 @@ from cambc import Controller, Position, Environment, EntityType, Team, Direction
 from dataclasses import dataclass, field
 from collections import deque
 import time
+import units.builder as builder
 
 _HAS_DIRECTION    = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
@@ -81,6 +82,7 @@ _rush_tiebroken = 0
 
 _blocked: set[Position] = set() #walls, all buildings but my barriers and all roads/conveyors
 _conveyors: set[Position] = set()
+_conveyors_targets: set[Position] = set()
 _my_barriers: set[Position] = set()
 _ores: set[Position] = set()
 _enemy_launch_adj: set[Position] = set()
@@ -228,6 +230,7 @@ def update(update_conv = True) -> None:
     
     blocked = _blocked
     conveyors = _conveyors
+    conveyor_targets = _conveyors_targets
     my_barriers = _my_barriers
     ores = _ores
     enemy_launch_adj = _enemy_launch_adj
@@ -399,6 +402,8 @@ def update(update_conv = True) -> None:
             ny = ly + dy
             if 0 <= nx < width and 0 <= ny < height:
                 enemy_launch_adj.add(Position(nx, ny))
+    for c in conveyors:
+        conveyor_targets.add(Position(building_conv_target[c.x+c.y*width]%width, building_conv_target[c.x+c.y*width]//width))
     if update_conv:
         compute_conveyor_loads()
 def is_tile_empty(pos: Position):
@@ -406,7 +411,13 @@ def is_tile_empty(pos: Position):
 
 def can_place_at_restrictive(pos: Position):
     return is_tile_empty(pos) or in_bounds(pos) and _rc.can_destroy(pos) and (_rc.get_tile_building_id(pos) != None and _rc.get_entity_type(_rc.get_tile_building_id(pos)) is EntityType.ROAD)
-
+def is_passable(pos: Position):
+    if not in_bounds(pos): return False
+    n = pos.x + pos.y * _width
+    if _INT_ENV[_ground[n]] is Environment.WALL: return False
+    if _building_id[n] == 0: return True
+    t = _INT_ET[_building_type[n]]
+    return t in _CONVEYOR_TYPES or t is EntityType.ROAD or t is EntityType.MARKER or (_building_team[n] == _TM_INT[_rc.get_team()] and t is EntityType.BARRIER)
 def get_avoid(
     avoid_conveyors: bool,
     avoid_builders: bool,
@@ -416,6 +427,7 @@ def get_avoid(
     avoid = set(_blocked)
     if avoid_conveyors:
         avoid |= _conveyors
+        avoid |= _conveyors_targets
     if avoid_ore:
         avoid |= _ores
     if avoid_core:
@@ -532,7 +544,10 @@ def propogate_load(pos: int, depth: int = 0):
     building_id = _building_id
     next = building_conv_target[pos]
     if building_id[next] == 0 or _INT_ET[building_type[next]] not in _CONVEYOR_TYPES:
-        return building_load[pos], building_ore[pos]
+        if Position(pos%_width, pos//_width) in builder.target_splitters:
+            return building_load[pos], _ENV_INT[Environment.ORE_AXIONITE]
+        else:
+            return building_load[pos], _ENV_INT[Environment.ORE_TITANIUM]
     building_load[pos], building_ore[pos] = propogate_load(next, depth + 1)
     return (building_load[pos], building_ore[pos])
 
@@ -550,7 +565,7 @@ def compute_conveyor_loads():
     for i in my_conveyors:
         c = i[0]
         h = i[1]
-        building_ore[c.x+c.y*width] = _ground[h.x+h.y*width]
+        # building_ore[c.x+c.y*width] = _ground[h.x+h.y*width]
     for i in my_conveyors:
         push_load(i[0].x+i[0].y*width)
     for i in my_conveyors:

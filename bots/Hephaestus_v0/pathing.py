@@ -1,6 +1,6 @@
 import heapq
 import map_info
-from cambc import Controller, Direction, Position, EntityType
+from cambc import Controller, Direction, Position, EntityType, ResourceType, Environment
 import comms
 import math
 from array import array
@@ -104,6 +104,8 @@ class Pathing:
     forget_launcher = set()
     width = height = 0
     rc = None
+    stuck_turns = 0
+    prev_pos = None
     
     def __init__(self, c: Controller):
         self.width = c.get_map_width()
@@ -128,7 +130,7 @@ class Pathing:
         px, py = rc.get_position().x, rc.get_position().y
         dx, dy = dir.delta()
         new_pos = Position(px + dx, py + dy)
-
+        print("move pre", rc.get_position())
         if not map_info.in_bounds(new_pos):
             return False
         id = rc.get_tile_building_id(new_pos)
@@ -141,6 +143,7 @@ class Pathing:
             rc.build_road(new_pos)
         if rc.can_move(dir):
             rc.move(dir)
+            print("move post", rc.get_position())
             return True
         return False
 
@@ -183,6 +186,7 @@ class Pathing:
             self.changed = True
         
         self.start_p = start_p
+        print("set startp", self, start_p)
         self.target_p = target_p
         self.adjacent = adjacent_in
         self.dirs = input_dirs
@@ -433,15 +437,26 @@ class Pathing:
                 self.path_idx += 1
             return True
         return False
-    def move_to(self, target: Position):
-        if {target} != self.target_p:
+    def move_to(self, target: Position | set[Position]):
+        if isinstance(target, Position):
+            target = {target}
+        if target != self.target_p:
             self.forget_launcher.clear()
         print("move to ", target)
         avoid = map_info.get_avoid(False, True, False)
         # for a in avoid:
             # self.rc.draw_indicator_dot(a, 255, 0, 0)
         my_pos = self.rc.get_position()
-
+        if target == self.target_p and self.rc.get_position() == self.prev_pos:
+            self.stuck_turns += 1
+        else:
+            self.prev_pos = self.rc.get_position()
+            self.stuck_turns = 0
+        if self.stuck_turns > 2 + self.rc.get_id()%8:
+            for i in ALL_DIRS:
+                if self.rc.can_move(i):
+                    self.rc.move(i)
+                    return
         path = self.calculate_path(target, avoid)
         marked = False
         rc = self.rc
@@ -457,7 +472,11 @@ class Pathing:
                     if not map_info.in_bounds(p2):
                         continue
                     if rc.can_place_marker(p2):
-                        rc.place_marker(p2, comms.encode_launch(target))
+                        closest = None
+                        for t in target:
+                            if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
+                                closest = t
+                        rc.place_marker(p2, comms.encode_launch(closest))
                         self.forget_launcher.add(pos)
                         marked = True
                         break
@@ -471,7 +490,11 @@ class Pathing:
                                 id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
                             rc.destroy(p2)
                         if rc.can_place_marker(p2):
-                            rc.place_marker(p2, comms.encode_launch(target))
+                            closest = None
+                            for t in target:
+                                if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
+                                    closest = t
+                            rc.place_marker(p2, comms.encode_launch(closest))
                             self.forget_launcher.add(pos)
                             marked = True
                             break
@@ -488,38 +511,42 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, ore: Position, avoid_extra: list[Position] = None, update: bool = False):
-        print("conveyors from ", ore)
+    def calculate_conveyor_path(self, start: Position, ore: Position, avoid_extra: list[Position] = None, update: bool = False):
+        print("conveyors from ", start)
         core = map_info._my_core
         if not avoid_extra:
             avoid_extra = {}
-        target = {Position(core.x + dx, core.y + dy) for _, (dx, dy) in ALL_DIRS_DELTAS}
-
+        target = set()
         # FIX: cache frequently-used references for the loop
         width_l        = map_info._width
         height_l       = map_info._height
         my_team        = self.rc.get_team()
         is_conveyor    = map_info.is_conveyor
-
+        ore_type = map_info.ground_at(ore.x, ore.y)
+        if ore_type == Environment.ORE_TITANIUM:
+            target.update({Position(core.x + dx, core.y + dy) for _, (dx, dy) in ALL_DIRS_DELTAS})
         for x in range(width_l):
             for y in range(height_l):
-                if map_info.id_at(x, y) != 0 and is_conveyor(map_info.type_at(x, y)) and map_info.can_route(x, y) and map_info.load_at(x, y) <= 3 and map_info.team_at(x, y) == my_team and Position(x, y) not in avoid_extra:
+                if map_info.id_at(x, y) != 0 and is_conveyor(map_info.type_at(x, y)) and map_info.can_route(x, y) and map_info.load_at(x, y) <= 3 and map_info.team_at(x, y) == my_team and Position(x, y) not in avoid_extra and (ore_type == map_info.trans_ore_at(x, y) or ore_type == Environment.ORE_TITANIUM):
                     target.add(Position(x, y))
-        adding_foundry = False
-        if builder.target_foundry not in target and (not map_info.id_at(builder.target_foundry.x, builder.target_foundry.y) != 0 or not map_info.is_conveyor(map_info.type_at(builder.target_foundry.x, builder.target_foundry.y))):
-            adding_foundry = True
-            target.add(builder.target_foundry)
+        for s in builder.target_splitters:
+            if map_info.id_at(s.x, s.y) == 0 or map_info.type_at(s.x, s.y) != EntityType.SPLITTER:
+                target.add(s)
+                continue
+            if map_info.load_at(s.x, s.y) <= 3 and map_info.can_route(s.x, s.y):
+                target.add(s)
+        if len(target) == 0:
+            return []
+        print(ore_type, target)
         avoid = map_info.get_avoid(True, False, True)
+        avoid.update(builder.target_foundry)
         for p in avoid_extra:
             avoid.add(p)
-        self.calculate_path(target, avoid, ore, CONV, not update)
+        self.calculate_path(target, avoid, start, CONV, not update)
         if self.path is None or len(self.path) < 1:
             return self.path
-        if self.path[-1] == builder.target_foundry and adding_foundry:
-            for d in ALL_DIRS:
-                if builder.target_foundry.distance_squared(core.add(d)) == 1:
-                    self.path.append(core.add(d))
-                    break
+        if self.path[-1] in builder.target_splitters:
+            self.path.append(Position(-1, -1))
         return self.path
 
 

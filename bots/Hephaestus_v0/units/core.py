@@ -56,10 +56,10 @@ def run():
     max_spawn = 4
     if rc.get_current_round() < 100:
         max_spawn = 3
-    # if rc.get_current_round() == 200:
+    # if rc.get_current_round() == 400:
     #     rc.resign()
     core_pos = rc.get_position()
-    rc.convert(rc.get_global_resources()[1])
+    # rc.convert(rc.get_global_resources()[1])
     if rc.get_current_round() == 0:
         dx = max(-1, min(1, map_info._MAP_CENTER.x - core_pos.x))
         dy = max(-1, min(1, map_info._MAP_CENTER.y - core_pos.y))
@@ -81,7 +81,7 @@ def run():
                 num_spawned += 1
                 return  # Only spawn 1 builder for turn 1
     
-    # Normal spawning logic
+    # # Normal spawning logic
     if num_spawned < max_spawn or rc.get_global_resources()[0] > 900 + rc.get_scale_percent() or rc.get_hp() < 500:
         spawn_pos = random_spawn_tile()
         if spawn_pos is not None:
