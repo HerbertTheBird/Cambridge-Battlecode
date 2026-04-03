@@ -1021,7 +1021,7 @@ def run_route():
                         for f in target_foundry:
                             if to_build.distance_squared(f) == 1:
                                 build_foundry = f
-                                if map_info.id_at(f) != 0 and map_info.type_at(f) == EntityType.FOUNDRY:
+                                if map_info.id_at(f.x, f.y) != 0 and map_info.type_at(f.x, f.y) == EntityType.FOUNDRY:
                                     build_foundry = None
                                     break
                     return True
