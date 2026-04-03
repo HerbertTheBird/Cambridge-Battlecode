@@ -56,7 +56,7 @@ def run():
     max_spawn = 4
     if rc.get_current_round() < 100:
         max_spawn = 3
-    # if rc.get_current_round() == 400:
+    # if rc.get_current_round() == 100:
     #     rc.resign()
     core_pos = rc.get_position()
     # rc.convert(rc.get_global_resources()[1])
