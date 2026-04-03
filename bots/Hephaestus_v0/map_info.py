@@ -209,7 +209,7 @@ def build_core_areas() -> None:
                     _building_team[m] = _building_team[n]
                     _their_core_area.add(Position(x, y))
                     _blocked.add(Position(x, y))
-def update() -> None:
+def update(update_conv = True) -> None:
     from units.builder import log
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
@@ -399,7 +399,8 @@ def update() -> None:
             ny = ly + dy
             if 0 <= nx < width and 0 <= ny < height:
                 enemy_launch_adj.add(Position(nx, ny))
-    compute_conveyor_loads()
+    if update_conv:
+        compute_conveyor_loads()
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (_rc.is_tile_empty(pos) or (_rc.get_tile_building_id(pos) != None and _rc.get_entity_type(_rc.get_tile_building_id(pos)) is EntityType.MARKER))
 

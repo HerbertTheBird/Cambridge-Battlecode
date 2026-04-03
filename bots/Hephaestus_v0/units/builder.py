@@ -100,7 +100,7 @@ def run_pre():
     global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, target_foundry
 
     map_info.update()
-
+    nav.rebuild_broken_barriers()
     if target_foundry is None and map_info._my_core is not None:
         core = map_info._my_core
         center = map_info._MAP_CENTER
@@ -1009,8 +1009,8 @@ def run_route():
                     if rc.can_build_launcher(launcher_position):
                         rc.build_launcher(launcher_position)
                 return
-        if route_idx < len(ore_path) - 1:
-            
+        def attempt_build():
+            global route_idx, ore_path
             to_build = ore_path[route_idx]
             next = ore_path[route_idx + 1]
             bridge = to_build.distance_squared(next) > 1
@@ -1028,16 +1028,22 @@ def run_route():
                     if route_idx == 0:
                         map_info.my_conveyors.add((to_build, routed_ore))
                     route_idx += 1
+                    return True
                 elif not bridge and rc.can_build_conveyor(to_build, dir):
                     rc.build_conveyor(to_build, dir)
                     if route_idx == 0:
                         map_info.my_conveyors.add((to_build, routed_ore))
                     route_idx += 1
-            if route_idx < len(ore_path) - 1:
-                if nav.move_to(ore_path[route_idx]) == False:
-                    mode = Mode.EXPLORE
-                    return
-
+                    return True
+            return False
+        if route_idx < len(ore_path) - 1:
+            attempt_build()
+            if route_idx >= len(ore_path) - 1:
+                return
+            if nav.move_to(ore_path[route_idx]) == False:
+                mode = Mode.EXPLORE
+                return
+            attempt_build()
 
 def check_sabotage():
     global mode, opponent_ore, defended_ores

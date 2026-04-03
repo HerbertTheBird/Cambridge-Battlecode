@@ -92,7 +92,7 @@ class Pathing:
     
     MAX_ITER = None
 
-    destroyed_barriers = set()
+    destroyed_barriers = dict()
     run_id = 1 #start at 1 in case something weird happens (all stamp arrays init to 0)
     avoid_id = 1
     heap = []
@@ -136,18 +136,33 @@ class Pathing:
             return False
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos):
             rc.destroy(new_pos)
-            self.destroyed_barriers.add(new_pos)
+            self.destroyed_barriers[new_pos] = rc.get_current_round()
         if rc.can_build_road(new_pos):
             rc.build_road(new_pos)
-        for p in self.destroyed_barriers:
-            if rc.can_build_barrier(p):
-                rc.build_barrier(p)
         if rc.can_move(dir):
             rc.move(dir)
             return True
         return False
 
+    def rebuild_broken_barriers(self):
+        rc = self.rc
+        print("broken", self.destroyed_barriers)
+        built = []
+        for p in self.destroyed_barriers:
+            if not rc.is_in_vision(p):
+                continue
+            if self.destroyed_barriers[p]+2 > rc.get_current_round():
+                continue
+            id = rc.get_tile_building_id(p)
+            if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p):
+                rc.destroy(p)
+            if rc.can_build_barrier(p):
+                rc.build_barrier(p)
+                built.append(p)
+        print("put back", built)
 
+        for p in built:
+            self.destroyed_barriers.pop(p)
     def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs:list[Direction]=DIRS, adjacent_in: bool = False):
         builder.log("a* init")
         if self == builder.nav:
