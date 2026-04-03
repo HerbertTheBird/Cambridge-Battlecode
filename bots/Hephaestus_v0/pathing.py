@@ -540,6 +540,7 @@ class Pathing:
         print(ore_type, target)
         avoid = map_info.get_avoid(True, False, True)
         avoid.update(builder.target_foundry)
+        avoid.update(builder.target_splitters)
         for p in avoid_extra:
             avoid.add(p)
         self.calculate_path(target, avoid, start, CONV, not update)
