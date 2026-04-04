@@ -192,16 +192,17 @@ def run_pre():
 
         # Compute score
         dist_sq = my_pos.distance_squared(pos)
-        score = dist_sq + (hp / max_hp) * 10
+        score = dist_sq + ((max_hp - hp) / max_hp) * 10
 
         if score < best_score:
             best_score = score
             repair_target = pos
 
     # --- Step 3: Switch mode if we found a target ---
-    if repair_target is not None:
+    if repair_target:
+        if mode != Mode.HEAL:
+            mode_memory = mode
         mode = Mode.HEAL
-        mode_memory = mode
         log(f"Repair target set at {repair_target} with score {best_score}, switching to HEAL mode")
 
     # Clean up expired blocks
@@ -317,6 +318,7 @@ def check_heal():
     global mode
     if not repair_target:
         mode = mode_memory
+    log(repair_target)
 
 def run_heal():
     global repair_target
@@ -328,7 +330,6 @@ def run_heal():
     # --- Step 1: Move toward the repair target ---
     if my_pos != repair_target:
         nav.move_to(repair_target)
-        return  # wait until reaching target
 
     # --- Step 2: Scan surrounding tiles (including target) for most damaged ---
     damaged_candidates = []
