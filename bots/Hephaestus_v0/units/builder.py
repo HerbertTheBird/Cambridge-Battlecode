@@ -33,8 +33,8 @@ blocked_ores = {}
 defended_ores = set()
 cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
 all_dirs = list(Direction)
-nav = None
-ore_nav = None
+nav: Pathing
+ore_nav: Pathing
 
 axionite_after = 500
 
@@ -63,7 +63,7 @@ target_foundry = set()
 target_splitters = set()
 splitter_dir = None
 
-rc = None
+rc: Controller
 
 MODE_ACTIONS = None
 
@@ -873,7 +873,7 @@ def run_build_harvester():
 
             building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_team(building_id) != rc.get_team():
-                rc.fire()
+                rc.fire(target_ore)
                 return
             moved = False
             for d in random.sample(all_dirs, len(all_dirs)):

@@ -2,7 +2,7 @@ from cambc import Controller, Position, Environment, EntityType, GameError
 import random
 import map_info
 
-rc = None
+rc: Controller
 num_spawned = 0
 defended = set()
 
