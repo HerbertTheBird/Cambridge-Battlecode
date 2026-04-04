@@ -226,14 +226,17 @@ def check_rush_core():
                 return
 
     # route to core
-    path = nav.calculate_path(map_info._predicted_enemy_core)
-    if path is not None:
-        if len(path) > 0:
-            log("Path to core found.")
+    if map_info._predicted_enemy_core is not None:
+        path = nav.calculate_path(map_info._predicted_enemy_core)
+        if path is not None:
+            if len(path) > 0:
+                log("Path to core found.")
+            else:
+                log("Opponent core is unreachable")
         else:
-            log("Opponent core is unreachable")
+            log("A* TLE - assuming safe state, ignoring")
     else:
-        log("A* TLE - assuming safe state, ignoring")
+        log("No predicted enemy core")
         
                 
 def run_attack_core():
@@ -424,19 +427,20 @@ def run_prepare_launcher():
             if not map_info.in_bounds(pos):
                 continue
 
-            dist = pos.distance_squared(map_info._predicted_enemy_core)
+            if map_info._predicted_enemy_core is not None:
+                dist = pos.distance_squared(map_info._predicted_enemy_core)
 
-            # Priority 1: empty tiles
-            if map_info.is_tile_empty(pos):
-                if dist < best_empty_dist:
-                    best_empty = pos
-                    best_empty_dist = dist
+                # Priority 1: empty tiles
+                if map_info.is_tile_empty(pos):
+                    if dist < best_empty_dist:
+                        best_empty = pos
+                        best_empty_dist = dist
 
-            # Priority 2: restrictive, owned tiles
-            elif map_info.can_place_at_restrictive(pos):
-                if dist < best_restrict_dist:
-                    best_restrict = pos
-                    best_restrict_dist = dist
+                # Priority 2: restrictive, owned tiles
+                elif map_info.can_place_at_restrictive(pos):
+                    if dist < best_restrict_dist:
+                        best_restrict = pos
+                        best_restrict_dist = dist
 
     launcher_pos = None
 
