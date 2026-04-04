@@ -93,6 +93,7 @@ def run():
 # Global to track current repair target
 repair_target = None
 repair_override_turns = 2  # time window after a bot is spawned
+mode_memory = mode
 
 def run_pre():
     """
@@ -103,6 +104,7 @@ def run_pre():
     - Self-healing is still performed as a fallback.
     """
     global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, target_foundry, target_splitters
+    global mode_memory
 
     map_info.update()
     if not map_info._my_core:
@@ -138,36 +140,69 @@ def run_pre():
             
     my_pos = rc.get_position()
 
-    # --- Step 0: Heal self if possible (fallback) ---
-    if map_info._my_core and map_info.id_at(map_info._my_core.x, map_info._my_core.y) and map_info.hp_at(map_info._my_core.x, map_info._my_core.y) < 500 and rc.get_position().distance_squared(map_info._my_core) <= 2:
-        if rc.can_heal(my_pos):
-            rc.heal(my_pos)
-        mode = Mode.HEAL_CORE
-        return
+    # --- Step 0: Core-aware healing logic ---
+
+    core = map_info._my_core
+
+    if core:
+        dist_to_core = my_pos.distance_squared(core)
+
+        # If we are within 3x3 of the core, prioritize self-heal
+        if dist_to_core <= 2:
+            if rc.can_heal(my_pos):
+                rc.heal(my_pos)
+                return
+
+        # Otherwise try to heal the tile toward the core
+        dir_to_core = my_pos.direction_to(core)
+        target_tile = my_pos.add(dir_to_core)
+
+        # Check if that tile lies within core's 3x3
+        if target_tile.distance_squared(core) <= 2:
+            if rc.can_heal(target_tile):
+                rc.heal(target_tile)
+                return
+
+    # Fallback self-heal
     if rc.can_heal(my_pos):
         rc.heal(my_pos)
 
-    # --- Step 1: If we already have a repair target, switch to HEAL mode ---
-    if repair_target is not None:
-        mode = Mode.HEAL
-        return  # permanent state, run() or run_heal() will handle movement/healing
+    # --- Step 1: Recompute repair target every turn ---
+    repair_target = None
+    best_score = float('inf')
 
     # --- Step 2: Scan for damaged allied conveyors/bridges ---
     for pos in rc.get_nearby_tiles():
         building_id = rc.get_tile_building_id(pos)
         if building_id is None:
             continue
+
         if rc.get_team(building_id) != rc.get_team():
             continue
+
         b_type = rc.get_entity_type(building_id)
         if b_type not in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE):
             continue
-        if rc.get_hp(building_id) < rc.get_max_hp(building_id):
-            # First damaged tile seen becomes permanent repair target
+
+        hp = rc.get_hp(building_id)
+        max_hp = rc.get_max_hp(building_id)
+
+        if hp >= max_hp:
+            continue
+
+        # Compute score
+        dist_sq = my_pos.distance_squared(pos)
+        score = dist_sq + (hp / max_hp) * 10
+
+        if score < best_score:
+            best_score = score
             repair_target = pos
-            mode = Mode.HEAL
-            log(f"Repair target set at {repair_target}, switching to HEAL mode")
-            return
+
+    # --- Step 3: Switch mode if we found a target ---
+    if repair_target is not None:
+        mode = Mode.HEAL
+        mode_memory = mode
+        log(f"Repair target set at {repair_target} with score {best_score}, switching to HEAL mode")
 
     # Clean up expired blocks
     current_round = rc.get_current_round()
@@ -279,16 +314,11 @@ def run_post():
     pass
 
 def check_heal():
-    pass
+    global mode
+    if not repair_target:
+        mode = mode_memory
 
 def run_heal():
-    """
-    Permanent HEAL mode:
-    - Move toward the permanent repair_target.
-    - Heal the tile with the most missing HP in the surrounding area.
-    - Place roads on empty tiles around repair target.
-    - Attack enemy roads around repair target.
-    """
     global repair_target
     if repair_target is None:
         return  # safety check
@@ -667,31 +697,31 @@ def run_explore():
     global explore_target, turns_since_last_explore_target, last_placed_launcher, launcher_count
     my_pos = rc.get_position()
 
-    # === Launcher placement logic: spread launchers ===
-    if (launcher_count < 6):
-        for other in rc.get_nearby_buildings():
-                if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
-                    if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
-                        last_placed_launcher = rc.get_position(other)
-        for tile in rc.get_nearby_tiles(2):
-            if not map_info.is_tile_empty(tile):
-                continue
+    # # === Launcher placement logic: spread launchers ===
+    # if (launcher_count < 6):
+    #     for other in rc.get_nearby_buildings():
+    #             if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
+    #                 if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
+    #                     last_placed_launcher = rc.get_position(other)
+    #     for tile in rc.get_nearby_tiles(2):
+    #         if not map_info.is_tile_empty(tile):
+    #             continue
 
-            if not last_placed_launcher:
-                # No known launchers? optional: skip placement
-                continue
+    #         if not last_placed_launcher:
+    #             # No known launchers? optional: skip placement
+    #             continue
 
-            # Find distance to closest launcher
-            closest_dist = tile.distance_squared(last_placed_launcher)
+    #         # Find distance to closest launcher
+    #         closest_dist = tile.distance_squared(last_placed_launcher)
 
-            # Condition: far enough (>16) but still within vision radius
-            if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > launcher_count * 80:
-                if rc.can_build_launcher(tile):
-                    rc.build_launcher(tile)
-                    last_placed_launcher = tile
-                    launcher_count += 1
-                    log(f"Placed launcher at {tile}")
-                    return  # only build one per turn
+    #         # Condition: far enough (>16) but still within vision radius
+    #         if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > launcher_count * 80:
+    #             if rc.can_build_launcher(tile):
+    #                 rc.build_launcher(tile)
+    #                 last_placed_launcher = tile
+    #                 launcher_count += 1
+    #                 log(f"Placed launcher at {tile}")
+    #                 return  # only build one per turn
 
     if explore_target is None:
         force_generate_explore_target()
