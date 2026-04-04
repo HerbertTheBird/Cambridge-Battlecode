@@ -339,7 +339,7 @@ def run_heal():
             pos = Position(repair_target.x + dx, repair_target.y + dy)
             if not map_info.in_bounds(pos):
                 continue
-            if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
+            if not rc.is_in_vision(pos):
                 continue
             surrounding_tiles.append(pos)
             building_id = rc.get_tile_building_id(pos)
