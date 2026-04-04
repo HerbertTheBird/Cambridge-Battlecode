@@ -36,7 +36,7 @@ all_dirs = list(Direction)
 nav = None
 ore_nav = None
 
-axionite_after = 500
+axionite_after = 2000
 
 # Cache deltas directly to bypass `Enum` and `.add()` overhead
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in all_dirs]
@@ -1014,15 +1014,6 @@ def run_route():
             next = ore_path[route_idx + 1]
             bridge = to_build.distance_squared(next) > 1
             dir = to_build.direction_to(next)
-            if route_idx > 0 and map_info.id_at(to_build.x, to_build.y) != 0 and map_info.team_at(to_build.x, to_build.y) != rc.get_team() and map_info.is_turret(map_info.type_at(to_build.x, to_build.y)):
-                nav.move_to(ore_path[route_idx-1])
-                if rc.can_destroy(ore_path[route_idx-1]):
-                    rc.destroy(ore_path[route_idx-1])
-                    route_idx -= 1
-                    to_build = ore_path[route_idx]
-                    next = ore_path[route_idx + 1]
-                    bridge = to_build.distance_squared(next) > 1
-                    dir = to_build.direction_to(next)
             print("next", next, to_build, target_foundry)
             if next == Position(-1, -1):
                 if map_info.id_at(to_build.x, to_build.y) != 0 and map_info.type_at(to_build.x, to_build.y) == EntityType.SPLITTER and map_info.team_at(to_build.x, to_build.y) == rc.get_team():
