@@ -64,6 +64,8 @@ def count_incoming_titanium():
             if abs(dx) <= 1 and abs(dy) <= 1:
                 continue
             pos = Position(core_pos.x + dx, core_pos.y + dy)
+            if not map_info.in_bounds(pos) or not rc.is_in_vision(pos):
+                continue
             bid = rc.get_tile_building_id(pos)
             if bid is None:
                 continue
