@@ -33,10 +33,10 @@ blocked_ores = {}
 defended_ores = set()
 cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
 all_dirs = list(Direction)
-nav: Pathing
-ore_nav: Pathing
+nav = None
+ore_nav = None
 
-axionite_after = 500
+axionite_after = 2000
 
 # Cache deltas directly to bypass `Enum` and `.add()` overhead
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in all_dirs]
@@ -63,7 +63,7 @@ target_foundry = set()
 target_splitters = set()
 splitter_dir = None
 
-rc: Controller
+rc = None
 
 MODE_ACTIONS = None
 
@@ -873,7 +873,7 @@ def run_build_harvester():
 
             building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_team(building_id) != rc.get_team():
-                rc.fire(target_ore)
+                rc.fire()
                 return
             moved = False
             for d in random.sample(all_dirs, len(all_dirs)):
@@ -1014,15 +1014,6 @@ def run_route():
             next = ore_path[route_idx + 1]
             bridge = to_build.distance_squared(next) > 1
             dir = to_build.direction_to(next)
-            if route_idx > 0 and map_info.id_at(to_build.x, to_build.y) != 0 and map_info.team_at(to_build.x, to_build.y) != rc.get_team() and map_info.is_turret(map_info.type_at(to_build.x, to_build.y)):
-                nav.move_to(ore_path[route_idx-1])
-                if rc.can_destroy(ore_path[route_idx-1]):
-                    rc.destroy(ore_path[route_idx-1])
-                    route_idx -= 1
-                    to_build = ore_path[route_idx]
-                    next = ore_path[route_idx + 1]
-                    bridge = to_build.distance_squared(next) > 1
-                    dir = to_build.direction_to(next)
             print("next", next, to_build, target_foundry)
             if next == Position(-1, -1):
                 if map_info.id_at(to_build.x, to_build.y) != 0 and map_info.type_at(to_build.x, to_build.y) == EntityType.SPLITTER and map_info.team_at(to_build.x, to_build.y) == rc.get_team():
