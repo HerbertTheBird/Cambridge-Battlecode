@@ -109,8 +109,6 @@ class Player:
                             self.me = builder_rush
                     else:
                         if (c.get_current_round() > 1000 and c.get_id() % 2 == 0):
-                            if (self.me is builder):
-                                self.initialized = False
                             self.me = builder_rush
                         else:
                             self.me = builder
