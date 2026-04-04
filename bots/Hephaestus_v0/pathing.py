@@ -41,8 +41,8 @@ DIRS: list[Step] = [
 ]
 
 bridge_cost = 10
-barrier_cost = 5
-adj_launch_cost = 10
+barrier_cost = 15
+adj_launch_cost = 20
 CONV: list[Step] = [
     (0, -1, 1),
     (0, 1, 1),
@@ -473,35 +473,17 @@ class Pathing:
         path = self.calculate_path(target, avoid)
         marked = False
         rc = self.rc
-
-        for dr, (dx, dy) in ALL_DIRS_DELTAS:
-            pos = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.in_bounds(pos):
-                continue
-            id = rc.get_tile_building_id(pos)
-            if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team() and pos not in self.forget_launcher:
-                for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
-                    p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
-                    if not map_info.in_bounds(p2):
-                        continue
-                    if rc.can_place_marker(p2):
-                        closest = None
-                        for t in target:
-                            if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
-                                closest = t
-                        rc.place_marker(p2, comms.encode_launch(closest))
-                        self.forget_launcher.add(pos)
-                        marked = True
-                        break
-                if not marked:
+        if len(self.destroyed_barriers) == 0:
+            for dr, (dx, dy) in ALL_DIRS_DELTAS:
+                pos = Position(my_pos.x + dx, my_pos.y + dy)
+                if not map_info.in_bounds(pos):
+                    continue
+                id = rc.get_tile_building_id(pos)
+                if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team() and pos not in self.forget_launcher:
                     for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
                         p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
                         if not map_info.in_bounds(p2):
                             continue
-                        id2 = rc.get_tile_building_id(p2)
-                        if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(
-                                id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
-                            rc.destroy(p2)
                         if rc.can_place_marker(p2):
                             closest = None
                             for t in target:
@@ -511,10 +493,28 @@ class Pathing:
                             self.forget_launcher.add(pos)
                             marked = True
                             break
+                    if not marked:
+                        for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
+                            p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
+                            if not map_info.in_bounds(p2):
+                                continue
+                            id2 = rc.get_tile_building_id(p2)
+                            if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(
+                                    id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
+                                rc.destroy(p2)
+                            if rc.can_place_marker(p2):
+                                closest = None
+                                for t in target:
+                                    if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
+                                        closest = t
+                                rc.place_marker(p2, comms.encode_launch(closest))
+                                self.forget_launcher.add(pos)
+                                marked = True
+                                break
+                if marked:
+                    break
             if marked:
-                break
-        if marked:
-            return
+                return
         if path is None:
             return None
         if len(path) < 1:
