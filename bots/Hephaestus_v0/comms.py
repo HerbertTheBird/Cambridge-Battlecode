@@ -8,7 +8,7 @@ _TURN_MASK = (1<<TURN_BITS)-1
 ID_BITS = 6 # mod 64
 _ID_MASK = (1 << ID_BITS) - 1
 
-rc = None
+rc: Controller
 
 
 def init(c: Controller):
