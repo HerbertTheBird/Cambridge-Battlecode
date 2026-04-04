@@ -28,7 +28,7 @@ SPAWN_TURN = -2
 class Player:
     def __init__(self):
         self.initialized = False
-        self.me = None
+        self.me
         
 
     # def _prepare_profile_dir(self, c: Controller) -> None:
