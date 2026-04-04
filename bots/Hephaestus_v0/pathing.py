@@ -169,8 +169,10 @@ class Pathing:
                 continue
             id = rc.get_tile_building_id(p)
             if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p):
+                print("barrier place break", p)
                 rc.destroy(p)
             if rc.can_build_barrier(p):
+                print("barrier place", p)
                 rc.build_barrier(p)
                 built.append(p)
         print("put back", built)

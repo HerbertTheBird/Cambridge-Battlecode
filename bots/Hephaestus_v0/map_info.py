@@ -438,29 +438,34 @@ def get_avoid(
             if _rc.get_entity_type(unit) is EntityType.BUILDER_BOT:
                 avoid.add(_rc.get_position(unit))
     return avoid
-def best_sentinel_dir(pos: Position):
+def best_sentinel_dir(pos: Position, avoid_dir = None):
     # from units.builder_states.builder_rush import log
     from units.builder import log
     valid = set()
     my_team = _rc.get_team()
     w = _width
     h = _height
-    for dir in _CARDINAL:
-        new_pos = pos.add(dir)
-        nx, ny = new_pos.x, new_pos.y
-        n = nx+ny*w
-        if 0 <= nx < w and 0 <= ny < h:
-            if _building_id[n] == 0:
-                continue
-            type = _INT_ET[_building_type[n]]
-            if _building_id[n] != 0 and (type is EntityType.HARVESTER or type is EntityType.CONVEYOR and _INT_DIR[_building_dir[n]] == new_pos.direction_to(pos)):
-                log(f"Validated {new_pos.direction_to(pos)}")
-                for dir2 in _ALL_DIRECTIONS:
-                    if dir2 is not _DIR_CENTRE and dir2 is not dir:
-                        valid.add(dir2)
-    if len(valid) == 0: #THIS IS IN CASE OF A BRIDGE, MAY BREAK THINGS IF ASSUMED TO RETURN NONE IF NOTHING NEARBY
+    if avoid_dir == None:
+        for dir in _CARDINAL:
+            new_pos = pos.add(dir)
+            nx, ny = new_pos.x, new_pos.y
+            n = nx+ny*w
+            if 0 <= nx < w and 0 <= ny < h:
+                if _building_id[n] == 0:
+                    continue
+                type = _INT_ET[_building_type[n]]
+                if _building_id[n] != 0 and (type is EntityType.HARVESTER or type is EntityType.CONVEYOR and _INT_DIR[_building_dir[n]] == new_pos.direction_to(pos)):
+                    log(f"Validated {new_pos.direction_to(pos)}")
+                    for dir2 in _ALL_DIRECTIONS:
+                        if dir2 is not _DIR_CENTRE and dir2 is not dir:
+                            valid.add(dir2)
+        if len(valid) == 0: #THIS IS IN CASE OF A BRIDGE, MAY BREAK THINGS IF ASSUMED TO RETURN NONE IF NOTHING NEARBY
+            for dir in _ALL_DIRECTIONS:
+                valid.add(dir)
+    else:
         for dir in _ALL_DIRECTIONS:
-            valid.add(dir)
+            if dir != avoid_dir:
+                valid.add(dir)
 
     mx_harvesters = 0
     mx_base       = 0
@@ -516,6 +521,10 @@ def best_sentinel_dir(pos: Position):
             mx_other      = other
             best_dir      = dir
     return best_dir
+def handle_turret(pos: Position, avoid_dir = None):
+    dir = best_sentinel_dir(pos, avoid_dir)
+    if _rc.can_build_sentinel(pos, dir):
+        _rc.build_sentinel(pos, dir)
 def push_load(pos: int):
     building_conv_target = _building_conv_target
     building_load = _building_load
