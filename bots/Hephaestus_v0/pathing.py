@@ -552,6 +552,7 @@ class Pathing:
 
 
     def calculate_launcher_position(self, path: list[Position], ore: Position) -> Position | None:
+        return None
         if self.rc.get_unit_count() == 50: #maybe remove later, but if we hit cap, i literally cant place more launchers
             return None
         avoid = map_info.get_avoid(True, False, True)
