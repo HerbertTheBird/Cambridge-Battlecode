@@ -105,6 +105,8 @@ def run_pre():
     global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, target_foundry, target_splitters
 
     map_info.update()
+    if not map_info._my_core:
+        rc.self_destruct()
     nav.rebuild_broken_barriers()
     if len(target_foundry) == 0 and map_info._my_core is not None:
         core = map_info._my_core
@@ -569,7 +571,7 @@ def update_target_ore():
                         fail = True
                 card_d = [[0, 1], [0, -1], [1, 0], [-1, 0]]
                 for d in card_d:
-                    if map_info.id_at(pos.x+d[0], pos.y+d[1]) != 0 and map_info.type_at(pos.x+d[0], pos.y+d[1]) != EntityType.ROAD and map_info.team_at(pos.x+d[0], pos.y+d[1]) != rc.get_team():
+                    if map_info.in_bounds(Position(pos.x+d[0], pos.y+d[1])) and map_info.id_at(pos.x+d[0], pos.y+d[1]) != 0 and map_info.type_at(pos.x+d[0], pos.y+d[1]) != EntityType.ROAD and map_info.team_at(pos.x+d[0], pos.y+d[1]) != rc.get_team():
                         fail = True
                 if pos in blocked_ores and blocked_ores[pos] > rc.get_current_round():
                     fail = True
@@ -1039,7 +1041,7 @@ def run_route():
                         splitter_dir = Direction.EAST
                     elif to_build.x == map_info._my_core.x+2:
                         splitter_dir = Direction.WEST
-                    elif to_build.y == map_info._my_core.y-2:
+                    elif to_build.y == map_info._my_core.y+2:
                         splitter_dir = Direction.NORTH
                     else:
                         splitter_dir = Direction.SOUTH
@@ -1050,7 +1052,7 @@ def run_route():
                             for f in target_foundry:
                                 if to_build.distance_squared(f) == 1:
                                     build_foundry = f
-                                    if map_info.id_at(f) != 0 and map_info.type_at(f) == EntityType.FOUNDRY:
+                                    if map_info.id_at(f.x, f.y) != 0 and map_info.type_at(f.x, f.y) == EntityType.FOUNDRY:
                                         build_foundry = None
                                         break
                         route_idx += 1
@@ -1073,14 +1075,7 @@ def run_route():
                 return
             attempt_build()
 
-            adjacent = set()
-            
-            for dir in all_dirs:
-                if dir == Direction.CENTRE:
-                    continue
-                if map_info.is_passable(ore_path[route_idx].add(dir)):
-                    adjacent.add(ore_path[route_idx].add(dir))
-            if len(adjacent) == 0 or nav.move_to(adjacent) == False:
+            if nav.move_to(ore_path[route_idx]) == False:
                 mode = Mode.EXPLORE
                 return
         if build_foundry:
