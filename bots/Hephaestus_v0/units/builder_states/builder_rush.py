@@ -615,7 +615,7 @@ def run_attack():
                         points_at_tile = True
 
                 if points_at_tile and adjacent_empty:
-                    rc.move(random.choice(adjacent_empty))
+                    rc.move(my_pos.direction_to(random.choice(adjacent_empty)))
 
     # --- Case 2: Place sentinel on empty tile an enemy conveyor/bridge leads into ---
     for dx in (-1, 0, 1):
