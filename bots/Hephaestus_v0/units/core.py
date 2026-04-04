@@ -2,7 +2,7 @@ from cambc import Controller, Position, Environment, EntityType, GameError, Reso
 import random
 import map_info
 
-rc: Controller = None
+rc: Controller
 num_spawned = 0
 prev_unit_count = 0
 last_titanium = 500
@@ -78,8 +78,9 @@ def count_incoming_titanium():
                 if res is not None and res == ResourceType.TITANIUM:
                     # check it points toward core
                     d = rc.get_direction(bid)
-                    out_x = pos.x + d.dx
-                    out_y = pos.y + d.dy
+                    dx, dy = d.delta()
+                    out_x = pos.x + dx
+                    out_y = pos.y + dy
                     if abs(out_x - core_pos.x) <= 1 and abs(out_y - core_pos.y) <= 1:
                         count += 1
             except GameError:
