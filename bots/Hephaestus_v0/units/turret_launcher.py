@@ -5,7 +5,7 @@ import sys
 import comms
 import math
 import units.builder as builder
-rc: Controller | None = None
+rc: Controller
 all_dirs = list(Direction)
 _DIRS_8 = (
     (1, 0), (-1, 0), (0, 1), (0, -1),

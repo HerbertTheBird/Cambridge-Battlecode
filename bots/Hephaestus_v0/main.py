@@ -10,6 +10,7 @@ import sys
 # import pstats
 # import pathlib
 import shutil
+from types import ModuleType
 
 import units.builder as builder
 import units.builder_states.builder_rush as builder_rush
@@ -27,7 +28,7 @@ SPAWN_TURN = -2
 class Player:
     def __init__(self):
         self.initialized = False
-        self.me = None
+        self.me: ModuleType
         
 
     # def _prepare_profile_dir(self, c: Controller) -> None:
@@ -108,8 +109,6 @@ class Player:
                             self.me = builder_rush
                     else:
                         if (c.get_current_round() > 1000 and c.get_id() % 2 == 0):
-                            if (self.me == builder):
-                                self.initialized = False
                             self.me = builder_rush
                         else:
                             self.me = builder

@@ -1,8 +1,8 @@
-from cambc import Controller, Position, EntityType, Direction
+from cambc import Controller, Position, EntityType, Direction, Team
 import math
 import map_info
 
-rc = None
+rc: Controller
 
 # 1. Pre-calculate integer offsets to bypass enum hashing overhead entirely
 CARDINAL_OFFSETS = [
@@ -19,7 +19,7 @@ def init(c: Controller):
     map_info.init(c)
 
 
-def priority(tile: Position, my_pos: Position, my_team: int) -> int:
+def priority(tile: Position, my_pos: Position, my_team: Team) -> int:
     # Localize methods for faster lookup
     get_team = rc.get_team
     get_entity_type = rc.get_entity_type

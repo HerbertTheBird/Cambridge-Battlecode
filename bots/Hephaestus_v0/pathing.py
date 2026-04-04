@@ -3,6 +3,7 @@ import map_info
 from cambc import Controller, Direction, Position, EntityType, ResourceType, Environment
 import comms
 import math
+from collections.abc import Collection
 from array import array
 import time
 import units.builder as builder
@@ -10,6 +11,8 @@ import sys
 WEIGHT = 2
 MIN_WEIGHT = 1.5
 ZIG_LENGTH = 2
+
+Step = tuple[int, int, int]
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -20,13 +23,13 @@ CARD_DIR = [
     Direction.EAST,
     Direction.WEST,
 ]
-CARD = [
+CARD: list[Step] = [
     (0, -1, 1),
     (0, 1, 1),
     (-1, 0, 1),
     (1, 0, 1),
 ]
-DIRS = [
+DIRS: list[Step] = [
     (0, -1, 1),
     (0, 1, 1),
     (-1, 0, 1),
@@ -40,7 +43,7 @@ DIRS = [
 bridge_cost = 10
 barrier_cost = 5
 adj_launch_cost = 10
-CONV = [
+CONV: list[Step] = [
     (0, -1, 1),
     (0, 1, 1),
     (-1, 0, 1),
@@ -71,6 +74,14 @@ CONV = [
     (1, 1, bridge_cost),
 ]
 
+
+def _is_builder_nav(pathing: "Pathing") -> bool:
+    return getattr(builder, "nav", None) is pathing
+
+
+def _is_builder_ore_nav(pathing: "Pathing") -> bool:
+    return getattr(builder, "ore_nav", None) is pathing
+
 class Pathing:
         
     seen = None #a stamp array checking if we have seen this tile in this run
@@ -84,7 +95,7 @@ class Pathing:
     start_p = None
     target_p = None
     adjacent = None
-    dirs = None
+    dirs: list[Step] | None = None
 
     changed = False
     
@@ -103,7 +114,7 @@ class Pathing:
     
     forget_launcher = set()
     width = height = 0
-    rc = None
+    rc: Controller
     stuck_turns = 0
     prev_pos = None
     
@@ -166,9 +177,9 @@ class Pathing:
 
         for p in built:
             self.destroyed_barriers.pop(p)
-    def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs:list[Direction]=DIRS, adjacent_in: bool = False):
+    def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs: list[Step] = DIRS, adjacent_in: bool = False):
         builder.log("a* init")
-        if self == builder.nav:
+        if _is_builder_nav(self):
             print(start_p, target_p)
         if isinstance(target_p, Position):
             target_p = {target_p}
@@ -198,7 +209,7 @@ class Pathing:
         width_l  = self.width
         if self.changed:
             self.heap.clear()
-        if self == builder.ore_nav:
+        if _is_builder_ore_nav(self):
             print("changed? " + str(self.changed) + " " + str(len(self.heap)))
         if len(self.heap) == 0:
             is_dirs  = (input_dirs is DIRS)
@@ -223,9 +234,9 @@ class Pathing:
             pos = self.parent[pos] if self.target[pos] != self.run_id else -1
         return path_out
 
-    def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
+    def a_star(self, start_p: Position, avoid_p: set[Position] | None = None) -> list[Position] | None:
         builder.log("a* start")
-        if self == builder.ore_nav:
+        if _is_builder_ore_nav(self):
             builder.log("CONV A STAR")
         if avoid_p is None:
             avoid_p = set()
@@ -317,7 +328,7 @@ class Pathing:
             heap.clear()
             return path_out
         # c = 0
-        if self == builder.ore_nav:
+        if _is_builder_ore_nav(self):
             builder.log(str(len(heap)))
         while heap:
             # c += 1
@@ -338,7 +349,7 @@ class Pathing:
 
             px = pos % width
             py = pos // width
-            if self == builder.nav:
+            if _is_builder_nav(self):
                 rc.draw_indicator_dot(Position(px, py), min(255, self.iter*255//625), 0, 0)
             for dx, dy, cost in dirs:
                 nx = px + dx
@@ -392,7 +403,7 @@ class Pathing:
                 return True
         return False
 
-    def calculate_path(self, target: set[Position] | Position, avoid = None, start=None, dirs = DIRS, adjacent=False):
+    def calculate_path(self, target: set[Position] | Position, avoid = None, start=None, dirs: list[Step] = DIRS, adjacent=False):
         rc = self.rc
         if start is None:
             start = rc.get_position()
@@ -511,11 +522,11 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, start: Position, ore: Position, avoid_extra: list[Position] = None, update: bool = False):
+    def calculate_conveyor_path(self, start: Position, ore: Position, avoid_extra: Collection[Position] | None = None, update: bool = False):
         print("conveyors from ", start)
         core = map_info._my_core
         if not avoid_extra:
-            avoid_extra = {}
+            avoid_extra = []
         target = set()
         # FIX: cache frequently-used references for the loop
         width_l        = map_info._width

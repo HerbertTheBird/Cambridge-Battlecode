@@ -53,7 +53,7 @@ _DIR_CENTRE = Direction.CENTRE
 _ALL_DIRECTIONS = tuple(Direction)
 _CARDINAL = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
-_rc = None
+_rc: Controller
 _width = _height = 0
 _MAP_CENTER = None
 _ground: list[int] = []
@@ -91,7 +91,7 @@ _enemy_launch: set[Position] = set()
 _my_core_area: set[Position] = set()
 _their_core_area: set[Position] = set()
 
-my_conveyors: set[tuple[Position]] = set()
+my_conveyors: set[tuple[Position, Position]] = set()
 def ground_at(x, y):
     return _INT_ENV[_ground[x+y*_width]]
 def seen_at(x, y):
@@ -172,7 +172,7 @@ def flip(pos: Position):
     if _rot_sym:
         return rot_flip(pos)
     return None
-def core_center(core_id: int, tile: Position) -> Position:
+def core_center(core_id: int, tile: Position) -> Position | None:
     def empty(pos: Position) -> bool:
         return not in_bounds(pos) or (_rc.is_in_vision(pos) and _rc.get_tile_building_id(pos) != core_id)
     up    = empty(Position(tile.x,     tile.y - 1))
@@ -312,7 +312,7 @@ def update(update_conv = True) -> None:
             target = None
             if et == EntityType.BRIDGE:
                 target = rc_get_bridge_target(entity_id)
-            elif et in _CONVEYOR_TYPES:
+            elif et in _CONVEYOR_TYPES and direction is not None:
                 target = tile.add(direction)
             building_id[n] = entity_id
             building_type[n] = _ET_INT[et]
@@ -341,11 +341,12 @@ def update(update_conv = True) -> None:
         _solved_sym = True
         if _my_core:
             _their_core = flip(_my_core)
-            pos = _their_core.x+_their_core.y*width
-            building_id[pos] = -1 #0 means junk data, so -1 means theres something here???
-            building_type[pos] = _ET_INT[EntityType.CORE]
-            building_hp[pos] = 500
-            building_team[pos] = 1-_TM_INT[my_team]
+            if _their_core is not None:
+                pos = _their_core.x+_their_core.y*width
+                building_id[pos] = -1 #0 means junk data, so -1 means theres something here???
+                building_type[pos] = _ET_INT[EntityType.CORE]
+                building_hp[pos] = 500
+                building_team[pos] = 1-_TM_INT[my_team]
             build_core_areas()
         for x in range(width):
             for y in range(height):
