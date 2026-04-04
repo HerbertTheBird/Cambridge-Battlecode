@@ -1,4 +1,4 @@
-from cambc import Controller, Position, EntityType, Direction
+from cambc import Controller, Position, EntityType, Direction, Team
 import math
 import map_info
 
@@ -10,7 +10,7 @@ def init(c: Controller):
     map_info.init(c)
 
 
-def priority(tile: Position, my_team: int) -> int:
+def priority(tile: Position, my_team: Team) -> int:
     get_team = rc.get_team
     get_entity_type = rc.get_entity_type
     get_tile_building_id = rc.get_tile_building_id
@@ -65,7 +65,7 @@ DIRS = [
 DIR_TO_IDX = {d: i for i, d in enumerate(DIRS)}
 
 
-def rotate_towards(my_pos: Position, my_team: int, target_pos: Position):
+def rotate_towards(my_pos: Position, my_team: Team, target_pos: Position):
     desired_dir = my_pos.direction_to(target_pos)
 
     current_dir = rc.get_direction()
@@ -172,4 +172,4 @@ def run():
             rc.draw_indicator_line(my_pos, best_target, 255, 150, 150)
 
         # --- Otherwise rotate toward nearest builder ---
-        rotate_towards(my_pos, my_team, best_target)
+            rotate_towards(my_pos, my_team, best_target)

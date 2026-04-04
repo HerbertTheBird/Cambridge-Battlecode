@@ -1,10 +1,14 @@
-from cambc import Controller, Position, Environment, EntityType, GameError
+from cambc import Controller, Position, Environment, EntityType, GameError, ResourceType
 import random
 import map_info
 
 rc: Controller
 num_spawned = 0
+prev_unit_count = 0
+last_titanium = 500
+last_scaling = 100.
 defended = set()
+
 
 def random_spawn_tile() -> Position | None:
     """Return a random adjacent tile that can be spawned on."""
@@ -20,6 +24,7 @@ def random_spawn_tile() -> Position | None:
         if rc.can_spawn(p):
             return p
     return None
+
 
 def get_closest_titanium_tile() -> Position | None:
     """Return the closest visible titanium ore without an allied harvester."""
@@ -50,12 +55,68 @@ def get_closest_titanium_tile() -> Position | None:
 
     return closest_ore
 
+
+def count_incoming_titanium():
+    core_pos = rc.get_position()
+    count = 0
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            if abs(dx) <= 1 and abs(dy) <= 1:
+                continue
+            pos = Position(core_pos.x + dx, core_pos.y + dy)
+            bid = rc.get_tile_building_id(pos)
+            if bid is None:
+                continue
+            try:
+                if rc.get_team(bid) != rc.get_team():
+                    continue
+                etype = rc.get_entity_type(bid)
+                if etype not in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR,
+                                 EntityType.SPLITTER, EntityType.BRIDGE):
+                    continue
+                res = rc.get_stored_resource(bid)
+                if res is not None and res == ResourceType.TITANIUM:
+                    # check it points toward core
+                    d = rc.get_direction(bid)
+                    dx, dy = d.delta()
+                    out_x = pos.x + dx
+                    out_y = pos.y + dy
+                    if abs(out_x - core_pos.x) <= 1 and abs(out_y - core_pos.y) <= 1:
+                        count += 1
+            except GameError:
+                pass
+    return count * 10
+
+
 def run():
-    global num_spawned
+    global num_spawned, prev_unit_count, last_titanium, last_scaling
+
+    titanium = rc.get_global_resources()[0]
+    scaling = rc.get_scale_percent()
+    round_num = rc.get_current_round()
+
+    passive = 10 if round_num % 4 == 0 else 0
+    scaling_delta = scaling - last_scaling
+    titanium_delta = (titanium - last_titanium) - passive
+    lost_conveyors = False
+    # Counts the incoming titanium at the end of this function. Doesn't take bridges into account.
+    if -1. <= scaling_delta <= 1. and -2 <= titanium_delta <= 0.:
+        roads_built = -titanium_delta
+        if roads_built > 0:
+            scaling_delta -= roads_built * 0.5
+        if scaling_delta < -0.5:
+            lost_conveyors = bool(scaling_delta < -0.99)
 
     max_spawn = 4
-    if rc.get_current_round() < 100:
-        max_spawn = 3
+    if titanium > 600:
+        max_spawn = 6
+    elif titanium > 800:
+        max_spawn = 8
+
+    current_count = rc.get_unit_count()
+    if prev_unit_count > current_count:
+        num_spawned -= (prev_unit_count - current_count)
+
     # if rc.get_current_round() == 100:
     #     rc.resign()
     core_pos = rc.get_position()
@@ -80,7 +141,7 @@ def run():
                 rc.spawn_builder(spawn_pos)
                 num_spawned += 1
                 return  # Only spawn 1 builder for turn 1
-    
+
     # # Normal spawning logic
     if num_spawned < max_spawn or rc.get_global_resources()[0] > 900 + rc.get_scale_percent() or rc.get_hp() < 500:
         spawn_pos = random_spawn_tile()
@@ -114,9 +175,16 @@ def run():
                 rc.spawn_builder(spawn_pos)
                 num_spawned += 1
                 print(f"Spawned builder toward damaged {b_type} at {pos}")
+    prev_unit_count = rc.get_unit_count()
+    last_titanium = rc.get_global_resources()[0] + count_incoming_titanium()
+    last_scaling = rc.get_scale_percent()
+
 
 def init(c: Controller):
-    global rc, num_spawned
+    global rc, num_spawned, prev_unit_count, last_titanium, last_scaling
     rc = c
     num_spawned = 0
+    prev_unit_count = 0
+    last_titanium = 500
+    last_scaling = 100.
     map_info.init(c)

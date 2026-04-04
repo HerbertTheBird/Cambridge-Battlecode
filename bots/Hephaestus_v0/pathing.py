@@ -111,7 +111,7 @@ class Pathing:
     
     forget_launcher = set()
     width = height = 0
-    rc = None
+    rc: Controller
     stuck_turns = 0
     prev_pos = None
     
