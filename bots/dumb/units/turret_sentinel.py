@@ -2,7 +2,7 @@ from cambc import Controller, Position, EntityType, Direction
 import math
 import map_info
 
-rc: Controller
+rc = None
 
 # 1. Pre-calculate integer offsets to bypass enum hashing overhead entirely
 CARDINAL_OFFSETS = [

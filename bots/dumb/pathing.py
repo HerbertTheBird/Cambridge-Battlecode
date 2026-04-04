@@ -71,14 +71,6 @@ CONV = [
     (1, 1, bridge_cost),
 ]
 
-
-def _is_builder_nav(pathing: "Pathing") -> bool:
-    return getattr(builder, "nav", None) is pathing
-
-
-def _is_builder_ore_nav(pathing: "Pathing") -> bool:
-    return getattr(builder, "ore_nav", None) is pathing
-
 class Pathing:
         
     seen = None #a stamp array checking if we have seen this tile in this run
@@ -176,7 +168,7 @@ class Pathing:
             self.destroyed_barriers.pop(p)
     def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs:list[Direction]=DIRS, adjacent_in: bool = False):
         builder.log("a* init")
-        if _is_builder_nav(self):
+        if self == builder.nav:
             print(start_p, target_p)
         if isinstance(target_p, Position):
             target_p = {target_p}
@@ -206,7 +198,7 @@ class Pathing:
         width_l  = self.width
         if self.changed:
             self.heap.clear()
-        if _is_builder_ore_nav(self):
+        if self == builder.ore_nav:
             print("changed? " + str(self.changed) + " " + str(len(self.heap)))
         if len(self.heap) == 0:
             is_dirs  = (input_dirs is DIRS)
@@ -233,7 +225,7 @@ class Pathing:
 
     def a_star(self, start_p: Position, avoid_p: set[Position] = None) -> list[Position] | None:
         builder.log("a* start")
-        if _is_builder_ore_nav(self):
+        if self == builder.ore_nav:
             builder.log("CONV A STAR")
         if avoid_p is None:
             avoid_p = set()
@@ -325,7 +317,7 @@ class Pathing:
             heap.clear()
             return path_out
         # c = 0
-        if _is_builder_ore_nav(self):
+        if self == builder.ore_nav:
             builder.log(str(len(heap)))
         while heap:
             # c += 1
@@ -346,7 +338,7 @@ class Pathing:
 
             px = pos % width
             py = pos // width
-            if _is_builder_nav(self):
+            if self == builder.nav:
                 rc.draw_indicator_dot(Position(px, py), min(255, self.iter*255//625), 0, 0)
             for dx, dy, cost in dirs:
                 nx = px + dx
@@ -521,7 +513,7 @@ class Pathing:
 
     def calculate_conveyor_path(self, start: Position, ore: Position, avoid_extra: list[Position] = None, update: bool = False):
         print("conveyors from ", start)
-        core = map_info._my_core
+        core = map_info._predicted_enemy_core
         if not avoid_extra:
             avoid_extra = {}
         target = set()
@@ -537,12 +529,12 @@ class Pathing:
             for y in range(height_l):
                 if map_info.id_at(x, y) != 0 and is_conveyor(map_info.type_at(x, y)) and map_info.can_route(x, y) and map_info.load_at(x, y) <= 3 and map_info.team_at(x, y) == my_team and Position(x, y) not in avoid_extra and (ore_type == map_info.trans_ore_at(x, y) or ore_type == Environment.ORE_TITANIUM):
                     target.add(Position(x, y))
-        for s in builder.target_splitters:
-            if map_info.id_at(s.x, s.y) == 0 or map_info.type_at(s.x, s.y) != EntityType.SPLITTER:
-                target.add(s)
-                continue
-            if map_info.load_at(s.x, s.y) <= 3 and map_info.can_route(s.x, s.y):
-                target.add(s)
+        # for s in builder.target_splitters:
+        #     if map_info.id_at(s.x, s.y) == 0 or map_info.type_at(s.x, s.y) != EntityType.SPLITTER:
+        #         target.add(s)
+        #         continue
+        #     if map_info.load_at(s.x, s.y) <= 3 and map_info.can_route(s.x, s.y):
+        #         target.add(s)
         if len(target) == 0:
             return []
         print(ore_type, target)

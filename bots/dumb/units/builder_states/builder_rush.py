@@ -26,9 +26,9 @@ turns_since_last_explore_target = 0
 next_attack_tile = None
 attack_ore = None
 
-rc: Controller
+rc = None
 MODE_ACTIONS = None
-nav: Pathing
+nav = None
 class Mode(Enum):
     RUSH_CORE = (255, 165, 0, "rush opponent core")
     PREPARE_LAUNCHER = (0, 180, 180, "set up for launcher")

@@ -1,8 +1,7 @@
 from cambc import Controller, Position, EntityType
 import math
 import map_info
-rc: Controller
-
+rc = None
 def init(c: Controller):
     global rc
     rc = c
@@ -53,8 +52,7 @@ def run():
     for x in range(pos.x-vision_r, pos.x+vision_r+1):
         for y in range(pos.y-vision_r, pos.y+vision_r+1):
             if rc.can_fire(Position(x, y)):
-                if priority(Position(x, y)) < best_priority:
+                if priority(Position(x, y)) < priority(best):
                     best = Position(x, y)
-                    best_priority = priority(best)
     if best is not None:
         rc.fire(best)
