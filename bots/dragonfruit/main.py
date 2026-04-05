@@ -1637,6 +1637,7 @@ class Player:
              self.last_fired_round = ct.get_current_round()
         target = choose_target(ct, my_pos, vc)
         log("turret target:", target)
+        
         if target is None:
             target = choose_passive_target(ct, my_pos, self.my_team, vc, map_obj=self.map)
             log("turret passive target:", target)
@@ -1645,7 +1646,29 @@ class Player:
                 ct.fire(target)
                 log(f"turret fired at {target}")
                 self.last_fired_round = ct.get_current_round()
-        elif ct.get_current_round() - self.last_fired_round >= 20:
+        elif ct.get_entity_type() == EntityType.GUNNER:
+            if self.global_titanium <= GameConstants.GUNNER_ROTATE_COST[0] + 50:
+                current_dir = ct.get_direction()
+                rotate_dir = None
+                rotate_dist = INF
+                for (_eid, etype, pos) in vc.enemy_units:
+                    if etype not in TURRET_TYPES:
+                        continue
+                    dist = my_pos.distance_squared(pos)
+                    if dist > 2:
+                        continue
+                    desired_dir = my_pos.direction_to(pos)
+                    if desired_dir == current_dir:
+                        continue
+                    if dist < rotate_dist:
+                        rotate_dist = dist
+                        rotate_dir = desired_dir
+                if rotate_dir is not None and ct.can_rotate(rotate_dir):
+                    ct.rotate(rotate_dir)
+                    rotated = True
+                    log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+        
+        if ct.get_current_round() - self.last_fired_round >= 20:
             if len(vc.enemy_units) > 0:
                 self.last_fired_round = ct.get_current_round()
                 return
