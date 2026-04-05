@@ -63,6 +63,11 @@ def log(text : str):
     print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {text}")
 
 
+def destroy_building(pos: Position):
+    rc.destroy(pos)
+    map_info.note_destroy(pos)
+
+
 def check_attack_core():
     """
     Monitors current ATTACK_CORE target. 
@@ -451,8 +456,12 @@ def run_prepare_launcher():
 
     # otherwise clear restrictive tile and place
     elif best_restrict is not None:
-        if rc.can_destroy(best_restrict):
-            rc.destroy(best_restrict)
+        if (
+            best_restrict != my_pos
+            and rc.get_global_resources()[0] >= rc.get_launcher_cost()[0]
+            and rc.can_destroy(best_restrict)
+        ):
+            destroy_building(best_restrict)
 
         if rc.can_build_launcher(best_restrict):
             rc.build_launcher(best_restrict)

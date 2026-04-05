@@ -120,6 +120,46 @@ def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < _width and 0 <= pos.y < _height
 def can_route(x, y):
     return _building_my[x+y*_width] == _building_my_key
+
+
+def note_destroy(pos: Position) -> None:
+    if not in_bounds(pos):
+        return
+
+    n = pos.x + pos.y * _width
+    building_id = _building_id[n]
+    if building_id == 0:
+        return
+
+    building_type = _INT_ET[_building_type[n]]
+
+    _blocked.discard(pos)
+    _my_barriers.discard(pos)
+    _enemy_launch.discard(pos)
+
+    if building_type in _CONVEYOR_TYPES:
+        _conveyors.discard(pos)
+        target_idx = _building_conv_target[n]
+        if target_idx:
+            _conveyors_targets.discard(Position(target_idx % _width, target_idx // _width))
+    else:
+        _conveyors.discard(pos)
+
+    if building_type in _CONVEYOR_TYPES or building_type is _ET_HARVESTER:
+        stale = [entry for entry in my_conveyors if entry[0] == pos or entry[1] == pos]
+        for entry in stale:
+            my_conveyors.discard(entry)
+
+    _building_id[n] = 0
+    _building_hp[n] = 0
+    _building_type[n] = 0
+    _building_team[n] = 0
+    _building_dir[n] = 0
+    _building_conv_target[n] = 0
+    _building_load[n] = 0
+    _building_ore[n] = 0
+    _building_my[n] = 0
+
 def init(c: Controller):
     global _rc, _width, _height
     global _ground, _seen, _building_id, _building_type, _building_hp, _building_team, _building_dir, _building_conv_target, _building_load, _building_ore, _building_my
