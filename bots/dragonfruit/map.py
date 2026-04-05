@@ -1,4 +1,5 @@
 import random
+from array import array
 from collections import defaultdict
 
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType, Team
@@ -7,6 +8,8 @@ from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPE
 from comms import Comms
 from helpers import on_map, on_map_coords, get_foundry_positions, is_core_tile
 
+from log import log, log_time
+
 SYMMETRY_MAPPING = {
     (True,  False, False): Symmetry.FLIP_X,
     (False, True,  False): Symmetry.FLIP_Y,
@@ -14,27 +17,39 @@ SYMMETRY_MAPPING = {
 }
 
 _BRIDGE_OFFSETS = tuple((dx, dy) for dx in range(-3, 4) for dy in range(-3, 4) if dx*dx + dy*dy <= 9)
+_CARDINAL_OFFSETS = ((0, -1), (1, 0), (0, 1), (-1, 0))
 
 RESOURCE_MASK_TITANIUM = 1
 RESOURCE_MASK_AXIONITE = 2
 OBSERVED_RESOURCE_MAX_AGE = 5
 
+FLAG_SEEN = 1 << 0
+FLAG_WALL = 1 << 1
+FLAG_BLOCKED = 1 << 2
+FLAG_ALLY_BARRIER = 1 << 3
+FLAG_ORE_TITANIUM = 1 << 4
+FLAG_ORE_AXIONITE = 1 << 5
+
 class Map:
     def __init__(self, width: int, height: int):
         self.width = width
         self.height = height
-        self.env: list[list[Environment | None]] = [[None] * height for _ in range(width)]
-        self.entities: list[list[tuple[int, EntityType, Team] | None]] = [[None] * height for _ in range(width)]
+        self.tile_count = width * height
+        self._tile_flags = array("I", [0]) * self.tile_count
+        self._env: list[Environment | None] = [None] * self.tile_count
+        self._entity_id = array("i", [0]) * self.tile_count
+        self._entity_type: list[EntityType | None] = [None] * self.tile_count
+        self._entity_team: list[Team | None] = [None] * self.tile_count
         self.ore_ti = set()
         self.ore_ax = set()
-        self.unserviced_harvesters: set[Position] = set()
         self.unreachable_harvesters: set[Position] = set()
-        self.conveyor_outputs: dict[Position, Position] = {}  # build_pos -> output_pos
-        self.conveyor_inputs: defaultdict[Position, set[Position]] = defaultdict(set)  # output_pos -> set of build_pos
+        self.unreachable_ores: set[Position] = set()
+        self._output_idx = array("i", [-1]) * self.tile_count
+        self._input_indices: list[set[int]] = [set() for _ in range(self.tile_count)]
         self.conveyor_resources: defaultdict[Position, set[ResourceType]] = defaultdict(set)  # build_pos -> observed resource types
         self.conveyor_resources_last_seen: defaultdict[Position, dict[ResourceType, int]] = defaultdict(dict)
-        self.input_chain_valid: list[list[bool]] = [[False] * height for _ in range(width)]
-        self.input_resource_masks: list[list[int]] = [[0] * height for _ in range(width)]
+        self._input_chain_valid = bytearray(self.tile_count)
+        self._input_resource_masks = array("I", [0]) * self.tile_count
         self.current_round = 0
         self._feeds_turret_cache: dict[tuple[Position, Team], bool] = {}
         self._feeds_building_cache: dict[tuple[Position, Team], bool] = {}
@@ -46,6 +61,148 @@ class Map:
         self.can_flip_x = True
         self.can_flip_y = True
         self.can_rotate = True
+
+    def _idx(self, pos: Position) -> int:
+        return pos.y * self.width + pos.x
+
+    def _idx_if_on_map(self, pos: Position) -> int | None:
+        if not on_map(pos, self.width, self.height):
+            return None
+        return pos.y * self.width + pos.x
+
+    def _pos(self, idx: int) -> Position:
+        return Position(idx % self.width, idx // self.width)
+
+    def _get_flag_idx(self, idx: int, flag: int) -> bool:
+        return bool(self._tile_flags[idx] & flag)
+
+    def _set_flag_idx(self, idx: int, flag: int):
+        self._tile_flags[idx] |= flag
+
+    def _clear_flag_idx(self, idx: int, flag: int):
+        self._tile_flags[idx] &= ~flag
+
+    def _set_tile_env_idx(self, idx: int, env: Environment):
+        self._env[idx] = env
+        self._set_flag_idx(idx, FLAG_SEEN)
+        self._clear_flag_idx(idx, FLAG_WALL | FLAG_ORE_TITANIUM | FLAG_ORE_AXIONITE)
+        if env == Environment.WALL:
+            self._set_flag_idx(idx, FLAG_WALL)
+        elif env == Environment.ORE_TITANIUM:
+            self._set_flag_idx(idx, FLAG_ORE_TITANIUM)
+        elif env == Environment.ORE_AXIONITE:
+            self._set_flag_idx(idx, FLAG_ORE_AXIONITE)
+
+    def _set_tile_entity_idx(self, idx: int, bid: int, etype: EntityType, team: Team):
+        self._entity_id[idx] = bid
+        self._entity_type[idx] = etype
+        self._entity_team[idx] = team
+
+    def _clear_tile_entity_idx(self, idx: int):
+        self._entity_id[idx] = 0
+        self._entity_type[idx] = None
+        self._entity_team[idx] = None
+
+    def _set_blocked_idx(self, idx: int, blocked: bool):
+        if blocked:
+            self._set_flag_idx(idx, FLAG_BLOCKED)
+        else:
+            self._clear_flag_idx(idx, FLAG_BLOCKED)
+
+    def _set_ally_barrier_idx(self, idx: int, is_barrier: bool):
+        if is_barrier:
+            self._set_flag_idx(idx, FLAG_ALLY_BARRIER)
+        else:
+            self._clear_flag_idx(idx, FLAG_ALLY_BARRIER)
+
+    def _is_visited_idx(self, idx: int) -> bool:
+        return self._get_flag_idx(idx, FLAG_SEEN)
+
+    def _get_tile_env_idx(self, idx: int) -> Environment | None:
+        return self._env[idx]
+
+    def _get_entity_type_idx(self, idx: int) -> EntityType | None:
+        return self._entity_type[idx]
+
+    def _get_entity_team_idx(self, idx: int) -> Team | None:
+        return self._entity_team[idx]
+
+    def _is_ore_idx(self, idx: int) -> bool:
+        flags = self._tile_flags[idx]
+        return bool(flags & (FLAG_ORE_TITANIUM | FLAG_ORE_AXIONITE))
+
+    def _has_ore_harvester_idx(self, idx: int) -> bool:
+        if self._entity_type[idx] != EntityType.HARVESTER:
+            return False
+        env = self._env[idx]
+        return env == Environment.ORE_TITANIUM or env == Environment.ORE_AXIONITE
+
+    def _has_adjacent_ally_conveyor_idx(self, idx: int, my_team: Team) -> bool:
+        x = idx % self.width
+        y = idx // self.width
+        for dx, dy in _CARDINAL_OFFSETS:
+            nx = x + dx
+            ny = y + dy
+            if not on_map_coords(nx, ny, self.width, self.height):
+                continue
+            nidx = ny * self.width + nx
+            if self._entity_type[nidx] in CONVEYOR_TYPES and self._entity_team[nidx] == my_team:
+                return True
+        return False
+
+    def has_entity(self, pos: Position) -> bool:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return False
+        return self._entity_id[idx] != 0
+
+    def get_tile_entity_type(self, pos: Position) -> EntityType | None:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return None
+        return self._entity_type[idx]
+
+    def is_blocked_idx(self, idx: int) -> bool:
+        return self._get_flag_idx(idx, FLAG_BLOCKED)
+
+    def is_ally_barrier_idx(self, idx: int) -> bool:
+        return self._get_flag_idx(idx, FLAG_ALLY_BARRIER)
+
+    def get_conveyor_output(self, pos: Position) -> Position | None:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return None
+        out_idx = self._output_idx[idx]
+        if out_idx < 0:
+            return None
+        return self._pos(out_idx)
+
+    def has_conveyor_output(self, pos: Position) -> bool:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return False
+        return self._output_idx[idx] >= 0
+
+    def iter_conveyor_input_indices(self, pos: Position):
+        return iter(self._input_indices[self._idx(pos)])
+
+    def has_conveyor_inputs(self, pos: Position) -> bool:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return False
+        return bool(self._input_indices[idx])
+
+    def get_conveyor_input_count(self, pos: Position) -> int:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return 0
+        return len(self._input_indices[idx])
+
+    def get_conveyor_input_positions(self, pos: Position) -> list[Position]:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return []
+        return [self._pos(input_idx) for input_idx in self._input_indices[idx]]
         
     def get_symmetric_pos(self, pos: Position, symmetry: Symmetry):
         if symmetry == Symmetry.FLIP_X:
@@ -61,17 +218,17 @@ class Map:
             return
         if self.can_flip_x:
             sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_X)
-            sym_env = self.env[sym_pos.x][sym_pos.y]
+            sym_env = self._env[self._idx(sym_pos)]
             if sym_env is not None and sym_env != env:
                 self.can_flip_x = False
         if self.can_flip_y:
             sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_Y)
-            sym_env = self.env[sym_pos.x][sym_pos.y]
+            sym_env = self._env[self._idx(sym_pos)]
             if sym_env is not None and sym_env != env:
                 self.can_flip_y = False
         if self.can_rotate:
             sym_pos = self.get_symmetric_pos(pos, Symmetry.ROTATE)
-            sym_env = self.env[sym_pos.x][sym_pos.y]
+            sym_env = self._env[self._idx(sym_pos)]
             if sym_env is not None and sym_env != env:
                 self.can_rotate = False
                 
@@ -80,18 +237,18 @@ class Map:
             return
         if self.can_flip_x:
             sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_X)
-            sym_entity = self.entities[sym_pos.x][sym_pos.y]
-            if sym_entity is not None and sym_entity[1] != EntityType.CORE:
+            sym_etype = self.get_tile_entity_type(sym_pos)
+            if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_flip_x = False
         if self.can_flip_y:
             sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_Y)
-            sym_entity = self.entities[sym_pos.x][sym_pos.y]
-            if sym_entity is not None and sym_entity[1] != EntityType.CORE:
+            sym_etype = self.get_tile_entity_type(sym_pos)
+            if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_flip_y = False
         if self.can_rotate:
             sym_pos = self.get_symmetric_pos(pos, Symmetry.ROTATE)
-            sym_entity = self.entities[sym_pos.x][sym_pos.y]
-            if sym_entity is not None and sym_entity[1] != EntityType.CORE:
+            sym_etype = self.get_tile_entity_type(sym_pos)
+            if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_rotate = False
 
     def get_symmetry_key(self):
@@ -120,16 +277,16 @@ class Map:
         return resources
 
     def _get_cached_resource_mask(self, pos: Position) -> int:
-        return self.input_resource_masks[pos.x][pos.y]
+        return self._input_resource_masks[self._idx(pos)]
 
     def _set_cached_resource_mask(self, pos: Position, mask: int):
-        self.input_resource_masks[pos.x][pos.y] = mask
+        self._input_resource_masks[self._idx(pos)] = mask
 
     def _get_cached_chain_valid(self, pos: Position) -> bool:
-        return self.input_chain_valid[pos.x][pos.y]
+        return bool(self._input_chain_valid[self._idx(pos)])
 
     def _set_cached_chain_valid(self, pos: Position, valid: bool):
-        self.input_chain_valid[pos.x][pos.y] = valid
+        self._input_chain_valid[self._idx(pos)] = 1 if valid else 0
 
     def input_chain_reaches_resource(self, pos: Position, resource: ResourceType) -> bool:
         return bool(self._get_cached_resource_mask(pos) & self._resource_to_mask(resource))
@@ -220,7 +377,8 @@ class Map:
     def infer_chain_resource_at_output(self, output_pos: Position, ct: Controller) -> ResourceType | None:
         """Infer the resource for a broken chain gap, preferring live input storage."""
         live_resources = set()
-        for input_pos in self.conveyor_inputs.get(output_pos, ()):
+        for input_idx in self.iter_conveyor_input_indices(output_pos):
+            input_pos = self._pos(input_idx)
             if not ct.is_in_vision(input_pos):
                 continue
             bid = ct.get_tile_building_id(input_pos)
@@ -235,151 +393,172 @@ class Map:
             return None
 
         cached_resources = set(self.get_cached_conveyor_resources(output_pos))
-        for input_pos in self.conveyor_inputs.get(output_pos, ()):
+        for input_idx in self.iter_conveyor_input_indices(output_pos):
+            input_pos = self._pos(input_idx)
             cached_resources.update(self.get_cached_conveyor_resources(input_pos))
         if len(cached_resources) == 1:
             return next(iter(cached_resources))
         return None
 
     def _has_ore_harvester_at(self, pos: Position) -> bool:
-        entity = self.entities[pos.x][pos.y]
-        if entity is None or entity[1] != EntityType.HARVESTER:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
             return False
-        env = self.env[pos.x][pos.y]
-        return env == Environment.ORE_TITANIUM or env == Environment.ORE_AXIONITE
+        return self._has_ore_harvester_idx(idx)
 
-    def _collect_downstream_positions(self, dirty_roots: set[Position]) -> list[Position]:
+    def _has_adjacent_ally_conveyor(self, pos: Position, my_team: Team) -> bool:
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return False
+        return self._has_adjacent_ally_conveyor_idx(idx, my_team)
+
+    def is_unserviced_harvester(self, pos: Position, my_team: Team) -> bool:
+        return self._has_ore_harvester_at(pos) and not self._has_adjacent_ally_conveyor(pos, my_team)
+
+    def _collect_downstream_indices(self, dirty_roots: set[int]) -> list[int]:
         positions = []
         seen = set()
         stack = list(dirty_roots)
         while stack:
-            pos = stack.pop()
-            if pos in seen or not on_map(pos, self.width, self.height):
+            idx = stack.pop()
+            if idx in seen or idx < 0 or idx >= self.tile_count:
                 continue
-            seen.add(pos)
-            positions.append(pos)
-            next_pos = self.conveyor_outputs.get(pos)
-            if next_pos is not None:
-                stack.append(next_pos)
+            seen.add(idx)
+            positions.append(idx)
+            next_idx = self._output_idx[idx]
+            if next_idx >= 0:
+                stack.append(next_idx)
         return positions
 
-    def _compute_cached_resource_mask(self, pos: Position) -> int:
+    def _compute_cached_resource_mask_idx(self, idx: int) -> int:
         mask = 0
+        width = self.width
+        height = self.height
+        x = idx % width
+        y = idx // width
+        env_grid = self._env
+        entity_types = self._entity_type
+        input_chain_valid = self._input_chain_valid
+        input_resource_masks = self._input_resource_masks
 
-        for d in CARDINAL_DIRECTIONS:
-            adj = pos.add(d)
-            if not on_map(adj, self.width, self.height):
+        for dx, dy in _CARDINAL_OFFSETS:
+            nx = x + dx
+            ny = y + dy
+            if not on_map_coords(nx, ny, width, height):
                 continue
-            entity = self.entities[adj.x][adj.y]
-            if entity is None or entity[1] != EntityType.HARVESTER:
+            nidx = ny * width + nx
+            if entity_types[nidx] != EntityType.HARVESTER:
                 continue
-            env = self.env[adj.x][adj.y]
+            env = env_grid[nidx]
             if env == Environment.ORE_TITANIUM:
                 mask |= RESOURCE_MASK_TITANIUM
             elif env == Environment.ORE_AXIONITE:
                 mask |= RESOURCE_MASK_AXIONITE
 
-        for input_pos in self.conveyor_inputs.get(pos, ()):
-            if not on_map(input_pos, self.width, self.height):
+        for input_idx in self._input_indices[idx]:
+            if not self._get_flag_idx(input_idx, FLAG_SEEN):
+                continue
+            if entity_types[input_idx] not in CONVEYOR_TYPES:
+                continue
+            if not input_chain_valid[input_idx]:
                 continue
 
-            if not self.is_visited(input_pos):
-                continue
-
-            entity = self.entities[input_pos.x][input_pos.y]
-            if entity is None or entity[1] not in CONVEYOR_TYPES:
-                continue
-            if not self._get_cached_chain_valid(input_pos):
-                continue
-
-            mask |= self._get_cached_resource_mask(input_pos)
+            mask |= input_resource_masks[input_idx]
             if mask == (RESOURCE_MASK_TITANIUM | RESOURCE_MASK_AXIONITE):
                 break
 
         return mask
 
-    def _compute_cached_chain_valid(self, pos: Position) -> bool:
+    def _compute_cached_chain_valid_idx(self, idx: int) -> bool:
         has_valid_feeder = False
+        width = self.width
+        height = self.height
+        x = idx % width
+        y = idx // width
+        env_grid = self._env
+        entity_types = self._entity_type
+        input_chain_valid = self._input_chain_valid
 
-        for d in CARDINAL_DIRECTIONS:
-            adj = pos.add(d)
-            if not on_map(adj, self.width, self.height):
+        for dx, dy in _CARDINAL_OFFSETS:
+            nx = x + dx
+            ny = y + dy
+            if not on_map_coords(nx, ny, width, height):
                 continue
-            entity = self.entities[adj.x][adj.y]
-            if entity is None or entity[1] != EntityType.HARVESTER:
+            nidx = ny * width + nx
+            if entity_types[nidx] != EntityType.HARVESTER:
                 continue
-            env = self.env[adj.x][adj.y]
+            env = env_grid[nidx]
             if env == Environment.ORE_TITANIUM or env == Environment.ORE_AXIONITE:
                 has_valid_feeder = True
 
-        for input_pos in self.conveyor_inputs.get(pos, ()):
-            if not on_map(input_pos, self.width, self.height):
-                continue
-            if not self.is_visited(input_pos):
+        for input_idx in self._input_indices[idx]:
+            if not self._get_flag_idx(input_idx, FLAG_SEEN):
                 # Unvisited input — optimistically assume valid
                 has_valid_feeder = True
                 continue
-            entity = self.entities[input_pos.x][input_pos.y]
-            if entity is None or entity[1] not in CONVEYOR_TYPES:
+            if entity_types[input_idx] not in CONVEYOR_TYPES:
                 continue  # broken input, but other inputs may still be valid
-            if not self._get_cached_chain_valid(input_pos):
+            if not input_chain_valid[input_idx]:
                 continue  # invalid upstream, but other inputs may still be valid
             has_valid_feeder = True
 
         return has_valid_feeder
 
-    def _recompute_input_chain_cache(self, dirty_roots: set[Position]):
-        positions = self._collect_downstream_positions(dirty_roots)
+    def _recompute_input_chain_cache(self, dirty_roots: set[int]):
+        positions = self._collect_downstream_indices(dirty_roots)
         if not positions:
             return
 
         pos_set = set(positions)
 
         # Build in-degree map (only counting edges within pos_set)
-        in_degree: dict[Position, int] = {pos: 0 for pos in positions}
-        for pos in positions:
-            for input_pos in self.conveyor_inputs.get(pos, ()):
-                if input_pos in pos_set:
-                    in_degree[pos] += 1
+        in_degree: dict[int, int] = {idx: 0 for idx in positions}
+        for idx in positions:
+            for input_idx in self._input_indices[idx]:
+                if input_idx in pos_set:
+                    in_degree[idx] += 1
 
         # Topological sort via Kahn's algorithm
-        queue = [pos for pos in positions if in_degree[pos] == 0]
-        topo_order: list[Position] = []
+        queue = [idx for idx in positions if in_degree[idx] == 0]
+        topo_order: list[int] = []
         qi = 0
         while qi < len(queue):
-            pos = queue[qi]
+            idx = queue[qi]
             qi += 1
-            topo_order.append(pos)
-            output = self.conveyor_outputs.get(pos)
-            if output is not None and output in pos_set:
-                in_degree[output] -= 1
-                if in_degree[output] == 0:
-                    queue.append(output)
+            topo_order.append(idx)
+            output_idx = self._output_idx[idx]
+            if output_idx >= 0 and output_idx in pos_set:
+                in_degree[output_idx] -= 1
+                if in_degree[output_idx] == 0:
+                    queue.append(output_idx)
 
         # Positions not in topo_order are in cycles — mark invalid
-        for pos in positions:
-            if pos not in in_degree or in_degree[pos] != 0:
+        for idx in positions:
+            if idx not in in_degree or in_degree[idx] != 0:
+                pos = self._pos(idx)
                 self._set_cached_chain_valid(pos, False)
                 self._set_cached_resource_mask(pos, 0)
 
         # Single pass in topological order (upstream first)
-        for pos in topo_order:
-            new_valid = self._compute_cached_chain_valid(pos)
-            new_mask = self._compute_cached_resource_mask(pos) if new_valid else 0
+        for idx in topo_order:
+            pos = self._pos(idx)
+            new_valid = self._compute_cached_chain_valid_idx(idx)
+            new_mask = self._compute_cached_resource_mask_idx(idx) if new_valid else 0
             self._set_cached_chain_valid(pos, new_valid)
             self._set_cached_resource_mask(pos, new_mask)
 
     def _remove_conveyor_tracking(self, pos: Position):
         """Remove conveyor output/input/resource tracking for a position."""
-        old_output = self.conveyor_outputs.pop(pos, None)
-        if old_output is not None:
-            self.conveyor_inputs[old_output].discard(pos)
-            if not self.conveyor_inputs[old_output]:
-                del self.conveyor_inputs[old_output]
+        idx = self._idx(pos)
+        old_output_idx = self._output_idx[idx]
+        if old_output_idx >= 0:
+            self._input_indices[old_output_idx].discard(idx)
+        self._output_idx[idx] = -1
         self.conveyor_resources.pop(pos, None)
         self.conveyor_resources_last_seen.pop(pos, None)
 
     def update_vision(self, ct: Controller, comms: Comms):
+        log_time(ct, "Start of update vision")
         self.current_round = ct.get_current_round()
         self._feeds_turret_cache.clear()
         self._feeds_building_cache.clear()
@@ -389,95 +568,148 @@ class Map:
         self._chain_last_visible_cache.clear()
         my_team = ct.get_team()
         nearby = ct.get_nearby_tiles()
-        dirty_cache_positions: set[Position] = set()
+        dirty_cache_positions: set[int] = set()
 
-        # First pass: update env and entities
+        env_grid = self._env
+        entity_ids = self._entity_id
+        entity_types = self._entity_type
+        entity_teams = self._entity_team
+        output_idx = self._output_idx
+        input_indices = self._input_indices
+        ore_ti = self.ore_ti
+        ore_ax = self.ore_ax
+        tile_flags = self._tile_flags
+        width = self.width
+        height = self.height
+
+        ct_get_tile_env = ct.get_tile_env
+        ct_get_tile_building_id = ct.get_tile_building_id
+        ct_get_entity_type = ct.get_entity_type
+        ct_get_team = ct.get_team
+        ct_get_marker_value = ct.get_marker_value
+        ct_get_bridge_target = ct.get_bridge_target
+        ct_get_direction = ct.get_direction
+        ct_get_stored_resource = ct.get_stored_resource
+        
+        log_time(ct, "After local variable assignment")
+
         for pos in nearby:
-            prev_output = self.conveyor_outputs.get(pos)
-            prev_was_ore_harvester = self._has_ore_harvester_at(pos) if self.is_visited(pos) else False
+            x = pos.x
+            y = pos.y
+            idx = y * width + x
+            prev_output_idx = output_idx[idx]
+            prev_was_ore_harvester = False
+            if tile_flags[idx] & FLAG_SEEN and entity_types[idx] == EntityType.HARVESTER:
+                prev_env = env_grid[idx]
+                prev_was_ore_harvester = prev_env == Environment.ORE_TITANIUM or prev_env == Environment.ORE_AXIONITE
 
-            env = ct.get_tile_env(pos)
-            if self.env[pos.x][pos.y] is None:
-                self.env[pos.x][pos.y] = env
+            env = env_grid[idx]
+            if env is None:
+                env = ct_get_tile_env(pos)
+                self._set_tile_env_idx(idx, env)
                 if env == Environment.ORE_TITANIUM:
-                    self.ore_ti.add(pos)
+                    ore_ti.add(pos)
                 elif env == Environment.ORE_AXIONITE:
-                    self.ore_ax.add(pos)
+                    ore_ax.add(pos)
                 self.check_symmetry(pos, env)
+                
+            if env == Environment.WALL:
+                self._clear_tile_entity_idx(idx)
+                self._set_blocked_idx(idx, True)
+                self._set_ally_barrier_idx(idx, False)
+                continue
 
-            bid = ct.get_tile_building_id(pos)
+            bid = ct_get_tile_building_id(pos)
             if bid is not None:
-                etype = ct.get_entity_type(bid)
-                team = ct.get_team(bid)
+                cached_bid = entity_ids[idx]
+                if cached_bid != 0 and cached_bid == bid:
+                    etype = entity_types[idx]
+                    team = entity_teams[idx]
+                else:
+                    etype = ct_get_entity_type(bid)
+                    team = ct_get_team(bid)
                 if etype == EntityType.MARKER:
                     if team == my_team:
-                        comms.read_marker(ct.get_marker_value(bid))
-                    self.entities[pos.x][pos.y] = None
-                    if pos in self.conveyor_outputs:
+                        comms.read_marker(ct_get_marker_value(bid))
+                    self._clear_tile_entity_idx(idx)
+                    self._set_blocked_idx(idx, False)
+                    self._set_ally_barrier_idx(idx, False)
+                    if output_idx[idx] >= 0:
                         self._remove_conveyor_tracking(pos)
                 else:
                     if etype == EntityType.CORE:
-                        if self.entities[pos.x][pos.y] is None:
+                        if cached_bid != bid:
                             self.check_core_symmetry(pos)
-                    self.entities[pos.x][pos.y] = (bid, etype, team)
+                    assert etype is not None
+                    assert team is not None
+                    self._set_tile_entity_idx(idx, bid, etype, team)
+                    self._set_blocked_idx(idx, False)
+                    self._set_ally_barrier_idx(idx, False)
+                    if etype == EntityType.BARRIER and team == my_team:
+                        self._set_ally_barrier_idx(idx, True)
+                    elif (
+                        (etype == EntityType.CORE and team != my_team)
+                        or (etype not in CONVEYOR_TYPES and etype != EntityType.ROAD and etype != EntityType.CORE)
+                    ):
+                        self._set_blocked_idx(idx, True)
 
                     # Track conveyor outputs and resources
                     if etype in CONVEYOR_TYPES:
-                        new_output = ct.get_bridge_target(bid) if etype == EntityType.BRIDGE else pos.add(ct.get_direction(bid))
-                        old_output = self.conveyor_outputs.get(pos)
-                        if old_output != new_output:
-                            if old_output is not None:
-                                self.conveyor_inputs[old_output].discard(pos)
-                                if not self.conveyor_inputs[old_output]:
-                                    del self.conveyor_inputs[old_output]
-                            self.conveyor_outputs[pos] = new_output
-                            self.conveyor_inputs[new_output].add(pos)
-                        resource = ct.get_stored_resource(bid)
+                        if cached_bid != 0 and cached_bid == bid:
+                            new_output_idx = prev_output_idx
+                        else:
+                            new_output = ct_get_bridge_target(bid) if etype == EntityType.BRIDGE else pos.add(ct_get_direction(bid))
+                            if 0 <= new_output.x < width and 0 <= new_output.y < height:
+                                new_output_idx = new_output.y * width + new_output.x
+                            else:
+                                new_output_idx = -1
+                        old_output_idx = output_idx[idx]
+                        if old_output_idx != new_output_idx:
+                            if old_output_idx >= 0:
+                                input_indices[old_output_idx].discard(idx)
+                            output_idx[idx] = new_output_idx
+                            if new_output_idx >= 0:
+                                input_indices[new_output_idx].add(idx)
+                        resource = ct_get_stored_resource(bid)
                         if resource is not None:
                             self._record_conveyor_resource(pos, resource)
-                    elif pos in self.conveyor_outputs:
+                    elif output_idx[idx] >= 0:
                         self._remove_conveyor_tracking(pos)
             else:
-                self.entities[pos.x][pos.y] = None
-                if pos in self.conveyor_outputs:
+                self._clear_tile_entity_idx(idx)
+                self._set_blocked_idx(idx, False)
+                self._set_ally_barrier_idx(idx, False)
+                if output_idx[idx] >= 0:
                     self._remove_conveyor_tracking(pos)
 
-            new_output = self.conveyor_outputs.get(pos)
-            if prev_output is not None:
-                dirty_cache_positions.add(prev_output)
-            if new_output is not None:
-                dirty_cache_positions.add(new_output)
+            new_output_idx = output_idx[idx]
+            if prev_output_idx != new_output_idx:
+                if prev_output_idx >= 0:
+                    dirty_cache_positions.add(prev_output_idx)
+                if new_output_idx >= 0:
+                    dirty_cache_positions.add(new_output_idx)
 
-            new_is_ore_harvester = self._has_ore_harvester_at(pos)
+            new_is_ore_harvester = (
+                entity_types[idx] == EntityType.HARVESTER
+                and (env_grid[idx] == Environment.ORE_TITANIUM or env_grid[idx] == Environment.ORE_AXIONITE)
+            )
             if prev_was_ore_harvester != new_is_ore_harvester:
-                for d in CARDINAL_DIRECTIONS:
-                    adj = pos.add(d)
-                    if not on_map(adj, self.width, self.height):
+                for dx, dy in _CARDINAL_OFFSETS:
+                    nx = x + dx
+                    ny = y + dy
+                    if not on_map_coords(nx, ny, width, height):
                         continue
-                    dirty_cache_positions.add(adj)
+                    dirty_cache_positions.add(ny * width + nx)
+
+        log_time(ct, "After processing nearby tiles")
 
         self.update_symmetry()
+        
+        log_time(ct, "After updating symmetry")
+        
         self._recompute_input_chain_cache(dirty_cache_positions)
         
-        # Second pass: maintain unserviced_harvesters
-        for pos in nearby:
-            entity = self.entities[pos.x][pos.y]
-            if entity is not None and entity[1] == EntityType.HARVESTER:
-                has_ally_conveyor = False
-                for d in CARDINAL_DIRECTIONS:
-                    n = pos.add(d)
-                    if not on_map(n, self.width, self.height):
-                        continue
-                    n_entity = self.entities[n.x][n.y]
-                    if n_entity is not None and n_entity[1] in CONVEYOR_TYPES and n_entity[2] == my_team:
-                        has_ally_conveyor = True
-                        break
-                if has_ally_conveyor:
-                    self.unserviced_harvesters.discard(pos)
-                else:
-                    self.unserviced_harvesters.add(pos)
-            else:
-                self.unserviced_harvesters.discard(pos)
+        log_time(ct, "After recomputing conveyor cache")
     
     def follow_chain_terminal(self, start_pos: Position) -> Position:
         """Follow conveyor_outputs from start_pos to the end of the chain.
@@ -498,7 +730,7 @@ class Map:
                 break
             path.append(cur)
             visited[cur] = len(path) - 1
-            next_pos = self.conveyor_outputs.get(cur)
+            next_pos = self.get_conveyor_output(cur)
             if next_pos is None:
                 result = cur
                 break
@@ -532,7 +764,7 @@ class Map:
                 break
             path.append(cur)
             visited[cur] = len(path) - 1
-            next_pos = self.conveyor_outputs.get(cur)
+            next_pos = self.get_conveyor_output(cur)
             if next_pos is None:
                 result = cur
                 break
@@ -550,7 +782,7 @@ class Map:
         """Return True if placing a conveyor at build_pos pointing to output_pos
         would create a loop (i.e. following the chain from output_pos eventually
         reaches build_pos)."""
-        cur = self.conveyor_outputs.get(output_pos)
+        cur = self.get_conveyor_output(output_pos)
         if cur is None:
             return False
 
@@ -559,7 +791,20 @@ class Map:
             if cur in seen:
                 return cur == build_pos
             seen.add(cur)
-            cur = self.conveyor_outputs.get(cur)
+            cur = self.get_conveyor_output(cur)
+        return False
+
+    def _would_create_loop_idx(self, build_idx: int, output_idx: int) -> bool:
+        cur_idx = self._output_idx[output_idx]
+        if cur_idx < 0:
+            return False
+
+        seen = {build_idx}
+        while cur_idx >= 0:
+            if cur_idx in seen:
+                return cur_idx == build_idx
+            seen.add(cur_idx)
+            cur_idx = self._output_idx[cur_idx]
         return False
 
     def get_feeders(self, output_pos: Position) -> list[tuple[Position, EntityType]]:
@@ -574,18 +819,19 @@ class Map:
             adj = output_pos.add(d)
             if not on_map(adj, self.width, self.height):
                 continue
-            entity = self.entities[adj.x][adj.y]
+            entity = self.get_tile_entity(adj)
             if entity is None or entity[1] != EntityType.HARVESTER:
                 continue
-            env = self.env[adj.x][adj.y]
+            env = self.get_tile_env(adj)
             if env == Environment.ORE_TITANIUM or env == Environment.ORE_AXIONITE:
                 feeders.append((adj, EntityType.HARVESTER))
 
-        for input_pos in self.conveyor_inputs.get(output_pos, ()):
+        for input_idx in self.iter_conveyor_input_indices(output_pos):
+            input_pos = self._pos(input_idx)
             if not on_map(input_pos, self.width, self.height):
                 continue
             if self.is_visited(input_pos):
-                entity = self.entities[input_pos.x][input_pos.y]
+                entity = self.get_tile_entity(input_pos)
                 if entity is None or entity[1] not in CONVEYOR_TYPES:
                     continue
                 etype = entity[1]
@@ -601,10 +847,10 @@ class Map:
             adj = output_pos.add(d)
             if not on_map(adj, self.width, self.height):
                 continue
-            entity = self.entities[adj.x][adj.y]
+            entity = self.get_tile_entity(adj)
             if entity is None or entity[1] != EntityType.HARVESTER:
                 continue
-            env = self.env[adj.x][adj.y]
+            env = self.get_tile_env(adj)
             if env == Environment.ORE_TITANIUM or env == Environment.ORE_AXIONITE:
                 return True
         return False
@@ -622,16 +868,20 @@ class Map:
             return cached
         cur = pos
         visited = set()
-        while cur in self.conveyor_outputs:
+        while self.has_conveyor_output(cur):
             if cur in visited:
                 self._feeds_building_cache[key] = False
                 return False  # cycle
             visited.add(cur)
-            cur = self.conveyor_outputs[cur]
+            next_pos = self.get_conveyor_output(cur)
+            if next_pos is None:
+                self._feeds_building_cache[key] = False
+                return False
+            cur = next_pos
             if not self.is_visited(cur):
                 self._feeds_building_cache[key] = False
                 return False
-            entity = self.entities[cur.x][cur.y]
+            entity = self.get_tile_entity(cur)
             if entity is None:
                 self._feeds_building_cache[key] = False
                 return False
@@ -654,12 +904,16 @@ class Map:
             return cached
         cur = pos
         visited = set()
-        while cur in self.conveyor_outputs:
+        while self.has_conveyor_output(cur):
             if cur in visited:
                 self._feeds_building_in_vision_cache[key] = False
                 return False
             visited.add(cur)
-            cur = self.conveyor_outputs[cur]
+            next_pos = self.get_conveyor_output(cur)
+            if next_pos is None:
+                self._feeds_building_in_vision_cache[key] = False
+                return False
+            cur = next_pos
             if not ct.is_in_vision(cur):
                 self._feeds_building_in_vision_cache[key] = False
                 return False
@@ -669,7 +923,7 @@ class Map:
             if not self.is_visited(cur):
                 self._feeds_building_in_vision_cache[key] = False
                 return False
-            entity = self.entities[cur.x][cur.y]
+            entity = self.get_tile_entity(cur)
             if entity is None:
                 self._feeds_building_in_vision_cache[key] = False
                 return False
@@ -692,16 +946,20 @@ class Map:
             return cached
         cur = pos
         visited = set()
-        while cur in self.conveyor_outputs:
+        while self.has_conveyor_output(cur):
             if cur in visited:
                 self._feeds_turret_cache[key] = False
                 return False  # cycle
             visited.add(cur)
-            cur = self.conveyor_outputs[cur]
+            next_pos = self.get_conveyor_output(cur)
+            if next_pos is None:
+                self._feeds_turret_cache[key] = False
+                return False
+            cur = next_pos
             if not self.is_visited(cur):
                 self._feeds_turret_cache[key] = False
                 return False
-            entity = self.entities[cur.x][cur.y]
+            entity = self.get_tile_entity(cur)
             if entity is None:
                 self._feeds_turret_cache[key] = False
                 return False
@@ -731,17 +989,19 @@ class Map:
         cache_result = True
         result = 1
 
-        while cur in self.conveyor_outputs:
+        while self.has_conveyor_output(cur):
             if cur in visited:
                 break
             visited.add(cur)
             path.append(cur)
 
-            next_pos = self.conveyor_outputs[cur]
+            next_pos = self.get_conveyor_output(cur)
+            if next_pos is None:
+                break
             if not self.is_visited(next_pos):
                 break
 
-            entity = self.entities[next_pos.x][next_pos.y]
+            entity = self.get_tile_entity(next_pos)
             if entity is None:
                 result = 0
                 break
@@ -772,36 +1032,56 @@ class Map:
         return result
 
     def get_nearest_unserviced_harvester(self, pos: Position, ct: Controller) -> Position | None:
+        my_team = ct.get_team()
         best_ti = None
         best_ti_dist = INF
         best_ax = None
         best_ax_dist = INF
-        for hpos in self.unserviced_harvesters:
+
+        for hpos in self.ore_ti:
             if hpos in self.unreachable_harvesters:
                 continue
             dist = pos.distance_squared(hpos)
-            if hpos in self.ore_ti:
-                if dist < best_ti_dist:
-                    best_ti_dist = dist
-                    best_ti = hpos
-            else:
-                if dist < best_ax_dist:
-                    best_ax_dist = dist
-                    best_ax = hpos
+            if dist >= best_ti_dist:
+                continue
+            if not self.is_unserviced_harvester(hpos, my_team):
+                continue
+            best_ti_dist = dist
+            best_ti = hpos
+            
         if best_ti is not None:
             return best_ti
+
+        for hpos in self.ore_ax:
+            if hpos in self.unreachable_harvesters:
+                continue
+            dist = pos.distance_squared(hpos)
+            if dist >= best_ax_dist:
+                continue
+            if not self.is_unserviced_harvester(hpos, my_team):
+                continue
+            best_ax_dist = dist
+            best_ax = hpos
         if ct.get_global_resources()[0] >= 1500 and best_ax is not None:
             return best_ax
         return None
 
     def get_tile_env(self, pos: Position) -> Environment | None:
-        return self.env[pos.x][pos.y]
+        return self._env[self._idx(pos)]
     
     def get_tile_entity(self, pos: Position) -> tuple[int, EntityType, Team] | None:
-        return self.entities[pos.x][pos.y]
+        idx = self._idx(pos)
+        bid = self._entity_id[idx]
+        if bid == 0:
+            return None
+        etype = self._entity_type[idx]
+        team = self._entity_team[idx]
+        assert etype is not None
+        assert team is not None
+        return (bid, etype, team)
     
     def is_visited(self, pos: Position) -> bool:
-        return self.env[pos.x][pos.y] is not None
+        return self._get_flag_idx(self._idx(pos), FLAG_SEEN)
         
     def get_random_tile(self) -> Position:
         return Position(random.randint(0, self.width - 1), random.randint(0, self.height - 1))
@@ -813,25 +1093,36 @@ class Map:
         best_ax_dist = INF
 
         for ore_pos in self.ore_ti:
+            if ore_pos in self.unreachable_ores or ore_pos in self.unreachable_harvesters:
+                continue
             entity = self.get_tile_entity(ore_pos)
             if entity is not None and entity[1] == EntityType.HARVESTER:
                 continue
+            # if self.has_adjacent_opposite_resource_chain(ore_pos, ResourceType.TITANIUM, ct):
+            #     self.unreachable_ores.add(ore_pos)
+            #     continue
             dist = pos.distance_squared(ore_pos)
             if dist < best_ti_dist:
                 best_ti_dist = dist
                 best_ti = ore_pos
+                
+        if best_ti is not None:
+            return best_ti
 
         for ore_pos in self.ore_ax:
+            if ore_pos in self.unreachable_ores or ore_pos in self.unreachable_harvesters:
+                continue
             entity = self.get_tile_entity(ore_pos)
             if entity is not None and entity[1] == EntityType.HARVESTER:
+                continue
+            if self.has_adjacent_opposite_resource_chain(ore_pos, ResourceType.RAW_AXIONITE, ct):
+                self.unreachable_ores.add(ore_pos)
                 continue
             dist = pos.distance_squared(ore_pos)
             if dist < best_ax_dist:
                 best_ax_dist = dist
                 best_ax = ore_pos
 
-        if best_ti is not None:
-            return best_ti
         if best_ax is not None and ct.get_global_resources()[0] >= 1500:
             return best_ax        
         return None
@@ -871,7 +1162,7 @@ class Map:
         terminal = self.follow_chain_terminal(pos)
         if not on_map(terminal, self.width, self.height) or not self.is_visited(terminal):
             return False
-        entity = self.entities[terminal.x][terminal.y]
+        entity = self.get_tile_entity(terminal)
         return (
             entity is not None
             and entity[1] == EntityType.FOUNDRY
@@ -881,10 +1172,10 @@ class Map:
 
     def is_single_input_foundry(self, pos: Position, my_team) -> bool:
         """True if pos has an ally foundry with at most 1 input and no titanium input."""
-        entity = self.entities[pos.x][pos.y]
+        entity = self.get_tile_entity(pos)
         if entity is None or entity[1] != EntityType.FOUNDRY or entity[2] != my_team:
             return False
-        input_positions = self.conveyor_inputs.get(pos, set())
+        input_positions = self.get_conveyor_input_positions(pos)
         if len(input_positions) > 1:
             return False
         return not any(
@@ -907,16 +1198,34 @@ class Map:
 
     def is_adjacent_to_opposite_ore(self, pos: Position, resource: ResourceType | None) -> bool:
         """True if pos is adjacent to a harvester or ore of the opposite resource type."""
-        if resource is None:
-            return False
-        opposite_ore = self.ore_ti if resource == ResourceType.RAW_AXIONITE else self.ore_ax if resource == ResourceType.TITANIUM else None
-        if opposite_ore is None:
+        if resource != ResourceType.RAW_AXIONITE:
             return False
         for d in CARDINAL_DIRECTIONS:
             adj = pos.add(d)
             if not on_map(adj, self.width, self.height):
                 continue
-            if adj in opposite_ore:
+            if adj in self.ore_ti:
+                return True
+        return False
+
+    def has_adjacent_opposite_resource_chain(self, ore_pos: Position, resource: ResourceType | None, ct: Controller) -> bool:
+        """True if a bare ore already has a cardinally adjacent conveyor/bridge with
+        positive evidence of carrying the opposite resource."""
+        if resource == ResourceType.TITANIUM:
+            opposite = ResourceType.RAW_AXIONITE
+        elif resource == ResourceType.RAW_AXIONITE:
+            opposite = ResourceType.TITANIUM
+        else:
+            return False
+
+        for d in CARDINAL_DIRECTIONS:
+            adj = ore_pos.add(d)
+            if not on_map(adj, self.width, self.height) or not self.is_visited(adj):
+                continue
+            entity = self.get_tile_entity(adj)
+            if entity is None or entity[1] not in CONVEYOR_TYPES:
+                continue
+            if self._get_conveyor_resource_state(adj, ct, opposite) == 1:
                 return True
         return False
     
@@ -930,19 +1239,11 @@ class Map:
         Use this for empty tiles that don't have a conveyor yet but are fed by one."""
         if resource is None:
             return False
-        for input_pos in self.conveyor_inputs.get(pos, ()):
+        for input_idx in self.iter_conveyor_input_indices(pos):
+            input_pos = self._pos(input_idx)
             if self._get_conveyor_resource_state(input_pos, ct, resource) == 2:
                 return True
         return False
-
-    def terminal_distance_squared(self, pos: Position, core_pos: Position | None, end_positions: set | None = None) -> int | float:
-        """Distance metric toward the current terminal objective."""
-        if end_positions:
-            return min(pos.distance_squared(end_pos) for end_pos in end_positions)
-        if core_pos is None:
-            return INF
-        return pos.distance_squared(core_pos)
-
 
     def get_best_conveyor_output(self, build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
         """Find the best cardinal-adjacent tile for a conveyor at build_pos.
@@ -951,6 +1252,8 @@ class Map:
         if core_pos is None:
             return None
 
+        terminal_positions: tuple[tuple[int, int], ...] = ()
+        cx = cy = 0
         if end_positions:
             terminal_positions = tuple((p.x, p.y) for p in end_positions)
 
@@ -972,117 +1275,146 @@ class Map:
                 dy = pos.y - cy
                 return dx * dx + dy * dy
 
-        build_dist = dist_to_terminal(build_pos)
+        if end_positions:
+            def dist_to_terminal_xy(x: int, y: int) -> int | float:
+                best = INF
+                for tx, ty in terminal_positions:
+                    dx = x - tx
+                    dy = y - ty
+                    dist = dx * dx + dy * dy
+                    if dist < best:
+                        best = dist
+                return best
+        else:
+            def dist_to_terminal_xy(x: int, y: int) -> int | float:
+                dx = x - cx
+                dy = y - cy
+                return dx * dx + dy * dy
+
+        build_dist = dist_to_terminal_xy(build_pos.x, build_pos.y)
         best_terminal = None
         best_terminal_dist = INF
         best_next = None
         best_next_dist = INF
-        print(f"  conv_output: build={build_pos} core={core_pos} term_dist²={build_dist} res={resource}")
+        build_idx = self._idx(build_pos)
+        end_idx_set = {self._idx(p) for p in end_positions} if end_positions else None
+        width = self.width
+        height = self.height
+        log(f"  conv_output: build={build_pos} core={core_pos} term_dist²={build_dist} res={resource}")
 
-        for d in CARDINAL_DIRECTIONS:
-            adj = build_pos.add(d)
-            if not on_map(adj, self.width, self.height):
-                print(f"    {adj} ({d}): SKIP off map")
+        for d, (dx, dy) in zip(CARDINAL_DIRECTIONS, _CARDINAL_OFFSETS):
+            ax = build_pos.x + dx
+            ay = build_pos.y + dy
+            if not on_map_coords(ax, ay, width, height):
+                adj = Position(ax, ay)
+                log(f"    {adj} ({d}): SKIP off map")
                 continue
-            dist = dist_to_terminal(adj)
+            adj_idx = ay * self.width + ax
+            dist = dist_to_terminal_xy(ax, ay)
             if dist >= build_dist:
-                print(f"    {adj} ({d}): SKIP not closer to terminal (dist²={dist} >= {build_dist})")
+                adj = Position(ax, ay)
+                log(f"    {adj} ({d}): SKIP not closer to terminal (dist²={dist} >= {build_dist})")
                 continue
-            if self.would_create_loop(build_pos, adj):
-                print(f"    {adj} ({d}): SKIP would create loop")
+            if self._would_create_loop_idx(build_idx, adj_idx):
+                adj = Position(ax, ay)
+                log(f"    {adj} ({d}): SKIP would create loop")
                 continue
-            if self.is_ore(adj):
-                print(f"    {adj} ({d}): SKIP is ore")
+            if self._is_ore_idx(adj_idx):
+                adj = Position(ax, ay)
+                log(f"    {adj} ({d}): SKIP is ore")
                 continue
 
             # Terminal position (core tile or end position)
-            is_terminal = (adj in end_positions) if end_positions is not None else (core_pos is not None and abs(adj.x - core_pos.x) <= 1 and abs(adj.y - core_pos.y) <= 1)
+            is_terminal = (adj_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(ax - core_pos.x) <= 1 and abs(ay - core_pos.y) <= 1)
             if is_terminal:
+                adj = Position(ax, ay)
                 if dist < best_terminal_dist:
-                    print(f"    {adj} ({d}): TERMINAL (new best, dist²={dist})")
+                    log(f"    {adj} ({d}): TERMINAL (new best, dist²={dist})")
                     best_terminal_dist = dist
                     best_terminal = (d, adj)
                 else:
-                    print(f"    {adj} ({d}): TERMINAL (worse, dist²={dist} >= {best_terminal_dist})")
+                    log(f"    {adj} ({d}): TERMINAL (worse, dist²={dist} >= {best_terminal_dist})")
                 continue
         
+            adj = Position(ax, ay)
             if self.is_adjacent_to_opposite_ore(adj, resource):
-                print(f"    {adj} ({d}): SKIP adjacent to opposite ore")
+                log(f"    {adj} ({d}): SKIP adjacent to opposite ore")
                 continue
 
 
-            if not self.is_visited(adj):
-                print(f"    {adj} ({d}): SKIP not visited")
+            if not self._is_visited_idx(adj_idx):
+                log(f"    {adj} ({d}): SKIP not visited")
                 continue
-            if self.env[adj.x][adj.y] == Environment.WALL:
-                print(f"    {adj} ({d}): SKIP wall")
+            if self._get_tile_env_idx(adj_idx) == Environment.WALL:
+                log(f"    {adj} ({d}): SKIP wall")
                 continue
 
-            entity = self.entities[adj.x][adj.y]
-            if entity is not None:
-                _, etype, eteam = entity
+            etype = self._get_entity_type_idx(adj_idx)
+            if etype is not None:
+                eteam = self._get_entity_team_idx(adj_idx)
                 # Ally conveyor/bridge carrying matching resource — chain into it
                 if etype in CONVEYOR_TYPES and my_team is not None and eteam == my_team:
                     # Non-bridge types can only feed a splitter from the back
                     if etype == EntityType.SPLITTER:
-                        splitter_output = self.conveyor_outputs.get(adj)
-                        if splitter_output is not None:
-                            splitter_dir = adj.direction_to(splitter_output)
+                        splitter_output_idx = self._output_idx[adj_idx]
+                        if splitter_output_idx >= 0:
+                            splitter_dir = adj.direction_to(self._pos(splitter_output_idx))
                             if d != splitter_dir:
-                                print(f"    {adj} ({d}): SKIP ally splitter not feeding from back (faces {splitter_dir})")
+                                log(f"    {adj} ({d}): SKIP ally splitter not feeding from back (faces {splitter_dir})")
                                 continue
                     if not self.has_conflict(resource, adj, ct):
                         # Check the ally conveyor's own output is closer to core than build_pos
-                        ally_output = self.conveyor_outputs.get(adj)
+                        ally_output_idx = self._output_idx[adj_idx]
+                        ally_output = self._pos(ally_output_idx) if ally_output_idx >= 0 else None
                         if ally_output is not None and dist_to_terminal(ally_output) >= build_dist:
-                            print(f"    {adj} ({d}): SKIP ally {etype} output not closer to terminal")
+                            log(f"    {adj} ({d}): SKIP ally {etype} output not closer to terminal")
                             continue
                         # Follow chain to terminal and verify it reaches the right destination
                         terminal = self.follow_chain_terminal(adj)
                         if end_positions is not None and terminal not in end_positions:
                             is_core = core_pos is not None and abs(terminal.x - core_pos.x) <= 1 and abs(terminal.y - core_pos.y) <= 1
-                            if is_core or (on_map(terminal, self.width, self.height) and self.entities[terminal.x][terminal.y] is not None):
-                                print(f"    {adj} ({d}): SKIP ally {etype} chain ends at {terminal} (wrong dest)")
+                            if is_core or (on_map(terminal, self.width, self.height) and self.has_entity(terminal)):
+                                log(f"    {adj} ({d}): SKIP ally {etype} chain ends at {terminal} (wrong dest)")
                                 continue
                         # Use the last visible output as the effective distance
                         effective_pos = self.follow_chain_last_visible(adj)
                         if effective_pos is None:
-                            print(f"    {adj} ({d}): SKIP ally {etype} chain leaves vision immediately")
+                            log(f"    {adj} ({d}): SKIP ally {etype} chain leaves vision immediately")
                             continue
                         effective_dist = dist_to_terminal(effective_pos)
                         if effective_dist < best_next_dist:
-                            print(f"    {adj} ({d}): CHAIN ally {etype} eff_dist²={effective_dist} (new best)")
+                            log(f"    {adj} ({d}): CHAIN ally {etype} eff_dist²={effective_dist} (new best)")
                             best_next_dist = effective_dist
                             best_next = (d, adj)
                         else:
-                            print(f"    {adj} ({d}): CHAIN ally {etype} eff_dist²={effective_dist} (worse, best={best_next_dist})")
+                            log(f"    {adj} ({d}): CHAIN ally {etype} eff_dist²={effective_dist} (worse, best={best_next_dist})")
                     else:
-                        print(f"    {adj} ({d}): SKIP ally {etype} wrong/no resource")
+                        log(f"    {adj} ({d}): SKIP ally {etype} wrong/no resource")
                 elif etype == EntityType.MARKER or (etype == EntityType.ROAD and my_team is not None and eteam == my_team):
                     if self.has_input_conflict(resource, adj, ct):
-                        print(f"    {adj} ({d}): SKIP road/marker has opposite-resource input")
+                        log(f"    {adj} ({d}): SKIP road/marker has opposite-resource input")
                         continue
                     if dist < best_next_dist:
-                        print(f"    {adj} ({d}): ALLY ROAD dist²={dist} (new best)")
+                        log(f"    {adj} ({d}): ALLY ROAD dist²={dist} (new best)")
                         best_next_dist = dist
                         best_next = (d, adj)
                     else:
-                        print(f"    {adj} ({d}): ALLY ROAD dist²={dist} (worse, best={best_next_dist})")
+                        log(f"    {adj} ({d}): ALLY ROAD dist²={dist} (worse, best={best_next_dist})")
                 else:
-                    print(f"    {adj} ({d}): SKIP occupied by {eteam} {etype}")
+                    log(f"    {adj} ({d}): SKIP occupied by {eteam} {etype}")
             else:
                 if self.has_input_conflict(resource, adj, ct):
-                    print(f"    {adj} ({d}): SKIP empty tile has opposite-resource input")
+                    log(f"    {adj} ({d}): SKIP empty tile has opposite-resource input")
                     continue
                 if dist < best_next_dist:
-                    print(f"    {adj} ({d}): EMPTY dist²={dist} (new best)")
+                    log(f"    {adj} ({d}): EMPTY dist²={dist} (new best)")
                     best_next_dist = dist
                     best_next = (d, adj)
                 else:
-                    print(f"    {adj} ({d}): EMPTY dist²={dist} (worse, best={best_next_dist})")
+                    log(f"    {adj} ({d}): EMPTY dist²={dist} (worse, best={best_next_dist})")
 
         result = best_terminal if best_terminal is not None else best_next
-        print(f"  conv_output result: {result}")
+        log(f"  conv_output result: {result}")
         if best_terminal is not None:
             return best_terminal
         return best_next
@@ -1094,6 +1426,8 @@ class Map:
         if core_pos is None:
             return None
 
+        terminal_positions: tuple[tuple[int, int], ...] = ()
+        cx = cy = 0
         if end_positions:
             terminal_positions = tuple((p.x, p.y) for p in end_positions)
 
@@ -1115,97 +1449,121 @@ class Map:
                 dy = pos.y - cy
                 return dx * dx + dy * dy
 
+        if end_positions:
+            def dist_to_terminal_xy(x: int, y: int) -> int | float:
+                best = INF
+                for tx, ty in terminal_positions:
+                    dx = x - tx
+                    dy = y - ty
+                    dist = dx * dx + dy * dy
+                    if dist < best:
+                        best = dist
+                return best
+        else:
+            def dist_to_terminal_xy(x: int, y: int) -> int | float:
+                dx = x - cx
+                dy = y - cy
+                return dx * dx + dy * dy
+
         best_terminal = None
         best_terminal_dist = INF
         best_next = None
         best_next_dist = INF
-        bridge_dist_to_terminal = dist_to_terminal(bridge_pos)
-        print(f"  bridge_output: pos={bridge_pos} core={core_pos} bridge_term_dist²={bridge_dist_to_terminal} res={resource}")
+        bridge_dist_to_terminal = dist_to_terminal_xy(bridge_pos.x, bridge_pos.y)
+        bridge_idx = self._idx(bridge_pos)
+        end_idx_set = {self._idx(p) for p in end_positions} if end_positions else None
+        width = self.width
+        height = self.height
+        log(f"  bridge_output: pos={bridge_pos} core={core_pos} bridge_term_dist²={bridge_dist_to_terminal} res={resource}")
         for dx, dy in _BRIDGE_OFFSETS:
             x, y = bridge_pos.x + dx, bridge_pos.y + dy
+            if not on_map_coords(x, y, width, height):
+                continue
+            candidate_idx = y * width + x
+            candidate_dist = dist_to_terminal_xy(x, y)
+            if self._would_create_loop_idx(bridge_idx, candidate_idx):
+                candidate = Position(x, y)
+                log(f"    {candidate}: SKIP loop")
+                continue
+            if self._is_ore_idx(candidate_idx):
+                candidate = Position(x, y)
+                log(f"    {candidate}: SKIP ore")
+                continue
             candidate = Position(x, y)
-            if not on_map(candidate, self.width, self.height):
-                continue
-            candidate_dist = dist_to_terminal(candidate)
-            if self.would_create_loop(bridge_pos, candidate):
-                print(f"    {candidate}: SKIP loop")
-                continue
-            if self.is_ore(candidate):
-                print(f"    {candidate}: SKIP ore")
-                continue
             if self.is_adjacent_to_opposite_ore(candidate, resource):
-                print(f"    {candidate}: SKIP adj opposite ore")
+                log(f"    {candidate}: SKIP adj opposite ore")
                 continue
-            is_terminal = (candidate in end_positions) if end_positions is not None else (core_pos is not None and abs(x - core_pos.x) <= 1 and abs(y - core_pos.y) <= 1)
+            is_terminal = (candidate_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(x - core_pos.x) <= 1 and abs(y - core_pos.y) <= 1)
             if is_terminal:
                 if candidate_dist < best_terminal_dist:
-                    print(f"    {candidate}: TERMINAL (new best, dist²={candidate_dist})")
+                    log(f"    {candidate}: TERMINAL (new best, dist²={candidate_dist})")
                     best_terminal_dist = candidate_dist
                     best_terminal = candidate
                 else:
-                    print(f"    {candidate}: TERMINAL (worse, dist²={candidate_dist} >= {best_terminal_dist})")
+                    log(f"    {candidate}: TERMINAL (worse, dist²={candidate_dist} >= {best_terminal_dist})")
             elif candidate_dist >= bridge_dist_to_terminal:
-                print(f"    {candidate}: SKIP not closer to terminal (dist²={candidate_dist} >= {bridge_dist_to_terminal})")
-            elif not self.is_visited(candidate):
-                print(f"    {candidate}: SKIP not visited")
-            elif self.env[x][y] == Environment.WALL:
-                print(f"    {candidate}: SKIP wall")
+                log(f"    {candidate}: SKIP not closer to terminal (dist²={candidate_dist} >= {bridge_dist_to_terminal})")
+            elif not self._is_visited_idx(candidate_idx):
+                log(f"    {candidate}: SKIP not visited")
+            elif self._get_tile_env_idx(candidate_idx) == Environment.WALL:
+                log(f"    {candidate}: SKIP wall")
             else:
-                entity = self.entities[x][y]
-                if entity is not None:
-                    _, etype, eteam = entity
+                etype = self._get_entity_type_idx(candidate_idx)
+                if etype is not None:
+                    eteam = self._get_entity_team_idx(candidate_idx)
                     if etype in CONVEYOR_TYPES and my_team is not None and eteam == my_team:
                         if not self.has_conflict(resource, candidate, ct):
                             # Check the ally conveyor's own output is closer to core than bridge_pos
-                            ally_output = self.conveyor_outputs.get(candidate)
+                            ally_output_idx = self._output_idx[candidate_idx]
+                            ally_output = self._pos(ally_output_idx) if ally_output_idx >= 0 else None
                             if ally_output is not None and dist_to_terminal(ally_output) >= bridge_dist_to_terminal:
-                                print(f"    {candidate}: SKIP ally {etype} output not closer to terminal")
+                                log(f"    {candidate}: SKIP ally {etype} output not closer to terminal")
                                 continue
                             # Follow chain to terminal and verify it reaches the right destination
                             terminal = self.follow_chain_terminal(candidate)
                             if end_positions is not None and terminal not in end_positions:
                                 is_core = core_pos is not None and abs(terminal.x - core_pos.x) <= 1 and abs(terminal.y - core_pos.y) <= 1
-                                if is_core or (on_map(terminal, self.width, self.height) and self.entities[terminal.x][terminal.y] is not None):
-                                    print(f"    {candidate}: SKIP ally {etype} chain ends at {terminal} (wrong dest)")
+                                if is_core or (on_map(terminal, self.width, self.height) and self.has_entity(terminal)):
+                                    log(f"    {candidate}: SKIP ally {etype} chain ends at {terminal} (wrong dest)")
                                     continue
                             # Use the last visible output as the effective distance
                             effective_pos = self.follow_chain_last_visible(candidate)
                             if effective_pos is None:
-                                print(f"    {candidate}: SKIP ally {etype} chain leaves vision immediately")
+                                log(f"    {candidate}: SKIP ally {etype} chain leaves vision immediately")
                                 continue
                             effective_dist = dist_to_terminal(effective_pos)
                             if effective_dist < best_next_dist:
-                                print(f"    {candidate}: CHAIN ally {etype} eff_dist²={effective_dist} (new best)")
+                                log(f"    {candidate}: CHAIN ally {etype} eff_dist²={effective_dist} (new best)")
                                 best_next_dist = effective_dist
                                 best_next = candidate
                             else:
-                                print(f"    {candidate}: CHAIN ally {etype} eff_dist²={effective_dist} (worse, best={best_next_dist})")
+                                log(f"    {candidate}: CHAIN ally {etype} eff_dist²={effective_dist} (worse, best={best_next_dist})")
                         else:
-                            print(f"    {candidate}: SKIP ally {etype} wrong/no resource")
+                            log(f"    {candidate}: SKIP ally {etype} wrong/no resource")
                     elif etype == EntityType.MARKER or etype == EntityType.ROAD and my_team is not None and eteam == my_team:
                         if self.has_input_conflict(resource, candidate, ct):
-                            print(f"    {candidate}: SKIP road/marker has opposite-resource input")
+                            log(f"    {candidate}: SKIP road/marker has opposite-resource input")
                             continue
                         if candidate_dist < best_next_dist:
-                            print(f"    {candidate}: ALLY ROAD dist²={candidate_dist} (new best)")
+                            log(f"    {candidate}: ALLY ROAD dist²={candidate_dist} (new best)")
                             best_next_dist = candidate_dist
                             best_next = candidate
                         else:
-                            print(f"    {candidate}: ALLY ROAD dist²={candidate_dist} (worse, best={best_next_dist})")
+                            log(f"    {candidate}: ALLY ROAD dist²={candidate_dist} (worse, best={best_next_dist})")
                     else:
-                        print(f"    {candidate}: SKIP occupied by {eteam} {etype}")
+                        log(f"    {candidate}: SKIP occupied by {eteam} {etype}")
                 else:
                     if self.has_input_conflict(resource, candidate, ct):
-                        print(f"    {candidate}: SKIP empty tile has opposite-resource input")
+                        log(f"    {candidate}: SKIP empty tile has opposite-resource input")
                         continue
                     if candidate_dist < best_next_dist:
-                        print(f"    {candidate}: EMPTY dist²={candidate_dist} (new best)")
+                        log(f"    {candidate}: EMPTY dist²={candidate_dist} (new best)")
                         best_next_dist = candidate_dist
                         best_next = candidate
                     else:
-                        print(f"    {candidate}: EMPTY dist²={candidate_dist} (worse, best={best_next_dist})")
+                        log(f"    {candidate}: EMPTY dist²={candidate_dist} (worse, best={best_next_dist})")
         result = best_terminal if best_terminal is not None else best_next
-        print(f"  bridge_output result: {result}")
+        log(f"  bridge_output result: {result}")
         if best_terminal is not None:
             return best_terminal
         return best_next
@@ -1215,26 +1573,30 @@ class Map:
         Red=enemy units, Orange=enemy conveyors, Yellow=other enemy non-road,
         Green=ally units, Blue=ally conveyors, Purple=other ally non-road."""
         _UNIT_TYPES = (EntityType.CORE, EntityType.BUILDER_BOT, *TURRET_TYPES, EntityType.LAUNCHER)
-        for x in range(self.width):
-            for y in range(self.height):
-                entity = self.entities[x][y]
-                if entity is None:
-                    continue
-                _, etype, team = entity
-                if etype == EntityType.ROAD or etype == EntityType.MARKER:
-                    continue
-                pos = Position(x, y)
-                if team != my_team:
-                    if etype in _UNIT_TYPES:
-                        ct.draw_indicator_dot(pos, 255, 0, 0)      # red
-                    elif etype in CONVEYOR_TYPES:
-                        ct.draw_indicator_dot(pos, 255, 165, 0)    # orange
-                    else:
-                        ct.draw_indicator_dot(pos, 255, 255, 0)    # yellow
+        for idx in range(self.tile_count):
+            entity_id = self._entity_id[idx]
+            if entity_id == 0:
+                continue
+            entity = (entity_id, self._entity_type[idx], self._entity_team[idx])
+            x = idx % self.width
+            y = idx // self.width
+            if entity is None:
+                continue
+            _, etype, team = entity
+            if etype == EntityType.ROAD or etype == EntityType.MARKER:
+                continue
+            pos = Position(x, y)
+            if team != my_team:
+                if etype in _UNIT_TYPES:
+                    ct.draw_indicator_dot(pos, 255, 0, 0)      # red
+                elif etype in CONVEYOR_TYPES:
+                    ct.draw_indicator_dot(pos, 255, 165, 0)    # orange
                 else:
-                    if etype in _UNIT_TYPES:
-                        ct.draw_indicator_dot(pos, 0, 255, 0)      # green
-                    elif etype in CONVEYOR_TYPES:
-                        ct.draw_indicator_dot(pos, 0, 100, 255)    # blue
-                    else:
-                        ct.draw_indicator_dot(pos, 180, 0, 255)    # purple
+                    ct.draw_indicator_dot(pos, 255, 255, 0)    # yellow
+            else:
+                if etype in _UNIT_TYPES:
+                    ct.draw_indicator_dot(pos, 0, 255, 0)      # green
+                elif etype in CONVEYOR_TYPES:
+                    ct.draw_indicator_dot(pos, 0, 100, 255)    # blue
+                else:
+                    ct.draw_indicator_dot(pos, 180, 0, 255)    # purple

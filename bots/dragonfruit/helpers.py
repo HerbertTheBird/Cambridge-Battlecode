@@ -6,6 +6,8 @@ from globals import DIRECTIONS, ALL_DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TY
 
 from vision import VisionCache
 
+from log import log, log_time
+
 _GOLDEN = 0.618033988749895  # golden ratio conjugate
 _INTERCEPT_RESOURCES = (ResourceType.TITANIUM, ResourceType.REFINED_AXIONITE)
 _INTERCEPT_MAX_TRAVEL_DIST_SQ = 13
@@ -69,7 +71,7 @@ def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None
     If vc is provided and enemies are visible, refuses to build over ally sentinels."""
     if core_pos is None:
         return None
-    print(f"  bridge_build_pos: harvester={harvester_pos} core={core_pos}")
+    log(f"  bridge_build_pos: harvester={harvester_pos} core={core_pos}")
     enemies_visible = len(vc.enemy_units) > 0
     best = None
     best_dist = INF
@@ -80,13 +82,13 @@ def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None
     for d in CARDINAL_DIRECTIONS:
         pos = harvester_pos.add(d)
         if not on_map(pos, width, height):
-            print(f"    {pos} ({d}): SKIP off map")
+            log(f"    {pos} ({d}): SKIP off map")
             continue
         if not ct.is_in_vision(pos):
-            print(f"    {pos} ({d}): SKIP not in vision")
+            log(f"    {pos} ({d}): SKIP not in vision")
             continue
         if map_obj.get_tile_env(pos) == Environment.WALL:
-            print(f"    {pos} ({d}): SKIP wall")
+            log(f"    {pos} ({d}): SKIP wall")
             continue
         bid = ct.get_tile_building_id(pos)
         has_enemy = False
@@ -95,14 +97,14 @@ def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None
             bteam = ct.get_team(bid)
             # Don't destroy ally turrets when enemies are visible
             if (btype in TURRET_TYPES or btype == EntityType.LAUNCHER) and bteam == my_team and enemies_visible:
-                print(f"    {pos} ({d}): SKIP ally turret (enemies visible)")
+                log(f"    {pos} ({d}): SKIP ally turret (enemies visible)")
                 continue
             if btype == EntityType.MARKER or (btype in (EntityType.ROAD, EntityType.BARRIER) and bteam == my_team) or (btype in TURRET_TYPES and bteam == my_team):
                 pass  # can build over these freely
             elif bteam != my_team and ct.is_tile_passable(pos):
                 has_enemy = True  # enemy passable building — can fire on it
             else:
-                print(f"    {pos} ({d}): SKIP blocked by {btype}")
+                log(f"    {pos} ({d}): SKIP blocked by {btype}")
                 continue
         dist = pos.distance_squared(core_pos)
         has_conflict = False
@@ -116,14 +118,14 @@ def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None
         if ((not has_enemy and best_has_enemy)
             or (has_enemy == best_has_enemy and not has_conflict and best_conflicts)
             or (has_enemy == best_has_enemy and has_conflict == best_conflicts and dist < best_dist)):
-            print(f"    {pos} ({d}): NEW BEST dist²={dist} conflict={has_conflict} enemy={has_enemy}")
+            log(f"    {pos} ({d}): NEW BEST dist²={dist} conflict={has_conflict} enemy={has_enemy}")
             best_dist = dist
             best = pos
             best_conflicts = has_conflict
             best_has_enemy = has_enemy
         else:
-            print(f"    {pos} ({d}): WORSE dist²={dist} conflict={has_conflict} enemy={has_enemy} (best={best_dist} best_conflict={best_conflicts})")
-    print(f"  bridge_build_pos result: {best}")
+            log(f"    {pos} ({d}): WORSE dist²={dist} conflict={has_conflict} enemy={has_enemy} (best={best_dist} best_conflict={best_conflicts})")
+    log(f"  bridge_build_pos result: {best}")
     return best
 
 def can_build_over_existing(pos: Position, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache) -> bool:
@@ -526,11 +528,11 @@ def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy
     turret_type = get_best_turret_type(pos, enemy_core_pos)
     if turret_type == EntityType.GUNNER and ct.can_build_gunner(pos, direction):
         ct.build_gunner(pos, direction)
-        print(f"BUILT gunner at {pos} facing {direction}")
+        log(f"BUILT gunner at {pos} facing {direction}")
         return True
     if turret_type == EntityType.SENTINEL and ct.can_build_sentinel(pos, direction):
         ct.build_sentinel(pos, direction)
-        print(f"BUILT sentinel at {pos} facing {direction}")
+        log(f"BUILT sentinel at {pos} facing {direction}")
         return True
     return False
 
@@ -610,4 +612,4 @@ def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height
 
     if best_heal_pos is not None and ct.can_heal(best_heal_pos):
         ct.heal(best_heal_pos)
-        print(f"HEAL at {best_heal_pos} amount={best_heal_amount} can_heal_builder={best_can_heal_builder}")
+        log(f"HEAL at {best_heal_pos} amount={best_heal_amount} can_heal_builder={best_can_heal_builder}")

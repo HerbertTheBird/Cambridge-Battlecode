@@ -1,5 +1,7 @@
 from cambc import Position, Direction, Controller
 
+from log import log, log_time
+
 _CARDINAL_OFFSETS = ((0, -1), (1, 0), (0, 1), (-1, 0))
 _CARDINAL_DIRECTIONS = (Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)
 
@@ -28,18 +30,18 @@ def bench_compare(ct, func1, name1, func2, name2, iterations=1000):
     time2 += func2(ct, iterations - half)  # func2 first
     time1 += func1(ct, iterations - half)
 
-    print(f"--- Comparing: {name1} vs {name2} ({iterations} iters) ---")
-    print(f"{name1}: {time1} us")
-    print(f"{name2}: {time2} us")
+    log(f"--- Comparing: {name1} vs {name2} ({iterations} iters) ---")
+    log(f"{name1}: {time1} us")
+    log(f"{name2}: {time2} us")
 
     if time2 > 0 and time1 > 0:
         if time1 > time2:
-            print(f"Result: {name2} is {time1 / time2:.2f}x faster than {name1}")
+            log(f"Result: {name2} is {time1 / time2:.2f}x faster than {name1}")
         else:
-            print(f"Result: {name1} is {time2 / time1:.2f}x faster than {name2}")
+            log(f"Result: {name1} is {time2 / time1:.2f}x faster than {name2}")
     elif time1 == 0 and time2 == 0:
-        print("Result: Both too fast to measure! Increase iterations.")
-    print("")
+        log("Result: Both too fast to measure! Increase iterations.")
+    log("")
 
 # ==========================================
 # Benchmark 1: Position Allocation vs Math
@@ -135,7 +137,7 @@ def run_benchmarks(iterations=100):
     Executes all benchmark comparisons.
     Pass a higher iterations count if the microsecond differences are too small.
     """
-    print(f"\nRUNNING BENCHMARKS ({iterations} iters)")
+    log(f"\nRUNNING BENCHMARKS ({iterations} iters)")
     
     bench_compare(live_ct, 
                   benchmark_position_alloc, "Position.add()", 
@@ -206,10 +208,10 @@ def bench_track(func1, func2, *args, **kwargs):
 def bench_results():
     """Prints the accumulated results of live comparisons. Call this at the end of your run() method."""
     if not _live_benchmarks:
-        print("No live benchmarks recorded.")
+        log("No live benchmarks recorded.")
         return
 
-    print(f"\nLIVE BENCHMARK RESULTS")
+    log(f"\nLIVE BENCHMARK RESULTS")
     for name, data in _live_benchmarks.items():
         calls = data['calls']
         if calls == 0:
@@ -218,16 +220,16 @@ def bench_results():
         avg1 = data['time1'] / calls
         avg2 = data['time2'] / calls
         
-        print(f"--- {name} ({calls} calls) ---")
-        print(f"Original Avg: {avg1:.2f} us | Total: {data['time1']} us")
-        print(f"Modified Avg: {avg2:.2f} us | Total: {data['time2']} us")
+        log(f"--- {name} ({calls} calls) ---")
+        log(f"Original Avg: {avg1:.2f} us | Total: {data['time1']} us")
+        log(f"Modified Avg: {avg2:.2f} us | Total: {data['time2']} us")
         
         if avg1 > 0 and avg2 > 0:
             if avg1 > avg2:
-                print(f"Result: Modified is {avg1 / avg2:.2f}x faster")
+                log(f"Result: Modified is {avg1 / avg2:.2f}x faster")
             elif avg2 > avg1:
-                print(f"Result: Original is {avg2 / avg1:.2f}x faster")
+                log(f"Result: Original is {avg2 / avg1:.2f}x faster")
             else:
-                print("Result: Tied!")
+                log("Result: Tied!")
         elif data['time1'] == 0 and data['time2'] == 0:
-            print("Result: Both too fast to measure accurately.")
+            log("Result: Both too fast to measure accurately.")
