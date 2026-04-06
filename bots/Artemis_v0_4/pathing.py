@@ -40,6 +40,7 @@ DIRS = [
 ]
 
 bridge_cost = 5
+adj_launch_cost = 20
 CONV = [
     (0, -1, 1),
     (0, 1, 1),
@@ -71,6 +72,7 @@ class Pathing:
     parent = None
     target = None
     avoid = None
+    adj_launch = None
     MAX_ITER = None
 
     dist_to_target = {}
@@ -103,6 +105,7 @@ class Pathing:
         self.parent  = array('I', [0]) * (self.width * self.height)
         self.target  = array('I', [0]) * (self.width * self.height)
         self.avoid   = array('I', [0]) * (self.width * self.height)
+        self.adj_launch   = array('I', [0]) * (self.width * self.height)
         self.best_g  = array('I', [0]) * (self.width * self.height)
         self.MAX_ITER = int(math.sqrt(self.width * self.height))*10
         self.heap = []
@@ -220,6 +223,7 @@ class Pathing:
         target = self.target
         run_id = self.run_id
         avoid = self.avoid
+        adj_launch = self.adj_launch
         avoid_id = self.avoid_id
         seen = self.seen
         rc = self.rc
@@ -242,6 +246,11 @@ class Pathing:
             if avoid[h] != avoid_id-1:
                 avoid_changed = True
             avoid[h] = avoid_id
+        for p in map_info.enemy_launch_adj:
+            h = p.y * width_l + p.x
+            if adj_launch[h] != avoid_id - 1:
+                avoid_changed = True
+            adj_launch[h] = avoid_id
         has_initial_move = False
         for dx, dy, _ in self.dirs:
             if not map_info.in_bounds(Position(start_p.x+dx, start_p.y+dy)):
@@ -334,6 +343,8 @@ class Pathing:
                 if avoid[n] == avoid_id:
                     continue
                 ng = g + cost
+                if dirs is not CONV and adj_launch[n] == avoid_id:
+                    ng += adj_launch_cost
                 if ng >= best_g[n] and seen[n] == run_id:
                     continue
                 # if abs_local(dx) > 1 or abs_local(dy) > 1 and abs_local(nx-my_core.x) <= 1 and abs_local(ny-my_core.y) <= 1:  #this is so i can place a splitter at the end
