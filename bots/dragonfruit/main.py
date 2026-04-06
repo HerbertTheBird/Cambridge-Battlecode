@@ -626,8 +626,22 @@ class Player:
                     break
             if not closer_ally:
                 log(f"heal target at {best_heal_pos}")
-                # self.nav.set_destination(best_heal_pos, "adjacent")
-                # return State.HEAL
+                self.nav.set_destination(best_heal_pos, "adjacent")
+                return State.HEAL
+
+        # Priority 0.6: if we can see a damaged ally core, go heal it.
+        # Do not require this bot to be the closest ally since core loss ends the game.
+        if vc.core_pos is not None and ct.is_in_vision(vc.core_pos):
+            core_id = ct.get_tile_building_id(vc.core_pos)
+            if (
+                core_id is not None
+                and ct.get_team(core_id) == self.my_team
+                and ct.get_entity_type(core_id) == EntityType.CORE
+                and ct.get_hp(core_id) < ct.get_max_hp(core_id) - 40 # Arbitrary threshold to prevent bots getting stuck healing core
+            ):
+                log(f"heal core at {vc.core_pos}")
+                self.nav.set_destination(vc.core_pos, "adjacent")
+                return State.HEAL
                 
         log_time(ct, "After checking heals")
 
