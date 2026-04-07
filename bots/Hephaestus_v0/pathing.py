@@ -61,6 +61,10 @@ class Pathing:
         self.height = c.get_map_height()
         self.rc = c
 
+        w = self.width
+        h = self.height
+
+        # --- movement definitions (make these class-level if truly constant) ---
         raw_card: list[tuple[int, int, int]] = [
             (0, -1, 1),
             (0, 1, 1),
@@ -116,50 +120,48 @@ class Pathing:
             (1, 1, bridge_cost),
         ]
 
-        w = self.width
-        h = self.height
+        # --- mask cache (important: many dx/dy repeat) ---
+        mask_cache: dict[tuple[int, int], int] = {}
 
-        self.CARD: list[Step] = []
-        for dx, dy, cost in raw_card:
-            mask = 0
-            for y in range(h):
-                ny = y + dy
-                if ny < 0 or ny >= h:
-                    continue
-                row_base = y * w
-                for x in range(w):
-                    nx = x + dx
-                    if 0 <= nx < w:
-                        mask |= 1 << (row_base + x)
-            self.CARD.append((dx, dy, cost, mask))
+        def build_mask(dx: int, dy: int) -> int:
+            key = (dx, dy)
+            cached = mask_cache.get(key)
+            if cached is not None:
+                return cached
 
-        self.DIRS: list[Step] = []
-        for dx, dy, cost in raw_dirs:
-            mask = 0
-            for y in range(h):
-                ny = y + dy
-                if ny < 0 or ny >= h:
-                    continue
-                row_base = y * w
-                for x in range(w):
-                    nx = x + dx
-                    if 0 <= nx < w:
-                        mask |= 1 << (row_base + x)
-            self.DIRS.append((dx, dy, cost, mask))
+            # out of bounds entirely
+            if abs(dx) >= w or abs(dy) >= h:
+                mask_cache[key] = 0
+                return 0
 
-        self.CONV: list[Step] = []
-        for dx, dy, cost in raw_conv:
-            mask = 0
-            for y in range(h):
-                ny = y + dy
-                if ny < 0 or ny >= h:
-                    continue
-                row_base = y * w
-                for x in range(w):
-                    nx = x + dx
-                    if 0 <= nx < w:
-                        mask |= 1 << (row_base + x)
-            self.CONV.append((dx, dy, cost, mask))
+            # valid rectangle of source cells
+            x0 = max(0, -dx)
+            x1 = min(w, w - dx)
+            y0 = max(0, -dy)
+            y1 = min(h, h - dy)
+
+            if x0 >= x1 or y0 >= y1:
+                mask_cache[key] = 0
+                return 0
+
+            # build one row
+            row_bits = ((1 << (x1 - x0)) - 1) << x0
+            nrows = y1 - y0
+
+            # repeat row_bits every w bits (no loops)
+            block = row_bits * ((1 << (nrows * w)) - 1) // ((1 << w) - 1)
+
+            mask = block << (y0 * w)
+            mask_cache[key] = mask
+            return mask
+
+        def make_steps(raw: list[tuple[int, int, int]]) -> list[Step]:
+            return [(dx, dy, cost, build_mask(dx, dy)) for dx, dy, cost in raw]
+
+        # --- final tables ---
+        self.CARD = make_steps(raw_card)
+        self.DIRS = make_steps(raw_dirs)
+        self.CONV = make_steps(raw_conv)
 
 
     def move(self, dir: Direction):
@@ -216,20 +218,6 @@ class Pathing:
         for p in built:
             self.destroyed_barriers.pop(p)
 
-
-    def reconstruct_path(
-        self,
-        can_visit: list[int],
-        start: int,
-        target: int,
-        barriers: int,
-        adj_launch: int,
-        routing: bool = False,
-    ) -> list[Position] | None:
-        width = self.width
-        height = self.height
-        cell_count = width * height
-        all_bits = (1 << cell_count) - 1
 
     def reconstruct_path(
         self,
