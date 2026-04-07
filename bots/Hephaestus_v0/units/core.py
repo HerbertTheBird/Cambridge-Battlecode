@@ -96,7 +96,8 @@ def run():
     titanium = rc.get_global_resources()[0]
     scaling = rc.get_scale_percent()
     round_num = rc.get_current_round()
-
+    # if round_num == 100:
+    #     rc.resign()
     passive = 10 if round_num % 4 == 0 else 0
     scaling_delta = scaling - last_scaling
     titanium_delta = (titanium - last_titanium) - passive
