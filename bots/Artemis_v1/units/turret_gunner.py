@@ -1,8 +1,8 @@
-from cambc import Controller, Position, EntityType, Direction, Team
+from cambc import Controller, Position, EntityType, Direction
 import math
 import map_info
 
-rc: Controller
+rc = None
 
 def init(c: Controller):
     global rc
@@ -10,7 +10,7 @@ def init(c: Controller):
     map_info.init(c)
 
 
-def priority(tile: Position, my_team: Team) -> int:
+def priority(tile: Position, my_team: int) -> int:
     get_team = rc.get_team
     get_entity_type = rc.get_entity_type
     get_tile_building_id = rc.get_tile_building_id
@@ -65,15 +65,31 @@ DIRS = [
 DIR_TO_IDX = {d: i for i, d in enumerate(DIRS)}
 
 
-def rotate_towards(my_pos: Position, my_team: Team, target_pos: Position):
+def rotate_towards(my_pos: Position, my_team: int, target_pos: Position):
     desired_dir = my_pos.direction_to(target_pos)
+
     current_dir = rc.get_direction()
 
     if current_dir == desired_dir:
         return
 
+    cur_idx = DIR_TO_IDX[current_dir]
+    target_idx = DIR_TO_IDX[desired_dir]
+
+    # Compute shortest rotation direction
+    diff = (target_idx - cur_idx) % 8
+
+    if diff <= 4:
+        # rotate clockwise (+1)
+        next_dir = DIRS[(cur_idx + 1) % 8]
+    else:
+        # rotate counterclockwise (-1)
+        next_dir = DIRS[(cur_idx - 1) % 8]
+
+    # Only rotate one step
     if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= 50:
-        rc.rotate(desired_dir)
+        print("ATTEMPTING ROTATE")
+        rc.rotate(next_dir)
 
 def run():
     map_info.update()
@@ -128,7 +144,7 @@ def run():
 
             # Blocked BEFORE reaching target
             if step > 1:
-                if not map_info.is_tile_empty(p) and not rc.is_tile_empty(p) and not is_passable(p):
+                if not map_info.is_tile_empty(p) and not is_passable(p):
                     print(f"Stopped because {map_info.is_tile_empty(p)} {is_passable(p)}")
                     break
 
@@ -156,4 +172,4 @@ def run():
             rc.draw_indicator_line(my_pos, best_target, 255, 150, 150)
 
         # --- Otherwise rotate toward nearest builder ---
-            rotate_towards(my_pos, my_team, best_target)
+        rotate_towards(my_pos, my_team, best_target)

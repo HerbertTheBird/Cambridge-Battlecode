@@ -417,7 +417,9 @@ def force_generate_explore_target():
             explore_target = Position(random_x, random_y)
             return
 
-    # If no empty tile found after 100 tries, fallback to completely random
+    # If no empty tile found after 2 tries, fallback to completely random
+    if (random.randint(0, 1) == 0):
+        explore_target = random.choice(list(map_info._conveyors))
     random_x = random.randint(0, map_info._width - 1)
     random_y = random.randint(0, map_info._height - 1)
     explore_target = Position(random_x, random_y)
@@ -1038,7 +1040,7 @@ def check_route():
 
 
 def run_route():
-    global route_idx, ore_path, launcher_position, mode, build_foundry
+    global route_idx, ore_path, launcher_position, mode, build_foundry, routed
     log(str(ore_path))
     if not ore_path:
         ore_path = ore_nav.calculate_conveyor_path(routed_ore, routed_ore, None, False)
@@ -1160,6 +1162,7 @@ def run_route():
 
             if not attempt_build() and nav.move_to(ore_path[route_idx]) == False:
                 mode = Mode.EXPLORE
+                routed += 1
                 return
         if build_foundry:
             adjacent = set()
@@ -1170,6 +1173,7 @@ def run_route():
                     adjacent.add(build_foundry.add(dir))
             if nav.move_to(adjacent) == False:
                 mode = Mode.EXPLORE
+                routed += 1
                 return
             if (
                 build_foundry != rc.get_position()

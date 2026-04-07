@@ -15,7 +15,7 @@ class Mode(Enum):
     BUILD_HARVESTER = (0, 180, 180, "build harvester")
     ROUTE = (255, 255, 0, "route to core")
     SABOTAGE = (200, 10, 10, "attack harvester")
-    BUILD_TRAP = (193, 154, 107, "launcher trap")
+    BUILD_KILLBOX = (193, 154, 107, "launcher killbox")
     HEAL_CORE = (255, 165, 0, "heal core")
     CUT_SUPPLY = (255, 0, 255, "cut enemy supply")
     def __init__(self, r, g, b, desc):
@@ -314,6 +314,83 @@ def run_pre():
                 min_dist_sq_sabotage = dist_sq_sabotage
                 sabotage_ore = pos
 
+    # --- Step X: Detect diagonal trap locations around OUR harvesters ---
+    trap_loc = None
+
+    for pos in rc.get_nearby_tiles():
+        building_id = rc.get_tile_building_id(pos)
+        if building_id is None:
+            continue
+
+        # Only consider OUR harvesters
+        if rc.get_team(building_id) != rc.get_team():
+            continue
+        if rc.get_entity_type(building_id) != EntityType.HARVESTER:
+            continue
+
+        # Check 4 diagonal tiles around the harvester
+        for dx, dy in [(1,1), (1,-1), (-1,1), (-1,-1)]:
+            diag = Position(pos.x + dx, pos.y + dy)
+
+            if not map_info.is_on_map(diag):
+                continue
+        
+
+            # Diagonal tile must be empty or passable
+            if not rc.is_tile_passable(diag):
+                continue
+
+            valid = True
+            open_tiles = 0
+
+            # Scan 3x3 centered at diag
+            for sx in [-1, 0, 1]:
+                for sy in [-1, 0, 1]:
+                    check = Position(diag.x + sx, diag.y + sy)
+
+                    if not map_info.is_on_map(check):
+                        continue
+
+                    # Count open tiles
+                    try:
+                        if map_info.is_tile_empty(check) and rc.is_tile_passable(check):
+                            open_tiles += 1
+                    except GameError:
+                        pass
+
+                    bid = rc.get_tile_building_id(check)
+                    if bid is None:
+                        continue
+
+                    team = rc.get_team(bid)
+                    etype = rc.get_entity_type(bid)
+
+                    # No enemy buildings
+                    if team != rc.get_team():
+                        valid = False
+                        break
+
+                    # No our conveyors / bridges
+                    if etype in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE):
+                        valid = False
+                        break
+
+                if not valid:
+                    break
+
+            # Require at most 4 open tiles
+            if valid:
+                log(open_tiles)
+            if valid and open_tiles <= 4:
+                trap_loc = diag
+                break
+
+        if trap_loc is not None:
+            break
+
+    if trap_loc:
+        log(f"Trap location found at {trap_loc}")
+
     # Update target_ore based on what we can see right now
     if closest_ore is not None:
         if target_ore is None:
@@ -426,6 +503,13 @@ def run_heal():
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
     turns_since_last_explore_target = 0
+    
+    round_num = rc.get_current_round()
+    go_attack = (
+        round_num > 1000 and rc.get_id() % 6 == 0
+    )
+    if (go_attack):
+        explore_target = map_info.predicted_enemy_core
     
     for _ in range(2):  # slightly more aggressive
         random_x = random.randint(0, map_info.width - 1)
@@ -607,34 +691,11 @@ def check_explore():
     global mode, explore_target, turns_since_last_explore_target, defended_ores, routed, trap_loc
 
     my_pos = rc.get_position()
-
-    # # --- Step 0: Check trap condition ---
-    # if routed >= 1:
-    #     for dx in (-1, 0, 1):
-    #         for dy in (-1, 0, 1):
-    #             cpos = Position(my_pos.x + dx, my_pos.y + dy)
-    #             impassable_count = 0
-    #             building_id = rc.get_tile_building_id(cpos)
-    #             if not (building_id and map_info.is_conveyor(rc.get_entity_type(building_id))):
-    #                 for dx in (-1, 0, 1):
-    #                     for dy in (-1, 0, 1):
-    #                         if dx == 0 and dy == 0:
-    #                             continue
-    #                         pos = Position(cpos.x + dx, cpos.y + dy)
-    #                         if not map_info.is_on_map(pos):
-    #                             continue  # out-of-map tiles are ignored now
-    #                         building_id = rc.get_tile_building_id(pos)
-    #                         is_impassable_our_building = building_id is not None and rc.get_team(building_id) == rc.get_team() and not rc.is_tile_passable(pos)
-    #                         is_wall = map_info.ground[pos.x][pos.y] == Environment.WALL
-    #                         if building_id and map_info.is_conveyor(rc.get_entity_type(building_id)):
-    #                             impassable_count -= 1000
-    #                         if is_impassable_our_building or is_wall:
-    #                             impassable_count += 1
-    #                 if impassable_count >= 3:
-    #                     mode = Mode.BUILD_TRAP
-    #                     trap_loc = cpos  # store the current location for trap building
-    #                     return
-
+    
+    if (trap_loc):
+        mode = Mode.BUILD_KILLBOX
+        return
+    
     # --- Step 1: Existing exploration logic ---
     if opponent_ore and opponent_ore not in defended_ores:
         mode = Mode.SABOTAGE
@@ -867,7 +928,7 @@ def run_build_harvester():
                                     ore_sentinel_count[ore_key] = 1
                                     return
 
-                    if routed >= 1 and pos.x % 2 == 0 and expected_finish and built_count != 0:
+                    if routed >= 3 and pos.x % 2 == 0 and expected_finish and built_count != 0:
                         if rc.can_build_sentinel(pos, pos.direction_to(target_ore).rotate_right()):
                             rc.build_sentinel(pos, pos.direction_to(target_ore).rotate_right())
                             return
