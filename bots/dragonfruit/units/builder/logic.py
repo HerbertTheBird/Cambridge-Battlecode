@@ -149,7 +149,7 @@ def _get_intercept_output_state(output: Position, ct: Controller, my_team: Team,
         return 0, None, None, None
     if map_obj.get_tile_env(output) == Environment.WALL:
         return 0, None, None, None
-    turret_cost = gunner_cost if get_best_turret_type(output, enemy_core_pos) == EntityType.GUNNER else sentinel_cost
+    turret_cost = gunner_cost if get_best_turret_type(output, enemy_core_pos, ct, None, map_obj) == EntityType.GUNNER else sentinel_cost
     if global_titanium < turret_cost:
         return 0, None, None, None
     bid = ct.get_tile_building_id(output)
@@ -401,18 +401,18 @@ def get_sentinel_direction(intercept_pos: Position, enemy_pos: Position, ct: Con
             return rot
     return None
 
-def get_best_turret_type(pos: Position, enemy_core_pos: Position | None) -> EntityType:
+def get_best_turret_type(pos: Position, enemy_core_pos: Position | None, ct : Controller, primary_threat : Position = None, map_obj = None) -> EntityType:
     """Return the preferred turret type for an intercept build at pos."""
-    if enemy_core_pos is not None and is_gunner_position(enemy_core_pos, pos):
+    if enemy_core_pos is not None and is_gunner_position(enemy_core_pos, pos, ct, primary_threat, map_obj):
         return EntityType.GUNNER
     return EntityType.SENTINEL
 
-def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None) -> bool:
+def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None, primary_threat : Position = None, map_obj = None) -> bool:
     """Try to build a gunner (if valid position near enemy core) or sentinel at pos.
     Returns True if a turret was built."""
-    turret_type = get_best_turret_type(pos, enemy_core_pos)
+    turret_type = get_best_turret_type(pos, enemy_core_pos, ct, primary_threat, map_obj)
     if turret_type == EntityType.GUNNER and ct.can_build_gunner(pos, direction):
-        ct.build_gunner(pos, direction)
+        ct.build_gunner(pos, pos.direction_to(primary_threat))
         log(f"BUILT gunner at {pos} facing {direction}")
         return True
     if turret_type == EntityType.SENTINEL and ct.can_build_sentinel(pos, direction):

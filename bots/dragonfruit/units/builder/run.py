@@ -634,7 +634,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                             # Abort if the same allied turret we would build is already here.
                             if (bid_team == player.my_team
                                 and bid_etype in TURRET_TYPES
-                                and bid_etype == get_best_turret_type(intercept_pos, enemy_core_anchor)
+                                and bid_etype == get_best_turret_type(intercept_pos, enemy_core_anchor, ct, None, player.map)
                                 and ct.get_direction(bid) == direction):
                                 clear_state(player, )
                             # Skip if the building feeds one of our turrets
@@ -658,10 +658,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                                 bbid = ct.get_tile_builder_bot_id(intercept_pos)
                                 if (bbid is None or bbid == ct.get_id()) and ct.can_destroy(intercept_pos) and safe_destroy(player, ct, intercept_pos, vc):
                                     log("destroyed to build turret")
-                                if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor):
+                                if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor, enemy_pos, player.map):
                                     clear_state(player, )
                         else:
-                            if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor):
+                            if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor, enemy_pos, player.map):
                                 clear_state(player, )
 
 
