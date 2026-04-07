@@ -1,7 +1,7 @@
 from cambc import Controller, Position
 
 from globals import *
-from combat import choose_target, choose_passive_target
+from units.sentinel.combat import choose_target, choose_passive_target
 from log import log
 
 def run_turret(player, ct: Controller, my_pos: Position, vc) -> None:
@@ -22,7 +22,7 @@ def run_turret(player, ct: Controller, my_pos: Position, vc) -> None:
             player.skipped_firing_turns = 0
     elif ct.get_action_cooldown() == 0:
         player.skipped_firing_turns += 1
-    
+
     if player.skipped_firing_turns >= 8:
         if len(vc.enemy_units) > 0:
             player.last_fired_round = ct.get_current_round()
