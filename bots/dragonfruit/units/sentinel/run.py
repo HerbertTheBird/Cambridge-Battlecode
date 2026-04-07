@@ -26,5 +26,14 @@ def run_turret(player, ct: Controller, my_pos: Position, vc) -> None:
     if player.skipped_firing_turns >= 8:
         if len(vc.enemy_units) > 0:
             player.last_fired_round = ct.get_current_round()
+
         if (ct.get_scale_percent() > 500 or player.skipped_firing_turns >= 20) and len(vc.ally_builder_bots) > 0:
-            ct.self_destruct()
+            adjacent_to_harvester = any(
+                my_pos.distance_squared(hpos) == 1
+                for (_bid, hpos, _team) in vc.harvesters
+            )
+
+            if not adjacent_to_harvester:
+                ct.self_destruct()
+            else:
+                log(f"skip self-destruct: adjacent to harvester at {my_pos}")
