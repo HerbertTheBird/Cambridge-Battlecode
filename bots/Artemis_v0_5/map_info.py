@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from collections import deque
 
 def is_on_map(pos: Position):
-    return rc.is_in_vision(pos) and 0 <= pos.x < width and 0 <= pos.y < height
+    return 0 <= pos.x < width and 0 <= pos.y < height
 CARDINALS = [
     Direction.NORTH,
     Direction.SOUTH,
