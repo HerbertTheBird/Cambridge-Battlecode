@@ -2,6 +2,7 @@ from cambc import Controller, EntityType, Position, ResourceType
 
 from globals import *
 from helpers import *
+from units.builder.logic import *
 from vision import VisionCache
 from log import log, log_time
 

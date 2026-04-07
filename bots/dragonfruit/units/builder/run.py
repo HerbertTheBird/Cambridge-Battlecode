@@ -3,6 +3,8 @@ from cambc import Controller, Direction, EntityType, Environment, Position, Reso
 from globals import *
 from combat import *
 from helpers import *
+from units.builder.build import *
+from units.builder.logic import *
 from log import log, log_time
 from units.builder.decide_state import decideState
 

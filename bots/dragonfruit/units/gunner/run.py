@@ -1,4 +1,4 @@
-from cambc import Controller, Position
+from cambc import Controller, Position, GameConstants
 
 from globals import *
 from combat import choose_gunner_target

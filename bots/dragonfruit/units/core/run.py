@@ -3,7 +3,7 @@ import random
 from cambc import Controller, Direction, EntityType, Position
 
 from globals import *
-from helpers import *
+from units.core.spawn import *
 
 def run_core(player, ct: Controller, my_pos: Position, vc) -> None:
     builder_cost = ct.get_builder_bot_cost()[0]
