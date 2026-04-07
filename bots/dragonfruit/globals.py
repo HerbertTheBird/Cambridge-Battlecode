@@ -2,17 +2,22 @@ from enum import Enum
 
 from cambc import Direction, EntityType
 
+USE_LAUNCHERS = False
+RUSH_CORE = False
+
 INF = float('inf')
 
-DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
-ALL_DIRECTIONS = [Direction.CENTRE, *DIRECTIONS]
-CARDINAL_DIRECTIONS = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+DIRECTIONS = tuple(d for d in Direction if d is not Direction.CENTRE)
+ALL_DIRECTIONS = (Direction.CENTRE, *DIRECTIONS) # We want centre first to prioritize current tile when healing, etc
+CARDINAL_DIRECTIONS = (Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)
+
+DELTAS: dict[Direction, tuple[int, int]] = {d: d.delta() for d in Direction}
 
 CONVEYOR_TYPES = (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER)
 TURRET_TYPES = (EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH)
 
 class State(Enum):
-    NONE = 0
+    EXPLORE = 0
     START_HARVEST_CHAIN = 1
     EXTEND_HARVEST_CHAIN = 2
     INTERCEPT = 3

@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 import heapq
 from array import array
 
-from cambc import Controller, Direction, EntityType, Environment, Position
+from cambc import Controller, EntityType, Environment, Position
 
 from globals import CONVEYOR_TYPES
 
@@ -12,6 +10,8 @@ MIN_WEIGHT = 1.5
 MAX_CPU_US = 1900
 CPU_CHECK_INTERVAL = 16
 BARRIER_PENALTY = 15
+ALLY_LAUNCHER_PENALTY = 30
+LAUNCHER_ADJ_PENALTY = 2
 MIN_COMPUTE_BUDGET_US = 120
 
 DIRS = [
@@ -24,18 +24,6 @@ DIRS = [
     (-1, 1),
     (1, 1),
 ]
-
-ADJACENT_OFFSETS = [
-    (0, -1),
-    (0, 1),
-    (-1, 0),
-    (1, 0),
-    (-1, -1),
-    (1, -1),
-    (-1, 1),
-    (1, 1),
-]
-
 
 class AStarNavigator:
     def __init__(self):
@@ -123,7 +111,7 @@ class AStarNavigator:
             return True
 
         bid = ct.get_tile_building_id(nxt)
-        if bid is not None and ct.get_team(bid) == self.my_team and ct.get_entity_type(bid) == EntityType.BARRIER:
+        if bid is not None and ct.get_team(bid) == self.my_team and ct.get_entity_type(bid) in (EntityType.BARRIER, EntityType.LAUNCHER):
             if ct.can_destroy(nxt):
                 ct.destroy(nxt)
                 if ct.can_move(direction):
@@ -232,19 +220,17 @@ class AStarNavigator:
             return []
         if self.destination_type not in ("exact", "adjacent"):
             return []
-        if not map_obj.is_visited(self.destination):
-            return []
 
         if self.destination_type == "adjacent":
             out = []
             seen = set()
-            for dx, dy in ADJACENT_OFFSETS:
+            for dx, dy in DIRS:
                 nx = self.destination.x + dx
                 ny = self.destination.y + dy
                 if nx < 0 or nx >= self.width or ny < 0 or ny >= self.height:
                     continue
                 pos = Position(nx, ny)
-                if pos in seen or not map_obj.is_visited(pos):
+                if pos in seen:
                     continue
                 if not self._is_standable_target(map_obj, pos):
                     continue
@@ -257,13 +243,13 @@ class AStarNavigator:
 
         out = []
         seen = set()
-        for dx, dy in ADJACENT_OFFSETS:
+        for dx, dy in DIRS:
             nx = self.destination.x + dx
             ny = self.destination.y + dy
             if nx < 0 or nx >= self.width or ny < 0 or ny >= self.height:
                 continue
             pos = Position(nx, ny)
-            if pos in seen or not map_obj.is_visited(pos):
+            if pos in seen:
                 continue
             if not self._is_standable_target(map_obj, pos):
                 continue
@@ -322,6 +308,10 @@ class AStarNavigator:
                 ng = g + 1
                 if n_idx != dest_idx and map_obj.is_ally_barrier_idx(n_idx):
                     ng += BARRIER_PENALTY
+                if n_idx != dest_idx and map_obj.is_ally_launcher_idx(n_idx):
+                    ng += ALLY_LAUNCHER_PENALTY
+                if n_idx != dest_idx:
+                    ng += map_obj.get_enemy_launcher_adj_count_idx(n_idx) * LAUNCHER_ADJ_PENALTY
                 if self.seen[n_idx] == self.run_id and ng >= self.best_g[n_idx]:
                     continue
 

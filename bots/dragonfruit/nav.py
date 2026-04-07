@@ -1,9 +1,6 @@
 from cambc import Direction, Position
 
-from globals import DIRECTIONS, INF
-
-# Precomputed delta table to avoid repeated .delta() calls
-_DELTAS: dict[Direction, tuple[int, int]] = {d: d.delta() for d in Direction}
+from globals import DIRECTIONS, INF, DELTAS
 
 def _dist_sq(ax: int, ay: int, bx: int, by: int) -> int:
     dx = ax - bx
@@ -82,7 +79,7 @@ class Navigator:
         best: Position | None = None
         best_dist = INF
         for d in DIRECTIONS:
-            ddx, ddy = _DELTAS[d]
+            ddx, ddy = DELTAS[d]
             ax, ay = px + ddx, py + ddy
             if not (0 <= ax < w and 0 <= ay < h):
                 continue
@@ -148,7 +145,7 @@ class Navigator:
 
         # === GREEDY ===
         if self.last_obstacle_found is None:
-            if self.try_greedy_move(ct, my_loc, target):
+            if self.try_greedy_move(ct, my_loc, target, map_obj):
                 self.reset_pathfinding()
                 return
 
@@ -162,7 +159,7 @@ class Navigator:
             self.execute_move(ct, dir, my_loc)
             if self.last_obstacle_found is not None:
                 self.turns_moving_to_obstacle += 1
-                ddx, ddy = _DELTAS[dir]
+                ddx, ddy = DELTAS[dir]
                 ox, oy = mlx + ddx, mly + ddy
                 if (
                     self.turns_moving_to_obstacle >= self.MAX_TURNS_MOVING_TO_OBSTACLE
@@ -183,7 +180,7 @@ class Navigator:
                 self.execute_move(ct, dir, my_loc)
                 return
 
-            ddx, ddy = _DELTAS[dir]
+            ddx, ddy = DELTAS[dir]
             nx, ny = mlx + ddx, mly + ddy
 
             if not (0 <= nx < w and 0 <= ny < h):
@@ -196,15 +193,8 @@ class Navigator:
         if self.can_pass(ct, dir, my_loc):
             self.execute_move(ct, dir, my_loc)
 
-    # =============================
-
-    def try_greedy_move(self, ct, my_loc, target):
+    def try_greedy_move(self, ct, my_loc, target, map_obj):
         dir = my_loc.direction_to(target)
-
-        if self.can_pass(ct, dir, my_loc):
-            self.execute_move(ct, dir, my_loc)
-            return True
-
         mx, my = my_loc
         tx, ty = target
         dist = _dist_sq(mx, my, tx, ty)
@@ -212,23 +202,21 @@ class Navigator:
         dir1 = dir.rotate_right()
         dir2 = dir.rotate_left()
 
-        if self.can_pass(ct, dir1, my_loc):
-            ddx, ddy = _DELTAS[dir1]
-            dist1 = _dist_sq(mx + ddx, my + ddy, tx, ty)
-        else:
-            dist1 = INF
+        candidates = []
+        for turn_cost, candidate_dir in ((0, dir), (1, dir1), (1, dir2)):
+            if not self.can_pass(ct, candidate_dir, my_loc):
+                continue
+            ddx, ddy = DELTAS[candidate_dir]
+            nx, ny = mx + ddx, my + ddy
+            next_dist = _dist_sq(nx, ny, tx, ty)
+            if next_dist >= dist:
+                continue
+            risk = map_obj.get_enemy_launcher_adj_count(Position(nx, ny))
+            candidates.append(((risk, next_dist, turn_cost), candidate_dir))
 
-        if self.can_pass(ct, dir2, my_loc):
-            ddx, ddy = _DELTAS[dir2]
-            dist2 = _dist_sq(mx + ddx, my + ddy, tx, ty)
-        else:
-            dist2 = INF
-
-        if dist1 < dist and dist1 < dist2:
-            self.execute_move(ct, dir1, my_loc)
-            return True
-        if dist2 < dist and dist2 < dist1:
-            self.execute_move(ct, dir2, my_loc)
+        if candidates:
+            _, best_dir = min(candidates, key=lambda item: item[0])
+            self.execute_move(ct, best_dir, my_loc)
             return True
 
         return False
@@ -254,8 +242,8 @@ class Navigator:
 
         mx, my = my_loc
         tx, ty = target
-        dlx, dly = _DELTAS[dir_left]
-        drx, dry = _DELTAS[dir_right]
+        dlx, dly = DELTAS[dir_left]
+        drx, dry = DELTAS[dir_right]
         dist_left = _dist_sq(mx + dlx, my + dly, tx, ty)
         dist_right = _dist_sq(mx + drx, my + dry, tx, ty)
 
@@ -295,14 +283,11 @@ class Navigator:
 
         self.states[my_loc.x][my_loc.y] = state
 
-    # =============================
-
-
     def can_pass(self, ct, dir, my_pos):
         if dir is None or dir == Direction.CENTRE:
             return False
 
-        ddx, ddy = _DELTAS[dir]
+        ddx, ddy = DELTAS[dir]
 
         nx, ny = my_pos.x + ddx, my_pos.y + ddy
         if not (0 <= nx < self.width and 0 <= ny < self.height):
@@ -324,7 +309,7 @@ class Navigator:
             return
 
         # Case 2: need to build road first
-        ddx, ddy = _DELTAS[dir]
+        ddx, ddy = DELTAS[dir]
         nx, ny = my_pos.x + ddx, my_pos.y + ddy
         if not (0 <= nx < self.width and 0 <= ny < self.height):
             return

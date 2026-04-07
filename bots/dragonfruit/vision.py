@@ -3,9 +3,9 @@ from cambc import EntityType
 class VisionCache:
     __slots__ = (
         'my_team', 'core_pos', 'enemy_core_pos',
-        'enemy_units', 'enemy_conveyors', 'enemy_other',
+        'enemy_units', 'enemy_conveyors', 'enemy_launchers', 'enemy_other',
         'harvesters',
-        'ally_builder_bots', 'ally_turrets', 'ally_conveyors', 'ally_other',
+        'ally_builder_bots', 'ally_turrets', 'ally_conveyors', 'ally_launchers', 'ally_other',
     )
 
     def __init__(self):
@@ -14,35 +14,42 @@ class VisionCache:
         self.enemy_core_pos = None
         self.enemy_units = []
         self.enemy_conveyors = []
+        self.enemy_launchers = []
         self.enemy_other = []
         self.harvesters = []
         self.ally_builder_bots = []
         self.ally_turrets = []
         self.ally_conveyors = []
+        self.ally_launchers = []
         self.ally_other = []
 
     def refresh(self, ct, my_team):
         self.my_team = my_team
         self.core_pos = None
         self.enemy_core_pos = None
+        
+        # Having local aliases speeds up runtime
 
         eu = self.enemy_units; eu.clear()
         ec = self.enemy_conveyors; ec.clear()
+        el = self.enemy_launchers; el.clear()
         eo = self.enemy_other; eo.clear()
         hv = self.harvesters; hv.clear()
         ab = self.ally_builder_bots; ab.clear()
         at_ = self.ally_turrets; at_.clear()
         ac = self.ally_conveyors; ac.clear()
+        al = self.ally_launchers; al.clear()
         ao = self.ally_other; ao.clear()
 
-        # Local aliases for append — avoids LOAD_ATTR per call
         eu_a = eu.append
         ec_a = ec.append
+        el_a = el.append
         eo_a = eo.append
         hv_a = hv.append
         ab_a = ab.append
         at_a = at_.append
         ac_a = ac.append
+        al_a = al.append
         ao_a = ao.append
 
         get_team = ct.get_team
@@ -54,6 +61,7 @@ class VisionCache:
         _GUN = EntityType.GUNNER
         _SEN = EntityType.SENTINEL
         _BRE = EntityType.BREACH
+        _LAU = EntityType.LAUNCHER
         _CON = EntityType.CONVEYOR
         _AC = EntityType.ARMOURED_CONVEYOR
         _BRI = EntityType.BRIDGE
@@ -79,6 +87,8 @@ class VisionCache:
                     self.enemy_core_pos = pos
                 if etype is _CORE or etype is _GUN or etype is _SEN or etype is _BRE or etype is _BB:
                     eu_a((eid, etype, pos))
+                elif etype is _LAU:
+                    el_a((eid, etype, pos))
                 elif etype is _CON or etype is _AC or etype is _BRI or etype is _SPL:
                     ec_a((eid, etype, pos))
                 else:
@@ -90,6 +100,8 @@ class VisionCache:
                     ab_a((eid, get_pos(eid)))
                 elif etype is _GUN or etype is _SEN or etype is _BRE:
                     at_a((eid, etype, get_pos(eid)))
+                elif etype is _LAU:
+                    al_a((eid, etype, get_pos(eid)))
                 elif etype is _CON or etype is _AC or etype is _BRI or etype is _SPL:
                     ac_a((eid, etype, get_pos(eid)))
                 else:
@@ -102,6 +114,7 @@ class VisionCache:
         _GUN = EntityType.GUNNER
         _SEN = EntityType.SENTINEL
         _BRE = EntityType.BREACH
+        _LAU = EntityType.LAUNCHER
         _CON = EntityType.CONVEYOR
         _AC = EntityType.ARMOURED_CONVEYOR
         _BRI = EntityType.BRIDGE
@@ -121,6 +134,10 @@ class VisionCache:
                     self.enemy_units.remove(item)
                 if entity_type is _CORE and self.enemy_core_pos == pos:
                     self.enemy_core_pos = None
+            elif entity_type is _LAU:
+                item = (entity_id, entity_type, pos)
+                if item in self.enemy_launchers:
+                    self.enemy_launchers.remove(item)
             elif entity_type is _CON or entity_type is _AC or entity_type is _BRI or entity_type is _SPL:
                 item = (entity_id, entity_type, pos)
                 if item in self.enemy_conveyors:
@@ -142,6 +159,10 @@ class VisionCache:
             item = (entity_id, entity_type, pos)
             if item in self.ally_turrets:
                 self.ally_turrets.remove(item)
+        elif entity_type is _LAU:
+            item = (entity_id, entity_type, pos)
+            if item in self.ally_launchers:
+                self.ally_launchers.remove(item)
         elif entity_type is _CON or entity_type is _AC or entity_type is _BRI or entity_type is _SPL:
             item = (entity_id, entity_type, pos)
             if item in self.ally_conveyors:

@@ -8,15 +8,12 @@ from vision import VisionCache
 
 from log import log, log_time
 
-_GOLDEN = 0.618033988749895  # golden ratio conjugate
+_GOLDEN = 0.618033988749895
 _INTERCEPT_RESOURCES = (ResourceType.TITANIUM, ResourceType.REFINED_AXIONITE)
 _INTERCEPT_MAX_TRAVEL_DIST_SQ = 13
 _INTERCEPT_THREAT_RADIUS_SQ = GameConstants.SENTINEL_VISION_RADIUS_SQ
 
 def bot_path_color(bot_id: int) -> tuple[int, int, int]:
-    """Return a bright, fully-saturated RGB color for bot_id.
-    Uses the golden ratio to spread hues evenly so nearby IDs get distinct colors.
-    All output colors have S=1 V=1 in HSV, so they are always vivid."""
     hue = (bot_id * _GOLDEN) % 1.0
     h6 = hue * 6.0
     sector = int(h6)
@@ -54,6 +51,23 @@ def is_core_tile(core_pos: Position | None, pos: Position) -> bool:
     if core_pos is None:
         return False
     return core_pos.distance_squared(pos) <= 2
+
+def get_core_tiles(core_pos: Position | None) -> list[Position]:
+    """Return the 9 occupied tiles for a core anchor position."""
+    if core_pos is None:
+        return []
+    return [
+        Position(core_pos.x + dx, core_pos.y + dy)
+        for dx in range(-1, 2)
+        for dy in range(-1, 2)
+    ]
+
+def get_nearest_core_tile(core_pos: Position | None, reference_pos: Position) -> Position | None:
+    """Return the core tile closest to reference_pos."""
+    tiles = get_core_tiles(core_pos)
+    if not tiles:
+        return None
+    return min(tiles, key=lambda pos: pos.distance_squared(reference_pos))
 
 def get_cardinal_direction_into_core(core_pos: Position | None, pos: Position) -> Direction | None:
     """Return the cardinal direction from pos into one of the core's 3x3 tiles."""
@@ -128,7 +142,7 @@ def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None
     log(f"  bridge_build_pos result: {best}")
     return best
 
-def can_build_over_existing(pos: Position, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache) -> bool:
+def can_build_over_existing(pos: Position, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
     """True if pos has an ally road/sentinel within action range that can be destroyed to build something.
     If vc is provided and enemies are visible, refuses to destroy ally sentinels."""
     if my_pos.distance_squared(pos) > 2:
@@ -145,43 +159,57 @@ def can_build_over_existing(pos: Position, ct: Controller, my_pos: Position, my_
         return True
     if ct.get_team(bid) != my_team:
         return False
-    # Don't destroy ally turrets when enemies are visible
+    # Don't destroy ally turrets or launchers when enemies are visible.
     if (etype in TURRET_TYPES or etype == EntityType.LAUNCHER) and len(vc.enemy_units) > 0:
         return False
+    if etype == EntityType.LAUNCHER:
+        return allow_launchers
     return etype in (EntityType.ROAD, EntityType.BARRIER) or etype in TURRET_TYPES
 
-def can_build_conveyor_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache) -> bool:
+def can_build_conveyor_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
     """True if we can build a conveyor at pos facing direction — either directly,
     or because the tile holds an ally road/sentinel we can first destroy."""
     if direction not in CARDINAL_DIRECTIONS:
         return False
     if ct.can_build_conveyor(pos, direction):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc)
+    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_conveyor_cost()[0])
 
-def can_build_splitter_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache) -> bool:
+def can_build_splitter_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
     """True if we can build a splitter at pos facing direction — either directly,
     or because the tile holds an ally road/sentinel we can first destroy."""
     if direction not in CARDINAL_DIRECTIONS:
         return False
     if ct.can_build_splitter(pos, direction):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc=vc)
+    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc=vc, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_splitter_cost()[0])
 
-def can_build_bridge_here(pos: Position, output: Position, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache) -> bool:
+def can_build_bridge_here(pos: Position, output: Position, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
     """True if we can build a bridge at pos with given output — either directly,
     or because the tile holds an ally road/sentinel we can first destroy."""
     if ct.can_build_bridge(pos, output):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc)
+    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_bridge_cost()[0])
+
+def can_build_launcher_here(pos: Position, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
+    """True if we can build a launcher at pos, possibly after destroying an allied support building."""
+    if ct.get_tile_builder_bot_id(pos) is not None:
+        return False
+    if ct.can_build_launcher(pos):
+        return True
+    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers)
+            and ct.get_global_resources()[0] >= ct.get_launcher_cost()[0])
 
 def get_barrier_targets(ore_pos: Position, core_pos: Position | None, ct: Controller, map_obj) -> list[Position]:
     """Return cardinal positions around ore_pos that need barriers,
     sorted by decreasing distance from core (farthest first).
+    Only titanium ore gets defended this way.
     Skips positions with conveyors, turrets, or existing barriers."""
+    if map_obj.get_tile_env(ore_pos) != Environment.ORE_TITANIUM:
+        return []
     my_team = ct.get_team()
     targets = []
     width = map_obj.width
@@ -512,16 +540,6 @@ def get_best_turret_type(pos: Position, enemy_core_pos: Position | None) -> Enti
         return EntityType.GUNNER
     return EntityType.SENTINEL
 
-def has_matching_ally_turret(ct: Controller, pos: Position, direction: Direction, my_team: Team, enemy_core_pos: Position | None) -> bool:
-    """True if pos already has the same allied turret we would choose to build."""
-    bid = ct.get_tile_building_id(pos)
-    if bid is None or ct.get_team(bid) != my_team:
-        return False
-    etype = ct.get_entity_type(bid)
-    if etype not in TURRET_TYPES:
-        return False
-    return etype == get_best_turret_type(pos, enemy_core_pos) and ct.get_direction(bid) == direction
-
 def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None) -> bool:
     """Try to build a gunner (if valid position near enemy core) or sentinel at pos.
     Returns True if a turret was built."""
@@ -613,3 +631,73 @@ def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height
     if best_heal_pos is not None and ct.can_heal(best_heal_pos):
         ct.heal(best_heal_pos)
         log(f"HEAL at {best_heal_pos} amount={best_heal_amount} can_heal_builder={best_can_heal_builder}")
+
+def dir_distance(a, b):
+    ia = DIRECTIONS.index(a)
+    ib = DIRECTIONS.index(b)
+    diff = abs(ia - ib)
+    return min(diff, 8 - diff)
+
+
+def get_ray_endpoint(start: Position, direction: Direction, width: int, height: int) -> Position:
+    dx, dy = direction.delta()
+    x, y = start.x, start.y
+
+    while True:
+        nx, ny = x + dx, y + dy
+        if nx < 0 or nx >= width or ny < 0 or ny >= height:
+            return Position(x, y)
+        x, y = nx, ny
+
+
+def get_valid_directions(ct, core_pos, width, height):
+    valid = []
+    for d in DIRECTIONS:
+        endpoint = get_ray_endpoint(core_pos, d, width, height)
+        if not ct.is_in_vision(endpoint):
+            valid.append((d, endpoint))
+    return valid
+
+
+def pick_three_directions(core_pos, width, height, valid_dirs):
+    if len(valid_dirs) <= 3:
+        return valid_dirs
+
+    center = Position(width // 2, height // 2)
+    half_w, half_h = width // 2, height // 2
+    max_dist_sq = half_w * half_w + half_h * half_h
+
+    best_triplet = (valid_dirs[0], valid_dirs[1], valid_dirs[2])
+    best_score = -1
+
+    for i in range(len(valid_dirs)):
+        for j in range(i + 1, len(valid_dirs)):
+            for k in range(j + 1, len(valid_dirs)):
+                sep01 = dir_distance(valid_dirs[i][0], valid_dirs[j][0])
+                sep02 = dir_distance(valid_dirs[i][0], valid_dirs[k][0])
+                sep12 = dir_distance(valid_dirs[j][0], valid_dirs[k][0])
+
+                # product of pairwise separations: rewards balanced spread
+                # e.g. (3,3,2)->18 beats "T" shape (2,2,4)->16
+                spread = sep01 * sep02 * sep12
+
+                # center closeness: best of the 3 endpoints (0 to 1)
+                best_closeness = max(
+                    1.0 - valid_dirs[i][1].distance_squared(center) / max_dist_sq,
+                    1.0 - valid_dirs[j][1].distance_squared(center) / max_dist_sq,
+                    1.0 - valid_dirs[k][1].distance_squared(center) / max_dist_sq,
+                )
+
+                # spread ranges 0-64 (max 4*4*4), closeness 0-1
+                score = spread * 10 + best_closeness * 30
+
+                if score > best_score:
+                    best_score = score
+                    best_triplet = (valid_dirs[i], valid_dirs[j], valid_dirs[k])
+
+    return list(best_triplet)
+
+def prioritize_direction(directions: list[Direction], preferred_dir: Direction) -> list[Direction]:
+    """Move preferred_dir to the front, adding it if needed."""
+    ordered = [d for d in directions if d != preferred_dir]
+    return [preferred_dir, *ordered][:3]

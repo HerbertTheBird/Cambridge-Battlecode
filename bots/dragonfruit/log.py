@@ -1,7 +1,7 @@
 from cambc import Controller
 
-DEBUG_LOGGING = False
-TIME_LOGGING = False
+DEBUG_LOGGING = True
+TIME_LOGGING = True
 
 
 if DEBUG_LOGGING:
