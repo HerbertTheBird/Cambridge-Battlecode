@@ -579,36 +579,64 @@ class Pathing:
         return path
 
 
-    def _get_conveyor_targets_and_avoid(self, ore: Position, avoid_extra: Collection[Position] | None = None):
+    def _get_conveyor_targets_and_avoid(
+        self,
+        ore: Position,
+        avoid_extra: Collection[Position] | None = None,
+    ):
         core = map_info._my_core
-        if not avoid_extra:
-            avoid_extra = []
-        target = set()
-        width_l        = map_info._width
-        height_l       = map_info._height
-        my_team        = self.rc.get_team()
-        is_conveyor    = map_info.is_conveyor
+        my_team = self.rc.get_team()
         ore_type = map_info.ground_at(ore.x, ore.y)
+
+        avoid_extra = set(avoid_extra or ())
+        target = set()
+
         if ore_type == Environment.ORE_TITANIUM:
-            target.update({Position(core.x + dx, core.y + dy) for _, (dx, dy) in ALL_DIRS_DELTAS})
-        for x in range(width_l):
-            for y in range(height_l):
-                if map_info.id_at(x, y) != 0 and is_conveyor(map_info.type_at(x, y)) and map_info.can_route(x, y) and map_info.load_at(x, y) <= 3 and map_info.team_at(x, y) == my_team and Position(x, y) not in avoid_extra and (ore_type == map_info.trans_ore_at(x, y) or ore_type == Environment.ORE_TITANIUM):
-                    target.add(Position(x, y))
+            target.update(
+                Position(core.x + dx, core.y + dy)
+                for _, (dx, dy) in ALL_DIRS_DELTAS
+            )
+
+        id_at = map_info.id_at
+        can_route = map_info.can_route
+        load_at = map_info.load_at
+        team_at = map_info.team_at
+        trans_ore_at = map_info.trans_ore_at
+        titanium = (ore_type == Environment.ORE_TITANIUM)
+
+        for p in map_info._conveyors:
+            x, y = p.x, p.y
+
+            if id_at(x, y) == 0:
+                continue
+            if not can_route(x, y):
+                continue
+            if load_at(x, y) > 3:
+                continue
+            if team_at(x, y) != my_team:
+                continue
+            if p in avoid_extra:
+                continue
+            if not titanium and trans_ore_at(x, y) != ore_type:
+                continue
+
+            target.add(p)
+
         for s in builder.target_splitters:
-            if map_info.id_at(s.x, s.y) == 0 or map_info.type_at(s.x, s.y) != EntityType.SPLITTER:
+            if id_at(s.x, s.y) == 0 or map_info.type_at(s.x, s.y) != EntityType.SPLITTER:
                 target.add(s)
                 continue
-            if map_info.load_at(s.x, s.y) <= 3 and map_info.can_route(s.x, s.y):
+            if load_at(s.x, s.y) <= 3 and can_route(s.x, s.y):
                 target.add(s)
-        if len(target) == 0:
+
+        if not target:
             return set(), set()
-        print(ore_type, target)
+
         avoid = map_info.get_avoid(True, False, True)
         avoid.update(builder.target_foundry)
         avoid.update(builder.target_splitters)
-        for p in avoid_extra:
-            avoid.add(p)
+        avoid.update(avoid_extra)
+
         return target, avoid
     def calculate_launcher_position(self, path: list[Position], ore: Position) -> Position | None:
         return None
