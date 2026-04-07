@@ -15,28 +15,28 @@ class Mode(Enum):
     BUILD_HARVESTER = (0, 180, 180, "build harvester")
     ROUTE = (255, 255, 0, "route to core")
     SABOTAGE = (200, 10, 10, "attack harvester")
-    BUILD_TRAP = (193, 154, 107, "launcher trap")
+    BUILD_KILLBOX = (193, 154, 107, "launcher killbox")
     HEAL_CORE = (255, 165, 0, "heal core")
+    CUT_SUPPLY = (255, 0, 255, "cut enemy supply")
     def __init__(self, r, g, b, desc):
         self.r = r
         self.g = g
         self.b = b
         self.desc = desc
         
-def log(text):
-    print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {str(text)}")
+def log(text : str):
+    print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {text}")
 
 mode = Mode.EXPLORE
+mode_memory = mode
 indicator = []
 routed = 0
 blocked_ores = {}
 defended_ores = set()
 cardinal_dirs = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
 all_dirs = list(Direction)
-nav: Pathing
-ore_nav: Pathing
-
-axionite_after = 500
+nav = None
+ore_nav = None
 
 # Cache deltas directly to bypass `Enum` and `.add()` overhead
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in all_dirs]
@@ -52,18 +52,16 @@ target_ore = None
 opponent_ore = None
 sabotage_ore = None
 
+# cut supply state
+cut_supply_target = None  # Position of our building to destroy (feeding enemy sentinel)
+
 # route state
 routed_ore = None
 ore_path = None
 launcher_position = None
 route_idx = 0
-build_foundry = None
 
-target_foundry = set()
-target_splitters = set()
-splitter_dir = None
-
-rc: Controller
+rc = None
 
 MODE_ACTIONS = None
 
@@ -93,7 +91,6 @@ def run():
 # Global to track current repair target
 repair_target = None
 repair_override_turns = 2  # time window after a bot is spawned
-mode_memory = mode
 
 def run_pre():
     """
@@ -103,46 +100,15 @@ def run_pre():
     - Once a damaged tile is found, set repair_target permanently and switch to HEAL mode.
     - Self-healing is still performed as a fallback.
     """
-    global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, target_foundry, target_splitters
+    global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, cut_supply_target
     global mode_memory
 
     map_info.update()
-    if not map_info._my_core:
-        rc.self_destruct()
-    nav.rebuild_broken_barriers()
-    if len(target_foundry) == 0 and map_info._my_core is not None:
-        core = map_info._my_core
-        for dir, (dx, dy) in CARDINAL_DELTAS:
-            tx = core.x + 2 * dx
-            ty = core.y + 2 * dy
-            target = Position(tx, ty)
-            if not map_info.in_bounds(target):
-                continue
-
-            if dx == 0:
-                side1 = Position(tx - 1, ty)
-                side2 = Position(tx + 1, ty)
-            else:
-                side1 = Position(tx, ty - 1)
-                side2 = Position(tx, ty + 1)
-            if not map_info.in_bounds(side1) or not map_info.in_bounds(side2):
-                continue
-
-            if map_info.ground_at(tx, ty) is Environment.WALL:
-                continue
-            if map_info.ground_at(side1.x, side1.y) is Environment.WALL:
-                continue
-            if map_info.ground_at(side2.x, side2.y) is Environment.WALL:
-                continue
-            target_foundry.add(target)
-            target_splitters.add(side1)
-            target_splitters.add(side2)
-            
     my_pos = rc.get_position()
 
     # --- Step 0: Core-aware healing logic ---
 
-    core = map_info._my_core
+    core = map_info.my_core
 
     if core:
         dist_to_core = my_pos.distance_squared(core)
@@ -166,6 +132,48 @@ def run_pre():
     # Fallback self-heal
     if rc.can_heal(my_pos):
         rc.heal(my_pos)
+
+
+    # --- Step 0.5: Scan for our buildings feeding enemy sentinels ---
+    # Enemy sentinels get ammo from cardinally adjacent conveyors/harvesters.
+    # If OUR buildings are feeding THEIR sentinels, destroy them — they're a liability.
+    best_cut_target = None
+    best_cut_dist = float('inf')
+    for pos in rc.get_nearby_tiles():
+        building_id = rc.get_tile_building_id(pos)
+        if building_id is None:
+            continue
+        if rc.get_team(building_id) == rc.get_team():
+            continue
+        if rc.get_entity_type(building_id) != EntityType.SENTINEL:
+            continue
+
+        # Found an enemy sentinel — check its cardinal neighbors for our buildings
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            adj = Position(pos.x + dx, pos.y + dy)
+            if not map_info.is_on_map(adj):
+                continue
+            if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
+                continue
+            adj_id = rc.get_tile_building_id(adj)
+            if adj_id is None:
+                continue
+            if rc.get_team(adj_id) != rc.get_team():
+                continue
+            adj_type = rc.get_entity_type(adj_id)
+            # Our conveyor, harvester, or bridge feeding the enemy sentinel
+            if adj_type in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
+                            EntityType.HARVESTER, EntityType.SPLITTER):
+                dist = my_pos.distance_squared(adj)
+                if dist < best_cut_dist:
+                    best_cut_dist = dist
+                    best_cut_target = adj
+
+    if best_cut_target is not None:
+        cut_supply_target = best_cut_target
+        mode = Mode.CUT_SUPPLY
+        log(f"Found our building at {best_cut_target} feeding enemy sentinel, cutting supply")
+        return
 
     # --- Step 1: Recompute repair target every turn ---
     repair_target = None
@@ -205,108 +213,193 @@ def run_pre():
         mode = Mode.HEAL
         log(f"Repair target set at {repair_target} with score {best_score}, switching to HEAL mode")
 
+
     # Clean up expired blocks
     current_round = rc.get_current_round()
     for ore, unblock_round in list(blocked_ores.items()):
         if current_round >= unblock_round:
             del blocked_ores[ore]
 
-    if map_info._my_core is None:
+    if map_info.my_core is None:
         return
 
-    # closest_ore = None
-    # min_dist_sq = float('inf')
-    # min_dist_sq_sabotage = float('inf')
-    # opponent_ore = None
-    # min_dist_sq_opponent = float('inf')
+    closest_ore = None
+    min_dist_sq = float('inf')
+    min_dist_sq_sabotage = float('inf')
+    opponent_ore = None
+    min_dist_sq_opponent = float('inf')
 
-    # # Find all visible titanium ores without an allied harvester on them
-    # nearby_units = rc.get_nearby_units(dist_sq=rc.get_vision_radius_sq())
+    # Find all visible titanium ores without an allied harvester on them
+    nearby_units = rc.get_nearby_units(dist_sq=rc.get_vision_radius_sq())
 
-    # allied_builders = []
-    # for uid in nearby_units:
-    #     if rc.get_entity_type(uid) == EntityType.BUILDER_BOT and rc.get_team(uid) == rc.get_team() and uid > 4:
-    #         allied_builders.append(uid)
+    allied_builders = []
+    for uid in nearby_units:
+        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT and rc.get_team(uid) == rc.get_team() and uid > 4:
+            allied_builders.append(uid)
             
-    # def am_closest_builder(pos):
-    #     my_dist = rc.get_position().distance_squared(pos)
+    def am_closest_builder(pos):
+        my_dist = rc.get_position().distance_squared(pos)
 
-    #     for uid in allied_builders:
-    #         try:
-    #             other_pos = rc.get_position(uid)
-    #             if other_pos is None:
-    #                 continue
+        for uid in allied_builders:
+            try:
+                other_pos = rc.get_position(uid)
+                if other_pos is None:
+                    continue
 
-    #             if other_pos.distance_squared(pos) < my_dist:
-    #                 return False
-    #         except GameError:
-    #             pass
+                if other_pos.distance_squared(pos) < my_dist:
+                    return False
+            except GameError:
+                pass
 
-    #     return True
+        return True
     
-    # for pos in rc.get_nearby_tiles():
-    #     if pos in blocked_ores:
-    #         continue
+    for pos in rc.get_nearby_tiles():
+        if pos in blocked_ores:
+            continue
 
-    #     env = rc.get_tile_env(pos)
+        env = rc.get_tile_env(pos)
 
-    #     if env == Environment.ORE_TITANIUM:
-    #         building_id = rc.get_tile_building_id(pos)
+        if env == Environment.ORE_TITANIUM:
+            building_id = rc.get_tile_building_id(pos)
 
-    #         blocked = False
-    #         occupied_opponent = False
-    #         if building_id is not None:
-    #             try:
-    #                 building_type = rc.get_entity_type(building_id)
-    #                 building_team = rc.get_team(building_id)
-    #                 if building_type == EntityType.HARVESTER and building_team == rc.get_team() or building_type == EntityType.BARRIER:
-    #                     blocked = True
-    #                 if building_type != EntityType.MARKER and building_team != rc.get_team():
-    #                     occupied_opponent = True
-    #             except GameError:
-    #                 pass
+            blocked = False
+            occupied_opponent = False
+            if building_id is not None:
+                try:
+                    building_type = rc.get_entity_type(building_id)
+                    building_team = rc.get_team(building_id)
+                    if building_type == EntityType.HARVESTER and building_team == rc.get_team():
+                        blocked = True
+                    if building_type != EntityType.MARKER and building_team != rc.get_team():
+                        occupied_opponent = True
+                except GameError:
+                    pass
 
-    #         if building_id is not None and pos not in defended_ores:
-    #             try:
-    #                 building_type = rc.get_entity_type(building_id)
-    #                 building_team = rc.get_team(building_id)
+            if building_id is not None and pos not in defended_ores:
+                try:
+                    building_type = rc.get_entity_type(building_id)
+                    building_team = rc.get_team(building_id)
 
-    #                 if building_type == EntityType.HARVESTER and building_team != rc.get_team():
-    #                     # Check for at least one passable adjacent tile
-    #                     has_passable_adjacent = False
-    #                     for d, (dx, dy) in CARDINAL_DELTAS:
-    #                         if d == Direction.CENTRE:
-    #                             continue
-    #                         adj = Position(pos.x + dx, pos.y + dy)
-    #                         try:
-    #                             if map_info.in_bounds(adj) and rc.is_tile_passable(adj):
-    #                                 has_passable_adjacent = True
-    #                                 break
-    #                         except GameError:
-    #                             pass
+                    if building_type == EntityType.HARVESTER and building_team != rc.get_team():
+                        # Check for at least one passable adjacent tile
+                        has_passable_adjacent = False
+                        for d, (dx, dy) in CARDINAL_DELTAS:
+                            if d == Direction.CENTRE:
+                                continue
+                            adj = Position(pos.x + dx, pos.y + dy)
+                            try:
+                                if map_info.is_on_map(adj) and rc.is_tile_passable(adj):
+                                    has_passable_adjacent = True
+                                    break
+                            except GameError:
+                                pass
 
-    #                     if has_passable_adjacent:
-    #                         dist_sq = pos.distance_squared(rc.get_position())
-    #                         if dist_sq < min_dist_sq_opponent:
-    #                             min_dist_sq_opponent = dist_sq
-    #                             opponent_ore = pos
-    #             except GameError:
-    #                 pass
+                        if has_passable_adjacent:
+                            dist_sq = pos.distance_squared(rc.get_position())
+                            if dist_sq < min_dist_sq_opponent:
+                                min_dist_sq_opponent = dist_sq
+                                opponent_ore = pos
+                except GameError:
+                    pass
 
-    #         if not blocked and not occupied_opponent:
-    #             if am_closest_builder(pos):
-    #                 dist_sq = pos.distance_squared(map_info._my_core)
-    #                 if dist_sq < min_dist_sq:
-    #                     min_dist_sq = dist_sq
-    #                     closest_ore = pos
+            if not blocked and not occupied_opponent:
+                if am_closest_builder(pos):
+                    dist_sq = pos.distance_squared(map_info.my_core)
+                    if dist_sq < min_dist_sq:
+                        min_dist_sq = dist_sq
+                        closest_ore = pos
 
-    #         dist_sq_sabotage = pos.distance_squared(rc.get_position())
-    #         if dist_sq_sabotage < min_dist_sq_sabotage:
-    #             min_dist_sq_sabotage = dist_sq_sabotage
-    #             sabotage_ore = pos
+            dist_sq_sabotage = pos.distance_squared(rc.get_position())
+            if dist_sq_sabotage < min_dist_sq_sabotage:
+                min_dist_sq_sabotage = dist_sq_sabotage
+                sabotage_ore = pos
+
+    # --- Step X: Detect diagonal trap locations around OUR harvesters ---
+    trap_loc = None
+
+    for pos in rc.get_nearby_tiles():
+        building_id = rc.get_tile_building_id(pos)
+        if building_id is None:
+            continue
+
+        # Only consider OUR harvesters
+        if rc.get_team(building_id) != rc.get_team():
+            continue
+        if rc.get_entity_type(building_id) != EntityType.HARVESTER:
+            continue
+
+        # Check 4 diagonal tiles around the harvester
+        for dx, dy in [(1,1), (1,-1), (-1,1), (-1,-1)]:
+            diag = Position(pos.x + dx, pos.y + dy)
+
+            if not map_info.is_on_map(diag):
+                continue
+        
+
+            # Diagonal tile must be empty or passable
+            if not rc.is_tile_passable(diag):
+                continue
+
+            valid = True
+            open_tiles = 0
+
+            # Scan 3x3 centered at diag
+            for sx in [-1, 0, 1]:
+                for sy in [-1, 0, 1]:
+                    check = Position(diag.x + sx, diag.y + sy)
+
+                    if not map_info.is_on_map(check):
+                        continue
+
+                    # Count open tiles
+                    try:
+                        if map_info.is_tile_empty(check) and rc.is_tile_passable(check):
+                            open_tiles += 1
+                    except GameError:
+                        pass
+
+                    bid = rc.get_tile_building_id(check)
+                    if bid is None:
+                        continue
+
+                    team = rc.get_team(bid)
+                    etype = rc.get_entity_type(bid)
+
+                    # No enemy buildings
+                    if team != rc.get_team():
+                        valid = False
+                        break
+
+                    # No our conveyors / bridges
+                    if etype in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE):
+                        valid = False
+                        break
+
+                if not valid:
+                    break
+
+            # Require at most 4 open tiles
+            if valid:
+                log(open_tiles)
+            if valid and open_tiles <= 4:
+                trap_loc = diag
+                break
+
+        if trap_loc is not None:
+            break
+
+    if trap_loc:
+        log(f"Trap location found at {trap_loc}")
 
     # Update target_ore based on what we can see right now
-    update_target_ore()
+    if closest_ore is not None:
+        if target_ore is None:
+            target_ore = closest_ore
+        else:
+            current_target_dist_sq = target_ore.distance_squared(map_info.my_core)
+            if min_dist_sq < current_target_dist_sq:
+                target_ore = closest_ore
+
     if target_ore:
         rc.draw_indicator_dot(target_ore, 255, 255, 0)
 
@@ -321,6 +414,13 @@ def check_heal():
     log(repair_target)
 
 def run_heal():
+    """
+    Permanent HEAL mode:
+    - Move toward the permanent repair_target.
+    - Heal the tile with the most missing HP in the surrounding area.
+    - Place roads on empty tiles around repair target.
+    - Attack enemy roads around repair target.
+    """
     global repair_target
     if repair_target is None:
         return  # safety check
@@ -330,6 +430,7 @@ def run_heal():
     # --- Step 1: Move toward the repair target ---
     if my_pos != repair_target:
         nav.move_to(repair_target)
+        return  # wait until reaching target
 
     # --- Step 2: Scan surrounding tiles (including target) for most damaged ---
     damaged_candidates = []
@@ -337,9 +438,9 @@ def run_heal():
     for dx in (-1, 0, 1):
         for dy in (-1, 0, 1):
             pos = Position(repair_target.x + dx, repair_target.y + dy)
-            if not map_info.in_bounds(pos):
+            if not map_info.is_on_map(pos):
                 continue
-            if rc.is_in_vision(pos):
+            if pos.distance_squared(my_pos) > rc.get_vision_radius_sq():
                 continue
             surrounding_tiles.append(pos)
             building_id = rc.get_tile_building_id(pos)
@@ -402,20 +503,33 @@ def run_heal():
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
     turns_since_last_explore_target = 0
-
+    
+    round_num = rc.get_current_round()
+    go_attack = (
+        round_num > 1000 and rc.get_id() % 6 == 0
+    )
+    if (go_attack):
+        explore_target = map_info.predicted_enemy_core
+    
     for _ in range(2):  # slightly more aggressive
-        random_x = random.randint(0, map_info._width - 1)
-        random_y = random.randint(0, map_info._height - 1)
-        if not map_info.seen_at(random_x, random_y):
+        random_x = random.randint(0, map_info.width - 1)
+        random_y = random.randint(0, map_info.height - 1)
+        if map_info.ground[random_x][random_y] is None:
             explore_target = Position(random_x, random_y)
             return
 
-    # If no empty tile found after 2 tries, fallback to completely random
-    if (random.randint(0, 1) == 0):
-        explore_target = random.choice(list(map_info._conveyors))
-    random_x = random.randint(0, map_info._width - 1)
-    random_y = random.randint(0, map_info._height - 1)
+    # If no empty tile found after 100 tries, fallback to completely random
+    round_num = rc.get_current_round()
+    go_attack = (
+        (round_num > 1500 and rc.get_id() % 2 == 0) or
+        (round_num > 1000 and rc.get_id() % 3 == 0)
+    )
+    if (go_attack):
+        explore_target = map_info.predicted_enemy_core
+    random_x = random.randint(0, map_info.width - 1)
+    random_y = random.randint(0, map_info.height - 1)
     explore_target = Position(random_x, random_y)
+    
 
 
 # check block
@@ -478,7 +592,7 @@ def run_build_trap():
             if dx == 0 and dy == 0:
                 continue
             pos = Position(center.x + dx, center.y + dy)
-            if map_info.in_bounds(pos):
+            if map_info.is_on_map(pos):
                 surrounding.append(pos)
 
     if not surrounding:
@@ -495,7 +609,7 @@ def run_build_trap():
                 if dx == 0 and dy == 0:
                     continue
                 neighbor = Position(tile.x + dx, tile.y + dy)
-                if not map_info.in_bounds(neighbor):
+                if not map_info.is_on_map(neighbor):
                     continue
                 if neighbor == center or neighbor in surrounding:
                     continue
@@ -536,7 +650,7 @@ def run_build_trap():
             if dx == 0 and dy == 0:
                 continue
             candidate = Position(escape_tile.x + dx, escape_tile.y + dy)
-            if not map_info.in_bounds(candidate):
+            if not map_info.is_on_map(candidate):
                 continue
             if candidate == center or candidate in surrounding:
                 continue
@@ -549,7 +663,7 @@ def run_build_trap():
                     if ddx == 0 and ddy == 0:
                         continue
                     neighbor = Position(candidate.x + ddx, candidate.y + ddy)
-                    if not map_info.in_bounds(neighbor):
+                    if not map_info.is_on_map(neighbor):
                         continue
                     if map_info.is_tile_empty(neighbor) or rc.is_tile_passable(neighbor):
                         score += 1
@@ -573,80 +687,15 @@ def run_build_trap():
 
 
 trap_loc = None
-def update_target_ore():
-    global target_ore
-    my_pos = rc.get_position()
-    claimed = comms.decode_claim()
-    for pos, turn, id in claimed:
-        if id == rc.get_id()&comms._ID_MASK:
-            continue
-        blocked_ores[pos] = max(blocked_ores.get(pos, 0), turn+10)
-        print("blocked", pos, turn, id)
-        for dir in cardinal_dirs:
-            new_pos = pos.add(dir)
-            if not map_info.in_bounds(new_pos):
-                continue
-            blocked_ores[new_pos] = max(blocked_ores.get(new_pos, 0), turn+10)
-
-    prev_target_ore = target_ore
-    target_ore = None
-    core = map_info._my_core
-    for pos in rc.get_nearby_tiles():
-        if map_info.ground_at(pos.x, pos.y) == Environment.ORE_TITANIUM or map_info.ground_at(pos.x, pos.y) == Environment.ORE_AXIONITE and rc.get_current_round() > axionite_after:
-            if not target_ore or core.distance_squared(pos) < core.distance_squared(target_ore) or pos == prev_target_ore:
-                fail = False
-                if map_info.id_at(pos.x, pos.y) != 0:
-                    if pos == prev_target_ore:
-                        print(map_info.team_at(pos.x, pos.y), rc.get_team(), map_info.type_at(pos.x, pos.y))
-                    if map_info.team_at(pos.x, pos.y) == rc.get_team() and map_info.type_at(pos.x, pos.y) == EntityType.HARVESTER:
-                        fail = True
-                    if map_info.team_at(pos.x, pos.y) != rc.get_team():
-                        fail = True
-                card_d = [[0, 1], [0, -1], [1, 0], [-1, 0]]
-                for d in card_d:
-                    if map_info.in_bounds(Position(pos.x+d[0], pos.y+d[1])) and map_info.id_at(pos.x+d[0], pos.y+d[1]) != 0 and map_info.type_at(pos.x+d[0], pos.y+d[1]) != EntityType.ROAD and map_info.team_at(pos.x+d[0], pos.y+d[1]) != rc.get_team():
-                        fail = True
-                if pos in blocked_ores and blocked_ores[pos] > rc.get_current_round():
-                    fail = True
-                if fail:
-                    if pos == prev_target_ore:
-                        prev_target_ore = None
-                    continue
-                target_ore = pos
-    if prev_target_ore:
-        target_ore = prev_target_ore
 def check_explore():
     global mode, explore_target, turns_since_last_explore_target, defended_ores, routed, trap_loc
 
     my_pos = rc.get_position()
-
-    # # --- Step 0: Check trap condition ---
-    # if routed >= 1:
-    #     for dx in (-1, 0, 1):
-    #         for dy in (-1, 0, 1):
-    #             cpos = Position(my_pos.x + dx, my_pos.y + dy)
-    #             impassable_count = 0
-    #             building_id = rc.get_tile_building_id(cpos)
-    #             if not (building_id and map_info.is_conveyor(rc.get_entity_type(building_id))):
-    #                 for dx in (-1, 0, 1):
-    #                     for dy in (-1, 0, 1):
-    #                         if dx == 0 and dy == 0:
-    #                             continue
-    #                         pos = Position(cpos.x + dx, cpos.y + dy)
-    #                         if not map_info.is_on_map(pos):
-    #                             continue  # out-of-map tiles are ignored now
-    #                         building_id = rc.get_tile_building_id(pos)
-    #                         is_impassable_our_building = building_id is not None and rc.get_team(building_id) == rc.get_team() and not rc.is_tile_passable(pos)
-    #                         is_wall = map_info.ground[pos.x][pos.y] == Environment.WALL
-    #                         if building_id and map_info.is_conveyor(rc.get_entity_type(building_id)):
-    #                             impassable_count -= 1000
-    #                         if is_impassable_our_building or is_wall:
-    #                             impassable_count += 1
-    #                 if impassable_count >= 3:
-    #                     mode = Mode.BUILD_TRAP
-    #                     trap_loc = cpos  # store the current location for trap building
-    #                     return
-
+    
+    if (trap_loc):
+        mode = Mode.BUILD_KILLBOX
+        return
+    
     # --- Step 1: Existing exploration logic ---
     if opponent_ore and opponent_ore not in defended_ores:
         mode = Mode.SABOTAGE
@@ -655,7 +704,6 @@ def check_explore():
     if target_ore:
         mode = Mode.BUILD_HARVESTER
         return
-
 
     if explore_target and my_pos.distance_squared(explore_target) <= 18:
         force_generate_explore_target()
@@ -666,10 +714,9 @@ def check_explore():
 
 def check_build_harvester():
     global mode, target_ore
-    # update_target_ore()
+
     if not target_ore:
         mode = Mode.EXPLORE
-        return
     if (target_ore.distance_squared(rc.get_position())) <= rc.get_vision_radius_sq():
         building_id = rc.get_tile_building_id(target_ore)
         if building_id and (
@@ -677,7 +724,7 @@ def check_build_harvester():
             target_ore = None
             mode = Mode.EXPLORE
             return
-    if nav.calculate_path(target_ore) != []:
+    if nav.calculate_path(target_ore):
         pass
     else:
         current_distance = rc.get_position().distance_squared(target_ore)
@@ -695,50 +742,60 @@ def run_explore_athena():
 
 last_placed_launcher = None
 launcher_count = 0
-ore_sentinel_count = {} 
+ore_sentinel_count = {}
 def run_explore():
     global explore_target, turns_since_last_explore_target, last_placed_launcher, launcher_count
     my_pos = rc.get_position()
 
-    # # === Launcher placement logic: spread launchers ===
-    # if (launcher_count < 6):
-    #     for other in rc.get_nearby_buildings():
-    #             if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
-    #                 if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
-    #                     last_placed_launcher = rc.get_position(other)
-    #     for tile in rc.get_nearby_tiles(2):
-    #         if not map_info.is_tile_empty(tile):
-    #             continue
+    titanium = rc.get_global_resources()[0]
+    round_num = rc.get_current_round()
 
-    #         if not last_placed_launcher:
-    #             # No known launchers? optional: skip placement
-    #             continue
+    # === Launcher placement logic: spread launchers ===
+    # Only place launchers if we're not resource-rich (when rich, prioritize finding more ore)
+    # Also allow launchers if we've already routed several harvesters
+    should_place_launchers = (launcher_count < 6) and (titanium < 500 or routed >= 3)
+    if should_place_launchers:
+        for other in rc.get_nearby_buildings():
+                if rc.get_team(other) == rc.get_team() and rc.get_entity_type(other) == EntityType.LAUNCHER:
+                    if not last_placed_launcher or rc.get_position(other).distance_squared(rc.get_position()) < last_placed_launcher.distance_squared(rc.get_position()):
+                        last_placed_launcher = rc.get_position(other)
+        for tile in rc.get_nearby_tiles(2):
+            if not map_info.is_tile_empty(tile):
+                continue
 
-    #         # Find distance to closest launcher
-    #         closest_dist = tile.distance_squared(last_placed_launcher)
+            if not last_placed_launcher:
+                continue
 
-    #         # Condition: far enough (>16) but still within vision radius
-    #         if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and rc.get_global_resources()[0] > launcher_count * 80:
-    #             if rc.can_build_launcher(tile):
-    #                 rc.build_launcher(tile)
-    #                 last_placed_launcher = tile
-    #                 launcher_count += 1
-    #                 log(f"Placed launcher at {tile}")
-    #                 return  # only build one per turn
+            closest_dist = tile.distance_squared(last_placed_launcher)
+
+            if closest_dist > 16 and closest_dist <= rc.get_vision_radius_sq() and titanium > launcher_count * 80:
+                if rc.can_build_launcher(tile):
+                    rc.build_launcher(tile)
+                    last_placed_launcher = tile
+                    launcher_count += 1
+                    log(f"Placed launcher at {tile}")
+                    return  # only build one per turn
 
     if explore_target is None:
         force_generate_explore_target()
 
-    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]:
+    if rc.get_global_resources()[0] < rc.get_bridge_cost()[0]:
         return
+
+    # When we have excess titanium, explore more aggressively to find new ore
+    # Re-target more often to cover more ground
+    if titanium > 500 and turns_since_last_explore_target > 15:
+        force_generate_explore_target()
 
     # loop until we find a target we can path to and move.
     moved = False
     attempts = 0
-    while not moved and attempts < 2:
-        if nav.move_to(explore_target) == False:
+    while not moved and attempts < 1:
+        path_exists = nav.calculate_path(explore_target)
+        if path_exists:
+            nav.execute_path()
+        elif path_exists is not None:
             force_generate_explore_target()
-            moved = True
         else:
             break
         attempts += 1
@@ -750,11 +807,12 @@ def run_explore():
 
 
 def run_build_harvester():
-    global mode, target_ore, blocked_ores, ore_sentinel_count, build_foundry
-    log("try build on " + str(target_ore))
-    if target_ore is None or rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2 + rc.get_barrier_cost()[0]*8:
+    global mode, target_ore, blocked_ores, ore_sentinel_count
+
+    if target_ore is None:
         mode = Mode.EXPLORE
         return
+
     if sabotage_ore and sabotage_ore != target_ore:
         if rc.can_build_barrier(sabotage_ore):
             rc.build_barrier(sabotage_ore)
@@ -771,7 +829,7 @@ def run_build_harvester():
             perimeter_secure = False
             continue
 
-        if not map_info.in_bounds(pos) or rc.get_tile_env(pos) == Environment.WALL:
+        if not map_info.is_on_map(pos) or rc.get_tile_env(pos) == Environment.WALL:
             wall_count += 1
             continue
 
@@ -781,22 +839,18 @@ def run_build_harvester():
             if rc.get_entity_type(building_id) in OUR_BUILDINGS and rc.get_team(building_id) == rc.get_team():
                 is_barrier = True
                 built_count += 1
-            if rc.get_entity_type(building_id) == EntityType.ROAD and rc.get_team(building_id) != rc.get_team():
-                if rc.can_move(rc.get_position().direction_to(pos)):
-                    rc.move(rc.get_position().direction_to(pos))
-                if rc.get_position() == pos and rc.can_fire(rc.get_position()):
-                    rc.fire(rc.get_position())
-            elif rc.get_team(building_id) != rc.get_team():
+            if rc.get_team(building_id) != rc.get_team():
                 opponent_sabotaged = True
+
         if not is_barrier:
             perimeter_secure = False
 
     if opponent_sabotaged:
         global blocked_ores
         if target_ore.distance_squared(rc.get_position()) < rc.get_vision_radius_sq():
-            building_id = rc.get_tile_building_id(target_ore)
-            if building_id and rc.get_entity_type(
-                    building_id) != EntityType.BARRIER and rc.can_destroy(target_ore) and not map_info.is_turret(rc.get_entity_type(
+            if rc.get_tile_building_id(target_ore) and (rc.get_tile_building_id(
+                    target_ore) != EntityType.BARRIER and rc.get_tile_building_id(
+                    target_ore) != EntityType.SENTINEL) and rc.can_destroy(target_ore) and not map_info.is_turret(rc.get_entity_type(
                     building_id)):
                 log("destroy1 " + str(target_ore))
                 rc.destroy(target_ore)
@@ -817,7 +871,7 @@ def run_build_harvester():
             # Check if this tile needs a barrier and if we are next to it.
             if rc.get_position().distance_squared(pos) <= 2:
                 # Check if it needs a barrier
-                is_wall = not map_info.in_bounds(pos) or rc.get_tile_env(pos) == Environment.WALL
+                is_wall = not map_info.is_on_map(pos) or rc.get_tile_env(pos) == Environment.WALL
                 if is_wall: continue
 
                 building_id = rc.get_tile_building_id(pos)
@@ -835,11 +889,50 @@ def run_build_harvester():
                         if rc.can_destroy(pos):
                             log("destroy2 " + str(pos))
                             rc.destroy(pos)
-                    if routed >= 0 and pos.x % 2 == 0:
-                        if rc.can_build_gunner(pos, pos.direction_to(target_ore).rotate_right()):
-                            rc.build_gunner(pos, pos.direction_to(target_ore).rotate_right())
+                    
+                    my_core = map_info.my_core
+                    manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
+                    harvester_cost = rc.get_harvester_cost()[0]
+                    conveyor_cost = rc.get_conveyor_cost()[0]
+                    scale = 1.1
+                    expected_finish = 10 + scale * (harvester_cost + manhattan_dist * conveyor_cost - 10 * manhattan_dist) < rc.get_global_resources()[0]
+                    
+                    # --- Placement logic ---
+                    log(f"Can route {expected_finish}")
+                    if routed >= 0 and expected_finish:
+                        log(f"Checking {pos} for potential sentinel")
+
+                        # --- Scan for nearby opponent harvesters ---
+                        enemy_harvester_id = None
+                        for unit_id in rc.get_nearby_buildings():  # only check 32 distance sq
+                            if rc.get_team(unit_id) == rc.get_team():
+                                continue  # skip own team
+
+                            if rc.get_entity_type(unit_id) == EntityType.HARVESTER:
+                                if pos.distance_squared(rc.get_position(unit_id)) < 32:
+                                    enemy_harvester_id = unit_id
+                                    break
+
+                        placed_sentinel = False
+                        if enemy_harvester_id is not None:
+                            log(f"Targeting {enemy_harvester_id}")
+                            enemy_pos = rc.get_position(enemy_harvester_id)
+                            dir_to_harvester = pos.direction_to(enemy_pos)
+                            dir_to_ore = pos.direction_to(target_ore)
+
+                            # Only place sentinel if directions differ, enemy in range, expected_finish, and we haven't already placed one
+                            ore_key = (target_ore.x, target_ore.y)
+                            if dir_to_harvester != dir_to_ore and ore_key not in ore_sentinel_count and expected_finish:
+                                if rc.can_build_sentinel(pos, dir_to_harvester):
+                                    rc.build_sentinel(pos, dir_to_harvester)
+                                    ore_sentinel_count[ore_key] = 1
+                                    return
+
+                    if routed >= 3 and pos.x % 2 == 0 and expected_finish and built_count != 0:
+                        if rc.can_build_sentinel(pos, pos.direction_to(target_ore).rotate_right()):
+                            rc.build_sentinel(pos, pos.direction_to(target_ore).rotate_right())
                             return
-                    if rc.can_build_barrier(pos):
+                    elif rc.can_build_barrier(pos):
                         rc.build_barrier(pos)
                         return
 
@@ -848,95 +941,30 @@ def run_build_harvester():
                     rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
                 log("destroy3 " + str(target_ore))
                 rc.destroy(target_ore)
-        nav.move_to(target_ore)
-        if rc.can_place_marker(target_ore):
-            rc.place_marker(target_ore, comms.encode_claim(target_ore))
-            bid = rc.get_tile_building_id(rc.get_position())
-            if bid and rc.get_entity_type(bid) == EntityType.ROAD and rc.get_team(bid) == rc.get_id():
-                rc.destroy(rc.get_position())
-        else:
-            for dir in all_dirs:
-                if not map_info.in_bounds(rc.get_position().add(dir)):
-                    continue
-                bid = rc.get_tile_building_id(rc.get_position().add(dir))
-                if bid and rc.get_entity_type(bid) == EntityType.ROAD and rc.get_team(bid) == rc.get_team():
-
-                    rc.destroy(rc.get_position().add(dir))
-                if rc.can_place_marker(rc.get_position().add(dir)):
-
-                    rc.place_marker(rc.get_position().add(dir), comms.encode_claim(target_ore))
-                    break
+        nav.execute_path()
         return
 
     # State 2: Perimeter is secure (or all walls). Let's build the harvester.
     else:
         # If we are on the ore, move off.
         if rc.get_position() == target_ore:
-            def is_blocking_neighbor(pos: Position) -> bool:
-                if pos == target_ore:
-                    return True
-                if not map_info.in_bounds(pos):
-                    return True
-                if rc.get_tile_env(pos) == Environment.WALL:
-                    return True
-
-                building_id = rc.get_tile_building_id(pos)
-                if building_id is None:
-                    return False
-
-                building_type = rc.get_entity_type(building_id)
-                building_team = rc.get_team(building_id)
-                if building_team == rc.get_team():
-                    return (
-                        building_type is EntityType.HARVESTER
-                        or building_type is EntityType.FOUNDRY
-                        or map_info.is_turret(building_type)
-                    )
-
-                if map_info.is_conveyor(building_type):
-                    return False
-                return building_type is not EntityType.ROAD and building_type is not EntityType.MARKER
-
-            def is_fully_surrounded(pos: Position) -> bool:
-                for d in all_dirs:
-                    if d is Direction.CENTRE:
-                        continue
-                    dx, dy = d.delta()
-                    neighbor = Position(pos.x + dx, pos.y + dy)
-                    if not is_blocking_neighbor(neighbor):
-                        return False
-                return True
-
             building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_team(building_id) != rc.get_team():
-                rc.fire(target_ore)
+                rc.fire()
                 return
             moved = False
             for d in random.sample(all_dirs, len(all_dirs)):
-                if d is Direction.CENTRE:
-                    continue
-                dx, dy = d.delta()
-                next_pos = Position(rc.get_position().x + dx, rc.get_position().y + dy)
-                if is_fully_surrounded(next_pos):
-                    continue
                 if rc.can_move(d):
                     rc.move(d)
                     moved = True
-                    break
             # nowhere to move
             if not moved:
                 my_pos = rc.get_position()
                 for d in random.sample(all_dirs, len(all_dirs)):
-                    if d is Direction.CENTRE:
-                        continue
                     dx, dy = d.delta()
-                    next_pos = Position(my_pos.x + dx, my_pos.y + dy)
-                    if is_fully_surrounded(next_pos):
-                        continue
-                    if map_info.is_tile_empty(next_pos):
+                    if map_info.is_tile_empty(Position(my_pos.x + dx, my_pos.y + dy)):
                         nav.move(d)
                         moved = True
-                        break
 
         # If adjacent to the ore, clear it and build.
         if rc.get_position().distance_squared(target_ore) <= 2:
@@ -948,7 +976,7 @@ def run_build_harvester():
                     rc.destroy(target_ore)
 
             if rc.get_tile_building_id(target_ore) is None:
-                my_core = map_info._my_core
+                my_core = map_info.my_core
                 if my_core:
                     manhattan_dist = abs(target_ore.x - my_core.x) + abs(target_ore.y - my_core.y)
                     harvester_cost = rc.get_harvester_cost()[0]
@@ -958,19 +986,19 @@ def run_build_harvester():
                     current_titanium = rc.get_global_resources()[0]
 
                     if current_titanium < required_titanium and target_ore not in ore_sentinel_count:
-                        blocked_ores[target_ore] = rc.get_current_round() + 50
+                        # Block for shorter time if we have decent resources (might afford it soon)
+                        block_time = 30 if current_titanium > 300 else 50
+                        blocked_ores[target_ore] = rc.get_current_round() + block_time
                         target_ore = None
                         mode = Mode.EXPLORE
                         return
 
                 if rc.can_build_harvester(target_ore):
                     rc.build_harvester(target_ore)
-                    global routed_ore, ore_path
+                    global routed_ore
                     routed_ore = target_ore
                     target_ore = None
                     mode = Mode.ROUTE
-                    build_foundry = None
-                    ore_path = []
                     return
         else:
             if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
@@ -981,165 +1009,130 @@ def run_build_harvester():
             nav.execute_path()
 
 
-
 def check_route():
     global ore_path, launcher_position, route_idx, mode, routed
-    # print(ore_path)
     if not ore_path:
-        ore_path = ore_nav.calculate_conveyor_path(routed_ore, routed_ore, None, False)
-        if ore_path == []:
-            mode = Mode.EXPLORE
-            return
+        ore_path = ore_nav.calculate_conveyor_path(routed_ore)
         route_idx = 0
-    else:
-        if route_idx < len(ore_path)-1:
-            next_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], routed_ore, ore_path[:route_idx], True)
-            if next_path:
-                ore_path = ore_path[:route_idx] + next_path
     if ore_path:
-        launcher_position = ore_nav.calculate_launcher_position(ore_path if ore_path[-1] != Position(-1, -1) else ore_path[:-1], routed_ore)
-    if ore_path and route_idx >= len(ore_path) - 1 and not launcher_position and not build_foundry:
+        launcher_position = ore_nav.calculate_launcher_position(ore_path, routed_ore)
+    if ore_path and route_idx >= len(ore_path) - 1 and not launcher_position:
         mode = Mode.EXPLORE
         routed += 1
         ore_path = None
 
 
 def run_route():
-    global route_idx, ore_path, launcher_position, mode, build_foundry, routed
-    log(str(ore_path))
-    if not ore_path:
-        ore_path = ore_nav.calculate_conveyor_path(routed_ore, routed_ore, None, False)
-        log("new path " + str(ore_path))
-
-        if ore_path == []:
-            mode = Mode.EXPLORE
-            return
-        route_idx = 0
+    global route_idx, ore_path, launcher_position
     if ore_path:
+        if route_idx < len(ore_path) - 1:
+            new_path = ore_nav.calculate_conveyor_path(ore_path[route_idx], ore_path[:route_idx], True)
+            if new_path:
+                print("new path", new_path, ore_path[:route_idx])
+                ore_path = ore_path[:route_idx] + new_path
+        # for i in range(len(ore_path)):
+        #     if route_idx == i:
+        #         rc.draw_indicator_line(Position(i, -1), ore_path[i], 0, 0, 255)
+        #     else:
+        #         rc.draw_indicator_line(Position(i, -1), ore_path[i], 0, 255, 0)
+            # rc.draw_indicator_line(ore_path[i], ore_path[i + 1], 0, 255, 0)
+            # rc.draw_indicator_dot(ore_path[i], 0, 255, 0)
         if launcher_position:
+            launcher = launcher_position
             place = True
             nearby_conv = None
             for i in range(len(ore_path) - 1):
                 p = ore_path[i]
-                if p.distance_squared(launcher_position) <= 2:
+                if p.distance_squared(launcher) <= 2:
                     nearby_conv = p
                     if route_idx <= i:
                         place = False
 
             if place:
-                if map_info.id_at(launcher_position.x, launcher_position.y) != 0 and map_info.team_at(launcher_position.x, launcher_position.y) != rc.get_team():
-                    if nav.move_to(launcher_position) == False:
-                        mode = Mode.EXPLORE
-                        return
-                    if rc.get_position() == launcher_position and rc.can_fire(launcher_position):
-                        rc.fire(launcher_position)
-                elif nearby_conv:
-                    if nav.move_to(nearby_conv) == False:
-                        mode = Mode.EXPLORE
-                        return
-                    if rc.can_destroy(launcher_position):
-                        log("destroy6 " + str(launcher_position))
-                        rc.destroy(launcher_position)
+                if map_info.building[launcher.x][launcher.y] and map_info.building[launcher.x][
+                    launcher.y].team != rc.get_team():
+                    nav.move_to(launcher)
+                    if rc.get_position() == launcher and rc.can_fire(launcher):
+                        rc.fire(launcher)
+                elif nearby_conv and nearby_conv != launcher:
+                    nav.move_to(nearby_conv)
+                    if rc.can_destroy(launcher):
+                        log("destroy6 " + str(launcher))
+                        rc.destroy(launcher)
                     id = rc.get_tile_building_id(rc.get_position())
-                    if rc.can_build_launcher(launcher_position):
-                        rc.build_launcher(launcher_position)
+                    if rc.get_position() == launcher:
+                        if route_idx < len(ore_path) - 1:
+                            to_build = ore_path[route_idx]
+                            bridge = ore_path[route_idx].distance_squared(ore_path[route_idx + 1]) > 1
+                            dir = ore_path[route_idx].direction_to(ore_path[route_idx + 1])
+                            if to_build.distance_squared(rc.get_position()) <= 2:
+                                if to_build == rc.get_position():
+                                    id = rc.get_tile_building_id(rc.get_position())
+                                    if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
+                                        rc.fire(rc.get_position())
+                                if rc.can_destroy(to_build):
+                                    log("destroy7 " + str(to_build))
+                                    rc.destroy(to_build)
+                                if bridge and rc.can_build_bridge(to_build, ore_path[route_idx + 1]):
+                                    rc.build_bridge(to_build, ore_path[route_idx + 1])
+                                    route_idx += 1
+                                elif not bridge and rc.can_build_conveyor(to_build, dir):
+                                    rc.build_conveyor(to_build, dir)
+                                    route_idx += 1
+                            next = ore_path[route_idx]
+                            if route_idx < len(ore_path) - 1:
+                                nav.move_to(next)
+                    if rc.can_build_launcher(launcher):
+                        rc.build_launcher(launcher)
                 return
-        def attempt_build():
-            global route_idx, ore_path, build_foundry
+
+        if route_idx < len(ore_path) - 1:
+            
             to_build = ore_path[route_idx]
-            next = ore_path[route_idx + 1]
-            bridge = to_build.distance_squared(next) > 1
-            dir = to_build.direction_to(next)
-            if route_idx > 0 and map_info.id_at(to_build.x, to_build.y) != 0 and map_info.team_at(to_build.x, to_build.y) != rc.get_team() and map_info.is_turret(map_info.type_at(to_build.x, to_build.y)):
-                nav.move_to(ore_path[route_idx-1])
-                if rc.can_destroy(ore_path[route_idx-1]):
-                    rc.destroy(ore_path[route_idx-1])
-                    route_idx -= 1
-                    to_build = ore_path[route_idx]
-                    next = ore_path[route_idx + 1]
-                    bridge = to_build.distance_squared(next) > 1
-                    dir = to_build.direction_to(next)
-            print("next", next, to_build, target_foundry)
-            if next == Position(-1, -1):
-                if map_info.id_at(to_build.x, to_build.y) != 0 and map_info.type_at(to_build.x, to_build.y) == EntityType.SPLITTER and map_info.team_at(to_build.x, to_build.y) == rc.get_team():
-                    print("hi here", to_build)
-                    route_idx += 1
-                    if map_info.ground_at(routed_ore.x, routed_ore.y) == Environment.ORE_AXIONITE:
-                        for f in target_foundry:
-                            if to_build.distance_squared(f) == 1:
-                                build_foundry = f
-                                if map_info.id_at(f.x, f.y) != 0 and map_info.type_at(f.x, f.y) == EntityType.FOUNDRY:
-                                    build_foundry = None
-                                    break
-                    return True
+            bridge = ore_path[route_idx].distance_squared(ore_path[route_idx + 1]) > 1
+            dir = ore_path[route_idx].direction_to(ore_path[route_idx + 1])
             if to_build.distance_squared(rc.get_position()) <= 2:
-                print("hi close enough")
                 if to_build == rc.get_position():
                     id = rc.get_tile_building_id(rc.get_position())
                     if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
                         rc.fire(rc.get_position())
-                if rc.can_destroy(to_build):
-                    log("destroy8 " + str(to_build))
-                    rc.destroy(to_build)
-                if next == Position(-1, -1):
-                    if to_build.x == map_info._my_core.x-2:
-                        splitter_dir = Direction.EAST
-                    elif to_build.x == map_info._my_core.x+2:
-                        splitter_dir = Direction.WEST
-                    elif to_build.y == map_info._my_core.y+2:
-                        splitter_dir = Direction.NORTH
-                    else:
-                        splitter_dir = Direction.SOUTH
-                    print("hi", to_build, splitter_dir)
-                    if rc.can_build_splitter(to_build, splitter_dir):
-                        rc.build_splitter(to_build, splitter_dir)
-                        if map_info.ground_at(routed_ore.x, routed_ore.y) == Environment.ORE_AXIONITE:
-                            for f in target_foundry:
-                                if to_build.distance_squared(f) == 1:
-                                    build_foundry = f
-                                    if map_info.id_at(f.x, f.y) != 0 and map_info.type_at(f.x, f.y) == EntityType.FOUNDRY:
-                                        build_foundry = None
-                                        break
-                        route_idx += 1
-                        return True
-                elif bridge and rc.can_build_bridge(to_build, ore_path[route_idx + 1]):
+            
+                if bridge and permissive_can_build_bridge(to_build, ore_path[route_idx + 1]):
+                    if rc.can_destroy(to_build):
+                        log("destroy8 " + str(to_build))
+                        rc.destroy(to_build)
                     rc.build_bridge(to_build, ore_path[route_idx + 1])
-                    if route_idx == 0:
-                        map_info.my_conveyors.add((to_build, routed_ore))
                     route_idx += 1
-                    return True
-                elif not bridge and rc.can_build_conveyor(to_build, dir):
+                elif not bridge and permissive_can_build_conveyor(to_build, dir):
+                    # if route_idx == len(ore_path)-2 and route_idx != 0 and ore_path[route_idx + 1].distance_squared(map_info.my_core) <= 2:
+                    #     if rc.can_build_splitter(to_build, ore_path[route_idx-1].direction_to(ore_path[route_idx])):
+                    #         rc.build_splitter(to_build, ore_path[route_idx-1].direction_to(ore_path[route_idx]))
+                    #         route_idx += 1
+                    # else:
+                    if rc.can_destroy(to_build):
+                        log("destroy8 " + str(to_build))
+                        rc.destroy(to_build)
                     rc.build_conveyor(to_build, dir)
-                    if route_idx == 0:
-                        map_info.my_conveyors.add((to_build, routed_ore))
                     route_idx += 1
-                    return True
-            return False
-        if route_idx < len(ore_path) - 1:
-            if route_idx >= len(ore_path) - 1:
-                return
-            attempt_build()
+                elif not bridge:
+                    if (rc.can_build_road(to_build) and rc.is_tile_empty(to_build)):
+                        rc.build_road(to_build)
+            next = ore_path[route_idx]
+            if route_idx < len(ore_path) - 1:
+                nav.move_to(next)
 
-            if nav.move_to(ore_path[route_idx]) == False:
-                mode = Mode.EXPLORE
-                routed += 1
-                return
-        if build_foundry:
-            adjacent = set()
-            for dir in all_dirs:
-                if dir == Direction.CENTRE:
-                    continue
-                if map_info.is_passable(build_foundry.add(dir)):
-                    adjacent.add(build_foundry.add(dir))
-            if nav.move_to(adjacent) == False:
-                mode = Mode.EXPLORE
-                routed += 1
-                return
-            if rc.can_destroy(build_foundry):
-                rc.destroy(build_foundry)
-            if rc.can_build_foundry(build_foundry):
-                rc.build_foundry(build_foundry)
-                build_foundry = None
+def permissive_can_build_bridge(to_build, target):
+    if rc.can_build_bridge(to_build, target):
+        return True
+    if rc.can_destroy(to_build) and rc.get_global_resources()[0] >= rc.get_bridge_cost()[0]:
+        return True
+    return False
+def permissive_can_build_conveyor(to_build, dir):
+    if rc.can_build_conveyor(to_build, dir):
+        return True
+    if rc.can_destroy(to_build) and rc.get_global_resources()[0] >= rc.get_conveyor_cost()[0]:
+        return True
+    return False
 
 def check_sabotage():
     global mode, opponent_ore, defended_ores
@@ -1170,7 +1163,7 @@ def check_sabotage():
         adj = Position(opponent_ore.x + dx, opponent_ore.y + dy)
 
         # Only consider tiles on map AND in vision
-        if not map_info.in_bounds(adj):
+        if not map_info.is_on_map(adj):
             continue
         if rc.get_position().distance_squared(adj) > rc.get_vision_radius_sq():
             continue
@@ -1194,7 +1187,7 @@ def run_sabotage():
     for dx in range(-2, 3):
         for dy in range(-2, 3):
             candidate = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.in_bounds(candidate):
+            if not map_info.is_on_map(candidate):
                 continue
             if my_pos.distance_squared(candidate) > 2:
                 continue
@@ -1203,7 +1196,7 @@ def run_sabotage():
             adjacent_enemy_harvester = False
             for d, (n_dx, n_dy) in CARDINAL_DELTAS:
                 neighbor = Position(candidate.x + n_dx, candidate.y + n_dy)
-                if not map_info.in_bounds(neighbor):
+                if not map_info.is_on_map(neighbor):
                     continue
                 neighbor_id = rc.get_tile_building_id(neighbor)
                 if neighbor_id is not None and rc.get_entity_type(neighbor_id) == EntityType.HARVESTER:
@@ -1221,7 +1214,7 @@ def run_sabotage():
     adjacent_tiles = []
     for d, (dx, dy) in CARDINAL_DELTAS:
         adj = Position(opponent_ore.x + dx, opponent_ore.y + dy)
-        if map_info.in_bounds(adj):
+        if map_info.is_on_map(adj):
             adjacent_tiles.append(adj)
 
     empty_tile = None
@@ -1290,3 +1283,87 @@ def check_heal_core():
     pass
 def run_heal_core():
     pass
+
+def check_cut_supply():
+    """
+    Re-verify the cut_supply_target is still valid:
+    - Our building still exists there
+    - It's still adjacent to an enemy sentinel
+    If not, clear the target and go back to EXPLORE.
+    """
+    global mode, cut_supply_target
+
+    if cut_supply_target is None:
+        mode = Mode.EXPLORE
+        return
+
+    my_pos = rc.get_position()
+
+    # If target is out of vision, keep heading toward it
+    if cut_supply_target.distance_squared(my_pos) > rc.get_vision_radius_sq():
+        return
+
+    # Check our building still exists
+    building_id = rc.get_tile_building_id(cut_supply_target)
+    if building_id is None or rc.get_team(building_id) != rc.get_team():
+        cut_supply_target = None
+        mode = Mode.EXPLORE
+        return
+
+    # Check there's still an enemy sentinel adjacent
+    has_enemy_sentinel = False
+    for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+        adj = Position(cut_supply_target.x + dx, cut_supply_target.y + dy)
+        if not map_info.is_on_map(adj):
+            continue
+        if adj.distance_squared(my_pos) > rc.get_vision_radius_sq():
+            continue
+        adj_id = rc.get_tile_building_id(adj)
+        if adj_id is None:
+            continue
+        if rc.get_team(adj_id) != rc.get_team() and rc.get_entity_type(adj_id) == EntityType.SENTINEL:
+            has_enemy_sentinel = True
+            break
+
+    if not has_enemy_sentinel:
+        cut_supply_target = None
+        mode = Mode.EXPLORE
+
+
+def run_cut_supply():
+    """
+    Move to our building that's feeding an enemy sentinel and destroy it.
+    Also destroy any other of our buildings in the area feeding enemy sentinels.
+    """
+    global cut_supply_target, mode
+
+    if cut_supply_target is None:
+        mode = Mode.EXPLORE
+        return
+
+    my_pos = rc.get_position()
+    rc.draw_indicator_line(my_pos, cut_supply_target, mode.r, mode.g, mode.b)
+
+    # If we're adjacent (dist <= 2), try to destroy it
+    if my_pos.distance_squared(cut_supply_target) <= 2:
+        if rc.can_destroy(cut_supply_target):
+            log(f"Destroying our building at {cut_supply_target} to cut enemy supply")
+            rc.destroy(cut_supply_target)
+            # Also fire at any enemy sentinel we can hit
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                adj = Position(cut_supply_target.x + dx, cut_supply_target.y + dy)
+                if not map_info.is_on_map(adj):
+                    continue
+                adj_id = rc.get_tile_building_id(adj)
+                if adj_id and rc.get_team(adj_id) != rc.get_team() and rc.can_fire(adj):
+                    rc.fire(adj)
+                    break
+            cut_supply_target = None
+            mode = Mode.EXPLORE
+            return
+        elif rc.can_fire(cut_supply_target):
+            rc.fire(cut_supply_target)
+            return
+    else:
+        # Move toward the target
+        nav.move_to(cut_supply_target)

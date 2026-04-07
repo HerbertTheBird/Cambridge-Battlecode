@@ -28,6 +28,7 @@ def log(text : str):
     print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {text}")
 
 mode = Mode.EXPLORE
+mode_memory = mode
 indicator = []
 routed = 0
 blocked_ores = {}
@@ -100,18 +101,38 @@ def run_pre():
     - Self-healing is still performed as a fallback.
     """
     global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, cut_supply_target
+    global mode_memory
 
     map_info.update()
     my_pos = rc.get_position()
 
-    # --- Step 0: Heal self if possible (fallback) ---
-    if map_info.my_core and map_info.building[map_info.my_core.x][map_info.my_core.y] and map_info.building[map_info.my_core.x][map_info.my_core.y].hp < 500 and rc.get_position().distance_squared(map_info.my_core) <= 2:
-        if rc.can_heal(my_pos):
-            rc.heal(my_pos)
-        mode = Mode.HEAL_CORE
-        return
+    # --- Step 0: Core-aware healing logic ---
+
+    core = map_info.my_core
+
+    if core:
+        dist_to_core = my_pos.distance_squared(core)
+
+        # If we are within 3x3 of the core, prioritize self-heal
+        if dist_to_core <= 2:
+            if rc.can_heal(my_pos):
+                rc.heal(my_pos)
+                return
+
+        # Otherwise try to heal the tile toward the core
+        dir_to_core = my_pos.direction_to(core)
+        target_tile = my_pos.add(dir_to_core)
+
+        # Check if that tile lies within core's 3x3
+        if target_tile.distance_squared(core) <= 2:
+            if rc.can_heal(target_tile):
+                rc.heal(target_tile)
+                return
+
+    # Fallback self-heal
     if rc.can_heal(my_pos):
         rc.heal(my_pos)
+
 
     # --- Step 0.5: Scan for our buildings feeding enemy sentinels ---
     # Enemy sentinels get ammo from cardinally adjacent conveyors/harvesters.
@@ -154,27 +175,44 @@ def run_pre():
         log(f"Found our building at {best_cut_target} feeding enemy sentinel, cutting supply")
         return
 
-    # --- Step 1: If we already have a repair target, switch to HEAL mode ---
-    if repair_target is not None:
-        mode = Mode.HEAL
-        return  # permanent state, run() or run_heal() will handle movement/healing
+    # --- Step 1: Recompute repair target every turn ---
+    repair_target = None
+    best_score = float('inf')
 
     # --- Step 2: Scan for damaged allied conveyors/bridges ---
     for pos in rc.get_nearby_tiles():
         building_id = rc.get_tile_building_id(pos)
         if building_id is None:
             continue
+
         if rc.get_team(building_id) != rc.get_team():
             continue
+
         b_type = rc.get_entity_type(building_id)
         if b_type not in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE):
             continue
-        if rc.get_hp(building_id) < rc.get_max_hp(building_id):
-            # First damaged tile seen becomes permanent repair target
+
+        hp = rc.get_hp(building_id)
+        max_hp = rc.get_max_hp(building_id)
+
+        if hp >= max_hp:
+            continue
+
+        # Compute score
+        dist_sq = my_pos.distance_squared(pos)
+        score = dist_sq + ((max_hp - hp) / max_hp) * 10
+
+        if score < best_score:
+            best_score = score
             repair_target = pos
-            mode = Mode.HEAL
-            log(f"Repair target set at {repair_target}, switching to HEAL mode")
-            return
+
+    # --- Step 3: Switch mode if we found a target ---
+    if repair_target:
+        if mode != Mode.HEAL:
+            mode_memory = mode
+        mode = Mode.HEAL
+        log(f"Repair target set at {repair_target} with score {best_score}, switching to HEAL mode")
+
 
     # Clean up expired blocks
     current_round = rc.get_current_round()
@@ -230,7 +268,7 @@ def run_pre():
                 try:
                     building_type = rc.get_entity_type(building_id)
                     building_team = rc.get_team(building_id)
-                    if building_type == EntityType.HARVESTER and building_team == rc.get_team() or building_type == EntityType.BARRIER:
+                    if building_type == EntityType.HARVESTER and building_team == rc.get_team():
                         blocked = True
                     if building_type != EntityType.MARKER and building_team != rc.get_team():
                         occupied_opponent = True
@@ -293,7 +331,10 @@ def run_post():
     pass
 
 def check_heal():
-    pass
+    global mode
+    if not repair_target:
+        mode = mode_memory
+    log(repair_target)
 
 def run_heal():
     """
@@ -385,7 +426,7 @@ def run_heal():
 def force_generate_explore_target():
     global explore_target, turns_since_last_explore_target
     turns_since_last_explore_target = 0
-
+    
     for _ in range(2):  # slightly more aggressive
         random_x = random.randint(0, map_info.width - 1)
         random_y = random.randint(0, map_info.height - 1)
@@ -394,9 +435,17 @@ def force_generate_explore_target():
             return
 
     # If no empty tile found after 100 tries, fallback to completely random
+    round_num = rc.get_current_round()
+    go_attack = (
+        (round_num > 1500 and rc.get_id() % 2 == 0) or
+        (round_num > 1000 and rc.get_id() % 3 == 0)
+    )
+    if (go_attack):
+        explore_target = map_info.predicted_enemy_core
     random_x = random.randint(0, map_info.width - 1)
     random_y = random.randint(0, map_info.height - 1)
     explore_target = Position(random_x, random_y)
+    
 
 
 # check block
@@ -681,10 +730,12 @@ def run_explore():
     moved = False
     attempts = 0
     while not moved and attempts < 1:
-        has_moved = nav.move_to(explore_target)
-        if has_moved == False:
+        path_exists = nav.calculate_path(explore_target)
+        if path_exists:
+            nav.execute_path()
+        elif path_exists is not None:
             force_generate_explore_target()
-        elif has_moved:
+        else:
             break
         attempts += 1
 
@@ -816,7 +867,7 @@ def run_build_harvester():
                                     ore_sentinel_count[ore_key] = 1
                                     return
 
-                    if routed >= 10 and pos.x % 2 == 0 and expected_finish and built_count != 0:
+                    if routed >= 1 and pos.x % 2 == 0 and expected_finish and built_count != 0:
                         if rc.can_build_sentinel(pos, pos.direction_to(target_ore).rotate_right()):
                             rc.build_sentinel(pos, pos.direction_to(target_ore).rotate_right())
                             return
