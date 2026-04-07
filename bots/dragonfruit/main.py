@@ -1,5 +1,6 @@
 import random
 import sys
+import traceback
 
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType, Team
 
@@ -39,6 +40,7 @@ class Player:
         self.timeout_turns = 0
         self.has_explored_first_destination = False
         self.last_fired_round = 0
+        self.skipped_firing_turns = 0
         self.harvest_ore_type: ResourceType | None = None
         self.harvest_ore_pos: Position | None = None   # position of the ore/harvester we're chaining from
         self.foundry_pos: Position | None = None
@@ -1036,7 +1038,7 @@ class Player:
                                 # Abort if the same allied turret we would build is already here.
                                 if (bid_team == self.my_team
                                     and bid_etype in TURRET_TYPES
-                                    and bid_etype == get_best_turret_type(intercept_pos, enemy_core_anchor)
+                                    and bid_etype == get_best_turret_type(intercept_pos, enemy_core_anchor, ct, None, self.map)
                                     and ct.get_direction(bid) == direction):
                                     clear_state(self, )
                                 # Skip if the building feeds one of our turrets
@@ -1060,10 +1062,10 @@ class Player:
                                     bbid = ct.get_tile_builder_bot_id(intercept_pos)
                                     if (bbid is None or bbid == ct.get_id()) and ct.can_destroy(intercept_pos) and safe_destroy(self, ct, intercept_pos, vc):
                                         log("destroyed to build turret")
-                                    if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor):
+                                    if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor, enemy_pos, self.map):
                                         clear_state(self, )
                             else:
-                                if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor):
+                                if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor, enemy_pos, self.map):
                                     clear_state(self, )
 
 
@@ -1272,7 +1274,8 @@ class Player:
 
     def run_turret(self, ct: Controller, my_pos: Position, vc) -> None:
         if self.last_fired_round == 0:
-             self.last_fired_round = ct.get_current_round()
+            self.last_fired_round = ct.get_current_round()
+
         target = choose_target(ct, my_pos, vc)
         log("turret target:", target)
         
@@ -1284,13 +1287,20 @@ class Player:
                 ct.fire(target)
                 log(f"turret fired at {target}")
                 self.last_fired_round = ct.get_current_round()
+                self.skipped_firing_turns = 0
+        elif ct.get_ammo_amount() >= 10 and ct.get_action_cooldown() == 0:
+            self.skipped_firing_turns += 1
         
-        if ct.get_current_round() - self.last_fired_round >= 20:
-            if len(vc.enemy_units) > 0:
-                self.last_fired_round = ct.get_current_round()
-                return
-            if ct.get_scale_percent() > 500:
+        
+        if len(vc.enemy_conveyors) > 0 and len(vc.ally_builder_bots) > 0:
+            if self.skipped_firing_turns >= 2:
                 ct.self_destruct()
+        else:
+            if self.skipped_firing_turns >= 16:
+                if len(vc.enemy_units) > 0:
+                    self.last_fired_round = ct.get_current_round()
+                if (ct.get_scale_percent() > 500 or self.skipped_firing_turns >= 32) and len(vc.ally_builder_bots) > 0:
+                    ct.self_destruct()
 
     def run_gunner(self, ct: Controller, my_pos: Position, vc) -> None:
         if self.last_fired_round == 0:
@@ -1303,6 +1313,7 @@ class Player:
             ct.fire(target)
             log(f"gunner fired at {target}")
             self.last_fired_round = ct.get_current_round()
+            self.skipped_firing_turns = 0
         else:
             if self.global_titanium <= GameConstants.GUNNER_ROTATE_COST[0] + 50:
                 current_dir = ct.get_direction()
@@ -1322,13 +1333,17 @@ class Player:
                         rotate_dir = desired_dir
                 if rotate_dir is not None and ct.can_rotate(rotate_dir):
                     ct.rotate(rotate_dir)
+                    self.skipped_firing_turns = 0
                     log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+        if ct.get_ammo_amount() >= 2 and ct.get_action_cooldown() == 0:
+            self.skipped_firing_turns += 1
+                    
 
-        if ct.get_current_round() - self.last_fired_round >= 20:
+        if self.skipped_firing_turns >= 8:
             if len(vc.enemy_units) > 0:
                 self.last_fired_round = ct.get_current_round()
-                return
-            if ct.get_scale_percent() > 500:
+                self.skipped_firing_turns -= 1
+            if (ct.get_scale_percent() > 500 or self.skipped_firing_turns >= 16) and len(vc.ally_builder_bots) > 0:
                 ct.self_destruct()
                 
     def run_launcher(self, ct: Controller, my_pos: Position, vc) -> None:
@@ -1498,3 +1513,4 @@ class Player:
 
         except Exception as e:
             print(f"Error: {e} on turn {ct.get_current_round()} by {self.etype}, ID: {ct.get_id()}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
