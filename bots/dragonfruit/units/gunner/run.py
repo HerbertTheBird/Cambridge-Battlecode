@@ -1,13 +1,13 @@
 from cambc import Controller, Position, GameConstants
 
 from globals import *
-from combat import choose_gunner_target
+from units.gunner.combat import choose_gunner_target
 from helpers import *
 from log import log
 
 def run_gunner(player, ct: Controller, my_pos: Position, vc) -> None:
     if player.last_fired_round == 0:
-            player.last_fired_round = ct.get_current_round()
+        player.last_fired_round = ct.get_current_round()
 
     target = choose_gunner_target(ct, my_pos, player.my_team)
     log("gunner target:", target)
@@ -40,7 +40,6 @@ def run_gunner(player, ct: Controller, my_pos: Position, vc) -> None:
                 log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
     if ct.get_action_cooldown() == 0:
         player.skipped_firing_turns += 1
-                
 
     if player.skipped_firing_turns >= 8:
         if len(vc.enemy_units) > 0:

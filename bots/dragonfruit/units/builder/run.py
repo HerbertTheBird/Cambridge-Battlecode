@@ -1,8 +1,7 @@
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType
 
 from globals import *
-from combat import *
-from helpers import *
+from helpers import (get_cardinal_direction_into_core, get_foundry_positions)
 from units.builder.build import *
 from units.builder.logic import *
 from log import log, log_time

@@ -43,3 +43,21 @@ SPAWN_WEALTHY_BUILDER_MULT = 5
 SPAWN_THREATENED_RESOURCE_MIN = 500
 SPAWN_THREATENED_BUILDER_MULT = 2
 SPAWN_WEALTHY_INTERVAL = 2
+
+TURRET_PRIORITY = {
+    EntityType.CORE: 0,
+    EntityType.BUILDER_BOT: 1,
+    EntityType.BREACH: 2,
+    EntityType.GUNNER: 3,
+    EntityType.SENTINEL: 3,
+}
+
+TURRET_PASSIVE_PRIORITY = {
+    EntityType.LAUNCHER: 0,
+    EntityType.BRIDGE: 1,
+    EntityType.CONVEYOR: 2,
+    EntityType.SPLITTER: 3,
+    EntityType.BARRIER: 4,
+    EntityType.ARMOURED_CONVEYOR: 5,
+    EntityType.ROAD: 6,
+}
