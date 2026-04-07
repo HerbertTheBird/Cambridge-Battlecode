@@ -41,8 +41,8 @@ DIRS: list[Step] = [
 ]
 
 bridge_cost = 10
-barrier_cost = 5
-adj_launch_cost = 10
+barrier_cost = 15
+adj_launch_cost = 20
 CONV: list[Step] = [
     (0, -1, 1),
     (0, 1, 1),
@@ -149,6 +149,7 @@ class Pathing:
             return False
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos):
             rc.destroy(new_pos)
+            map_info.note_destroy(new_pos)
             self.destroyed_barriers[new_pos] = rc.get_current_round()
         if rc.can_build_road(new_pos):
             rc.build_road(new_pos)
@@ -162,15 +163,24 @@ class Pathing:
         rc = self.rc
         print("broken", self.destroyed_barriers)
         built = []
+        barrier_cost = rc.get_barrier_cost()[0]
+        my_pos = rc.get_position()
         for p in self.destroyed_barriers:
             if not rc.is_in_vision(p):
                 continue
             if self.destroyed_barriers[p]+2 > rc.get_current_round():
                 continue
+            if p == my_pos:
+                continue
+            if rc.get_global_resources()[0] < barrier_cost:
+                continue
             id = rc.get_tile_building_id(p)
             if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p):
+                print("barrier place break", p)
                 rc.destroy(p)
+                map_info.note_destroy(p)
             if rc.can_build_barrier(p):
+                print("barrier place", p)
                 rc.build_barrier(p)
                 built.append(p)
         print("put back", built)
@@ -471,35 +481,17 @@ class Pathing:
         path = self.calculate_path(target, avoid)
         marked = False
         rc = self.rc
-
-        for dr, (dx, dy) in ALL_DIRS_DELTAS:
-            pos = Position(my_pos.x + dx, my_pos.y + dy)
-            if not map_info.in_bounds(pos):
-                continue
-            id = rc.get_tile_building_id(pos)
-            if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team() and pos not in self.forget_launcher:
-                for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
-                    p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
-                    if not map_info.in_bounds(p2):
-                        continue
-                    if rc.can_place_marker(p2):
-                        closest = None
-                        for t in target:
-                            if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
-                                closest = t
-                        rc.place_marker(p2, comms.encode_launch(closest))
-                        self.forget_launcher.add(pos)
-                        marked = True
-                        break
-                if not marked:
+        if len(self.destroyed_barriers) == 0:
+            for dr, (dx, dy) in ALL_DIRS_DELTAS:
+                pos = Position(my_pos.x + dx, my_pos.y + dy)
+                if not map_info.in_bounds(pos):
+                    continue
+                id = rc.get_tile_building_id(pos)
+                if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team() and pos not in self.forget_launcher:
                     for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
                         p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
                         if not map_info.in_bounds(p2):
                             continue
-                        id2 = rc.get_tile_building_id(p2)
-                        if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(
-                                id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
-                            rc.destroy(p2)
                         if rc.can_place_marker(p2):
                             closest = None
                             for t in target:
@@ -509,10 +501,29 @@ class Pathing:
                             self.forget_launcher.add(pos)
                             marked = True
                             break
+                    if not marked:
+                        for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
+                            p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
+                            if not map_info.in_bounds(p2):
+                                continue
+                            id2 = rc.get_tile_building_id(p2)
+                            if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(
+                                    id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
+                                rc.destroy(p2)
+                                map_info.note_destroy(p2)
+                            if rc.can_place_marker(p2):
+                                closest = None
+                                for t in target:
+                                    if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
+                                        closest = t
+                                rc.place_marker(p2, comms.encode_launch(closest))
+                                self.forget_launcher.add(pos)
+                                marked = True
+                                break
+                if marked:
+                    break
             if marked:
-                break
-        if marked:
-            return
+                return
         if path is None:
             return None
         if len(path) < 1:
@@ -524,11 +535,22 @@ class Pathing:
 
     def calculate_conveyor_path(self, start: Position, ore: Position, avoid_extra: Collection[Position] | None = None, update: bool = False):
         print("conveyors from ", start)
+        target, avoid = self._get_conveyor_targets_and_avoid(ore, avoid_extra)
+        if len(target) == 0:
+            return []
+        self.calculate_path(target, avoid, start, CONV, not update)
+        if self.path is None or len(self.path) < 1:
+            return self.path
+        if self.path[-1] in builder.target_splitters:
+            self.path.append(Position(-1, -1))
+        return self.path
+
+
+    def _get_conveyor_targets_and_avoid(self, ore: Position, avoid_extra: Collection[Position] | None = None):
         core = map_info._my_core
         if not avoid_extra:
             avoid_extra = []
         target = set()
-        # FIX: cache frequently-used references for the loop
         width_l        = map_info._width
         height_l       = map_info._height
         my_team        = self.rc.get_team()
@@ -547,21 +569,14 @@ class Pathing:
             if map_info.load_at(s.x, s.y) <= 3 and map_info.can_route(s.x, s.y):
                 target.add(s)
         if len(target) == 0:
-            return []
+            return set(), set()
         print(ore_type, target)
         avoid = map_info.get_avoid(True, False, True)
         avoid.update(builder.target_foundry)
         avoid.update(builder.target_splitters)
         for p in avoid_extra:
             avoid.add(p)
-        self.calculate_path(target, avoid, start, CONV, not update)
-        if self.path is None or len(self.path) < 1:
-            return self.path
-        if self.path[-1] in builder.target_splitters:
-            self.path.append(Position(-1, -1))
-        return self.path
-
-
+        return target, avoid
     def calculate_launcher_position(self, path: list[Position], ore: Position) -> Position | None:
         return None
         if self.rc.get_unit_count() == 50: #maybe remove later, but if we hit cap, i literally cant place more launchers

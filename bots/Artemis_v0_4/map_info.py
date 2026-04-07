@@ -40,12 +40,14 @@ _ET_HARVESTER         = EntityType.HARVESTER
 _ET_GUNNER            = EntityType.GUNNER
 _ET_SENTINEL          = EntityType.SENTINEL
 _ET_BREACH            = EntityType.BREACH
+_ET_LAUNCHER          = EntityType.LAUNCHER
 _ENV_EMPTY   = Environment.EMPTY
 _ENV_ORE_AX  = Environment.ORE_AXIONITE
 _ENV_ORE_TI  = Environment.ORE_TITANIUM
 # --- FIX 7: pre-cache Direction members to avoid repeated enum iteration.
 _DIR_CENTRE = Direction.CENTRE
 _ALL_DIRECTIONS = tuple(Direction)
+_ALL_DIRECTION_DELTAS = tuple(d.delta() for d in _ALL_DIRECTIONS)
 _CARDINAL_OFFSETS = {
     Direction.NORTH: (0, -1),
     Direction.SOUTH: (0, 1),
@@ -78,6 +80,8 @@ building_blocked_no_conveyors: set[Position] = set()
 building_blocked_no_barrier_no_conveyors: set[Position] = set()
 my_core_area: set[Position] = set()
 their_core_area: set[Position] = set()
+enemy_launch: set[Position] = set()
+enemy_launch_adj: set[Position] = set()
 # --- FIX 3: slots=True eliminates per-instance __dict__.
 @dataclass(slots=True)
 class Building:
@@ -101,7 +105,7 @@ def init(c: Controller):
     global ground_blocked_all, ground_blocked_no_ore
     global building_blocked_all, building_blocked_no_barrier
     global building_blocked_no_conveyors, building_blocked_no_barrier_no_conveyors
-    global my_core_area, their_core_area
+    global my_core_area, their_core_area, enemy_launch, enemy_launch_adj
     global MAP_CENTER
     rc = c
     width = rc.get_map_width()
@@ -121,6 +125,8 @@ def init(c: Controller):
     building_blocked_no_barrier_no_conveyors = set()
     my_core_area = set()
     their_core_area = set()
+    enemy_launch = set()
+    enemy_launch_adj = set()
 def hor_flip(pos: Position):
     return Position(width - 1 - pos.x, pos.y)
 def ver_flip(pos: Position):
@@ -360,6 +366,7 @@ def update() -> None:
     et_gunner    = _ET_GUNNER
     et_marker  = _ET_MARKER
     et_barrier = _ET_BARRIER
+    et_launcher = _ET_LAUNCHER
     et_core    = _ET_CORE
     prev_round = current_round - 1
     # --- FIX 11: keep frozenset references local.
@@ -368,6 +375,8 @@ def update() -> None:
     hdir_vals  = _has_direction_vals
     hvis_vals  = _has_vision_vals
     hbt_vals   = _has_bridge_target_vals
+    enemy_launch_local = enemy_launch
+    enemy_launch_adj_local = enemy_launch_adj
     for tile in visible_tiles:
         x = tile.x
         y = tile.y
@@ -417,7 +426,10 @@ def update() -> None:
                         gb_nore_add(flipped)
         entity_id = rc_get_tile_building_id(tile)
         if entity_id is None:
-            if building_local[x][y] is not None:
+            prev_building = building_local[x][y]
+            if prev_building is not None:
+                if prev_building.type is et_launcher and prev_building.team != my_team:
+                    enemy_launch_local.discard(tile)
                 building_local[x][y] = None
                 # --- FIX 14: inlined _update_building_blocked_at for None building.
                 bb_all_discard(tile)
@@ -466,6 +478,10 @@ def update() -> None:
         # This skips 5+ rc.get_*() C-API calls and a Building() allocation per tile.
         
         team = rc_get_team(entity_id)
+        if entity_type is et_launcher and team != my_team:
+            enemy_launch_local.add(tile)
+        else:
+            enemy_launch_local.discard(tile)
         # if entity_type == _ET_CORE and team != my_team:
         #     # do smth
         if prev_building is not None and prev_building.id == entity_id:
@@ -590,6 +606,15 @@ def update() -> None:
                     predicted_enemy_core = vsym_core
                 else:
                     predicted_enemy_core = hsym_core
+    enemy_launch_adj_local.clear()
+    for launcher_pos in enemy_launch_local:
+        lx = launcher_pos.x
+        ly = launcher_pos.y
+        for dx, dy in _ALL_DIRECTION_DELTAS:
+            nx = lx + dx
+            ny = ly + dy
+            if 0 <= nx < width and 0 <= ny < height:
+                enemy_launch_adj_local.add(Position(nx, ny))
 
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (rc.is_tile_empty(pos) or (rc.get_tile_building_id(pos) != None and rc.get_entity_type(rc.get_tile_building_id(pos)) is _ET_MARKER))

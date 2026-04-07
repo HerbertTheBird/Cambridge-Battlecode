@@ -26,6 +26,11 @@ class Mode(Enum):
 def log(text):
     print(f" <span style='color: #{mode.r:02x}{mode.g:02x}{mode.b:02x}'>|</span> {str(text)}")
 
+
+def destroy_building(pos: Position):
+    rc.destroy(pos)
+    map_info.note_destroy(pos)
+
 mode = Mode.EXPLORE
 indicator = []
 routed = 0
@@ -58,6 +63,7 @@ ore_path = None
 launcher_position = None
 route_idx = 0
 build_foundry = None
+titanium = 0
 
 target_foundry = set()
 target_splitters = set()
@@ -104,9 +110,10 @@ def run_pre():
     - Self-healing is still performed as a fallback.
     """
     global target_ore, blocked_ores, sabotage_ore, opponent_ore, repair_target, mode, target_foundry, target_splitters
-    global mode_memory
+    global mode_memory, titanium
 
     map_info.update()
+    titanium = rc.get_global_resources()[0]
     if not map_info._my_core:
         rc.self_destruct()
     nav.rebuild_broken_barriers()
@@ -339,7 +346,7 @@ def run_heal():
             pos = Position(repair_target.x + dx, repair_target.y + dy)
             if not map_info.in_bounds(pos):
                 continue
-            if rc.is_in_vision(pos):
+            if not rc.is_in_vision(pos):
                 continue
             surrounding_tiles.append(pos)
             building_id = rc.get_tile_building_id(pos)
@@ -513,8 +520,13 @@ def run_build_trap():
             rc.build_barrier(tile)
             return
             rc.draw_indicator_dot(tile, 255, 0, 0)
-        elif rc.is_tile_passable(tile) and rc.can_destroy(tile):
-            rc.destroy(tile)
+        elif (
+            rc.is_tile_passable(tile)
+            and tile != rc.get_position()
+            and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]
+            and rc.can_destroy(tile)
+        ):
+            destroy_building(tile)
             if (rc.can_build_barrier(tile)):
                 rc.build_barrier(tile)
                 return
@@ -564,8 +576,13 @@ def run_build_trap():
     if rc.can_build_barrier(escape_tile):
         rc.build_barrier(escape_tile)
         rc.draw_indicator_dot(escape_tile, 255, 0, 0)
-    elif rc.is_tile_passable(escape_tile) and rc.can_destroy(escape_tile):
-            rc.destroy(escape_tile)
+    elif (
+        rc.is_tile_passable(escape_tile)
+        and escape_tile != rc.get_position()
+        and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]
+        and rc.can_destroy(escape_tile)
+    ):
+            destroy_building(escape_tile)
             if (rc.can_build_barrier(escape_tile)):
                 rc.build_barrier(escape_tile)
 
@@ -696,6 +713,29 @@ def run_explore_athena():
 last_placed_launcher = None
 launcher_count = 0
 ore_sentinel_count = {} 
+
+
+def get_needed_barrier_tiles(ore: Position) -> list[Position]:
+    needed = []
+    if not rc.is_in_vision(ore):
+        return needed
+    for _, (dx, dy) in CARDINAL_DELTAS:
+        pos = Position(ore.x + dx, ore.y + dy)
+        if not map_info.in_bounds(pos):
+            continue
+        if not rc.is_in_vision(pos):
+            continue
+        if map_info.ground_at(pos.x, pos.y) == Environment.WALL:
+            continue
+        if map_info.can_place_at_restrictive(pos):
+            needed.append(pos)
+    return needed
+
+
+def has_harvester_reserve(barriers_needed: int) -> bool:
+    return rc.get_global_resources()[0] >= rc.get_harvester_cost()[0] * 2 + rc.get_barrier_cost()[0] * barriers_needed * 2
+
+
 def run_explore():
     global explore_target, turns_since_last_explore_target, last_placed_launcher, launcher_count
     my_pos = rc.get_position()
@@ -752,15 +792,16 @@ def run_explore():
 def run_build_harvester():
     global mode, target_ore, blocked_ores, ore_sentinel_count, build_foundry
     log("try build on " + str(target_ore))
-    if target_ore is None or rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2 + rc.get_barrier_cost()[0]*8:
+    if target_ore is None:
         mode = Mode.EXPLORE
         return
+    adjacent_tiles = [Position(target_ore.x + dx, target_ore.y + dy) for _, (dx, dy) in CARDINAL_DELTAS]
+    needed_barrier_tiles = get_needed_barrier_tiles(target_ore)
+    can_commit_build = has_harvester_reserve(len(needed_barrier_tiles))
     if sabotage_ore and sabotage_ore != target_ore:
         if rc.can_build_barrier(sabotage_ore):
             rc.build_barrier(sabotage_ore)
             return
-
-    adjacent_tiles = [Position(target_ore.x + dx, target_ore.y + dy) for _, (dx, dy) in CARDINAL_DELTAS]
 
     perimeter_secure = True
     wall_count = 0
@@ -791,15 +832,15 @@ def run_build_harvester():
         if not is_barrier:
             perimeter_secure = False
 
-    if opponent_sabotaged:
+    if opponent_sabotaged and can_commit_build:
         global blocked_ores
         if target_ore.distance_squared(rc.get_position()) < rc.get_vision_radius_sq():
             building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_entity_type(
                     building_id) != EntityType.BARRIER and rc.can_destroy(target_ore) and not map_info.is_turret(rc.get_entity_type(
-                    building_id)):
+                    building_id)) and titanium >= rc.get_barrier_cost()[0]:
                 log("destroy1 " + str(target_ore))
-                rc.destroy(target_ore)
+                destroy_building(target_ore)
             if rc.can_build_barrier(target_ore):
                 rc.build_barrier(target_ore)
                 blocked_ores[target_ore] = rc.get_current_round() + 150
@@ -812,6 +853,11 @@ def run_build_harvester():
     
     scale = 1.0
     if not perimeter_secure and wall_count < 4:
+        if not can_commit_build:
+            nav.move_to(target_ore)
+            if rc.can_place_marker(target_ore):
+                rc.place_marker(target_ore, comms.encode_claim(target_ore))
+            return
         # Try to build from our current position if we are close enough to an insecure spot.
         for pos in adjacent_tiles:
             # Check if this tile needs a barrier and if we are next to it.
@@ -820,40 +866,29 @@ def run_build_harvester():
                 is_wall = not map_info.in_bounds(pos) or rc.get_tile_env(pos) == Environment.WALL
                 if is_wall: continue
 
-                building_id = rc.get_tile_building_id(pos)
-                is_our_barrier = False
-                if building_id:
-                    try:
-                        if rc.get_entity_type(building_id) in OUR_BUILDINGS:
-                            is_our_barrier = True
-                    except GameError:
-                        pass
-
-                if not is_our_barrier:
+                if pos in needed_barrier_tiles:
                     # This tile needs a barrier. Can we build/destroy?
+                    building_id = rc.get_tile_building_id(pos)
                     if building_id and rc.get_team(building_id) == rc.get_team() and not map_info.is_turret(rc.get_entity_type(building_id)):
-                        if rc.can_destroy(pos):
+                        if rc.can_destroy(pos) and titanium >= rc.get_barrier_cost()[0]:
                             log("destroy2 " + str(pos))
-                            rc.destroy(pos)
-                    if routed >= 0 and pos.x % 2 == 0:
-                        if rc.can_build_gunner(pos, pos.direction_to(target_ore).rotate_right()):
-                            rc.build_gunner(pos, pos.direction_to(target_ore).rotate_right())
-                            return
+                            destroy_building(pos)
+                    
                     if rc.can_build_barrier(pos):
                         rc.build_barrier(pos)
                         return
 
         if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
             if not rc.is_tile_passable(target_ore) and rc.get_entity_type(
-                    rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
+                    rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore) and titanium >= rc.get_harvester_cost()[0]:
                 log("destroy3 " + str(target_ore))
-                rc.destroy(target_ore)
+                destroy_building(target_ore)
         nav.move_to(target_ore)
         if rc.can_place_marker(target_ore):
             rc.place_marker(target_ore, comms.encode_claim(target_ore))
             bid = rc.get_tile_building_id(rc.get_position())
             if bid and rc.get_entity_type(bid) == EntityType.ROAD and rc.get_team(bid) == rc.get_id():
-                rc.destroy(rc.get_position())
+                destroy_building(rc.get_position())
         else:
             for dir in all_dirs:
                 if not map_info.in_bounds(rc.get_position().add(dir)):
@@ -861,7 +896,7 @@ def run_build_harvester():
                 bid = rc.get_tile_building_id(rc.get_position().add(dir))
                 if bid and rc.get_entity_type(bid) == EntityType.ROAD and rc.get_team(bid) == rc.get_team():
 
-                    rc.destroy(rc.get_position().add(dir))
+                    destroy_building(rc.get_position().add(dir))
                 if rc.can_place_marker(rc.get_position().add(dir)):
 
                     rc.place_marker(rc.get_position().add(dir), comms.encode_claim(target_ore))
@@ -943,9 +978,9 @@ def run_build_harvester():
             building_id = rc.get_tile_building_id(target_ore)
             if building_id and rc.get_team(building_id) == rc.get_team() and rc.get_entity_type(
                     building_id) != EntityType.HARVESTER:
-                if rc.can_destroy(target_ore):
+                if rc.can_destroy(target_ore) and titanium >= rc.get_harvester_cost()[0]:
                     log("destroy4 " + str(target_ore))
-                    rc.destroy(target_ore)
+                    destroy_building(target_ore)
 
             if rc.get_tile_building_id(target_ore) is None:
                 my_core = map_info._my_core
@@ -963,7 +998,7 @@ def run_build_harvester():
                         mode = Mode.EXPLORE
                         return
 
-                if rc.can_build_harvester(target_ore):
+                if can_commit_build and rc.can_build_harvester(target_ore):
                     rc.build_harvester(target_ore)
                     global routed_ore, ore_path
                     routed_ore = target_ore
@@ -975,9 +1010,9 @@ def run_build_harvester():
         else:
             if (target_ore.distance_squared(rc.get_position()) <= rc.get_vision_radius_sq()):
                 if not rc.is_tile_passable(target_ore) and rc.get_entity_type(
-                        rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore):
+                        rc.get_tile_building_id(target_ore)) != EntityType.HARVESTER and rc.can_destroy(target_ore) and titanium >= rc.get_harvester_cost()[0]:
                     log("destroy5 " + str(target_ore))
-                    rc.destroy(target_ore)
+                    destroy_building(target_ore)
             nav.execute_path()
 
 
@@ -1037,9 +1072,9 @@ def run_route():
                     if nav.move_to(nearby_conv) == False:
                         mode = Mode.EXPLORE
                         return
-                    if rc.can_destroy(launcher_position):
+                    if rc.can_destroy(launcher_position) and titanium >= rc.get_launcher_cost()[0]:
                         log("destroy6 " + str(launcher_position))
-                        rc.destroy(launcher_position)
+                        destroy_building(launcher_position)
                     id = rc.get_tile_building_id(rc.get_position())
                     if rc.can_build_launcher(launcher_position):
                         rc.build_launcher(launcher_position)
@@ -1053,7 +1088,7 @@ def run_route():
             if route_idx > 0 and map_info.id_at(to_build.x, to_build.y) != 0 and map_info.team_at(to_build.x, to_build.y) != rc.get_team() and map_info.is_turret(map_info.type_at(to_build.x, to_build.y)):
                 nav.move_to(ore_path[route_idx-1])
                 if rc.can_destroy(ore_path[route_idx-1]):
-                    rc.destroy(ore_path[route_idx-1])
+                    destroy_building(ore_path[route_idx-1])
                     route_idx -= 1
                     to_build = ore_path[route_idx]
                     next = ore_path[route_idx + 1]
@@ -1076,11 +1111,17 @@ def run_route():
                 print("hi close enough")
                 if to_build == rc.get_position():
                     id = rc.get_tile_building_id(rc.get_position())
-                    if id and rc.get_team(id) != rc.get_team() and rc.can_fire(rc.get_position()):
-                        rc.fire(rc.get_position())
-                if rc.can_destroy(to_build):
+                    if id and rc.get_team(id) != rc.get_team():
+                        if rc.get_entity_type(id) == EntityType.ROAD:
+                            if rc.can_fire(rc.get_position()):
+                                rc.fire(rc.get_position())
+                            return True
+                        if rc.can_fire(rc.get_position()):
+                            rc.fire(rc.get_position())
+                next_cost = rc.get_splitter_cost()[0] if next == Position(-1, -1) else rc.get_bridge_cost()[0] if bridge else rc.get_conveyor_cost()[0]
+                if rc.can_destroy(to_build) and titanium >= next_cost:
                     log("destroy8 " + str(to_build))
-                    rc.destroy(to_build)
+                    destroy_building(to_build)
                 if next == Position(-1, -1):
                     if to_build.x == map_info._my_core.x-2:
                         splitter_dir = Direction.EAST
@@ -1118,9 +1159,8 @@ def run_route():
         if route_idx < len(ore_path) - 1:
             if route_idx >= len(ore_path) - 1:
                 return
-            attempt_build()
 
-            if nav.move_to(ore_path[route_idx]) == False:
+            if not attempt_build() and nav.move_to(ore_path[route_idx]) == False:
                 mode = Mode.EXPLORE
                 routed += 1
                 return
@@ -1135,8 +1175,12 @@ def run_route():
                 mode = Mode.EXPLORE
                 routed += 1
                 return
-            if rc.can_destroy(build_foundry):
-                rc.destroy(build_foundry)
+            if (
+                build_foundry != rc.get_position()
+                and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0]
+                and rc.can_destroy(build_foundry)
+            ):
+                destroy_building(build_foundry)
             if rc.can_build_foundry(build_foundry):
                 rc.build_foundry(build_foundry)
                 build_foundry = None
@@ -1254,9 +1298,9 @@ def run_sabotage():
             if direction:
                 if rc.get_tile_building_id(empty_tile) and rc.get_entity_type(
                         rc.get_tile_building_id(empty_tile)) != EntityType.SENTINEL:
-                    if rc.can_destroy(empty_tile):
+                    if rc.can_destroy(empty_tile) and titanium >= rc.get_sentinel_cost()[0]:
                         log("destroy9 " + str(empty_tile))
-                        rc.destroy(empty_tile)
+                        destroy_building(empty_tile)
                 if rc.can_build_sentinel(empty_tile, direction):
                     rc.build_sentinel(empty_tile, direction)
 
@@ -1277,9 +1321,9 @@ def run_sabotage():
             nav.move_to(passable_tile)
 
         # We're on it → destroy or fire
-        if rc.can_destroy(passable_tile):
+        if rc.can_destroy(passable_tile) and titanium >= rc.get_sentinel_cost()[0]:
             log("destroy10 " + str(passable_tile))
-            rc.destroy(passable_tile)
+            destroy_building(passable_tile)
         elif rc.get_position() == passable_tile:
             if rc.can_fire(rc.get_position()):
                 rc.fire(rc.get_position())
