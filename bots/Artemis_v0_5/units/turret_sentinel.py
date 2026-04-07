@@ -37,15 +37,15 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
 
     # ---- 0. CORE (highest priority) ----
     if building_type == EntityType.CORE and not my_building:
-        return 1
+        return 0
 
     # ---- 1. Enemy conveyors / bridges / splitters ----
     if building_type and map_info.is_conveyor(building_type) and not my_building:
-        return 2
+        return 1
 
     # ---- 2. Enemy builder ON our building ----
     if builder_id and get_team(builder_id) != my_team and my_building:
-        return 3
+        return 2
 
     # ---- 8. Enemy builder NOT on our building ----
     if builder_id and get_team(builder_id) != my_team:
@@ -54,7 +54,7 @@ def priority(tile: Position, my_pos: Position, my_team: int) -> int:
     # ---- Keep your other priorities (shifted if needed) ----
     if building_type:
         if map_info.is_turret(building_type) and not my_building:
-            return 0
+            return 3
         if building_type == EntityType.LAUNCHER and not my_building:
             return 4
         if building_type == EntityType.BARRIER and not my_building:
