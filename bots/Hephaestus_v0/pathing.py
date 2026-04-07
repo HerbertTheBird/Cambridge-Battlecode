@@ -4,15 +4,10 @@ from cambc import Controller, Direction, Position, EntityType, ResourceType, Env
 import comms
 import math
 from collections.abc import Collection
-from array import array
 import time
 import units.builder as builder
 import sys
-WEIGHT = 2
-MIN_WEIGHT = 1.5
-ZIG_LENGTH = 2
-
-Step = tuple[int, int, int]
+from functools import lru_cache
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -23,56 +18,14 @@ CARD_DIR = [
     Direction.EAST,
     Direction.WEST,
 ]
-CARD: list[Step] = [
-    (0, -1, 1),
-    (0, 1, 1),
-    (-1, 0, 1),
-    (1, 0, 1),
-]
-DIRS: list[Step] = [
-    (0, -1, 1),
-    (0, 1, 1),
-    (-1, 0, 1),
-    (1, 0, 1),
-    (-1, -1, 1),
-    (1, -1, 1),
-    (-1, 1, 1),
-    (1, 1, 1),
-]
+from typing import TypeAlias
+
+Step: TypeAlias = tuple[int, int, int, int]
+# (dx, dy, cost, valid_from_mask)
 
 bridge_cost = 10
-barrier_cost = 15
+barrier_cost = 10
 adj_launch_cost = 20
-CONV: list[Step] = [
-    (0, -1, 1),
-    (0, 1, 1),
-    (-1, 0, 1),
-    (1, 0, 1),
-    (3, 0, bridge_cost),
-    (-3, 0, bridge_cost),
-    (0, 3, bridge_cost),
-    (0, -3, bridge_cost),
-    (2, 2, bridge_cost),
-    (2, -2, bridge_cost),
-    (-2, 2, bridge_cost),
-    (-2, -2, bridge_cost),
-    (2, 1, bridge_cost),
-    (2, -1, bridge_cost),
-    (-2, 1, bridge_cost),
-    (-2, -1, bridge_cost),
-    (1, 2, bridge_cost),
-    (1, -2, bridge_cost),
-    (-1, 2, bridge_cost),
-    (-1, -2, bridge_cost),
-    (-2, 0, bridge_cost),
-    (2, 0, bridge_cost),
-    (0, 2, bridge_cost),
-    (0, -2, bridge_cost),
-    (-1, -1, bridge_cost),
-    (-1, 1, bridge_cost),
-    (1, -1, bridge_cost),
-    (1, 1, bridge_cost),
-]
 
 
 def _is_builder_nav(pathing: "Pathing") -> bool:
@@ -84,56 +37,129 @@ def _is_builder_ore_nav(pathing: "Pathing") -> bool:
 
 class Pathing:
         
-    seen = None #a stamp array checking if we have seen this tile in this run
-    best_g = None #regular array storing best g (best distance)
-    target = None #a stamp array containing targets
-    start = None #a stamp array containing the start locations (target of a* since its backwards)
-    avoid = None #a stamp array (updated every call instead of every run) that stores which tiles are impassible
-    barriers = None #stamp array for barriers
-    adj_launch = None #stamp array for tiles adjacent to launcher
-    #inputs to a*, so we can check if it changed
-    start_p = None
-    target_p = None
-    adjacent = None
-    dirs: list[Step] | None = None
-
-    changed = False
-    
-    parent = None #for rebuilding (NOT A STAMP ARRAY)
-    
-    MAX_ITER = None
-
     destroyed_barriers = dict()
-    run_id = 1 #start at 1 in case something weird happens (all stamp arrays init to 0)
-    avoid_id = 1
-    heap = []
-    iter = 0
-
-    path = [] #i want to store the current path found so i can follow it while recomputing
-    path_idx = 0
     
     forget_launcher = set()
     width = height = 0
     rc: Controller
+    
     stuck_turns = 0
     prev_pos = None
     
+    target_p = None
+    
+    last_dir = None
+    last_last_dir = None
+    
+    path = None
+    path_idx = 0
+
+
+
     def __init__(self, c: Controller):
         self.width = c.get_map_width()
         self.height = c.get_map_height()
         self.rc = c
-        self.seen    = array('I', [0]) * (self.width * self.height)
-        self.parent  = array('I', [0]) * (self.width * self.height)
-        self.target  = array('I', [0]) * (self.width * self.height)
-        self.start  = array('I', [0]) * (self.width * self.height)
-        self.avoid   = array('I', [0]) * (self.width * self.height)
-        self.barriers   = array('I', [0]) * (self.width * self.height)
-        self.adj_launch   = array('I', [0]) * (self.width * self.height)
-        self.best_g  = array('I', [0]) * (self.width * self.height)
-        self.MAX_ITER = int(math.sqrt(self.width * self.height))*10
-        self.heap = []
-        self.path = []
-        self.path_idx = 0
+
+        raw_card: list[tuple[int, int, int]] = [
+            (0, -1, 1),
+            (0, 1, 1),
+            (-1, 0, 1),
+            (1, 0, 1),
+        ]
+
+        raw_dirs: list[tuple[int, int, int]] = [
+            (0, -1, 1),
+            (0, 1, 1),
+            (-1, 0, 1),
+            (1, 0, 1),
+            (-1, -1, 1),
+            (1, -1, 1),
+            (-1, 1, 1),
+            (1, 1, 1),
+        ]
+
+        raw_conv: list[tuple[int, int, int]] = [
+            (0, -1, 1),
+            (0, 1, 1),
+            (-1, 0, 1),
+            (1, 0, 1),
+
+            (3, 0, bridge_cost),
+            (-3, 0, bridge_cost),
+            (0, 3, bridge_cost),
+            (0, -3, bridge_cost),
+
+            (2, 2, bridge_cost),
+            (2, -2, bridge_cost),
+            (-2, 2, bridge_cost),
+            (-2, -2, bridge_cost),
+
+            (2, 1, bridge_cost),
+            (2, -1, bridge_cost),
+            (-2, 1, bridge_cost),
+            (-2, -1, bridge_cost),
+
+            (1, 2, bridge_cost),
+            (1, -2, bridge_cost),
+            (-1, 2, bridge_cost),
+            (-1, -2, bridge_cost),
+
+            (-2, 0, bridge_cost),
+            (2, 0, bridge_cost),
+            (0, 2, bridge_cost),
+            (0, -2, bridge_cost),
+
+            (-1, -1, bridge_cost),
+            (-1, 1, bridge_cost),
+            (1, -1, bridge_cost),
+            (1, 1, bridge_cost),
+        ]
+
+        w = self.width
+        h = self.height
+
+        self.CARD: list[Step] = []
+        for dx, dy, cost in raw_card:
+            mask = 0
+            for y in range(h):
+                ny = y + dy
+                if ny < 0 or ny >= h:
+                    continue
+                row_base = y * w
+                for x in range(w):
+                    nx = x + dx
+                    if 0 <= nx < w:
+                        mask |= 1 << (row_base + x)
+            self.CARD.append((dx, dy, cost, mask))
+
+        self.DIRS: list[Step] = []
+        for dx, dy, cost in raw_dirs:
+            mask = 0
+            for y in range(h):
+                ny = y + dy
+                if ny < 0 or ny >= h:
+                    continue
+                row_base = y * w
+                for x in range(w):
+                    nx = x + dx
+                    if 0 <= nx < w:
+                        mask |= 1 << (row_base + x)
+            self.DIRS.append((dx, dy, cost, mask))
+
+        self.CONV: list[Step] = []
+        for dx, dy, cost in raw_conv:
+            mask = 0
+            for y in range(h):
+                ny = y + dy
+                if ny < 0 or ny >= h:
+                    continue
+                row_base = y * w
+                for x in range(w):
+                    nx = x + dx
+                    if 0 <= nx < w:
+                        mask |= 1 << (row_base + x)
+            self.CONV.append((dx, dy, cost, mask))
 
 
     def move(self, dir: Direction):
@@ -155,6 +181,8 @@ class Pathing:
             rc.build_road(new_pos)
         if rc.can_move(dir):
             rc.move(dir)
+            self.last_last_dir = self.last_dir
+            self.last_dir = dir.delta()
             print("move post", rc.get_position())
             return True
         return False
@@ -187,261 +215,268 @@ class Pathing:
 
         for p in built:
             self.destroyed_barriers.pop(p)
-    def init_a_star(self, start_p: Position, target_p: Position | set[Position], input_dirs: list[Step] = DIRS, adjacent_in: bool = False):
-        builder.log("a* init")
-        if _is_builder_nav(self):
-            print(start_p, target_p)
-        if isinstance(target_p, Position):
-            target_p = {target_p}
-        self.changed = False
-        self.moved = self.start_p != start_p
-        if self.adjacent is not adjacent_in:
-            self.changed = True
-        if self.dirs is not input_dirs:
-            self.changed = True
-        if self.start_p and self.start_p.distance_squared(start_p) > 2:
-            self.changed = True
-        if input_dirs == CONV and self.moved:
-            self.changed = True
-        if self.target_p != target_p:
-            self.changed = True
-        
-        self.start_p = start_p
-        print("set startp", self, start_p)
-        self.target_p = target_p
-        self.adjacent = adjacent_in
-        self.dirs = input_dirs
 
-        heappush  = heapq.heappush
-        abs_local = abs
-        max_local = max
 
-        width_l  = self.width
-        if self.changed:
-            self.heap.clear()
-        if _is_builder_ore_nav(self):
-            print("changed? " + str(self.changed) + " " + str(len(self.heap)))
-        if len(self.heap) == 0:
-            is_dirs  = (input_dirs is DIRS)
-
-            self.run_id += 1
-            self.iter = 0
-            for p in target_p:
-                t  = p.y * width_l + p.x
-                self.target[t] = self.run_id
-                if is_dirs:
-                    h0 = max_local(abs_local(p.x - start_p.x), abs_local(p.y - start_p.y))
-                else:
-                    h0 = abs_local(p.x - start_p.x) + abs_local(p.y - start_p.y)
-                
-                heappush(self.heap, (h0*WEIGHT, 0, True, False, 0, t, 0))
-                self.seen[t] = self.run_id
-
-    def reconstruct_path(self, pos: int):
-        path_out = []
-        while pos != -1:
-            path_out.append(Position(pos % self.width, pos // self.width))
-            pos = self.parent[pos] if self.target[pos] != self.run_id else -1
-        return path_out
-
-    def a_star(self, start_p: Position, avoid_p: set[Position] | None = None) -> list[Position] | None:
-        builder.log("a* start")
-        if _is_builder_ore_nav(self):
-            builder.log("CONV A STAR")
-        if avoid_p is None:
-            avoid_p = set()
-        self.avoid_id += 1
-
-        
-        run_id = self.run_id
-        seen = self.seen
-        changed = self.changed
+    def reconstruct_path(
+        self,
+        can_visit: list[int],
+        start: int,
+        target: int,
+        barriers: int,
+        adj_launch: int,
+        routing: bool = False,
+    ) -> list[Position] | None:
         width = self.width
         height = self.height
-        heap = self.heap
-        dirs = self.dirs
-        adjacent = self.adjacent
-        target = self.target
-        run_id = self.run_id
-        avoid = self.avoid
-        barriers = self.barriers
-        adj_launch = self.adj_launch
-        avoid_id = self.avoid_id
-        rc = self.rc
-        parent = self.parent
-        best_g = self.best_g
-        start = self.start
-        sx = start_p.x
-        sy = start_p.y
-        start_time = time.perf_counter_ns()
-        heappush  = heapq.heappush
-        heappop   = heapq.heappop
-        cx = map_info._my_core.x
-        cy = map_info._my_core.y
+        cell_count = width * height
+        all_bits = (1 << cell_count) - 1
 
-        
-        
-        is_dirs = (dirs is DIRS)
+    def reconstruct_path(
+        self,
+        can_visit: list[int],
+        start: int,
+        target: int,
+        barriers: int,
+        adj_launch: int,
+        routing: bool = False,
+    ) -> list[Position] | None:
+        width = self.width
+        height = self.height
+        cell_count = width * height
+        all_bits = (1 << cell_count) - 1
 
-        if adjacent:
-            for dx, dy, _ in CARD:
-                p = Position(sx+dx, sy+dy)
-                if not map_info.in_bounds(p):
+        steps = tuple(
+            (dx, dy, step_cost)
+            for dx, dy, step_cost, _ in (self.CONV if routing else self.DIRS)
+        )
+
+        def idx_to_pos(idx: int) -> Position:
+            return Position(idx % width, idx // width)
+
+        def enter_cost(next_bit: int, step_cost: int) -> int:
+            cost = step_cost
+            if not routing:
+                if next_bit & barriers:
+                    cost += barrier_cost
+                if next_bit & adj_launch:
+                    cost += adj_launch_cost
+            return cost
+
+        def bit_to_idx(bit: int) -> int:
+            return bit.bit_length() - 1
+
+        def is_diagonal(dx: int, dy: int) -> bool:
+            return dx != 0 and dy != 0
+
+        def diagonal_family(dx: int, dy: int) -> int | None:
+            if not is_diagonal(dx, dy):
+                return None
+            return 1 if dx * dy > 0 else -1
+
+        def choose_predecessor(
+            candidates: list[tuple[int, int, int, int]],
+            last_dir: tuple[int, int] | None,
+            last_last_dir: tuple[int, int] | None,
+            cx: int,
+            cy: int,
+        ) -> tuple[int, int, int, int] | None:
+            if not candidates:
+                return None
+
+            if routing:
+                return candidates[0]
+
+            preferred_family = None
+            if last_dir is not None and is_diagonal(*last_dir):
+                last_family = diagonal_family(*last_dir)
+                if last_last_dir == last_dir:
+                    preferred_family = -last_family
+                else:
+                    preferred_family = last_family
+
+            def edge_dist(x: int, y: int) -> int:
+                return min(x, y, width - 1 - x, height - 1 - y)
+
+            cur_edge_dist = edge_dist(cx, cy)
+            in_edge_band = cur_edge_dist < 4
+
+            def sort_key(item: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+                _, _, dx, dy = item
+                diag = is_diagonal(dx, dy)
+
+                diagonal_penalty = 0 if diag else 1
+
+                # actual next tile the unit will move to from current
+                nx = cx - dx
+                ny = cy - dy
+                next_edge_dist = edge_dist(nx, ny)
+
+                # If we're already near an edge, prefer moves that go farther from it.
+                move_away_penalty = 0
+                if in_edge_band:
+                    move_away_penalty = 0 if next_edge_dist > cur_edge_dist else 1
+
+                # In general, prefer not being inside the edge band.
+                avoid_edge_penalty = 0 if next_edge_dist >= 4 else 1
+
+                family_penalty = 0
+                if preferred_family is not None and diag:
+                    fam = diagonal_family(dx, dy)
+                    family_penalty = 0 if fam == preferred_family else 1
+                elif preferred_family is not None and not diag:
+                    family_penalty = 2
+
+                return (
+                    diagonal_penalty,
+                    move_away_penalty,
+                    avoid_edge_penalty,
+                    family_penalty,
+                )
+
+            return min(candidates, key=sort_key)
+
+        best = -1
+        for layer, bits in enumerate(can_visit):
+            if bits & start:
+                best = layer
+                break
+        if best == -1:
+            return []
+
+        current = can_visit[best] & start
+        current &= -current  # isolate lowest set bit
+
+        path_bits = [current]
+        dist = best
+
+        last_dir: tuple[int, int] | None = self.last_dir
+        last_last_dir: tuple[int, int] | None = self.last_last_dir
+
+        while not (current & target):
+            cur_idx = bit_to_idx(current)
+            cx = cur_idx % width
+            cy = cur_idx // width
+
+            candidates: list[tuple[int, int, int, int]] = []
+
+            for dx, dy, step_cost in steps:
+                px = cx - dx
+                py = cy - dy
+
+                if not (0 <= px < width and 0 <= py < height):
                     continue
-                start[p.x+p.y*width] = run_id
-        else:
-            start[sx+sy*width] = run_id
+
+                prev_idx = py * width + px
+                prev_bit = 1 << prev_idx
+
+                move_cost = enter_cost(current, step_cost)
+                prev_dist = dist - move_cost
+                if prev_dist < 0 or prev_dist >= len(can_visit):
+                    continue
+
+                if can_visit[prev_dist] & prev_bit:
+                    candidates.append((prev_bit, prev_dist, dx, dy))
+
+            chosen = choose_predecessor(candidates, last_dir, last_last_dir, cx, cy)
+            if chosen is None:
+                return []
+
+            prev_bit, prev_dist, chosen_dx, chosen_dy = chosen
+
+            last_last_dir = last_dir
+            last_dir = (-chosen_dx, -chosen_dy)
+
+            current = prev_bit
+            dist = prev_dist
+            path_bits.append(current)
+
+        return [idx_to_pos(bit_to_idx(bit)) for bit in path_bits]
+    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: set[Position] | None = None, routing = False) -> list[Position] | None:
+        width = self.width
+        if avoid_p is None:
+            avoid_p = map_info.get_avoid(False, True, False)
+        if isinstance(start_p, Position):
+            start_p = {start_p}
+        if isinstance(target_p, Position):
+            target_p = {target_p}
+        target = 0
+        for p in target_p:
+            target |= (1<<(p.x+p.y*width))
+        start = 0
+        for p in start_p:
+            start |= (1<<(p.x+p.y*width))
+        avoid = 0
         for a in avoid_p:
             h = a.y * width + a.x
-            if (h == sx+sy*width and not adjacent) or target[h] == run_id:
+            if (start >> h)&1 or (target >> h)&1:
                 continue
-            avoid[h] = avoid_id
-        for b in map_info._my_barriers:
-            barriers[b.y * width + b.x] = avoid_id
-        for p in map_info._enemy_launch_adj:
-            adj_launch[p.y * width + p.x] = avoid_id
+            avoid |= (1<<h)
+        CONV = self.CONV
+        DIRS = self.DIRS
+        barriers = 0
+        adj_launch = 0
+        can_visit = [target]
+        visited = 0
         
-        if not adjacent:
-            has_initial_move = False
-            for dx, dy, _ in dirs:
-                if not map_info.in_bounds(Position(sx+dx, sy+dy)):
-                    continue
-                if avoid[(start_p.x+dx+(start_p.y+dy)*width)] != avoid_id:
-                    has_initial_move = True
-            if not has_initial_move:
-                return []
-            
-        WEIGHT_L = WEIGHT
-        new_hp = []
-        while heap:
-            f, g, card, zig_flag, zig_time, pos, iter = heappop(heap)
-            g *= -1
-            nx = pos%width
-            ny = pos//width
-            MIN_WEIGHT_L = MIN_WEIGHT+min(iter/100, 1)*(WEIGHT_L-MIN_WEIGHT)
-            if avoid[pos] == avoid_id:
-                continue
-            if g > best_g[pos]:
-                continue
-            if is_dirs:
-                h0 = max(abs(nx - sx), abs(ny - sy))
-            else:
-                h0 = abs(nx - sx) + abs(ny - sy)
-            new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max(0, 1 - g / h0)
-            new_f = g + h0 * new_h
-            heappush(new_hp, (new_f, -g, card, zig_flag, zig_time, pos, iter))
-        self.heap = new_hp
-        heap = self.heap
-        #heap format = path length, estimated path length, cardinal?, zigzag flag, zigzag time, start id
-        if not adjacent and seen[sx+sy*width] == run_id:
-            path_out = self.reconstruct_path(sx+sy*width)
-            heap.clear()
-            return path_out
-        # c = 0
-        if _is_builder_ore_nav(self):
-            builder.log(str(len(heap)))
-        while heap:
-            # c += 1
-            # if c > 20:
-            #     return None
-            self.iter += 1
-            MIN_WEIGHT_L = MIN_WEIGHT+min(self.iter/100, 1)*(WEIGHT_L-MIN_WEIGHT)
-            if self.iter > self.MAX_ITER:
-                break
-            _, g, card, _, zig_time, pos, _ = heappop(heap)
-            g *= -1
-            if start[pos] == run_id:
-                path_out = self.reconstruct_path(pos)
-                heap.clear()
+        start_time = time.perf_counter_ns()
+        for b in map_info._my_barriers:
+            barriers |= (1<<(b.y * width + b.x))
+        for p in map_info._enemy_launch_adj:
+            adj_launch |= (1<<(p.y * width + p.x))
+        
+        stuck = 0
+        i = 0
+        while True:
+            frontier = can_visit[i] & ~visited
+            visited |= frontier
+            if frontier & start:
                 end_time = time.perf_counter_ns()
-                builder.log("a star time: " + str(end_time-start_time))
-                return path_out
-
-            px = pos % width
-            py = pos // width
-            if _is_builder_nav(self):
-                rc.draw_indicator_dot(Position(px, py), min(255, self.iter*255//625), 0, 0)
-            for dx, dy, cost in dirs:
-                nx = px + dx
-                ny = py + dy
-                if (6 <= (nx-cx)*(nx-cx)+(ny-cy)*(ny-cy) <= 49) and dirs == CONV and cost == 1:
-                    continue
-                if nx < 0 or nx >= width or ny < 0 or ny >= height:
-                    continue
-                n = ny * width + nx 
-                if avoid[n] == avoid_id:
-                    continue
-                ng = g + cost
-                if dirs != CONV and barriers[n] == avoid_id:
-                    ng += barrier_cost
-                if dirs != CONV and adj_launch[n] == avoid_id:
-                    ng += adj_launch_cost
-                if ng >= best_g[n] and seen[n] == run_id:
-                    continue
-                
-                if is_dirs:
-                    h0 = max(abs(nx - sx), abs(ny - sy))
-                else:
-                    h0 = abs(nx - sx) + abs(ny - sy)
-                best_g[n] = ng
-                seen[n]   = run_id
-                parent[n] = pos
-
-                new_h = 0 if h0 == 0 else MIN_WEIGHT_L + (WEIGHT_L - MIN_WEIGHT) * max(0, 1 - ng / h0)
-                new_f = ng + h0 * new_h
-                # print("before ", n, self.dist_to_target.get(n), max_local(0, 1 - (ng) / h0) if h0 != 0 else 0, ng, MIN_WEIGHT_L, h0, new_h, new_f, is_dirs, nx, ny, tx, ty)
-
-                card = dx == 0 or dy == 0
-                new_zigged = (zig_time%(ZIG_LENGTH*2) < ZIG_LENGTH)^(dx>0)^(dy>0)
-                if new_zigged:
-                    new_zig_time = (zig_time+1)%(ZIG_LENGTH*2)
-                else:
-                    new_zig_time = ZIG_LENGTH if zig_time < ZIG_LENGTH else 0
-                heappush(
-                    heap,
-                    (new_f, -ng, card, not new_zigged, new_zig_time, n, self.iter)
-                )
-        end_time = time.perf_counter_ns()
-        heap.clear()
-        builder.log("a star time: " + str(end_time-start_time)) 
-        return []
-
+                builder.log("bfs time " + str(end_time-start_time) + "ns")
+                self.path = self.reconstruct_path(can_visit, start, target, barriers, adj_launch, routing)
+                self.path_idx = 0
+                return self.path
+            if frontier == 0:
+                stuck += 1
+                if stuck >= 11 if routing else 32:
+                    break
+            else:
+                stuck = 0
+            if routing:
+                can_visit.extend([0]*(i+bridge_cost+1-len(can_visit)))
+                for step in CONV:
+                    offset = step[0]+step[1]*width
+                    new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
+                    can_visit[(i+step[2])] |= new
+            else:
+                can_visit.extend([0]*(i+1+barrier_cost+adj_launch_cost+1-len(can_visit)))
+                for step in DIRS:
+                    offset = step[0]+step[1]*width
+                    new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
+                    can_visit[i+step[2]] |= (new & ~barriers & ~adj_launch)
+                    can_visit[i+step[2]+barrier_cost] |= (new & barriers & ~adj_launch)
+                    can_visit[i+step[2]+adj_launch_cost] |= (new & ~barriers & adj_launch)
+                    can_visit[i+step[2]+barrier_cost+adj_launch_cost] |= (new & barriers & adj_launch)
+            i+=1
 
     def moves_through_impassible(self, path: list[Position], avoid: set[Position]) -> bool:
         for i in range(1, len(path) - 1):
             if path[i] in avoid:
                 return True
         return False
-
-    def calculate_path(self, target: set[Position] | Position, avoid = None, start=None, dirs: list[Step] = DIRS, adjacent=False):
+    def calculate_path(self, target: set[Position] | Position):
         rc = self.rc
-        if start is None:
-            start = rc.get_position()
+        start = rc.get_position()
         if isinstance(target, Position):
             self.rc.draw_indicator_line(Position(0, 0), start, 255, 255, 255)
             self.rc.draw_indicator_line(Position(0, 0), target, 255, 255, 255)
             target = {target}
 
-        if avoid == None:
-            avoid = map_info.get_avoid(False, True, False)
-        next_path = None
-        self.init_a_star(start, target, dirs, adjacent)
-        next_path = self.a_star(start, avoid)
-        if next_path is not None:
-            self.path = next_path
-            self.path_idx = 0
-            for i in range(len(self.path) - 1):
-                rc.draw_indicator_line(self.path[i], self.path[i + 1], 0, 50, 0)
-        elif self.path is not None and len(self.path) > 1:
-            for i in range(len(self.path) - 1):
-                rc.draw_indicator_line(self.path[i], self.path[i + 1], 0, 0, 50)
-        
+        avoid = map_info.get_avoid(False, True, False)
+        next_path = self.bfs(start, target, avoid)
         on_path = self.path and len(self.path) >= self.path_idx+1 and self.path[self.path_idx] == start and self.path[-1] in target
         if on_path:
             return self.path[self.path_idx:]
         return next_path
-
-
     def execute_path(self, sample_path=None, path_idx_in=None):
         if sample_path is None:
             sample_path = self.path
@@ -478,7 +513,11 @@ class Pathing:
                 if self.rc.can_move(i):
                     self.rc.move(i)
                     return
-        path = self.calculate_path(target, avoid)
+                
+        path = self.bfs(my_pos, target, avoid, False)
+        if path:
+            for p in path:
+                self.rc.draw_indicator_dot(p, 255, 0, 0)
         marked = False
         rc = self.rc
         if len(self.destroyed_barriers) == 0:
@@ -528,7 +567,7 @@ class Pathing:
             return None
         if len(path) < 1:
             return False
-        self.execute_path()
+        self.execute_path(path)
         return True
 
 
@@ -538,12 +577,18 @@ class Pathing:
         target, avoid = self._get_conveyor_targets_and_avoid(ore, avoid_extra)
         if len(target) == 0:
             return []
-        self.calculate_path(target, avoid, start, CONV, not update)
-        if self.path is None or len(self.path) < 1:
-            return self.path
-        if self.path[-1] in builder.target_splitters:
-            self.path.append(Position(-1, -1))
-        return self.path
+        if not update:
+            new_start = set()
+            for dir in CARD_DIR:
+                if map_info.in_bounds(start.add(dir)):
+                    new_start.add(start.add(dir))
+            start = new_start
+        path = self.bfs(start, target, avoid, True)
+        if path is None or len(path) < 1:
+            return path
+        if path[-1] in builder.target_splitters:
+            path.append(Position(-1, -1))
+        return path
 
 
     def _get_conveyor_targets_and_avoid(self, ore: Position, avoid_extra: Collection[Position] | None = None):
