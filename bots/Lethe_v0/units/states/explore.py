@@ -10,13 +10,11 @@ nav: Pathing = None
 
 explore_target = None
 comm_flag = 1
-forget = None
 
 def init(c: Controller):
-    global rc, nav, forget
+    global rc, nav
     rc = c
     nav = Pathing(rc)
-    forget = units.builder.forget[comm_flag]
 def score():
     return 1
 def generate_explore_target():
@@ -30,8 +28,8 @@ def generate_explore_target():
             return
 
     # If no empty tile found after 2 tries, fallback to completely random
-    if (random.randint(0, 1) == 0):
-        explore_target = random.choice(list(map_info._conveyors))
+    if (random.randint(0, 1) == 0) and map_info._bm_conveyors:
+        explore_target = random.choice(list(map_info.iter_mask(map_info._bm_conveyors)))
     random_x = random.randint(0, map_info._width - 1)
     random_y = random.randint(0, map_info._height - 1)
     explore_target = Position(random_x, random_y)

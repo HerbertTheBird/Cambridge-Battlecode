@@ -4,7 +4,6 @@ from cambc import Controller, Position, Environment, EntityType, Team, Direction
 from dataclasses import dataclass, field
 from collections import deque
 import time
-import units.builder as builder
 
 _HAS_DIRECTION    = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
@@ -49,6 +48,33 @@ _DIR_INT = {t: i for i, t in enumerate(Direction)}
 _INT_DIR = {i: t for i, t in enumerate(Direction)}
 _TM_INT = {t: i for i, t in enumerate(Team)}
 _INT_TM = {i: t for i, t in enumerate(Team)}
+
+# Pre-computed indices for fast list access
+_IDX_CONVEYOR          = _ET_INT[EntityType.CONVEYOR]
+_IDX_ARMOURED_CONVEYOR = _ET_INT[EntityType.ARMOURED_CONVEYOR]
+_IDX_BRIDGE            = _ET_INT[EntityType.BRIDGE]
+_IDX_SPLITTER          = _ET_INT[EntityType.SPLITTER]
+_IDX_CORE              = _ET_INT[EntityType.CORE]
+_IDX_HARVESTER         = _ET_INT[EntityType.HARVESTER]
+_IDX_FOUNDRY           = _ET_INT[EntityType.FOUNDRY]
+_IDX_ROAD              = _ET_INT[EntityType.ROAD]
+_IDX_BARRIER           = _ET_INT[EntityType.BARRIER]
+_IDX_MARKER            = _ET_INT[EntityType.MARKER]
+_IDX_GUNNER            = _ET_INT[EntityType.GUNNER]
+_IDX_SENTINEL          = _ET_INT[EntityType.SENTINEL]
+_IDX_BREACH            = _ET_INT[EntityType.BREACH]
+_IDX_LAUNCHER          = _ET_INT[EntityType.LAUNCHER]
+_IDX_BUILDER_BOT       = _ET_INT[EntityType.BUILDER_BOT]
+
+_IDX_ENV_EMPTY  = _ENV_INT[Environment.EMPTY]
+_IDX_ENV_WALL   = _ENV_INT[Environment.WALL]
+_IDX_ENV_ORE_TI = _ENV_INT[Environment.ORE_TITANIUM]
+_IDX_ENV_ORE_AX = _ENV_INT[Environment.ORE_AXIONITE]
+
+_NUM_ET   = len(EntityType)
+_NUM_TEAM = len(Team)
+_NUM_ENV  = len(Environment)
+
 _DIR_CENTRE = Direction.CENTRE
 _ALL_DIRECTIONS = tuple(Direction)
 _CARDINAL = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
@@ -56,18 +82,32 @@ _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
 _rc: Controller
 _width = _height = 0
 _MAP_CENTER = None
-_ground: list[int] = []
-_seen: list[bool] = []
+
+# Per-tile arrays (scalar values that can't be bitmasks)
 _building_id: list[int] = []
-_building_type: list[int] = []
 _building_hp: list[int] = []
-_building_team: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
-_building_load: list[float] = []
-_building_ore: list[int] = []
-_building_my: list[int] = []
-_building_my_key = 1
+
+# Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
+_bm_et: list[int] = []      # one bitmask per EntityType
+_bm_team: list[int] = []    # one bitmask per Team
+_bm_env: list[int] = []     # one bitmask per Environment
+_bm_seen: int = 0           # seen tiles
+
+# Derived bitmasks
+_bm_blocked: int = 0            # walls + non-passable buildings + enemy core area
+_bm_conveyors: int = 0          # all conveyor-type buildings + my core area
+_bm_conveyor_targets: int = 0   # output target tiles of conveyors
+_bm_my_core_area: int = 0       # my core 3x3
+_bm_their_core_area: int = 0    # enemy core 3x3
+_bm_enemy_launch_adj: int = 0   # tiles adjacent to enemy launchers
+_bm_routable: int = 0           # my team's conveyor-type buildings
+_bm_route_targets: int = 0      # tiles route state can path toward
+_bm_conv_loaded: int = 0        # conveyor-type buildings with a stored resource
+
+_not_left_col: int = 0   # mask with all bits EXCEPT x=0 column
+_not_right_col: int = 0  # mask with all bits EXCEPT x=width-1 column
 
 _my_core: Position | None = None
 _their_core: Position | None = None
@@ -80,106 +120,152 @@ _solved_sym = False
 _rush_tiebroken = 0
 
 
-_blocked: set[Position] = set() #walls, all buildings but my barriers and all roads/conveyors
-_conveyors: set[Position] = set()
-_conveyors_targets: set[Position] = set()
-_my_barriers: set[Position] = set()
-_ores: set[Position] = set()
-_enemy_launch_adj: set[Position] = set()
-_enemy_launch: set[Position] = set()
-
-_my_core_area: set[Position] = set()
-_their_core_area: set[Position] = set()
-
-my_conveyors: set[tuple[Position, Position]] = set()
 def ground_at(x, y):
-    return _INT_ENV[_ground[x+y*_width]]
+    bit = 1 << (x + y * _width)
+    if _bm_env[_IDX_ENV_WALL] & bit: return Environment.WALL
+    if _bm_env[_IDX_ENV_ORE_TI] & bit: return Environment.ORE_TITANIUM
+    if _bm_env[_IDX_ENV_ORE_AX] & bit: return Environment.ORE_AXIONITE
+    return Environment.EMPTY
 def seen_at(x, y):
-    return _seen[x+y*_width]
+    return bool(_bm_seen & (1 << (x + y * _width)))
 def id_at(x, y):
     return _building_id[x+y*_width]
 def type_at(x, y):
-    return _INT_ET[_building_type[x+y*_width]]
+    bit = 1 << (x + y * _width)
+    bm = _bm_et
+    for i in range(_NUM_ET):
+        if bm[i] & bit:
+            return _INT_ET[i]
+    return None
 def hp_at(x, y):
     return _building_hp[x+y*_width]
 def team_at(x, y):
-    return _INT_TM[_building_team[x+y*_width]]
+    bit = 1 << (x + y * _width)
+    if _bm_team[0] & bit: return _INT_TM[0]
+    if _bm_team[1] & bit: return _INT_TM[1]
+    return None
 def dir_at(x, y):
     return _INT_DIR[_building_dir[x+y*_width]]
 def conv_target_at(x, y):
     return Position(_building_conv_target[x+y*_width]%_width, _building_conv_target[x+y*_width]//_width)
-def load_at(x, y):
-    return _building_load[x+y*_width]
-def trans_ore_at(x, y):
-    return _INT_ENV[_building_ore[x+y*_width]]
 def is_conveyor(type):
     return type in _CONVEYOR_TYPES
 def is_turret(type):
     return type in _TURRET_TYPES
 def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < _width and 0 <= pos.y < _height
-def can_route(x, y):
-    return _building_my[x+y*_width] == _building_my_key
+
+
+def positions_to_mask(positions) -> int:
+    """Convert an iterable of Positions to a bitmask."""
+    mask = 0
+    w = _width
+    for p in positions:
+        mask |= 1 << (p.x + p.y * w)
+    return mask
+
+def iter_mask(mask):
+    """Yield Positions from a bitmask."""
+    w = _width
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        yield Position(n % w, n // w)
+        mask ^= lsb
+
+
+def expand_chebyshev(mask: int) -> int:
+    """Expand a bitmask by 1 Chebyshev step (king-move flood)."""
+    w = _width
+    h = mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1)
+    return h | (h << w) | (h >> w)
+
+
+def expand_manhattan(mask: int) -> int:
+    """Expand a bitmask by 1 Manhattan step (4-directional flood)."""
+    w = _width
+    return mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1) | (mask << w) | (mask >> w)
 
 
 def note_destroy(pos: Position) -> None:
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded
     if not in_bounds(pos):
         return
 
     n = pos.x + pos.y * _width
-    building_id = _building_id[n]
-    if building_id == 0:
+    if _building_id[n] == 0:
         return
 
-    building_type = _INT_ET[_building_type[n]]
+    bit = 1 << n
 
-    _blocked.discard(pos)
-    _my_barriers.discard(pos)
-    _enemy_launch.discard(pos)
+    # Clear entity type bitmask
+    bm_et = _bm_et
+    old_et = None
+    for i in range(_NUM_ET):
+        if bm_et[i] & bit:
+            bm_et[i] &= ~bit
+            old_et = _INT_ET[i]
+            break
 
-    if building_type in _CONVEYOR_TYPES:
-        _conveyors.discard(pos)
-        target_idx = _building_conv_target[n]
-        if target_idx:
-            _conveyors_targets.discard(Position(target_idx % _width, target_idx // _width))
-    else:
-        _conveyors.discard(pos)
+    # Clear team bitmask
+    bm_team = _bm_team
+    for i in range(_NUM_TEAM):
+        if bm_team[i] & bit:
+            bm_team[i] &= ~bit
+            break
 
-    if building_type in _CONVEYOR_TYPES or building_type is _ET_HARVESTER:
-        stale = [entry for entry in my_conveyors if entry[0] == pos or entry[1] == pos]
-        for entry in stale:
-            my_conveyors.discard(entry)
+    _bm_blocked &= ~bit
+    _bm_conveyors &= ~bit
+    _bm_conv_loaded &= ~bit
+
+    if old_et is not None and old_et in _CONVEYOR_TYPES:
+        target_n = _building_conv_target[n]
+        if target_n:
+            _bm_conveyor_targets &= ~(1 << target_n)
 
     _building_id[n] = 0
     _building_hp[n] = 0
-    _building_type[n] = 0
-    _building_team[n] = 0
     _building_dir[n] = 0
     _building_conv_target[n] = 0
-    _building_load[n] = 0
-    _building_ore[n] = 0
-    _building_my[n] = 0
 
 def init(c: Controller):
     global _rc, _width, _height
-    global _ground, _seen, _building_id, _building_type, _building_hp, _building_team, _building_dir, _building_conv_target, _building_load, _building_ore, _building_my
+    global _building_id, _building_hp, _building_dir, _building_conv_target
+    global _bm_et, _bm_team, _bm_env, _bm_seen
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
+    global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
+    global _not_left_col, _not_right_col
     global _MAP_CENTER
     _rc = c
     _width = _rc.get_map_width()
     _height = _rc.get_map_height()
     _MAP_CENTER = Position(_width // 2, _height // 2)
     tiles = _width * _height
-    _ground               = [0] * tiles
-    _seen                 = [False] * tiles
     _building_id          = [0] * tiles
     _building_hp          = [0] * tiles
-    _building_type        = [0] * tiles
-    _building_team        = [0] * tiles
     _building_dir         = [0] * tiles
     _building_conv_target = [0] * tiles
-    _building_load        = [0] * tiles
-    _building_ore         = [0] * tiles
-    _building_my          = [0] * tiles
+
+    _bm_et   = [0] * _NUM_ET
+    _bm_team = [0] * _NUM_TEAM
+    _bm_env  = [0] * _NUM_ENV
+    _bm_seen = 0
+    _bm_blocked = 0
+    _bm_conveyors = 0
+    _bm_conveyor_targets = 0
+
+    # Column masks for safe bit-shifting (prevent wrap-around)
+    left_col = 0
+    right_col = 0
+    for y in range(_height):
+        left_col |= 1 << (y * _width)
+        right_col |= 1 << ((_width - 1) + y * _width)
+    _not_left_col = ~left_col
+    _not_right_col = ~right_col
+    _bm_my_core_area = 0
+    _bm_their_core_area = 0
+    _bm_enemy_launch_adj = 0
+
 def hor_flip(pos: Position):
     return Position(_width - 1 - pos.x, pos.y)
 def ver_flip(pos: Position):
@@ -190,18 +276,30 @@ def update_symmetry(tile: Position):
     global _hor_sym, _ver_sym, _rot_sym
     tx = tile.x
     ty = tile.y
-    env = _ground[tx+ty*_width]
+    env_idx = _env_at_idx(tx + ty * _width)
     rx = _width-1 - tx
     ry = _height-1 - ty
     if _hor_sym:
-        if _seen[rx+ty*_width] and _ground[rx+ty*_width] != env:
+        fn = rx+ty*_width
+        if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
             _hor_sym = False
     if _ver_sym:
-        if _seen[tx+ry*_width] and _ground[tx+ry*_width] != env:
+        fn = tx+ry*_width
+        if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
             _ver_sym = False
     if _rot_sym:
-        if _seen[rx+ry*_width] and _ground[rx+ry*_width] != env:
+        fn = rx+ry*_width
+        if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
             _rot_sym = False
+
+def _env_at_idx(n):
+    """Return the env list index for tile n."""
+    bit = 1 << n
+    for i in range(_NUM_ENV):
+        if _bm_env[i] & bit:
+            return i
+    return _IDX_ENV_EMPTY
+
 def flip(pos: Position):
     if not _solved_sym:
         return None
@@ -226,62 +324,183 @@ def core_center(core_id: int, tile: Position) -> Position | None:
     return None
 
 def build_core_areas() -> None:
-    global _my_core_area, _their_core_area
-    _my_core_area = set()
-    _their_core_area = set()
+    global _bm_my_core_area, _bm_their_core_area, _bm_conveyors
+    _bm_my_core_area = 0
+    _bm_their_core_area = 0
+    bm_et = _bm_et
+    bm_team = _bm_team
+    num_et = _NUM_ET
+    num_team = _NUM_TEAM
     if _my_core is not None:
         n = _my_core.x+_my_core.y*_width
+        my_team_idx = _TM_INT[_rc.get_team()]
         for x in range(_my_core.x - 1, _my_core.x + 2):
             for y in range(_my_core.y - 1, _my_core.y + 2):
                 m = x+y*_width
+                bit = 1 << m
+                # Clear any old entity/team bits at this tile
+                for i in range(num_et):
+                    bm_et[i] &= ~bit
+                for i in range(num_team):
+                    bm_team[i] &= ~bit
                 _building_id[m] = _building_id[n]
-                _building_type[m] = _building_type[n]
                 _building_hp[m] = _building_hp[n]
-                _building_team[m] = _building_team[n]
-                _my_core_area.add(Position(x, y))
-                _conveyors.add(Position(x, y)) #so i dont path through core somehow
+                _bm_my_core_area |= bit
+                bm_et[_IDX_CORE] |= bit
+                bm_team[my_team_idx] |= bit
+                _bm_conveyors |= bit  # so pathfinding avoids core
     if _their_core is not None:
         n = _their_core.x+_their_core.y*_width
+        enemy_team_idx = 1 - _TM_INT[_rc.get_team()]
         for x in range(_their_core.x - 1, _their_core.x + 2):
             for y in range(_their_core.y - 1, _their_core.y + 2):
                     m = x+y*_width
+                    bit = 1 << m
+                    for i in range(num_et):
+                        bm_et[i] &= ~bit
+                    for i in range(num_team):
+                        bm_team[i] &= ~bit
                     _building_id[m] = _building_id[n]
-                    _building_type[m] = _building_type[n]
                     _building_hp[m] = _building_hp[n]
-                    _building_team[m] = _building_team[n]
-                    _their_core_area.add(Position(x, y))
-                    _blocked.add(Position(x, y))
-def update(update_conv = True) -> None:
-    # from units.builder import log
+                    _bm_their_core_area |= bit
+                    bm_et[_IDX_CORE] |= bit
+                    bm_team[enemy_team_idx] |= bit
+
+def _compute_route_targets() -> int:
+    """Bitmask of tiles the route state can path toward.
+    Core/my turrets are always routable. Empty conveyors and their downstream
+    chain are routable only if the chain ends at my core/turret or is unseen.
+    Also propagates upstream from valid conveyors, stopping at intersections
+    (tiles where >1 conveyor feeds in)."""
+    result = _bm_my_core_area
+    my_convs = _bm_routable
+    if not my_convs:
+        return result
+
+    conv_target = _building_conv_target
+    my_team_idx = _TM_INT[_rc.get_team()]
+    tiles = _width * _height
+
+    # Valid termini: my core only
+    valid_end = _bm_my_core_area
+
+    # Build reverse map: tile_n -> bitmask of my conveyors that point to it
+    reverse = {}
+    in_degree = {}
+    mask = my_convs
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        tn = conv_target[n]
+        if tn and 0 <= tn < tiles:
+            if tn in reverse:
+                reverse[tn] |= lsb
+                in_degree[tn] += 1
+            else:
+                reverse[tn] = lsb
+                in_degree[tn] = 1
+        mask ^= lsb
+
+    # --- Downstream: validate chains from empty conveyors ---
+    # Only propagate if 3 or fewer conveyors ahead before hitting core/unseen
+    empty_convs = my_convs & ~_bm_conv_loaded
+    if not empty_convs:
+        return result
+
+    valid_convs = 0
+
+    mask = empty_convs
+    while mask:
+        lsb = mask & -mask
+        mask ^= lsb
+
+        chain = 0
+        cur = lsb
+        cur_n = cur.bit_length() - 1
+        chain_valid = False
+        downstream = 0
+
+        while True:
+            if chain & cur:
+                break
+            chain |= cur
+
+            tn = conv_target[cur_n]
+            if not tn or tn < 0 or tn >= tiles:
+                break
+
+            tbit = 1 << tn
+
+            if my_convs & tbit:
+                downstream += 1
+                if downstream > 3:
+                    break
+                cur = tbit
+                cur_n = tn
+                continue
+
+            if valid_end & tbit:
+                chain_valid = True
+            elif not (_bm_seen & tbit):
+                chain_valid = True
+            break
+
+        if chain_valid:
+            valid_convs |= chain
+
+    # --- Upstream: propagate from valid conveyors, stop at intersections ---
+    to_visit = valid_convs
+    visited = valid_convs
+    while to_visit:
+        next_visit = 0
+        m = to_visit
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            feeders = reverse.get(n, 0) & ~visited
+            if feeders:
+                visited |= feeders
+                valid_convs |= feeders
+                # Continue past feeders that are NOT intersections
+                f = feeders
+                while f:
+                    flsb = f & -f
+                    fn = flsb.bit_length() - 1
+                    if in_degree.get(fn, 0) <= 1:
+                        next_visit |= flsb
+                    f ^= flsb
+            m ^= lsb
+        to_visit = next_visit
+
+    result |= valid_convs
+    return result
+
+def update() -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded
+    global _bm_seen
     rc = _rc
-    ground = _ground
-    seen = _seen
     building_id = _building_id
-    building_type = _building_type
     building_hp = _building_hp
-    building_team = _building_team
     building_dir = _building_dir
     building_conv_target = _building_conv_target
-    building_load = _building_load
-    building_ore = _building_ore
-    
-    blocked = _blocked
-    conveyors = _conveyors
-    conveyor_targets = _conveyors_targets
-    my_barriers = _my_barriers
-    ores = _ores
-    enemy_launch_adj = _enemy_launch_adj
-    enemy_launch = _enemy_launch
-    
-    
+
+    bm_et = _bm_et
+    bm_team = _bm_team
+    bm_env = _bm_env
+    bm_seen = _bm_seen
+
+    num_et = _NUM_ET
+    num_team = _NUM_TEAM
+
     width = _width
     height = _height
-    
+
     visible_tiles = rc.get_nearby_tiles()
     my_team       = rc.get_team()
+    my_team_idx   = _TM_INT[my_team]
     my_pos        = rc.get_position()
     rc_get_tile_building_id   = rc.get_tile_building_id
     rc_get_entity_type        = rc.get_entity_type
@@ -291,29 +510,39 @@ def update(update_conv = True) -> None:
     rc_get_bridge_target      = rc.get_bridge_target
     rc_get_tile_env           = rc.get_tile_env
 
+    idx_wall = _IDX_ENV_WALL
+
     for tile in visible_tiles:
         x = tile.x
         y = tile.y
         n = x+y*width
-        if not seen[n]:
+        bit = 1 << n
+        if not (bm_seen & bit):
             env = rc_get_tile_env(tile)
-            ground[n] = _ENV_INT[env]
-            seen[n] = True
-            if env is Environment.WALL:
-                blocked.add(tile)
-            elif env is not Environment.EMPTY:
-                ores.add(tile)
+            env_idx = _ENV_INT[env]
+            bm_env[env_idx] |= bit
+            bm_seen |= bit
             rx = width-1-x
             ry = height-1-y
             if _hor_sym:
-                if seen[rx+y*width] and ground[rx+y*width] != _ENV_INT[env]:
-                    _hor_sym = False
+                fn = rx+y*width
+                fbit = 1 << fn
+                if (bm_seen & fbit):
+                    # check if env matches
+                    if not (bm_env[env_idx] & fbit):
+                        _hor_sym = False
             if _ver_sym:
-                if seen[x+ry*width] and ground[x+ry*width] != _ENV_INT[env]:
-                    _ver_sym = False
+                fn = x+ry*width
+                fbit = 1 << fn
+                if (bm_seen & fbit):
+                    if not (bm_env[env_idx] & fbit):
+                        _ver_sym = False
             if _rot_sym:
-                if seen[rx+ry*width] and ground[rx+ry*width] != _ENV_INT[env]:
-                    _rot_sym = False
+                fn = rx+ry*width
+                fbit = 1 << fn
+                if (bm_seen & fbit):
+                    if not (bm_env[env_idx] & fbit):
+                        _rot_sym = False
             if _solved_sym:
                 if _hor_sym:
                     fx, fy = width-1 - x, y
@@ -321,61 +550,82 @@ def update(update_conv = True) -> None:
                     fx, fy = x, height-1 - y
                 else:
                     fx, fy = width-1 - x, height-1 - y
-                ground[fx+fy*width]      = _ENV_INT[env]
-                seen[fx+fy*width] = True
-                if env is not None and env is not Environment.EMPTY:
-                    flipped = Position(fx, fy)
-                    if env is Environment.WALL:
-                        blocked.add(flipped)
-                    elif env is not Environment.EMPTY:
-                        ores.add(flipped)
-        
-        
+                fn = fx+fy*width
+                fbit = 1 << fn
+                bm_env[env_idx] |= fbit
+                bm_seen |= fbit
+
+
         entity_id = rc_get_tile_building_id(tile)
         if entity_id is None:
             if building_id[n] != 0:
-                blocked.discard(tile)
-                conveyors.discard(tile)
-                my_barriers.discard(tile)
-                enemy_launch.discard(tile)
+                for i in range(num_et):
+                    if bm_et[i] & bit:
+                        bm_et[i] &= ~bit
+                        break
+                for i in range(num_team):
+                    if bm_team[i] & bit:
+                        bm_team[i] &= ~bit
+                        break
                 building_id[n] = 0
             continue
         et = rc_get_entity_type(entity_id)
         if et == EntityType.MARKER:
+            if building_id[n] != 0:
+                for i in range(num_et):
+                    if bm_et[i] & bit:
+                        bm_et[i] &= ~bit
+                        break
+                for i in range(num_team):
+                    if bm_team[i] & bit:
+                        bm_team[i] &= ~bit
+                        break
             building_id[n] = 0
             continue
         if building_id[n] == entity_id:
             building_hp[n] = rc_get_hp(entity_id)
         else:
+            # Clear old bits if replacing a different building
+            if building_id[n] != 0:
+                for i in range(num_et):
+                    if bm_et[i] & bit:
+                        bm_et[i] &= ~bit
+                        break
+                for i in range(num_team):
+                    if bm_team[i] & bit:
+                        bm_team[i] &= ~bit
+                        break
+
             direction     = rc_get_direction(entity_id) if et in _HAS_DIRECTION else None
-            team = rc_get_team(entity_id)
+            team_val = rc_get_team(entity_id)
+            team_idx = _TM_INT[team_val]
             target = None
             if et == EntityType.BRIDGE:
                 target = rc_get_bridge_target(entity_id)
             elif et in _CONVEYOR_TYPES and direction is not None:
                 target = tile.add(direction)
             building_id[n] = entity_id
-            building_type[n] = _ET_INT[et]
             building_hp[n] = rc_get_hp(entity_id)
-            building_team[n] = _TM_INT[team]
             building_dir[n] = _DIR_INT[direction] if direction else 0
             building_conv_target[n] = (target.x+target.y*width) if target else 0
-            if et in _CONVEYOR_TYPES:
-                conveyors.add(tile)
-            elif et == EntityType.BARRIER and team == my_team:
-                my_barriers.add(tile)
-            elif et != EntityType.ROAD and et != EntityType.CORE:
-                blocked.add(tile)
-            if et == EntityType.LAUNCHER and team != my_team:
-                enemy_launch.add(tile)
+
+            # Set new bitmask bits
+            et_idx = _ET_INT[et]
+            bm_et[et_idx] |= bit
+            bm_team[team_idx] |= bit
+
             if et is EntityType.CORE:
-                if _my_core is None and team == my_team:
+                if _my_core is None and team_val == my_team:
                     _my_core = core_center(entity_id, tile)
                     _core_id = entity_id
                     build_core_areas()
-                elif _their_core is None and team != my_team:
+                elif _their_core is None and team_val != my_team:
                     _their_core = core_center(entity_id, tile)
                     build_core_areas()
+
+    # Write back bm_seen to global (int is immutable, local was a copy)
+    _bm_seen = bm_seen
+
     possible_syms = int(_hor_sym) + int(_ver_sym) + int(_rot_sym)
     if possible_syms == 1 and not _solved_sym:
         _solved_sym = True
@@ -383,31 +633,34 @@ def update(update_conv = True) -> None:
             _their_core = flip(_my_core)
             if _their_core is not None:
                 pos = _their_core.x+_their_core.y*width
-                building_id[pos] = -1 #0 means junk data, so -1 means theres something here???
-                building_type[pos] = _ET_INT[EntityType.CORE]
+                pbit = 1 << pos
+                building_id[pos] = -1
+                bm_et[_IDX_CORE] |= pbit
+                enemy_team_idx = 1 - my_team_idx
+                bm_team[enemy_team_idx] |= pbit
                 building_hp[pos] = 500
-                building_team[pos] = 1-_TM_INT[my_team]
             build_core_areas()
         for x in range(width):
             for y in range(height):
                 n = x+y*width
-                if seen[n]:
+                nbit = 1 << n
+                if bm_seen & nbit:
                     if _ver_sym:
                         flipped = (x)+(height-1-y)*width
                     elif _hor_sym:
                         flipped = (width-1-x)+(y)*width
                     else:
                         flipped = (width-1-x)+(height-1-y)*width
-                    if not seen[flipped]:
-                        env = ground[n]
-                        ground[flipped] = env
-                        seen[flipped] = True
-                        ev = _INT_ENV[env]
-                        if ev is not Environment.EMPTY:
-                            if ev is Environment.WALL:
-                                blocked.add(Position(flipped%width, flipped//width))
-                            elif ev is not Environment.EMPTY:
-                                ores.add(Position(flipped%width, flipped//width))
+                    fbit = 1 << flipped
+                    if not (bm_seen & fbit):
+                        # Copy env from source tile to flipped tile
+                        for env_i in range(_NUM_ENV):
+                            if bm_env[env_i] & nbit:
+                                bm_env[env_i] |= fbit
+                                break
+                        bm_seen |= fbit
+        _bm_seen = bm_seen
+
     if _my_core:
         if _their_core:
             _predicted_enemy_core = _their_core
@@ -434,19 +687,72 @@ def update(update_conv = True) -> None:
                     _predicted_enemy_core = vsym_core
                 else:
                     _predicted_enemy_core = hsym_core
-    enemy_launch_adj.clear()
-    for launcher_pos in enemy_launch:
-        lx = launcher_pos.x
-        ly = launcher_pos.y
+
+    # --- Update conveyor load status for visible conveyors ---
+    bm_conv_loaded = _bm_conv_loaded
+    conv_mask = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+                 | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER])
+    rc_get_stored_resource = rc.get_stored_resource
+    for tile in visible_tiles:
+        n = tile.x + tile.y * width
+        bit = 1 << n
+        if conv_mask & bit and building_id[n] > 0:
+            if rc_get_stored_resource(building_id[n]) is not None:
+                bm_conv_loaded |= bit
+            else:
+                bm_conv_loaded &= ~bit
+    _bm_conv_loaded = bm_conv_loaded
+
+    # --- Compute derived bitmasks ---
+
+    # Conveyors (all conveyor-type buildings + my core area)
+    _bm_conveyors = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+                     | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER])
+    _bm_conveyors |= _bm_my_core_area
+
+    # Routable = my team's conveyor-type buildings
+    _bm_routable = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+                    | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER]) & bm_team[my_team_idx]
+
+    _bm_route_targets = _compute_route_targets()
+
+    # Blocked = walls + non-passable buildings + enemy core area
+    _bm_blocked = bm_env[idx_wall]
+    _bm_blocked |= bm_et[_IDX_HARVESTER] | bm_et[_IDX_FOUNDRY]
+    _bm_blocked |= bm_et[_IDX_GUNNER] | bm_et[_IDX_SENTINEL]
+    _bm_blocked |= bm_et[_IDX_BREACH] | bm_et[_IDX_LAUNCHER]
+    _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
+    _bm_blocked |= _bm_their_core_area
+
+    # Conveyor targets
+    _bm_conveyor_targets = 0
+    conv_mask = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+                 | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER])
+    mask = conv_mask
+    while mask:
+        lsb = mask & -mask
+        cn = lsb.bit_length() - 1
+        tn = building_conv_target[cn]
+        if tn:
+            _bm_conveyor_targets |= 1 << tn
+        mask ^= lsb
+
+    # Enemy launcher adjacency
+    enemy_launchers = bm_et[_IDX_LAUNCHER] & ~bm_team[my_team_idx]
+    _bm_enemy_launch_adj = 0
+    mask = enemy_launchers
+    while mask:
+        lsb = mask & -mask
+        ln = lsb.bit_length() - 1
+        lx = ln % width
+        ly = ln // width
         for dx, dy in _DIRECTION_DELTAS.values():
             nx = lx + dx
             ny = ly + dy
             if 0 <= nx < width and 0 <= ny < height:
-                enemy_launch_adj.add(Position(nx, ny))
-    for c in conveyors:
-        conveyor_targets.add(Position(building_conv_target[c.x+c.y*width]%width, building_conv_target[c.x+c.y*width]//width))
-    if update_conv:
-        compute_conveyor_loads()
+                _bm_enemy_launch_adj |= 1 << (nx + ny * width)
+        mask ^= lsb
+
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (_rc.is_tile_empty(pos) or (_rc.get_tile_building_id(pos) != None and _rc.get_entity_type(_rc.get_tile_building_id(pos)) is EntityType.MARKER))
 
@@ -455,36 +761,46 @@ def can_place_at_restrictive(pos: Position):
 def is_passable(pos: Position):
     if not in_bounds(pos): return False
     n = pos.x + pos.y * _width
-    if _INT_ENV[_ground[n]] is Environment.WALL: return False
+    bit = 1 << n
+    if _bm_env[_IDX_ENV_WALL] & bit: return False
     if _building_id[n] == 0: return True
-    t = _INT_ET[_building_type[n]]
-    return t in _CONVEYOR_TYPES or t is EntityType.ROAD or t is EntityType.MARKER or (_building_team[n] == _TM_INT[_rc.get_team()] and t is EntityType.BARRIER)
+    my_team_idx = _TM_INT[_rc.get_team()]
+    return bool(
+        (_bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
+         | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
+         | _bm_et[_IDX_ROAD] | _bm_et[_IDX_MARKER]
+         | (_bm_et[_IDX_BARRIER] & _bm_team[my_team_idx])
+        ) & bit
+    )
+
 def get_avoid(
     avoid_conveyors: bool,
     avoid_builders: bool,
     avoid_ore: bool,
-) -> set[Position]:
+) -> int:
+    """Return a bitmask of tiles to avoid during pathfinding."""
     avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
-    avoid = set(_blocked)
+    mask = _bm_blocked
     if avoid_conveyors:
-        avoid |= _conveyors
-        avoid |= _conveyors_targets
+        mask |= _bm_conveyors | _bm_conveyor_targets
     if avoid_ore:
-        avoid |= _ores
+        mask |= _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
     if avoid_core:
-        avoid |= _my_core_area
+        mask |= _bm_my_core_area
     if avoid_builders:
         for unit in _rc.get_nearby_units():
             if _rc.get_entity_type(unit) is EntityType.BUILDER_BOT:
-                avoid.add(_rc.get_position(unit))
-    return avoid
+                p = _rc.get_position(unit)
+                mask |= 1 << (p.x + p.y * _width)
+    return mask
+
 def best_sentinel_dir(pos: Position, avoid_dir = None):
-    # from units.builder_states.builder_rush import log
-    # from units.builder import log
     valid = set()
-    my_team = _rc.get_team()
+    my_team_idx = _TM_INT[_rc.get_team()]
     w = _width
     h = _height
+    bm_et = _bm_et
+    bm_team = _bm_team
     if avoid_dir == None:
         for dir in _CARDINAL:
             new_pos = pos.add(dir)
@@ -493,8 +809,11 @@ def best_sentinel_dir(pos: Position, avoid_dir = None):
             if 0 <= nx < w and 0 <= ny < h:
                 if _building_id[n] == 0:
                     continue
-                type = _INT_ET[_building_type[n]]
-                if _building_id[n] != 0 and (type is EntityType.HARVESTER or type is EntityType.CONVEYOR and _INT_DIR[_building_dir[n]] == new_pos.direction_to(pos)):
+                sbit = 1 << n
+                if _building_id[n] != 0 and (
+                    (bm_et[_IDX_HARVESTER] & sbit) or
+                    (bm_et[_IDX_CONVEYOR] & sbit and _INT_DIR[_building_dir[n]] == new_pos.direction_to(pos))
+                ):
                     print(f"Validated {new_pos.direction_to(pos)}")
                     for dir2 in _ALL_DIRECTIONS:
                         if dir2 is not _DIR_CENTRE and dir2 is not dir:
@@ -516,16 +835,16 @@ def best_sentinel_dir(pos: Position, avoid_dir = None):
         harvesters = conveyors = other = 0
         base = 0
         pew = pos
-        seen = set()
+        seen_local = set()
 
         for i in range(1, 6):
             pew = pew.add(dir)
             for d in _ALL_DIRECTIONS:
                 s = pew.add(d)
 
-                if s in seen:
+                if s in seen_local:
                     continue
-                seen.add(s)
+                seen_local.add(s)
 
                 sx, sy = s.x, s.y
                 if not (0 <= sx < w and 0 <= sy < h):
@@ -534,15 +853,15 @@ def best_sentinel_dir(pos: Position, avoid_dir = None):
                 n = sx+sy*_width
                 if _building_id[n] == 0:
                     continue
-                if _INT_TM[_building_team[n]] == _rc.get_team():
+                sbit = 1 << n
+                if bm_team[my_team_idx] & sbit:
                     continue
 
-                t = _INT_ET[_building_type[n]]
-                if t is EntityType.HARVESTER:
+                if bm_et[_IDX_HARVESTER] & sbit:
                     harvesters += 1
-                elif t is EntityType.CORE:
+                elif bm_et[_IDX_CORE] & sbit:
                     base = 1
-                elif t in _CONVEYOR_TYPES:
+                elif (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR] | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER]) & sbit:
                     conveyors += 1
                 else:
                     other += 1
@@ -565,59 +884,3 @@ def handle_turret(pos: Position, avoid_dir = None):
     dir = best_sentinel_dir(pos, avoid_dir)
     if _rc.can_build_sentinel(pos, dir):
         _rc.build_sentinel(pos, dir)
-def push_load(pos: int):
-    building_conv_target = _building_conv_target
-    building_load = _building_load
-    building_ore = _building_ore
-    building_type = _building_type
-    building_id = _building_id
-    building_my = _building_my
-
-    type = building_ore[pos]
-    for i in range(100):
-        building_load[pos] += 1
-        building_ore[pos] = max(building_ore[pos], type)
-        building_my[pos] = _building_my_key
-        next = building_conv_target[pos]
-        if building_id[next] == 0 or _INT_ET[building_type[next]] not in _CONVEYOR_TYPES:
-            if (building_id[next] == 0 or _INT_ET[building_type[next]] not in _ACCEPT_ORE):
-                building_load[pos] = 100
-            break
-        pos = next
-def propogate_load(pos: int, depth: int = 0):
-    if depth == 100:
-        return 100, 0
-    building_conv_target = _building_conv_target
-    building_load = _building_load
-    building_type = _building_type
-    building_ore = _building_ore
-    building_id = _building_id
-    next = building_conv_target[pos]
-    if building_id[next] == 0 or _INT_ET[building_type[next]] not in _CONVEYOR_TYPES:
-        if Position(pos%_width, pos//_width) in builder.target_splitters:
-            return building_load[pos], _ENV_INT[Environment.ORE_AXIONITE]
-        else:
-            return building_load[pos], _ENV_INT[Environment.ORE_TITANIUM]
-    building_load[pos], building_ore[pos] = propogate_load(next, depth + 1)
-    return (building_load[pos], building_ore[pos])
-
-    
-def compute_conveyor_loads():
-    global _building_my_key
-    _building_my_key += 1
-    building_load = _building_load
-    building_ore = _building_ore
-
-    width = _width
-    for i in _conveyors:
-        building_load[i.x+i.y*width] = 0
-        building_ore[i.x+i.y*width] = 0
-    for i in my_conveyors:
-        c = i[0]
-        h = i[1]
-        # building_ore[c.x+c.y*width] = _ground[h.x+h.y*width]
-    for i in my_conveyors:
-        push_load(i[0].x+i[0].y*width)
-    for i in my_conveyors:
-        propogate_load(i[0].x+i[0].y*width)
-    

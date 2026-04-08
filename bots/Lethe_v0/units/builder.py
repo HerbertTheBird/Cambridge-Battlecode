@@ -21,18 +21,29 @@ def init(c: Controller):
     for s in states:
         s.init(c)
 
-forget = [dict() for _ in range(len(states) + 1)]
+forget = [0] * (len(states) + 1)            # bitmask per comm flag
+_forget_rounds = [dict() for _ in range(len(states) + 1)]  # idx -> round for expiry
+
 def handle_comms():
+    current_round = rc.get_current_round()
     for v in comms.get_new_messages():
         pos = comms.decode_location(v)
-        print("forget", pos.x, pos.y)
-        print(comms.decode(v))
-        forget[comms.decode_type(v)][pos.x+pos.y*map_info._width] = rc.get_current_round()
+        # print("forget", pos.x, pos.y)
+        # print(comms.decode(v))
+        idx = pos.x + pos.y * map_info._width
+        flag = comms.decode_type(v)
+        forget[flag] |= 1 << idx
+        _forget_rounds[flag][idx] = current_round
     for p in rc.get_nearby_tiles():
+        idx = p.x + p.y * map_info._width
         for i in range(len(forget)):
-            idx = p.x+p.y*map_info._width
-            if idx in forget[i] and forget[i][idx]+10 < rc.get_current_round():
-                del forget[i][idx]
+            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 10 < current_round:
+                del _forget_rounds[i][idx]
+                forget[i] &= ~(1 << idx)
+def draw_mask(mask, r, g, b):
+    for p in map_info.iter_mask(mask):
+        rc.draw_indicator_dot(p, r, g, b)
+
 def run():
     map_info.update()
     handle_comms()

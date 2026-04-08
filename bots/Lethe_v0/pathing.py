@@ -36,21 +36,21 @@ def _is_builder_ore_nav(pathing: "Pathing") -> bool:
     return getattr(builder, "ore_nav", None) is pathing
 
 class Pathing:
-        
+
     destroyed_barriers = dict()
-    
+
     forget_launcher = set()
     width = height = 0
     rc: Controller
-    
+
     stuck_turns = 0
     prev_pos = None
-    
+
     target_p = None
-    
+
     last_dir = None
     last_last_dir = None
-    
+
     path = None
     path_idx = 0
 
@@ -163,13 +163,30 @@ class Pathing:
         self.DIRS = make_steps(raw_dirs)
         self.CONV = make_steps(raw_conv)
 
+        # Precompute offsets for bridge zone (5 < dist² <= 18)
+        self._bridge_offsets = [
+            (dx, dy)
+            for dy in range(-4, 5)
+            for dx in range(-4, 5)
+            if 5 < dx * dx + dy * dy <= 18
+        ]
+
+    def _bridge_zone(self, center: Position) -> int:
+        cx, cy = center.x, center.y
+        w, h = self.width, self.height
+        mask = 0
+        for dx, dy in self._bridge_offsets:
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < w and 0 <= ny < h:
+                mask |= 1 << (nx + ny * w)
+        return mask
 
     def move(self, dir: Direction):
         rc = self.rc
         px, py = rc.get_position().x, rc.get_position().y
         dx, dy = dir.delta()
         new_pos = Position(px + dx, py + dy)
-        print("move pre", rc.get_position())
+        # print("move pre", rc.get_position())
         if not map_info.in_bounds(new_pos):
             return False
         id = rc.get_tile_building_id(new_pos)
@@ -185,13 +202,13 @@ class Pathing:
             rc.move(dir)
             self.last_last_dir = self.last_dir
             self.last_dir = dir.delta()
-            print("move post", rc.get_position())
+            # print("move post", rc.get_position())
             return True
         return False
 
     def rebuild_broken_barriers(self):
         rc = self.rc
-        print("broken", self.destroyed_barriers)
+        # print("broken", self.destroyed_barriers)
         built = []
         barrier_cost = rc.get_barrier_cost()[0]
         my_pos = rc.get_position()
@@ -206,14 +223,14 @@ class Pathing:
                 continue
             id = rc.get_tile_building_id(p)
             if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p):
-                print("barrier place break", p)
+                # print("barrier place break", p)
                 rc.destroy(p)
                 map_info.note_destroy(p)
             if rc.can_build_barrier(p):
-                print("barrier place", p)
+                # print("barrier place", p)
                 rc.build_barrier(p)
                 built.append(p)
-        print("put back", built)
+        # print("put back", built)
 
         for p in built:
             self.destroyed_barriers.pop(p)
@@ -354,43 +371,50 @@ class Pathing:
             path_bits.append(current)
 
         return [Position((b.bit_length() - 1) % width, (b.bit_length() - 1) // width) for b in path_bits]
-    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: set[Position] | None = None, routing = False) -> list[Position] | None:
+
+    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: int | None = None, routing = False, bridge_zone: int | None = None) -> list[Position] | None:
         width = self.width
         if avoid_p is None:
             avoid_p = map_info.get_avoid(False, True, False)
-        if isinstance(start_p, Position):
-            start_p = {start_p}
-        if isinstance(target_p, Position):
-            target_p = {target_p}
-        target = 0
-        for p in target_p:
-            target |= (1<<(p.x+p.y*width))
-        start = 0
-        for p in start_p:
-            start |= (1<<(p.x+p.y*width))
-        avoid = 0
-        for a in avoid_p:
-            h = a.y * width + a.x
-            if (start >> h)&1 or (target >> h)&1:
-                continue
-            avoid |= (1<<h)
+
+        if isinstance(start_p, int):
+            start = start_p
+        elif isinstance(start_p, Position):
+            start = 1 << (start_p.x + start_p.y * width)
+        else:
+            start = 0
+            for p in start_p:
+                start |= 1 << (p.x + p.y * width)
+
+        if isinstance(target_p, int):
+            target = target_p
+        elif isinstance(target_p, Position):
+            target = 1 << (target_p.x + target_p.y * width)
+        else:
+            target = 0
+            for p in target_p:
+                target |= 1 << (p.x + p.y * width)
+
+        # avoid_p is already a bitmask; just clear start/target from it
+        avoid = avoid_p & ~start & ~target
+
         CONV = self.CONV
         DIRS = self.DIRS
-        barriers = 0
-        adj_launch = 0
         can_visit = [target]
         visited = 0
-        
+
         start_time = time.perf_counter_ns()
-        for b in map_info._my_barriers:
-            barriers |= (1<<(b.y * width + b.x))
-        for p in map_info._enemy_launch_adj:
-            adj_launch |= (1<<(p.y * width + p.x))
-        
+
+        # Barriers and enemy launch adjacency directly from bitmasks
+        my_team_idx = map_info._TM_INT[self.rc.get_team()]
+        barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
+        adj_launch = map_info._bm_enemy_launch_adj
+
         stuck = 0
         i = 0
         while True:
             frontier = can_visit[i] & ~visited
+            # builder.draw_mask(frontier, min(255, i*10), 0, 0)
             visited |= frontier
             if frontier & start:
                 end_time = time.perf_counter_ns()
@@ -410,6 +434,8 @@ class Pathing:
                 for step in CONV:
                     offset = step[0]+step[1]*width
                     new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
+                    if bridge_zone is not None and step[2] <= 1:
+                        new &= ~bridge_zone
                     can_visit[(i+step[2])] |= new
             else:
                 can_visit.extend([0]*(i+1+barrier_cost+adj_launch_cost+1-len(can_visit)))
@@ -423,11 +449,15 @@ class Pathing:
             i+=1
         self.path = None
         return None
-    def moves_through_impassible(self, path: list[Position], avoid: set[Position]) -> bool:
+
+    def moves_through_impassible(self, path: list[Position], avoid: int) -> bool:
+        width = self.width
         for i in range(1, len(path) - 1):
-            if path[i] in avoid:
+            p = path[i]
+            if avoid & (1 << (p.x + p.y * width)):
                 return True
         return False
+
     def execute_path(self, sample_path=None, path_idx_in=None):
         if sample_path is None:
             sample_path = self.path
@@ -444,15 +474,14 @@ class Pathing:
                 self.path_idx += 1
             return True
         return False
+
     def move_to(self, target: Position | set[Position]):
         if isinstance(target, Position):
             target = {target}
         if target != self.target_p:
             self.forget_launcher.clear()
-        print("move to ", target)
+        # print("move to ", target)
         avoid = map_info.get_avoid(False, True, False)
-        # for a in avoid:
-            # self.rc.draw_indicator_dot(a, 255, 0, 0)
         my_pos = self.rc.get_position()
         if target == self.target_p and self.rc.get_position() == self.prev_pos:
             self.stuck_turns += 1
@@ -464,7 +493,7 @@ class Pathing:
                 if self.rc.can_move(i):
                     self.rc.move(i)
                     return True
-                
+
         path = self.bfs(my_pos, target, avoid, False)
         if path:
             for p in path:
@@ -521,140 +550,33 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, start: Position, ore: Position, avoid_extra: Collection[Position] | None = None, update: bool = False):
+    def calculate_conveyor_path(self, start: Position, update: bool = False):
         print("conveyors from ", start)
-        target, avoid = self._get_conveyor_targets_and_avoid(ore, avoid_extra)
-        if len(target) == 0:
+        target, avoid = self._get_conveyor_targets_and_avoid()
+        builder.draw_mask(target, 0, 255, 0)
+        if not target:
             return None
+        bz = self._bridge_zone(map_info._my_core)
         if not update:
             new_start = set()
             for dir in CARD_DIR:
-                if map_info.in_bounds(start.add(dir)):
+                if map_info.in_bounds(start.add(dir)) and (avoid >> ((start.x + dir.delta()[0]) + (start.y + dir.delta()[1]) * self.width) & 1) == 0:
                     new_start.add(start.add(dir))
             start = new_start
-        path = self.bfs(start, target, avoid, True)
+        path = self.bfs(start, target, avoid, True, bz)
         if not path:
             return None
-        if path[-1] in builder.target_splitters:
-            path.append(Position(-1, -1))
+        for i in range(len(path)-1):
+            self.rc.draw_indicator_line(path[i], path[i+1], 255, 0, 255)
+            self.rc.draw_indicator_dot(path[i], 255, 0, 255)
         return path
 
 
     def _get_conveyor_targets_and_avoid(
         self,
-        ore: Position,
-        avoid_extra: Collection[Position] | None = None,
     ):
-        core = map_info._my_core
-        my_team = self.rc.get_team()
-        ore_type = map_info.ground_at(ore.x, ore.y)
-
-        avoid_extra = set(avoid_extra or ())
-        target = set()
-
-        if ore_type == Environment.ORE_TITANIUM:
-            target.update(
-                Position(core.x + dx, core.y + dy)
-                for _, (dx, dy) in ALL_DIRS_DELTAS
-            )
-
-        id_at = map_info.id_at
-        can_route = map_info.can_route
-        load_at = map_info.load_at
-        team_at = map_info.team_at
-        trans_ore_at = map_info.trans_ore_at
-        titanium = (ore_type == Environment.ORE_TITANIUM)
-
-        for p in map_info._conveyors:
-            x, y = p.x, p.y
-
-            if id_at(x, y) == 0:
-                continue
-            if not can_route(x, y):
-                continue
-            if load_at(x, y) > 3:
-                continue
-            if team_at(x, y) != my_team:
-                continue
-            if p in avoid_extra:
-                continue
-            if not titanium and trans_ore_at(x, y) != ore_type:
-                continue
-
-            target.add(p)
-
-        for s in builder.target_splitters:
-            if id_at(s.x, s.y) == 0 or map_info.type_at(s.x, s.y) != EntityType.SPLITTER:
-                target.add(s)
-                continue
-            if load_at(s.x, s.y) <= 3 and can_route(s.x, s.y):
-                target.add(s)
-
+        target = map_info._bm_route_targets
         if not target:
-            return set(), set()
-
+            return 0, 0
         avoid = map_info.get_avoid(True, False, True)
-        avoid.update(builder.target_foundry)
-        avoid.update(builder.target_splitters)
-        avoid.update(avoid_extra)
-
         return target, avoid
-    def calculate_launcher_position(self, path: list[Position], ore: Position) -> Position | None:
-        return None
-        if self.rc.get_unit_count() == 50: #maybe remove later, but if we hit cap, i literally cant place more launchers
-            return None
-        avoid = map_info.get_avoid(True, False, True)
-        avoid.update(path)
-
-        current_pos  = self.rc.get_position()
-        width_local  = map_info._width
-        height_local = map_info._height
-        team         = self.rc.get_team()
-        path_len     = len(path)
-
-        for i in range(path_len - 1):
-            possible: set[Position] | None = None
-            last_possible: set[Position] | None = None
-
-            for j in range(i, path_len - 1):
-                base = path[j]
-                bx   = base.x
-                by   = base.y
-
-                here = set()
-                has_launcher = False
-
-                for _, (dx, dy) in ALL_DIRS_DELTAS:
-                    x = bx + dx
-                    y = by + dy
-
-                    if x < 0 or x >= width_local or y < 0 or y >= height_local:
-                        continue
-
-                    candidate = Position(x, y)
-                    here.add(candidate)
-
-                    if map_info.id_at(x, y) != 0 and map_info.team_at(x, y) == team and map_info.type_at(x, y) == EntityType.LAUNCHER:
-                        has_launcher = True
-
-                if has_launcher:
-                    continue
-
-                if possible is None:
-                    new_possible = here - avoid
-                else:
-                    new_possible = possible.intersection(here)
-                    if new_possible:
-                        new_possible.difference_update(avoid)
-
-                if not new_possible:
-                    break
-
-                last_possible = new_possible
-                possible = new_possible
-
-            if last_possible:
-                best = min(last_possible, key=lambda p: p.distance_squared(current_pos))
-                return best
-
-        return None
