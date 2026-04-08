@@ -45,10 +45,9 @@ def run():
     # loop until we find a target we can path to and move.
     moved = False
     attempts = 0
-    while not moved and attempts < 2:
+    while attempts < 2:
         if not nav.move_to(explore_target):
             generate_explore_target()
-            moved = True
         else:
             break
         attempts += 1

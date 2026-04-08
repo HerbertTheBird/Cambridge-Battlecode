@@ -294,6 +294,16 @@ def update_symmetry(tile: Position):
         if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
             _rot_sym = False
 
+def update_symmetry_from_comms(sym_bits):
+    """Update symmetry from comms. Each bit represents a possible symmetry."""
+    global _hor_sym, _ver_sym, _rot_sym
+    if not (sym_bits & 1):
+        _hor_sym = False
+    if not (sym_bits & 2):
+        _ver_sym = False
+    if not (sym_bits & 4):
+        _rot_sym = False
+
 def _env_at_idx(n):
     """Return the env list index for tile n."""
     bit = 1 << n

@@ -46,7 +46,8 @@ def _available_ore():
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
             & ~units.builder.forget[comm_flag]
             & ~enemy_blocking
-            & ~friendly_blocking)
+            & ~friendly_blocking
+            & units.builder._harvest_zone)
 
 def score():
     return 3 if _available_ore() else 0
@@ -84,6 +85,8 @@ def run():
             # Friendly building on ore — move adjacent and destroy it
             adj = set()
             for dir in Direction:
+                if dir == Direction.CENTRE:
+                    continue
                 adj_pos = best_ore.add(dir)
                 if not map_info.is_passable(adj_pos):
                     continue
@@ -103,6 +106,8 @@ def run():
             # Clear tile — move adjacent and build harvester
             adj = set()
             for dir in Direction:
+                if dir == Direction.CENTRE:
+                    continue
                 adj_pos = best_ore.add(dir)
                 if not map_info.is_passable(adj_pos):
                     continue
