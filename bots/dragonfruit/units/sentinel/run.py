@@ -5,24 +5,32 @@ from units.sentinel.combat import choose_target, choose_passive_target
 from log import log
 
 def run_turret(player, ct: Controller, my_pos: Position, vc) -> None:
+    # Initialize last fired round on first turn
     if player.last_fired_round == 0:
         player.last_fired_round = ct.get_current_round()
 
+    # Prioritize enemy units
     target = choose_target(ct, my_pos, vc)
     log("turret target:", target)
     
+    # Fall back to launchers or conveyors, etc
     if target is None:
         target = choose_passive_target(ct, my_pos, player.my_team, vc, map_obj=player.map)
         log("turret passive target:", target)
+        
+    # Fire if we have a target
     if target is not None:
         if ct.can_fire(target):
             ct.fire(target)
             log(f"turret fired at {target}")
             player.last_fired_round = ct.get_current_round()
             player.skipped_firing_turns = 0
-    elif ct.get_action_cooldown() == 0:
+            
+    # Otherwise increment skipped firing turns
+    if ct.get_action_cooldown() == 0:
         player.skipped_firing_turns += 1
 
+    # Self destruct if no nearby enemies and we haven't fired in a while
     if player.skipped_firing_turns >= 8:
         if len(vc.enemy_units) > 0:
             player.last_fired_round = ct.get_current_round()

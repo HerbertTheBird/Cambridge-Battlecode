@@ -2,8 +2,9 @@ from cambc import Controller, Direction, Position, EntityType
 
 from globals import CARDINAL_DIRECTIONS
 
-_GOLDEN = 0.618033988749895
+# Used to differentiate bot paths by color
 
+_GOLDEN = 0.618033988749895
 def bot_path_color(bot_id: int) -> tuple[int, int, int]:
     hue = (bot_id * _GOLDEN) % 1.0
     h6 = hue * 6.0

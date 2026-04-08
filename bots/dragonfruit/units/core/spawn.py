@@ -1,6 +1,8 @@
-from cambc import Direction, Position
+import random
 
-from globals import DIRECTIONS
+from cambc import Controller, Direction, EntityType, Position
+
+from globals import *
 
 def dir_distance(a, b):
     ia = DIRECTIONS.index(a)
@@ -68,3 +70,80 @@ def prioritize_direction(directions: list[Direction], preferred_dir: Direction) 
     """Move preferred_dir to the front, adding it if needed."""
     ordered = [d for d in directions if d != preferred_dir]
     return [preferred_dir, *ordered][:3]
+
+def choose_spawn_plan(player, ct: Controller, my_pos: Position):
+    valid_dirs = get_valid_directions(ct, my_pos, player.map.width, player.map.height)
+    rotational_core_dir = my_pos.direction_to(player.map.get_symmetric_pos(my_pos, Symmetry.ROTATE))
+
+    if len(valid_dirs) == 0:
+        return prioritize_direction(random.sample(DIRECTIONS, 3), rotational_core_dir)
+
+    chosen = pick_three_directions(my_pos, player.map.width, player.map.height, valid_dirs)
+    return prioritize_direction([d for (d, _) in chosen], rotational_core_dir)
+
+def draw_spawn_plan(ct: Controller, my_pos: Position, spawn_plan, width: int, height: int) -> None:
+    for d in spawn_plan:
+        endpoint = get_ray_endpoint(my_pos, d, width, height)
+        ct.draw_indicator_line(my_pos, endpoint, 0, 255, 0)
+
+def should_spawn(player, ct: Controller, vc) -> bool:
+    builder_cost = ct.get_builder_bot_cost()[0]
+    bridge_cost = ct.get_bridge_cost()[0]
+    sees_enemy = len(vc.enemy_units) > 0
+    current_round = ct.get_current_round()
+    rounds_since_spawn = current_round - player.last_spawn_round
+
+    # Spawn if no units left (core counts as 1, hence <=1)
+    no_units = ct.get_unit_count() <= 1
+    
+    # Spawn some builder bots at start
+    initial_units = player.num_spawned < SPAWN_INITIAL_COUNT
+    
+    # Spawn more bots once we've found titanium
+    resource_intake = (
+        player.num_spawned < SPAWN_LATER_COUNT and
+        player.global_titanium - builder_cost > 200 and
+        current_round - player.last_global_titanium_increase < 10
+    )
+
+    # Spawn if we have excess titanium
+    wealthy = (
+        rounds_since_spawn >= SPAWN_WEALTHY_INTERVAL and
+        player.global_titanium >= bridge_cost * SPAWN_WEALTHY_BRIDGE_MULT and
+        player.global_titanium >= builder_cost * SPAWN_WEALTHY_BUILDER_MULT and
+        player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD
+    )
+    
+    # Spawn if enemy spotted and no ally builder bots nearby
+    threatened = (
+        sees_enemy and
+        (player.global_titanium >= builder_cost * SPAWN_THREATENED_BUILDER_MULT or player.health - player.prev_health < 0) and
+        len(vc.ally_builder_bots) == 0
+    )
+    
+    # Spawn if we haven't seen a builder bot in a while
+    builder_drought = (
+        current_round - player.last_seen_builder_bot_round > 30 and
+        player.global_titanium - builder_cost > 200
+    )
+
+    return (
+        no_units or
+        initial_units or
+        resource_intake or
+        wealthy or
+        threatened or
+        builder_drought
+    )
+
+def choose_enemy_facing_spawn(my_pos: Position, enemy_units) -> Position | None:
+    if not enemy_units:
+        return None
+
+    nearest_enemy_pos = min(
+        (pos for (_eid, _etype, pos) in enemy_units),
+        key=lambda p: my_pos.distance_squared(p)
+    )
+    spawn_dir = my_pos.direction_to(nearest_enemy_pos)
+    return my_pos.add(spawn_dir)
+

@@ -26,7 +26,7 @@ class Player:
         self.path_color: tuple[int, int, int] = (0, 100, 255)
 
         self.num_spawned = 0
-        self.turns_since_wealthy_spawn = SPAWN_WEALTHY_INTERVAL
+        self.last_spawn_round = -SPAWN_WEALTHY_INTERVAL
         self.core_pos: Position | None = None
         self.enemy_core_pos: Position | None = None
         self.predicted_enemy_core_pos: Position | None = None

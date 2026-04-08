@@ -1,4 +1,6 @@
-from cambc import Controller, EntityType, Position, Team
+from cambc import Controller, Direction, EntityType, Position, Team
+
+from globals import INF, TURRET_TYPES
 
 def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Position | None:
     """Pick the gunner's shot by scanning its short forward ray."""
@@ -58,3 +60,26 @@ def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Pos
         return None
 
     return ray_tiles[first_enemy_idx]
+
+def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units) -> Direction | None:
+    current_dir = ct.get_direction()
+    rotate_dir = None
+    rotate_dist = INF
+
+    for (_eid, etype, pos) in enemy_units:
+        if etype not in TURRET_TYPES:
+            continue
+
+        dist = my_pos.distance_squared(pos)
+        if dist > 2:
+            continue
+
+        desired_dir = my_pos.direction_to(pos)
+        if desired_dir == current_dir:
+            continue
+
+        if dist < rotate_dist:
+            rotate_dist = dist
+            rotate_dir = desired_dir
+
+    return rotate_dir
