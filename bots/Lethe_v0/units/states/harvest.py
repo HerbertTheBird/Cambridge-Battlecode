@@ -155,7 +155,7 @@ def run():
             return
 
         # Otherwise — move adjacent, destroy if needed, place barrier
-        nav.move_to(best_ore)
+        print("MOVE?", nav.move_to(best_ore))
         if pid and (map_info._bm_team[my_team_idx] & pbit) and rc.can_destroy(p):
             rc.destroy(p)
             map_info.note_destroy(p)

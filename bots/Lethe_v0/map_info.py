@@ -261,6 +261,7 @@ def _build_turret_shift_masks():
             offsets.add((dx, dy))
         for dx, dy in _SENTINEL_OFFSETS[di]:
             offsets.add((dx, dy))
+            offsets.add((-dx, -dy))  # reversed for attack reachability
     _turret_shift_masks = {}
     for dx, dy in offsets:
         if abs(dx) >= w or abs(dy) >= h:

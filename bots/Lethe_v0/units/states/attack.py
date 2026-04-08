@@ -102,6 +102,84 @@ def _score_position(pos_n):
         return None
     return (best_score, best_dir, best_type)
 
+def _my_turret_coverage():
+    """Bitmask of all tiles my turrets can attack (regardless of ammo)."""
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_bm = map_info._bm_team[my_team_idx]
+    w = map_info._width
+    h = map_info._height
+    coverage = 0
+
+    # Breach + Sentinel: use shift masks like _compute_enemy_turret_threat
+    for turret_idx, offsets_table in ((map_info._IDX_BREACH, map_info._BREACH_OFFSETS),
+                                      (map_info._IDX_SENTINEL, map_info._SENTINEL_OFFSETS)):
+        turrets = map_info._bm_et[turret_idx] & my_team_bm
+        if not turrets:
+            continue
+        dir_masks = [0] * 8
+        m = turrets
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            di = map_info._building_dir[n]
+            dir_masks[di] |= lsb
+            m ^= lsb
+        for di in range(8):
+            dm = dir_masks[di]
+            if not dm:
+                continue
+            for dx, dy in offsets_table[di]:
+                shift_mask = map_info._turret_shift_masks.get((dx, dy))
+                if shift_mask is None:
+                    continue
+                offset = dx + dy * w
+                if offset > 0:
+                    coverage |= (dm & shift_mask) << offset
+                else:
+                    coverage |= (dm & shift_mask) >> (-offset)
+
+    # Gunner: per-turret rays with wall blocking
+    gunners = map_info._bm_et[map_info._IDX_GUNNER] & my_team_bm
+    if gunners:
+        walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+        m = gunners
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            px = n % w
+            py = n // w
+            for ray_di in range(8):
+                for dx, dy in map_info._GUNNER_RAYS[ray_di]:
+                    nx, ny = px + dx, py + dy
+                    if not (0 <= nx < w and 0 <= ny < h):
+                        break
+                    bit = 1 << (nx + ny * w)
+                    if walls & bit:
+                        break
+                    coverage |= bit
+            m ^= lsb
+
+    return coverage
+
+def _sentinel_reachable(targets):
+    """Bitmask of positions from which a sentinel (any direction) could hit at least one target tile.
+    Computed by shifting targets by reversed sentinel offsets."""
+    w = map_info._width
+    reachable = 0
+    for di in range(8):
+        for dx, dy in map_info._SENTINEL_OFFSETS[di]:
+            # Reverse: if sentinel at A hits A+(dx,dy)=B, then from B we need A = B+(-dx,-dy)
+            rdx, rdy = -dx, -dy
+            shift_mask = map_info._turret_shift_masks.get((rdx, rdy))
+            if shift_mask is None:
+                continue
+            offset = rdx + rdy * w
+            if offset > 0:
+                reachable |= (targets & shift_mask) << offset
+            else:
+                reachable |= (targets & shift_mask) >> (-offset)
+    return reachable
+
 def _placement_candidates():
     """Bitmask of tiles where a turret could be placed.
     Location: all conveyor outputs + cardinally adjacent to harvesters.
@@ -146,32 +224,48 @@ def _placement_candidates():
 
     return candidates
 
-def _get_attack_targets():
-    """Return bitmask of candidate positions that have a positive score."""
+def _get_attack_candidates():
+    """Return placement candidates filtered to those that can hit uncovered high-value targets."""
     candidates = _placement_candidates()
     if not candidates:
         return 0
 
-    w = map_info._width
-    result = 0
-    mask = candidates
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        res = _score_position(n)
-        if res is not None:
-            result |= lsb
-        mask ^= lsb
-    return result
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    enemy_idx = 1 - my_team_idx
+    enemy = map_info._bm_team[enemy_idx]
+
+    # High-value enemy targets only
+    high_value = (
+        map_info._bm_et[map_info._IDX_HARVESTER]
+        | map_info._bm_et[map_info._IDX_FOUNDRY]
+        | map_info._bm_et[map_info._IDX_GUNNER]
+        | map_info._bm_et[map_info._IDX_SENTINEL]
+        | map_info._bm_et[map_info._IDX_BREACH]
+        | map_info._bm_et[map_info._IDX_CORE]
+    ) & enemy
+
+    if not high_value:
+        return 0
+
+    # Remove targets already covered by my turrets
+    my_coverage = _my_turret_coverage()
+    uncovered = high_value & ~my_coverage
+    if not uncovered:
+        return 0
+
+    # Positions from which a sentinel could hit any uncovered target
+    reachable = _sentinel_reachable(uncovered)
+
+    return candidates & reachable
 
 def score():
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:
         return 0
-    return 7 if _get_attack_targets() else 0
+    return 7 if _get_attack_candidates() else 0
 
 def run():
     print("ATTACK")
-    candidates = _placement_candidates()
+    candidates = _get_attack_candidates()
     if not candidates:
         return
 
@@ -181,37 +275,32 @@ def run():
 
     width = map_info._width
 
-    # Find closest candidate to core, then pick the one with best score
+    # Find closest candidate to core via Manhattan expansion
     reached = 1 << (core.x + core.y * width)
     best = None
-    best_info = None
 
     for _ in range(width + map_info._height):
         found = candidates & reached
         if found:
-            # Evaluate all candidates at this distance, pick highest score
-            m = found
-            while m:
-                lsb = m & -m
-                n = lsb.bit_length() - 1
-                res = _score_position(n)
-                if res is not None:
-                    if best_info is None or res[0] > best_info[0]:
-                        best = Position(n % width, n // width)
-                        best_info = res
-                m ^= lsb
-            if best is not None:
-                break
+            lsb = found & -found
+            n = lsb.bit_length() - 1
+            best = Position(n % width, n // width)
+            break
         reached = map_info.expand_manhattan(reached)
 
-    if best is None or best_info is None:
+    if best is None:
+        return
+
+    # Full scoring on chosen tile
+    best_n = best.x + best.y * width
+    best_info = _score_position(best_n)
+    if best_info is None:
+        comms.mark(best, comm_flag)
         return
 
     _, dir_idx, turret_type = best_info
     direction = map_info._INT_DIR[dir_idx]
-    width = map_info._width
 
-    best_n = best.x + best.y * width
     best_bit = 1 << best_n
     best_id = map_info._building_id[best_n]
     my_team_idx = map_info._TM_INT[rc.get_team()]
@@ -222,12 +311,10 @@ def run():
         nav.move_to({best})
         if rc.can_fire(best):
             rc.fire(best)
-        # Try to step off to an adjacent tile so we can build
         for d in Direction:
             if d == Direction.CENTRE:
                 continue
-            p = best.add(d)
-            if map_info.in_bounds(p) and rc.can_move(d):
+            if rc.can_move(d):
                 rc.move(d)
                 break
     else:
@@ -244,12 +331,10 @@ def run():
         nav.move_to(adj)
 
         if best_id and is_mine:
-            # My conveyor/barrier/road/marker — destroy it
             if rc.can_destroy(best):
                 rc.destroy(best)
                 map_info.note_destroy(best)
 
-    # Place turret (marker gets overwritten automatically)
     if turret_type == EntityType.SENTINEL:
         if rc.can_build_sentinel(best, direction):
             rc.build_sentinel(best, direction)

@@ -45,10 +45,20 @@ def handle_comms():
         flag = comms.decode_type(v)
         forget[flag] |= 1 << idx
         _forget_rounds[flag][idx] = current_round
+        # Harvest claims also reserve cardinal neighbors (for barriers)
+        if flag == 3:
+            w = map_info._width
+            px, py = pos.x, pos.y
+            for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
+                nx, ny = px + dx, py + dy
+                if 0 <= nx < w and 0 <= ny < map_info._height:
+                    ni = nx + ny * w
+                    forget[flag] |= 1 << ni
+                    _forget_rounds[flag][ni] = current_round
     for p in rc.get_nearby_tiles():
         idx = p.x + p.y * map_info._width
         for i in range(len(forget)):
-            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 10 < current_round:
+            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 20 < current_round:
                 del _forget_rounds[i][idx]
                 forget[i] &= ~(1 << idx)
 def draw_mask(mask, r, g, b):

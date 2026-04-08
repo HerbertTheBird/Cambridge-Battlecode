@@ -410,7 +410,7 @@ class Pathing:
         adj_launch = map_info._bm_enemy_launch_adj | map_info._bm_enemy_turret_threat
         barriers &= ~start
         adj_launch &= ~start
-        builder.draw_mask(adj_launch, 255, 0, 0)
+        # builder.draw_mask(adj_launch, 255, 0, 0)
 
         convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
         if not routing:
@@ -447,8 +447,6 @@ class Pathing:
                 return self.path
             if frontier == 0:
                 stuck += 1
-                if stuck >= 11 if routing else 32:
-                    break
                 i += 1
                 if i >= len(can_visit):
                     break
