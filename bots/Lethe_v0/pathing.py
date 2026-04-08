@@ -407,7 +407,7 @@ class Pathing:
         # Barriers and enemy launch adjacency directly from bitmasks
         my_team_idx = map_info._TM_INT[self.rc.get_team()]
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
-        adj_launch = map_info._bm_enemy_launch_adj
+        adj_launch = map_info._bm_enemy_launch_adj | map_info._bm_enemy_turret_threat
 
         convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
         if not routing:

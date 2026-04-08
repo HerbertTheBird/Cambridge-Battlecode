@@ -13,20 +13,20 @@ comm_flag = 7
 _WEIGHTS = {
     map_info._IDX_CONVEYOR: 1,
     map_info._IDX_SPLITTER: 2,
-    map_info._IDX_BRIDGE: 5,
-    map_info._IDX_ARMOURED_CONVEYOR: 5,
+    map_info._IDX_BRIDGE: 4,
+    map_info._IDX_ARMOURED_CONVEYOR: 4,
     map_info._IDX_HARVESTER: 20,
     map_info._IDX_FOUNDRY: 50,
     map_info._IDX_ROAD: 0,
-    map_info._IDX_BARRIER: 5,
-    map_info._IDX_GUNNER: 10,
+    map_info._IDX_BARRIER: 4,
+    map_info._IDX_GUNNER: 25,
     map_info._IDX_SENTINEL: 30,
     map_info._IDX_BREACH: 65,
-    map_info._IDX_LAUNCHER: 20,
+    map_info._IDX_LAUNCHER: 10,
     map_info._IDX_CORE: 100,
 }
 
-GUNNER_MULTIPLIER = 3
+GUNNER_MULTIPLIER = 4
 SCORE_THRESHOLD = -15  # negative starting score to prevent random shooting of roads
 
 def init(c: Controller):
@@ -220,8 +220,8 @@ def run():
     if best_id and not is_mine:
         # Enemy road/marker — move onto it, fire, then step off to place
         nav.move_to({best})
-        if rc.can_fire(rc.get_position()):
-            rc.fire(rc.get_position())
+        if rc.can_fire(best):
+            rc.fire(best)
         # Try to step off to an adjacent tile so we can build
         for d in Direction:
             if d == Direction.CENTRE:

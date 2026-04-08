@@ -157,8 +157,8 @@ def run():
                 if is_enemy_clearable:
                     # Move onto tile and fire
                     nav.move_to({build_pos})
-                    if rc.can_fire(rc.get_position()):
-                        rc.fire(rc.get_position())
+                    if rc.can_fire(build_pos):
+                        rc.fire(build_pos)
                     comms.mark(best, comm_flag)
                     return
                 else:

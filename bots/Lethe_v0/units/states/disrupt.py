@@ -87,8 +87,8 @@ def run():
     elif best_id and (map_info._bm_et[map_info._IDX_ROAD]&best_bit):
         # Enemy road/marker — move onto it and fire
         nav.move_to({best})
-        if rc.can_fire(rc.get_position()):
-            rc.fire(rc.get_position())
+        if rc.can_fire(best):
+            rc.fire(best)
     else:
         # Empty tile — move adjacent and build barrier
         adj = set()

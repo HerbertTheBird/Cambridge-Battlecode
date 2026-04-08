@@ -1,9 +1,32 @@
 from cambc import Controller, Position, EntityType, Direction
-import math
 import map_info
 
 rc = None
 _no_ammo_turns = 0
+
+DIRS = [
+    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
+    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
+]
+
+_WEIGHTS = {
+    EntityType.CORE: 100,
+    EntityType.BREACH: 65,
+    EntityType.SENTINEL: 30,
+    EntityType.LAUNCHER: 20,
+    EntityType.HARVESTER: 20,
+    EntityType.BUILDER_BOT: 15,
+    EntityType.GUNNER: 10,
+    EntityType.FOUNDRY: 50,
+    EntityType.BRIDGE: 5,
+    EntityType.ARMOURED_CONVEYOR: 5,
+    EntityType.BARRIER: 5,
+    EntityType.SPLITTER: 2,
+    EntityType.CONVEYOR: 1,
+    EntityType.ROAD: 0,
+    EntityType.MARKER: 0,
+}
+
 
 def init(c: Controller):
     global rc
@@ -11,86 +34,40 @@ def init(c: Controller):
     map_info.init(c)
 
 
-def priority(tile: Position, my_team: int) -> int:
-    get_team = rc.get_team
-    get_entity_type = rc.get_entity_type
-    get_tile_building_id = rc.get_tile_building_id
-    get_tile_builder_bot_id = rc.get_tile_builder_bot_id
-
-    # --- Builder bot check ---
-    builder_id = get_tile_builder_bot_id(tile)
-    if builder_id and get_team(builder_id) != my_team:
-        return 3  # builder bots (after turrets)
-    elif builder_id:
-        return 9
-
-    # --- Building check ---
-    building_id = get_tile_building_id(tile)
-    if not building_id:
-        return 9
-
-    building_type = get_entity_type(building_id)
-
-    if building_type == map_info._ET_ROAD:
-        return 8
-    
-    if get_team(building_id) == my_team:
-        return 9
-
-    # Ignore markers
-    if building_type == map_info._ET_MARKER:
-        return 9
-
-    # Priority order
-    if building_type == EntityType.CORE:
-        return 0
-    if map_info.is_conveyor(building_type):
-        return 1
-    if map_info.is_turret(building_type):
-        return 2
-
-    return 4  # other enemy buildings
-
-# 8-direction order (must match engine ordering)
-DIRS = [
-    Direction.NORTH,
-    Direction.NORTHEAST,
-    Direction.EAST,
-    Direction.SOUTHEAST,
-    Direction.SOUTH,
-    Direction.SOUTHWEST,
-    Direction.WEST,
-    Direction.NORTHWEST,
-]
-
-DIR_TO_IDX = {d: i for i, d in enumerate(DIRS)}
+def _adj_harvester():
+    my_pos = rc.get_position()
+    for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
+        p = Position(my_pos.x + dx, my_pos.y + dy)
+        if map_info.in_bounds(p):
+            bid = rc.get_tile_building_id(p)
+            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+                return True
+    return False
 
 
-def rotate_towards(my_pos: Position, my_team: int, target_pos: Position):
-    desired_dir = my_pos.direction_to(target_pos)
+def _tile_score(tile):
+    my_team = rc.get_team()
+    # Turrets hit builder bot first if present
+    builder_id = rc.get_tile_builder_bot_id(tile)
+    if builder_id and rc.get_team(builder_id) != my_team:
+        return _WEIGHTS.get(EntityType.BUILDER_BOT, 0)
+    building_id = rc.get_tile_building_id(tile)
+    if building_id and rc.get_team(building_id) != my_team:
+        return _WEIGHTS.get(rc.get_entity_type(building_id), 0)
+    return 0
 
-    current_dir = rc.get_direction()
 
-    if current_dir == desired_dir:
-        return
+def _dir_score(direction):
+    """Score a direction by the best single target we could hit."""
+    my_pos = rc.get_position()
+    best = 0
+    for tile in rc.get_attackable_tiles_from(my_pos, direction, EntityType.GUNNER):
+        if rc.can_fire_from(my_pos, direction, EntityType.GUNNER, tile):
+            s = _tile_score(tile)
+            if s > best:
+                best = s
+    return best
 
-    cur_idx = DIR_TO_IDX[current_dir]
-    target_idx = DIR_TO_IDX[desired_dir]
-
-    # Compute shortest rotation direction
-    diff = (target_idx - cur_idx) % 8
-
-    if diff <= 4:
-        # rotate clockwise (+1)
-        next_dir = DIRS[(cur_idx + 1) % 8]
-    else:
-        # rotate counterclockwise (-1)
-        next_dir = DIRS[(cur_idx - 1) % 8]
-
-    # Only rotate one step
-    if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= 50:
-        print("ATTEMPTING ROTATE")
-        rc.rotate(next_dir)
 
 def run():
     global _no_ammo_turns
@@ -98,107 +75,48 @@ def run():
 
     if rc.get_ammo_amount() <= 0:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10:
-            my_pos = rc.get_position()
-            adj_harvester = False
-            for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-                p = Position(my_pos.x + dx, my_pos.y + dy)
-                if map_info.in_bounds(p):
-                    bid = rc.get_tile_building_id(p)
-                    if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
-                        adj_harvester = True
-                        break
-            if not adj_harvester:
-                rc.self_destruct()
-                return
+        if _no_ammo_turns >= 10 and not _adj_harvester():
+            rc.self_destruct()
+            return
     else:
         _no_ammo_turns = 0
 
     if rc.get_action_cooldown() > 0:
         return
 
-    if rc.get_ammo_amount() <= 0:
-        return
-
     my_pos = rc.get_position()
-    my_team = rc.get_team()
-    can_fire = rc.can_fire
 
+    # Try to fire in current direction
+    if rc.get_ammo_amount() > 0:
+        best_target = None
+        best_score = 0
+        for tile in rc.get_attackable_tiles():
+            if not rc.can_fire(tile):
+                continue
+            s = _tile_score(tile)
+            if s > best_score:
+                best_score = s
+                best_target = tile
+        if best_target:
+            rc.fire(best_target)
+            return
 
-    best_target = None
-    best_priority = 999
+    # Evaluate all 8 directions for rotation
+    if rc.get_global_resources()[0] > rc.get_harvester_cost()[0]:
+        current_dir = rc.get_direction()
+        best_dir = None
+        best_dir_score = 0
+        for d in DIRS:
+            if d == current_dir:
+                continue
+            s = _dir_score(d)
+            if s > best_dir_score:
+                best_dir_score = s
+                best_dir = d
+        if best_dir and rc.can_rotate(best_dir):
+            rc.rotate(best_dir)
+            return
 
-    pos_x, pos_y = my_pos.x, my_pos.y
-
-    # 8 directions: (dx, dy, max_steps)
-    DIRECTIONS = [
-        (0, 1, 3),   # N
-        (1, 1, 2),   # NE
-        (1, 0, 3),   # E
-        (1, -1, 2),  # SE
-        (0, -1, 3),  # S
-        (-1, -1, 2), # SW
-        (-1, 0, 3),  # W
-        (-1, 1, 2),  # NW
-    ]
-
-    # Cache methods (important for speed)
-    is_passable = rc.is_tile_passable
-    get_building = rc.get_tile_building_id
-    is_in_vision = rc.is_in_vision
-
-    # --- Scan only reachable tiles ---
-    for dx, dy, max_steps in DIRECTIONS:
-        cx, cy = pos_x, pos_y
-
-        for step in range(1, max_steps + 1):
-            cx += dx
-            cy += dy
-
-            p = Position(cx, cy)
-
-            if not map_info.in_bounds(p):
-                break
-            if not is_in_vision(p):
-                break
-
-            # Blocked BEFORE reaching target
-            if step > 1:
-                if not map_info.is_tile_empty(p) and not is_passable(p):
-                    print(f"Stopped because {map_info.is_tile_empty(p)} {is_passable(p)}")
-                    break
-
-            # Evaluate this tile
-            pr = priority(p, my_team)
-
-            if pr < best_priority:
-                best_priority = pr
-                best_target = p
-
-                if pr == 0:
-                    break  # best possible
-
-        if best_priority == 0:
-            break
-
-    # --- Fire if target exists ---
-    if best_target is not None and best_priority < 9 and rc.can_fire(best_target):
-        rc.fire(best_target)
-        return
-
-    if best_priority < 9 and best_target:
-        rc.draw_indicator_line(my_pos, best_target, 255, 150, 150)
-        rotate_towards(my_pos, my_team, best_target)
-        return
-
-    # No targets at all — self destruct unless adjacent to harvester
-    adj_harvester = False
-    for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if map_info.in_bounds(p):
-            bid = rc.get_tile_building_id(p)
-            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
-                adj_harvester = True
-                break
-    if not adj_harvester:
+    # No targets in any direction
+    if not _adj_harvester():
         rc.self_destruct()

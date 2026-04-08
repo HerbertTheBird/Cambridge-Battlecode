@@ -144,7 +144,7 @@ def run():
             continue  # has a real building — secured
 
         all_secured = False
-
+        print("not secured", p)
         # Enemy road — move onto it and fire
         if pid and not (map_info._bm_team[my_team_idx] & pbit) and is_road:
             nav.move_to({p})
@@ -154,7 +154,7 @@ def run():
             return
 
         # Otherwise — move adjacent, destroy if needed, place barrier
-        _move_adj(p)
+        nav.move_to(best_ore)
         if pid and (map_info._bm_team[my_team_idx] & pbit) and rc.can_destroy(p):
             rc.destroy(p)
             map_info.note_destroy(p)
