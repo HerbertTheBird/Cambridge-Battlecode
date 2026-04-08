@@ -27,19 +27,12 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     if player.comms.symmetry is not None and player.map.symmetry == Symmetry.UNKNOWN:
         player.map.symmetry = player.comms.symmetry
         log(f"symmetry from marker: {player.map.symmetry.name}")
-    previous_enemy_core = player.enemy_core_pos
-    if vc.enemy_core_pos is not None:
-        player.enemy_core_pos = vc.enemy_core_pos
+
     predicted_enemy_core = get_predicted_enemy_core_pos(player)
     if predicted_enemy_core != player.predicted_enemy_core_pos:
         player.predicted_enemy_core_pos = predicted_enemy_core
         if player.predicted_enemy_core_pos is not None:
             log(f"predicted enemy core position at {player.predicted_enemy_core_pos}")
-    if player.enemy_core_pos != previous_enemy_core and player.enemy_core_pos is not None:
-        log(f"confirmed enemy core position at {player.enemy_core_pos}")
-    # if player.map is not None and player.my_team is not None:
-    #     player.map.indicate_entity_map(ct, player.my_team)
-        
         
     log_time(ct, "After map checks")
 

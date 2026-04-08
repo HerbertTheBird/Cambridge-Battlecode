@@ -85,3 +85,12 @@ def get_foundry_positions(core_pos: Position | None, width: int, height: int) ->
             if on_map_coords(x, y, width, height):
                 positions.add(Position(x, y))
     return positions
+
+def check_for_resource_increase(player, ct: Controller):
+    # We gain passive titanium income every 4 rounds, so ignore for inferring harvest success
+    if ct.get_current_round() % 4 == 0:
+        return
+    if player.global_titanium > player.prev_global_titanium:
+        player.last_global_titanium_increase = ct.get_current_round()
+    if player.global_axionite > player.prev_global_axionite:
+        player.last_global_axionite_increase = ct.get_current_round()
