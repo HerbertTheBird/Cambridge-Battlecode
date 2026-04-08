@@ -37,7 +37,12 @@ def _available_ore():
         & ~map_info._bm_et[map_info._IDX_BARRIER]
         & ~map_info._bm_et[map_info._IDX_MARKER]
     )
-    return (map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+    ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+    w = map_info._width
+    # Ore tiles surrounded on all 4 cardinal sides by ore — unreachable by conveyor
+    landlocked = ore & (ore >> 1 & map_info._not_left_col) & (ore << 1 & map_info._not_right_col) & (ore >> w) & (ore << w)
+    return (ore
+            & ~landlocked
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
             & ~units.builder.forget[comm_flag]
             & ~enemy_blocking
