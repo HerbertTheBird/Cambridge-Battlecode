@@ -408,6 +408,9 @@ class Pathing:
         my_team_idx = map_info._TM_INT[self.rc.get_team()]
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
         adj_launch = map_info._bm_enemy_launch_adj | map_info._bm_enemy_turret_threat
+        barriers &= ~start
+        adj_launch &= ~start
+        builder.draw_mask(adj_launch, 255, 0, 0)
 
         convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
         if not routing:
@@ -507,7 +510,7 @@ class Pathing:
         avoid = map_info.get_avoid(False, True, False)
         # builder.draw_mask(avoid, 255, 0, 0)
         my_pos = self.rc.get_position()
-        if target == self.target_p and self.rc.get_position() == self.prev_pos:
+        if target == self.target_p and self.rc.get_position() == self.prev_pos and self.rc.get_position() not in target:
             self.stuck_turns += 1
         else:
             self.prev_pos = self.rc.get_position()

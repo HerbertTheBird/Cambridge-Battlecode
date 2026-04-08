@@ -34,13 +34,17 @@ def init(c: Controller):
     map_info.init(c)
 
 
-def _adj_harvester():
+def _should_stay():
     my_pos = rc.get_position()
+    my_team = rc.get_team()
     for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
         p = Position(my_pos.x + dx, my_pos.y + dy)
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+                return True
+            bot_id = rc.get_tile_builder_bot_id(p)
+            if bot_id and rc.get_team(bot_id) != my_team:
                 return True
     return False
 
@@ -75,7 +79,7 @@ def run():
 
     if rc.get_ammo_amount() <= 0:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _adj_harvester():
+        if _no_ammo_turns >= 10 and not _should_stay():
             rc.self_destruct()
             return
     else:
@@ -104,10 +108,37 @@ def run():
     # Evaluate all 8 directions for rotation
     if rc.get_global_resources()[0] > rc.get_harvester_cost()[0]:
         current_dir = rc.get_direction()
+        # If out of ammo, don't face toward the feeding conveyor/harvester
+        no_ammo = rc.get_ammo_amount() <= 0
+        feed_dirs = set()
+        if no_ammo:
+            w = map_info._width
+            h = map_info._height
+            my_team = rc.get_team()
+            px, py = my_pos.x, my_pos.y
+            pos_n = px + py * w
+            my_conveyors = (
+                map_info._bm_et[map_info._IDX_CONVEYOR]
+                | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+                | map_info._bm_et[map_info._IDX_SPLITTER]
+                | map_info._bm_et[map_info._IDX_BRIDGE]
+            ) & map_info._bm_team[map_info._TM_INT[my_team]]
+            my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[map_info._TM_INT[my_team]]
+            for dx, dy, d in [(0, -1, Direction.NORTH), (1, 0, Direction.EAST), (0, 1, Direction.SOUTH), (-1, 0, Direction.WEST)]:
+                nx, ny = px + dx, py + dy
+                if 0 <= nx < w and 0 <= ny < h:
+                    nn = nx + ny * w
+                    nbit = 1 << nn
+                    if (nbit & my_conveyors and map_info._building_conv_target[nn] == pos_n) \
+                            or (nbit & my_harvesters):
+                        feed_dirs.add(d)
+
         best_dir = None
         best_dir_score = 0
         for d in DIRS:
             if d == current_dir:
+                continue
+            if d in feed_dirs:
                 continue
             s = _dir_score(d)
             if s > best_dir_score:
@@ -118,5 +149,5 @@ def run():
             return
 
     # No targets in any direction
-    if not _adj_harvester():
+    if not _should_stay():
         rc.self_destruct()

@@ -15,19 +15,19 @@ _WEIGHTS = {
     map_info._IDX_SPLITTER: 2,
     map_info._IDX_BRIDGE: 4,
     map_info._IDX_ARMOURED_CONVEYOR: 4,
-    map_info._IDX_HARVESTER: 20,
-    map_info._IDX_FOUNDRY: 50,
+    map_info._IDX_HARVESTER: 35,
+    map_info._IDX_FOUNDRY: 55,
     map_info._IDX_ROAD: 0,
     map_info._IDX_BARRIER: 4,
-    map_info._IDX_GUNNER: 25,
-    map_info._IDX_SENTINEL: 30,
-    map_info._IDX_BREACH: 65,
+    map_info._IDX_GUNNER: 40,
+    map_info._IDX_SENTINEL: 50,
+    map_info._IDX_BREACH: 60,
     map_info._IDX_LAUNCHER: 10,
     map_info._IDX_CORE: 100,
 }
 
-GUNNER_MULTIPLIER = 4
-SCORE_THRESHOLD = -15  # negative starting score to prevent random shooting of roads
+GUNNER_MULTIPLIER = 2
+SCORE_THRESHOLD = -30  # negative starting score to prevent random shooting of roads
 
 def init(c: Controller):
     global rc, nav

@@ -31,13 +31,17 @@ def init(c: Controller):
     map_info.init(c)
 
 
-def _adj_harvester():
+def _should_stay():
     my_pos = rc.get_position()
+    my_team = rc.get_team()
     for dx, dy in CARDINAL_OFFSETS:
         p = Position(my_pos.x + dx, my_pos.y + dy)
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+                return True
+            bot_id = rc.get_tile_builder_bot_id(p)
+            if bot_id and rc.get_team(bot_id) != my_team:
                 return True
     return False
 
@@ -59,7 +63,7 @@ def run():
 
     if rc.get_ammo_amount() < 5:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _adj_harvester():
+        if _no_ammo_turns >= 10 and not _should_stay():
             rc.self_destruct()
             return
     else:
@@ -82,7 +86,7 @@ def run():
             best_target = tile
 
     if best_target is None:
-        if not _adj_harvester():
+        if not _should_stay():
             rc.self_destruct()
         return
 

@@ -101,12 +101,13 @@ def run():
     if best is None:
         return
 
+    danger = map_info._bm_enemy_turret_threat | map_info._bm_enemy_launch_adj
     adj = set()
     for d in Direction:
         if d == Direction.CENTRE:
             continue
         p = best.add(d)
-        if map_info.in_bounds(p) and map_info.is_passable(p):
+        if map_info.in_bounds(p) and map_info.is_passable(p) and not (danger & (1 << (p.x + p.y * width))):
             adj.add(p)
     if not adj:
         adj.add(best)
