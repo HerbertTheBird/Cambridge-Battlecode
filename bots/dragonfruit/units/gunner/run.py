@@ -23,7 +23,7 @@ def run_gunner(player, ct: Controller, my_pos: Position, vc) -> None:
         
     # Otherwise try to rotate toward enemy
     elif player.global_titanium <= GameConstants.GUNNER_ROTATE_COST[0] + 50:
-        rotate_dir = choose_rotate_dir(ct, my_pos, vc.enemy_units)
+        rotate_dir = choose_rotate_dir(ct, my_pos, vc.enemy_units, player.map)
 
         if rotate_dir is not None and ct.can_rotate(rotate_dir):
             ct.rotate(rotate_dir)

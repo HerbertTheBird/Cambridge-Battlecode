@@ -1,6 +1,7 @@
-from cambc import Controller, Direction, EntityType, Position, Team
+from cambc import Controller, Direction, EntityType, Position, Team, Environment
 
-from globals import INF, TURRET_TYPES
+from globals import INF, TURRET_TYPES, DIRECTIONS, CARDINAL_DIRECTIONS
+from helpers import on_map
 
 def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Position | None:
     """Pick the gunner's shot by scanning its short forward ray."""
@@ -61,20 +62,72 @@ def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Pos
 
     return ray_tiles[first_enemy_idx]
 
-def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units) -> Direction | None:
+def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj) -> set[Position]:
+    threat_tiles = set()
+
+    my_team = ct.get_team()
+    width = map_obj.width
+    height = map_obj.height
+
+    for d in DIRECTIONS:
+        dx, dy = d.delta()
+        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+
+        x, y = tpos.x, tpos.y
+        for _ in range(max_range):
+            x += dx
+            y += dy
+            cur = Position(x, y)
+
+            if not on_map(cur, width, height):
+                break
+
+            # Wall blocks
+            if map_obj.get_tile_env(cur) == Environment.WALL:
+                break
+
+            threat_tiles.add(cur)
+
+            # builder blocks
+            bbid = ct.get_tile_builder_bot_id(cur)
+            if bbid is not None:
+                if ct.get_team(bbid) == my_team:
+                    break  # ally blocks
+                continue  # enemy doesn't block
+
+            # buildings
+            bid = ct.get_tile_building_id(cur)
+            if bid is not None:
+                etype = ct.get_entity_type(bid)
+                team = ct.get_team(bid)
+
+                if etype == EntityType.MARKER or etype == EntityType.ROAD:
+                    continue
+
+                if team == my_team:
+                    break  # ally blocks
+                continue  # enemy doesn't block
+
+    return threat_tiles
+
+def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, map_obj) -> Direction | None:
     current_dir = ct.get_direction()
     rotate_dir = None
     rotate_dist = INF
 
-    for (_eid, etype, pos) in enemy_units:
+    for (eid, etype, tpos) in enemy_units:
         if etype not in TURRET_TYPES:
             continue
 
-        dist = my_pos.distance_squared(pos)
-        if dist > 2:
+        threat_tiles = get_gunner_threat_tiles(ct, tpos, map_obj)
+
+        # --- core check ---
+        if my_pos not in threat_tiles:
             continue
 
-        desired_dir = my_pos.direction_to(pos)
+        dist = my_pos.distance_squared(tpos)
+        desired_dir = my_pos.direction_to(tpos)
+
         if desired_dir == current_dir:
             continue
 
