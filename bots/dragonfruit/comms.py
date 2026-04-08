@@ -11,7 +11,6 @@ _COORD_MASK = (1 << COORD_BITS) - 1
 LAUNCH_ORDER_ID_MASK = _ID_MASK
 LAUNCH_ORDER_MAX_AGE = 5
 
-
 class Comms:
     def __init__(self):
         self.symmetry: Symmetry | None = None
