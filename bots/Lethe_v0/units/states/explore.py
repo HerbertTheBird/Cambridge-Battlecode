@@ -35,6 +35,8 @@ def generate_explore_target():
     explore_target = Position(random_x, random_y)
 def run():
     print("EXPLORE")
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]:
+        return
     if explore_target is None:
         generate_explore_target()
     if explore_target and rc.get_position().distance_squared(explore_target) <= 8:

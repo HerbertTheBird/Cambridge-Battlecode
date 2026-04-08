@@ -73,7 +73,7 @@ def _heal_targets():
     return damaged
 
 def score():
-    return 5 if _heal_targets() else 0
+    return 8 if _heal_targets() else 0
 
 def run():
     print("HEAL")
