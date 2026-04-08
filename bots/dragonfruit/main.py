@@ -129,6 +129,10 @@ class Player:
             self.prev_health = self.health
             self.prev_global_titanium = self.global_titanium
             self.prev_global_axionite = self.global_axionite
+            
+            self.map.update_all_symmetric_tiles(ct)
+            
+            # self.map.indicate_seen(ct)
 
         except Exception as e:
             print(f"Error: {e} on turn {ct.get_current_round()} by {self.etype}, ID: {ct.get_id()}", file=sys.stderr)
