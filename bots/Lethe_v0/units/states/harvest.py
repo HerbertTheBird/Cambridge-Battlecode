@@ -7,7 +7,7 @@ import units.builder
 rc: Controller = None
 nav: Pathing = None
 
-comm_flag = 2
+comm_flag = 3
 
 def init(c: Controller):
     global rc, nav
@@ -37,14 +37,20 @@ def _available_ore():
         & ~map_info._bm_et[map_info._IDX_BARRIER]
         & ~map_info._bm_et[map_info._IDX_MARKER]
     )
-    return (map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+    ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+    w = map_info._width
+    # Ore tiles surrounded on all 4 cardinal sides by ore — unreachable by conveyor
+    landlocked = ore & (ore >> 1 & map_info._not_left_col) & (ore << 1 & map_info._not_right_col) & (ore >> w) & (ore << w)
+    return (ore
+            & ~landlocked
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
             & ~units.builder.forget[comm_flag]
             & ~enemy_blocking
-            & ~friendly_blocking)
+            & ~friendly_blocking
+            & units.builder._harvest_zone)
 
 def score():
-    return 2 if _available_ore() else 0
+    return 3 if _available_ore() else 0
 
 def run():
     print("HARVEST")
@@ -79,6 +85,8 @@ def run():
             # Friendly building on ore — move adjacent and destroy it
             adj = set()
             for dir in Direction:
+                if dir == Direction.CENTRE:
+                    continue
                 adj_pos = best_ore.add(dir)
                 if not map_info.is_passable(adj_pos):
                     continue
@@ -98,6 +106,8 @@ def run():
             # Clear tile — move adjacent and build harvester
             adj = set()
             for dir in Direction:
+                if dir == Direction.CENTRE:
+                    continue
                 adj_pos = best_ore.add(dir)
                 if not map_info.is_passable(adj_pos):
                     continue

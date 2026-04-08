@@ -6,7 +6,7 @@ import units.builder
 
 rc: Controller = None
 nav: Pathing = None
-comm_flag = 3
+comm_flag = 4
 
 def init(c: Controller):
     global rc, nav
@@ -15,47 +15,7 @@ def init(c: Controller):
 
 def _dead_end_conveyors():
     """Bitmask of routable conveyors whose output is not connected to my ore-accepting network."""
-    routable = map_info._bm_routable & ~units.builder.forget[comm_flag]
-    if not routable:
-        return 0
-
-    my_team_idx = map_info._TM_INT[rc.get_team()]
-
-    my_accept = 0
-    for et in map_info._ACCEPT_ORE:
-        my_accept |= map_info._bm_et[map_info._ET_INT[et]]
-    my_accept &= map_info._bm_team[my_team_idx]
-
-    enemy_idx = 1 - my_team_idx
-    enemy_replaceable = (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_ROAD]
-        | map_info._bm_et[map_info._IDX_MARKER]
-    ) & map_info._bm_team[enemy_idx]
-
-    dead_ends = 0
-    tiles = map_info._width * map_info._height
-    building_id = map_info._building_id
-    conv_target = map_info._building_conv_target
-    bm_my = map_info._bm_team[my_team_idx]
-
-    mask = routable
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        tn = conv_target[n]
-        if tn and 0 <= tn < tiles:
-            tbit = 1 << tn
-            if not (my_accept & tbit):
-                if building_id[tn] == 0 or (bm_my & tbit) or (enemy_replaceable & tbit):
-                    dead_ends |= lsb
-        else:
-            dead_ends |= lsb
-        mask ^= lsb
-    return dead_ends
+    return map_info._bm_dead_end & ~units.builder.forget[comm_flag]
 
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
@@ -80,7 +40,7 @@ def _orphan_harvesters():
     return my_harvesters & ~served & ~units.builder.forget[comm_flag]
 
 def score():
-    return 3 if (_dead_end_conveyors() or _orphan_harvesters()) else 0
+    return 4 if (_dead_end_conveyors() or _orphan_harvesters()) else 0
 
 def run():
     print("ROUTE")
@@ -116,12 +76,15 @@ def run():
     is_harvester = bool(orphans & best_bit)
 
     if is_harvester:
-        # Move adjacent to harvester
+        path = nav.calculate_conveyor_path(best, update=False)
+
+        # Move adjacent to target conveyor to place
+        to_move = path[0] if path else best
         adj = set()
         for d in Direction:
             if d == Direction.CENTRE:
                 continue
-            p = best.add(d)
+            p = to_move.add(d)
             if map_info.in_bounds(p) and map_info.is_passable(p):
                 adj.add(p)
         if not adj:
@@ -129,7 +92,6 @@ def run():
         nav.move_to(adj)
 
         # Route from harvester: expand start to cardinal neighbors
-        path = nav.calculate_conveyor_path(best, update=False)
     else:
         # Dead-end conveyor: route from its output tile
         best_n = best.x + best.y * width

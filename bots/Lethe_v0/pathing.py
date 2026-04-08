@@ -26,6 +26,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 bridge_cost = 10
 barrier_cost = 10
 adj_launch_cost = 20
+conveyor_cost = 10
 
 
 def _is_builder_nav(pathing: "Pathing") -> bool:
@@ -99,25 +100,25 @@ class Pathing:
             (-2, 2, bridge_cost),
             (-2, -2, bridge_cost),
 
-            (2, 1, bridge_cost),
-            (2, -1, bridge_cost),
-            (-2, 1, bridge_cost),
-            (-2, -1, bridge_cost),
+            # (2, 1, bridge_cost),
+            # (2, -1, bridge_cost),
+            # (-2, 1, bridge_cost),
+            # (-2, -1, bridge_cost),
 
-            (1, 2, bridge_cost),
-            (1, -2, bridge_cost),
-            (-1, 2, bridge_cost),
-            (-1, -2, bridge_cost),
+            # (1, 2, bridge_cost),
+            # (1, -2, bridge_cost),
+            # (-1, 2, bridge_cost),
+            # (-1, -2, bridge_cost),
 
-            (-2, 0, bridge_cost),
-            (2, 0, bridge_cost),
-            (0, 2, bridge_cost),
-            (0, -2, bridge_cost),
+            # (-2, 0, bridge_cost),
+            # (2, 0, bridge_cost),
+            # (0, 2, bridge_cost),
+            # (0, -2, bridge_cost),
 
-            (-1, -1, bridge_cost),
-            (-1, 1, bridge_cost),
-            (1, -1, bridge_cost),
-            (1, 1, bridge_cost),
+            # (-1, -1, bridge_cost),
+            # (-1, 1, bridge_cost),
+            # (1, -1, bridge_cost),
+            # (1, 1, bridge_cost),
         ]
 
         # --- mask cache (important: many dx/dy repeat) ---
@@ -410,6 +411,28 @@ class Pathing:
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
         adj_launch = map_info._bm_enemy_launch_adj
 
+        convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
+        if not routing:
+            max_start = barrier_cost + adj_launch_cost + conveyor_cost
+            can_visit = [0] * (max_start + 1)
+            m = target
+            while m:
+                lsb = m & -m
+                cost = 0
+                if barriers & lsb:
+                    cost += barrier_cost
+                if adj_launch & lsb:
+                    cost += adj_launch_cost
+                if convs & lsb:
+                    cost += conveyor_cost
+                can_visit[cost] |= lsb
+                m ^= lsb
+        else:
+            t_core = target & ~convs
+            t_conv = target & convs
+            can_visit = [t_core] + [0] * conveyor_cost
+            can_visit[conveyor_cost] |= t_conv
+
         stuck = 0
         i = 0
         while True:
@@ -427,8 +450,11 @@ class Pathing:
                 stuck += 1
                 if stuck >= 11 if routing else 32:
                     break
-            else:
-                stuck = 0
+                i += 1
+                if i >= len(can_visit):
+                    break
+                continue
+            stuck = 0
             if routing:
                 can_visit.extend([0]*(i+bridge_cost+1-len(can_visit)))
                 for step in CONV:
@@ -476,6 +502,7 @@ class Pathing:
         return False
 
     def move_to(self, target: Position | set[Position]):
+        print("move to", target)
         if isinstance(target, Position):
             target = {target}
         if target != self.target_p:
@@ -488,6 +515,7 @@ class Pathing:
         else:
             self.prev_pos = self.rc.get_position()
             self.stuck_turns = 0
+            self.target_p = target
         if self.stuck_turns > 2 + self.rc.get_id()%8:
             for i in ALL_DIRS:
                 if self.rc.can_move(i):
