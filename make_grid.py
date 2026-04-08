@@ -1,7 +1,7 @@
 import pandas as pd
 import time 
 
-df=pd.read_csv("BlueDragonGames.csv")
+df=pd.read_csv("CitadelGames.csv")
 
 df["date"] = pd.to_datetime(df["date"]).dt.tz_localize("UTC")
 
