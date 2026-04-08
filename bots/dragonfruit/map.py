@@ -1104,9 +1104,9 @@ class Map:
             entity = self.get_tile_entity(ore_pos)
             if entity is not None and entity[1] == EntityType.HARVESTER:
                 continue
-            # if self.has_adjacent_opposite_resource_chain(ore_pos, ResourceType.TITANIUM, ct):
-            #     self.unreachable_ores.add(ore_pos)
-            #     continue
+            if self.has_adjacent_opposite_resource_chain(ore_pos, ResourceType.TITANIUM, ct):
+                self.unreachable_ores.add(ore_pos)
+                continue
             dist = pos.distance_squared(ore_pos)
             if dist < best_ti_dist:
                 best_ti_dist = dist
@@ -1204,13 +1204,16 @@ class Map:
 
     def is_adjacent_to_opposite_ore(self, pos: Position, resource: ResourceType | None) -> bool:
         """True if pos is adjacent to a harvester or ore of the opposite resource type."""
-        if resource != ResourceType.RAW_AXIONITE:
+        if resource is None:
+            return False
+        opposite_ore = self.ore_ti if resource == ResourceType.RAW_AXIONITE else self.ore_ax if resource == ResourceType.TITANIUM else None
+        if opposite_ore is None:
             return False
         for d in CARDINAL_DIRECTIONS:
             adj = pos.add(d)
             if not on_map(adj, self.width, self.height):
                 continue
-            if adj in self.ore_ti:
+            if adj in opposite_ore:
                 return True
         return False
 
@@ -1377,6 +1380,10 @@ class Map:
                 continue
             if self._would_create_loop_idx(build_idx, adj_idx):
                 continue
+            if self._is_ore_idx(adj_idx):
+                adj = Position(ax, ay)
+                log(f"    {adj} ({d}): SKIP is ore")
+                continue
             is_terminal = (adj_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(ax - core_pos.x) <= 1 and abs(ay - core_pos.y) <= 1)
             if is_terminal:
                 if dist < best_terminal_dist:
@@ -1438,6 +1445,10 @@ class Map:
                 continue
             candidate = Position(x, y)
             if self.is_adjacent_to_opposite_ore(candidate, resource):
+                continue
+            if self._is_ore_idx(candidate_idx):
+                candidate = Position(x, y)
+                log(f"    {candidate}: SKIP ore")
                 continue
             candidate_dist = dist_to_terminal_xy(x, y)
             is_terminal = (candidate_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(x - core_pos.x) <= 1 and abs(y - core_pos.y) <= 1)

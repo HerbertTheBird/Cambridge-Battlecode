@@ -83,7 +83,7 @@ def safe_destroy(player, ct: Controller, pos: Position, vc: VisionCache) -> bool
     if not ct.can_destroy(pos):
         return False
     ct.destroy(pos)
-    vc.remove_entity(bid, etype, team, pos)
+    vc.remove_entity(player, bid, etype, team, pos)
     return True
 
 def safe_build_conveyor(player, ct: Controller, pos: Position, direction) -> bool:

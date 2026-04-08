@@ -8,10 +8,10 @@ from helpers import (
     get_nearest_core_tile,
     is_core_tile,
     is_foundry_position,
-    is_gunner_position,
     is_marker_building,
     on_map,
 )
+
 from units.builder.build import (
     can_build_launcher_here,
     safe_build_launcher,
@@ -149,7 +149,7 @@ def _get_intercept_output_state(output: Position, ct: Controller, my_team: Team,
         return 0, None, None, None
     if map_obj.get_tile_env(output) == Environment.WALL:
         return 0, None, None, None
-    turret_cost = gunner_cost if get_best_turret_type(output, enemy_core_pos) == EntityType.GUNNER else sentinel_cost
+    turret_cost = gunner_cost if get_best_turret_type(output, enemy_core_pos, ct, None, map_obj) == EntityType.GUNNER else sentinel_cost
     if global_titanium < turret_cost:
         return 0, None, None, None
     bid = ct.get_tile_building_id(output)
@@ -187,7 +187,7 @@ def _has_matching_ally_intercept_turret(bid: int | None, etype: EntityType | Non
         return (
             team == my_team
             and etype in TURRET_TYPES
-            and etype == get_best_turret_type(pos, enemy_core_pos)
+            and etype == get_best_turret_type(pos, enemy_core_pos, ct, None)
             and ct.get_direction(bid) == direction
         )
     return False
@@ -401,19 +401,89 @@ def get_sentinel_direction(intercept_pos: Position, enemy_pos: Position, ct: Con
             return rot
     return None
 
-def get_best_turret_type(pos: Position, enemy_core_pos: Position | None) -> EntityType:
+def is_gunner_position(
+    core_pos: Position | None,
+    pos: Position,
+    ct: Controller,
+    primary_threat: Position | None,
+    map_obj,
+) -> bool:
+    """
+    True if pos is a good gunner location.
+
+    Satisfies one of:
+    1. Original heuristic: near enemy core
+    2. Has line-of-sight to primary_threat
+    """
+    if core_pos is not None:
+        dist = core_pos.distance_squared(pos)
+        if 2 < dist <= 18:
+            return True
+
+    if primary_threat is None or map_obj is None or not ct.is_in_vision(primary_threat):
+        return False
+
+    if ct.get_tile_builder_bot_id(primary_threat) is not None:
+        return False
+
+    my_team = ct.get_team()
+    width = map_obj.width
+    height = map_obj.height
+
+    for d in DIRECTIONS:
+        dx, dy = d.delta()
+        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+
+        x, y = pos.x, pos.y
+        for _ in range(max_range):
+            x += dx
+            y += dy
+
+            if not on_map(Position(x, y), width, height):
+                break
+
+            cur = Position(x, y)
+
+            if map_obj.get_tile_env(cur) == Environment.WALL:
+                break
+
+            if cur == primary_threat:
+                return True
+
+            bbid = ct.get_tile_builder_bot_id(cur)
+            if bbid is not None:
+                if ct.get_team(bbid) == my_team:
+                    break
+                continue
+
+            bid = ct.get_tile_building_id(cur)
+            if bid is not None:
+                etype = ct.get_entity_type(bid)
+                team = ct.get_team(bid)
+
+                if etype == EntityType.MARKER or etype == EntityType.ROAD:
+                    continue
+
+                if team == my_team:
+                    break
+                continue
+
+    return False
+
+def get_best_turret_type(pos: Position, enemy_core_pos: Position | None, ct: Controller, primary_threat: Position | None = None, map_obj = None) -> EntityType:
     """Return the preferred turret type for an intercept build at pos."""
-    if enemy_core_pos is not None and is_gunner_position(enemy_core_pos, pos):
+    if is_gunner_position(enemy_core_pos, pos, ct, primary_threat, map_obj):
         return EntityType.GUNNER
     return EntityType.SENTINEL
 
-def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None) -> bool:
+def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None, primary_threat: Position | None = None, map_obj = None) -> bool:
     """Try to build a gunner (if valid position near enemy core) or sentinel at pos.
     Returns True if a turret was built."""
-    turret_type = get_best_turret_type(pos, enemy_core_pos)
+    turret_type = get_best_turret_type(pos, enemy_core_pos, ct, primary_threat, map_obj)
     if turret_type == EntityType.GUNNER and ct.can_build_gunner(pos, direction):
-        ct.build_gunner(pos, direction)
-        log(f"BUILT gunner at {pos} facing {direction}")
+        gunner_direction = pos.direction_to(primary_threat) if primary_threat is not None else direction
+        ct.build_gunner(pos, gunner_direction)
+        log(f"BUILT gunner at {pos} facing {gunner_direction}")
         return True
     if turret_type == EntityType.SENTINEL and ct.can_build_sentinel(pos, direction):
         ct.build_sentinel(pos, direction)

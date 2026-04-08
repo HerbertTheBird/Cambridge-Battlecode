@@ -2,8 +2,9 @@ from cambc import Controller, Direction, Position, EntityType
 
 from globals import CARDINAL_DIRECTIONS
 
-_GOLDEN = 0.618033988749895
+# Used to differentiate bot paths by color
 
+_GOLDEN = 0.618033988749895
 def bot_path_color(bot_id: int) -> tuple[int, int, int]:
     hue = (bot_id * _GOLDEN) % 1.0
     h6 = hue * 6.0
@@ -85,9 +86,11 @@ def get_foundry_positions(core_pos: Position | None, width: int, height: int) ->
                 positions.add(Position(x, y))
     return positions
 
-def is_gunner_position(core_pos: Position | None, pos: Position) -> bool:
-    """True if pos is adjacent to the core's 3x3 area (valid gunner location)."""
-    if core_pos is None:
-        return False
-    dist = core_pos.distance_squared(pos)
-    return 2 < dist <= 18
+def check_for_resource_increase(player, ct: Controller):
+    # We gain passive titanium income every 4 rounds, so ignore for inferring harvest success
+    if ct.get_current_round() % 4 == 0:
+        return
+    if player.global_titanium > player.prev_global_titanium:
+        player.last_global_titanium_increase = ct.get_current_round()
+    if player.global_axionite > player.prev_global_axionite:
+        player.last_global_axionite_increase = ct.get_current_round()

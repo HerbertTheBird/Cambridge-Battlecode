@@ -1,8 +1,7 @@
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType
 
 from globals import *
-from combat import *
-from helpers import *
+from helpers import (get_cardinal_direction_into_core, get_foundry_positions)
 from units.builder.build import *
 from units.builder.logic import *
 from log import log, log_time
@@ -28,19 +27,12 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     if player.comms.symmetry is not None and player.map.symmetry == Symmetry.UNKNOWN:
         player.map.symmetry = player.comms.symmetry
         log(f"symmetry from marker: {player.map.symmetry.name}")
-    previous_enemy_core = player.enemy_core_pos
-    if vc.enemy_core_pos is not None:
-        player.enemy_core_pos = vc.enemy_core_pos
+
     predicted_enemy_core = get_predicted_enemy_core_pos(player)
     if predicted_enemy_core != player.predicted_enemy_core_pos:
         player.predicted_enemy_core_pos = predicted_enemy_core
         if player.predicted_enemy_core_pos is not None:
             log(f"predicted enemy core position at {player.predicted_enemy_core_pos}")
-    if player.enemy_core_pos != previous_enemy_core and player.enemy_core_pos is not None:
-        log(f"confirmed enemy core position at {player.enemy_core_pos}")
-    # if player.map is not None and player.my_team is not None:
-    #     player.map.indicate_entity_map(ct, player.my_team)
-        
         
     log_time(ct, "After map checks")
 
@@ -634,7 +626,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                             # Abort if the same allied turret we would build is already here.
                             if (bid_team == player.my_team
                                 and bid_etype in TURRET_TYPES
-                                and bid_etype == get_best_turret_type(intercept_pos, enemy_core_anchor)
+                                and bid_etype == get_best_turret_type(intercept_pos, enemy_core_anchor, ct, None, player.map)
                                 and ct.get_direction(bid) == direction):
                                 clear_state(player, )
                             # Skip if the building feeds one of our turrets
@@ -658,10 +650,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                                 bbid = ct.get_tile_builder_bot_id(intercept_pos)
                                 if (bbid is None or bbid == ct.get_id()) and ct.can_destroy(intercept_pos) and safe_destroy(player, ct, intercept_pos, vc):
                                     log("destroyed to build turret")
-                                if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor):
+                                if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor, enemy_pos, player.map):
                                     clear_state(player, )
                         else:
-                            if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor):
+                            if build_best_turret(ct, intercept_pos, direction, enemy_core_anchor, enemy_pos, player.map):
                                 clear_state(player, )
 
 
