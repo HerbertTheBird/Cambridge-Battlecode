@@ -716,6 +716,10 @@ class Map:
                     dirty_cache_positions.add(ny * width + nx)
 
         log_time(ct, "After processing nearby tiles")
+        
+        if comms.symmetry is not None and self.symmetry == Symmetry.UNKNOWN:
+            self.symmetry = comms.symmetry
+            log(f"symmetry from marker: {self.symmetry.name}")
 
         self.update_symmetry()
         

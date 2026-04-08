@@ -6,11 +6,11 @@ from units.builder.logic import *
 from vision import VisionCache
 from log import log, log_time
 
-def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache, predicted_enemy_core: 'Position | None' = None) -> State:    
+def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> State:
     # INTERCEPT if enemy threat and good turret build position/direction
     threat_result = get_nearest_enemy_threat_pos(vc, my_pos) if should_intercept(vc, my_pos, player.core_pos) else None
     if threat_result is None:
-        threat_result = get_known_core_intercept_threat(player, my_pos, "synthetic threat", predicted_enemy_core=predicted_enemy_core)
+        threat_result = get_known_core_intercept_threat(player, my_pos, "synthetic threat")
     threat_pos = None
     threat_is_core = False
     if threat_result is not None:
@@ -21,7 +21,17 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache, predi
     if threat_pos is not None:
         if threat_is_core or count_ally_turrets_covering(ct, vc, threat_pos) < 2:
             log("trying to find intercept pos")
-            intercept = find_intercept_pos(ct, my_pos, player.my_team, vc, threat_pos, player.map, enemy_only=False, global_titanium=player.global_titanium, enemy_core_pos=predicted_enemy_core)
+            intercept = find_intercept_pos(
+                ct,
+                my_pos,
+                player.my_team,
+                vc,
+                threat_pos,
+                player.map,
+                enemy_only=False,
+                global_titanium=player.global_titanium,
+                enemy_core_pos=player.predicted_enemy_core_pos,
+            )
             log_time(ct, "After find intercept pos")
             if intercept is not None:
                 log(f"intercept target at {intercept}")
@@ -53,7 +63,7 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache, predi
         return player.state
 
     # START_HARVEST_CHAIN if there is an unserviced or unharvested ore, we can start a chain, and allies aren't too close
-    target = player.nearest_unserviced or player.nearest_ore
+    target = player.nearest_unserviced or player.nearest_unharvested
 
     if target is not None:
         # Allow one closer ally in case it is busy with something else.

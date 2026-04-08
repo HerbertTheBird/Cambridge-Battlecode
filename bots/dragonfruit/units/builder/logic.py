@@ -10,6 +10,7 @@ from helpers import (
     is_foundry_position,
     is_marker_building,
     on_map,
+    get_predicted_enemy_core_pos,
 )
 
 from units.builder.build import (
@@ -972,21 +973,6 @@ def find_adjacent_foundry_reroute_source(player, ct: Controller, my_pos: Positio
             best_dist = dist
             best_pos = pos
     return best_pos
-
-def get_predicted_enemy_core_pos(player) -> Position | None:
-    if player.enemy_core_pos is not None:
-        return player.enemy_core_pos
-    if player.core_pos is None or player.map is None:
-        return None
-    if player.map.symmetry is not Symmetry.UNKNOWN:
-        return player.map.get_symmetric_pos(player.core_pos, player.map.symmetry)
-    if player.map.can_rotate:
-        return player.map.get_symmetric_pos(player.core_pos, Symmetry.ROTATE)
-    if player.map.can_flip_x:
-        return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_X)
-    if player.map.can_flip_y:
-        return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_Y)
-    return None
 
 def get_known_core_intercept_threat(player, reference_pos: Position, log_reason: str | None = None, predicted_enemy_core: Position | None = None) -> tuple[Position, bool] | None:
     if predicted_enemy_core is None:

@@ -1,6 +1,6 @@
 from cambc import Controller, Direction, Position, EntityType, ResourceType
 
-from globals import CARDINAL_DIRECTIONS
+from globals import CARDINAL_DIRECTIONS, Symmetry
 
 # Used to differentiate bot paths by color
 
@@ -98,3 +98,18 @@ def check_for_resource_increase(player, ct: Controller):
 def get_opposite_ore(map_obj, is_axionite: bool):
     """Return the ore set of the opposite type."""
     return map_obj.ore_ti if is_axionite else map_obj.ore_ax
+
+def get_predicted_enemy_core_pos(player) -> Position | None:
+    if player.enemy_core_pos is not None:
+        return player.enemy_core_pos
+    if player.core_pos is None or player.map is None:
+        return None
+    if player.map.symmetry is not Symmetry.UNKNOWN:
+        return player.map.get_symmetric_pos(player.core_pos, player.map.symmetry)
+    if player.map.can_rotate:
+        return player.map.get_symmetric_pos(player.core_pos, Symmetry.ROTATE)
+    if player.map.can_flip_x:
+        return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_X)
+    if player.map.can_flip_y:
+        return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_Y)
+    return None

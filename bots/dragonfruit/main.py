@@ -8,7 +8,7 @@ from nav import Navigator
 from a_star_nav import AStarNavigator
 from map import Map
 from comms import Comms
-from helpers import bot_path_color, check_for_resource_increase
+from helpers import bot_path_color, check_for_resource_increase, get_predicted_enemy_core_pos
 from vision import VisionCache
 from log import log, log_time
 from units import run_core, run_builder, run_gunner, run_turret, run_launcher
@@ -25,6 +25,7 @@ class Player:
         self.my_team: Team
         self.etype: EntityType
         self.my_id: int
+        self.my_pos: Position | None = None
 
         self.num_spawned = 0
         self.last_spawn_round = -SPAWN_WEALTHY_INTERVAL
@@ -40,7 +41,7 @@ class Player:
         self.harvest_ore_type: ResourceType | None = None
         self.harvest_ore_pos: Position | None = None
         self.nearest_unserviced: Position | None = None
-        self.nearest_ore: Position | None = None
+        self.nearest_unharvested: Position | None = None
         self.foundry_pos: Position | None = None
         self.foundry_positions: set | None = None
         
@@ -87,6 +88,7 @@ class Player:
             # Update turn info
      
             my_pos = ct.get_position()
+            self.my_pos = my_pos
             log(f"pos={my_pos}")
             
             self.health = ct.get_hp()
@@ -96,7 +98,12 @@ class Player:
             
             vc = self.vc
             vc.refresh(ct, self)
+            self.map.update_vision(ct, self.comms)
             
+            self.predicted_enemy_core_pos = get_predicted_enemy_core_pos(self)
+            log(f"predicted enemy core position at {self.predicted_enemy_core_pos}")
+            
+            log_time(ct, "After vision update")
 
             # Run logic based on entity type
 
