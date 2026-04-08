@@ -96,6 +96,8 @@ def run():
     titanium = rc.get_global_resources()[0]
     scaling = rc.get_scale_percent()
     round_num = rc.get_current_round()
+    # if round_num == 50:
+    #     rc.resign()
     passive = 10 if round_num % 4 == 0 else 0
     scaling_delta = scaling - last_scaling
     titanium_delta = (titanium - last_titanium) - passive
@@ -108,11 +110,11 @@ def run():
         if scaling_delta < -0.5:
             lost_conveyors = bool(scaling_delta < -0.99)
 
-    max_spawn = 4
+    max_spawn = 3
     if titanium > 600:
-        max_spawn = 6
+        max_spawn = 5
     elif titanium > 800:
-        max_spawn = 8
+        max_spawn = 7
 
     current_count = rc.get_unit_count()
     if prev_unit_count > current_count:
