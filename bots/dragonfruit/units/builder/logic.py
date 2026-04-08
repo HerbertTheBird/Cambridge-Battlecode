@@ -14,8 +14,11 @@ from helpers import (
 )
 
 from units.builder.build import (
+    can_build_conveyor_here,
     can_build_launcher_here,
+    safe_build_conveyor,
     safe_build_launcher,
+    safe_build_foundry,
     safe_destroy,
     safe_place_marker,
 )
@@ -932,6 +935,8 @@ def find_upgradeable_axionite_placeholder(player, ct: Controller, my_pos: Positi
     for (bid, etype, pos) in vc.ally_conveyors:
         if etype != EntityType.CONVEYOR or not is_foundry_position(player.core_pos, pos):
             continue
+        if not ct.can_destroy(pos):
+            continue
         if ct.get_tile_builder_bot_id(pos) is not None:
             continue
         is_axionite = (
@@ -939,13 +944,66 @@ def find_upgradeable_axionite_placeholder(player, ct: Controller, my_pos: Positi
             or player.map.has_recent_conveyor_resource(pos, ResourceType.RAW_AXIONITE)
             or player.map.input_chain_reaches_resource(pos, ResourceType.RAW_AXIONITE)
         )
-        if not is_axionite:
+        is_titanium = (
+            ct.get_stored_resource(bid) == ResourceType.TITANIUM
+            or player.map.has_recent_conveyor_resource(pos, ResourceType.TITANIUM)
+            or player.map.input_chain_reaches_resource(pos, ResourceType.TITANIUM)
+        )
+        if not is_axionite or is_titanium:
             continue
         dist = my_pos.distance_squared(pos)
         if dist < best_dist:
             best_dist = dist
             best_pos = pos
     return best_pos
+
+def get_adjacent_ally_foundry_direction(player, ct: Controller, pos: Position) -> Direction | None:
+    """Return the cardinal direction from pos to a visible adjacent ally foundry, if any."""
+    for direction in CARDINAL_DIRECTIONS:
+        foundry_pos = pos.add(direction)
+        if not on_map(foundry_pos, player.map.width, player.map.height) or not ct.is_in_vision(foundry_pos):
+            continue
+        bid = ct.get_tile_building_id(foundry_pos)
+        if bid is None:
+            continue
+        if ct.get_team(bid) == player.my_team and ct.get_entity_type(bid) == EntityType.FOUNDRY:
+            return direction
+    return None
+
+def try_upgrade_foundry_placeholder(player, ct: Controller, my_pos: Position, vc: VisionCache) -> bool:
+    """Upgrade a nearby axionite placeholder conveyor into a foundry or foundry-feeding conveyor."""
+    if player.global_titanium < 1500 or player.core_pos is None:
+        return False
+
+    placeholder_pos = find_upgradeable_axionite_placeholder(player, ct, my_pos, vc)
+    if placeholder_pos is None or not safe_destroy(player, ct, placeholder_pos, vc):
+        return False
+    log("destroyed axionite placeholder for foundry upgrade")
+
+    adjacent_foundry_dir = get_adjacent_ally_foundry_direction(player, ct, placeholder_pos)
+
+    if (
+        adjacent_foundry_dir is not None
+        and can_build_conveyor_here(
+            placeholder_pos,
+            adjacent_foundry_dir,
+            ct,
+            my_pos,
+            player.my_team,
+            player.map,
+            vc=vc,
+        )
+        and safe_build_conveyor(player, ct, placeholder_pos, adjacent_foundry_dir)
+    ):
+        log(f"rerouted axionite placeholder into conveyor feeding foundry at {placeholder_pos}")
+        return True
+
+    if safe_build_foundry(player, ct, placeholder_pos):
+        log(f"upgraded axionite placeholder to foundry at {placeholder_pos}")
+        return True
+
+    log(f"failed to rebuild foundry placeholder at {placeholder_pos}")
+    return True
 
 def find_adjacent_foundry_reroute_source(player, ct: Controller, my_pos: Position, foundry_pos: Position) -> Position | None:
     """Find a cardinal-adjacent ally conveyor/bridge carrying titanium that can be broken and rerouted into foundry_pos."""

@@ -1,4 +1,4 @@
-from cambc import Controller, EntityType, Environment, Position, ResourceType
+from cambc import Controller, Environment, Position
 
 from globals import *
 from helpers import get_foundry_positions
@@ -45,49 +45,8 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     log_time(ct, "After map checks")
 
     # Upgrade foundry placeholders if possible
-    if player.global_titanium >= 1500 and player.core_pos is not None:
-        for d in DIRECTIONS:
-            adj = my_pos.add(d)
-            if not on_map(adj, player.map.width, player.map.height) or not ct.is_in_vision(adj) or not is_foundry_position(player.core_pos, adj):
-                continue
-            bid = ct.get_tile_building_id(adj)
-            if bid is None or ct.get_team(bid) != player.my_team or ct.get_entity_type(bid) != EntityType.CONVEYOR:
-                continue
-            is_axionite = (
-                ct.get_stored_resource(bid) == ResourceType.RAW_AXIONITE
-                or player.map.has_recent_conveyor_resource(adj, ResourceType.RAW_AXIONITE)
-                or player.map.input_chain_reaches_resource(adj, ResourceType.RAW_AXIONITE)
-            )
-            is_titanium = (
-                ct.get_stored_resource(bid) == ResourceType.TITANIUM
-                or player.map.has_recent_conveyor_resource(adj, ResourceType.TITANIUM)
-                or player.map.input_chain_reaches_resource(adj, ResourceType.TITANIUM)
-            )
-            if not ((is_axionite and not is_titanium) and ct.can_destroy(adj)):
-                continue
-            if ct.get_tile_builder_bot_id(adj) is not None:
-                continue
-
-            adjacent_foundry_dir = None
-            for fd in CARDINAL_DIRECTIONS:
-                fpos = adj.add(fd)
-                if not on_map(fpos, player.map.width, player.map.height) or not ct.is_in_vision(fpos):
-                    continue
-                fbid = ct.get_tile_building_id(fpos)
-                if fbid is not None and ct.get_entity_type(fbid) == EntityType.FOUNDRY and ct.get_team(fbid) == player.my_team:
-                    adjacent_foundry_dir = fd
-                    break
-            safe_destroy(player, ct, adj, vc)
-            log("destroyed to build foundry")
-            if adjacent_foundry_dir is not None and can_build_conveyor_here(adj, adjacent_foundry_dir, ct, my_pos, player.my_team, player.map, vc=vc):
-                safe_build_conveyor(player, ct, adj, adjacent_foundry_dir)
-                log(f"upgraded axionite conveyor to splitter at {adj} -> foundry")
-            else:
-                safe_build_foundry(player, ct, adj)
-                log(f"upgraded axionite conveyor to foundry at {adj}")
-            break
-
-        log_time(ct, "After checking foundry upgrades")
+    try_upgrade_foundry_placeholder(player, ct, my_pos, vc)
+    log_time(ct, "After checking foundry upgrades")
 
     # Check for incomplete chains
     update_broken_chains(player, ct, vc)
