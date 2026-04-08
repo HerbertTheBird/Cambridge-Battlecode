@@ -38,6 +38,16 @@ def count_ally_turrets_covering(ct: Controller, vc: VisionCache, target_pos: Pos
             count += 1
     return count
 
+def get_ray_endpoint(pos: Position, direction: Direction, width: int, height: int) -> Position:
+    dx, dy = direction.delta()
+    if dx == 0 and dy == 0:
+        return pos
+
+    steps_x = width if dx == 0 else (width - 1 - pos.x if dx > 0 else pos.x)
+    steps_y = height if dy == 0 else (height - 1 - pos.y if dy > 0 else pos.y)
+    steps = min(steps_x, steps_y)
+    return Position(pos.x + dx * steps, pos.y + dy * steps)
+
 def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team, map_obj, vc: VisionCache, opposite_ore: set | None = None) -> Position | None:
     """Return the best adjacent tile to harvester_pos for starting a conveyor chain toward core_pos.
     Deprioritizes positions adjacent to opposite_ore (the 'wrong' ore type).
@@ -202,7 +212,7 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
     sentinel_cost = ct.get_sentinel_cost()[0]
 
     def _is_fed(output):
-        return map_obj.has_adjacent_ore_harvester(output) or map_obj.has_valid_input_chain(output)
+        return map_obj.has_adjacent_harvester(output) or map_obj.has_valid_input_chain(output)
 
     def _is_candidate(output: Position) -> bool:
         return (
@@ -314,7 +324,7 @@ def is_valid_intercept_pos(pos: Position, ct: Controller, my_team: Team, threat_
         return False
     if pos.distance_squared(threat_pos) > _INTERCEPT_THREAT_RADIUS_SQ:
         return False
-    if not (map_obj.has_adjacent_ore_harvester(pos) or map_obj.has_valid_input_chain(pos)):
+    if not (map_obj.has_adjacent_harvester(pos) or map_obj.has_valid_input_chain(pos)):
         return False
     direction = get_sentinel_direction(pos, threat_pos, ct, map_obj)
     if direction is None:
@@ -701,9 +711,8 @@ def clear_state(player):
     player.foundry_pos = None
     player.timeout_turns = 0
 
-def can_start_harvest_chain_now(player, ct: Controller, my_pos: Position, target: Position, vc: VisionCache) -> bool:
-    """Lightweight pre-check so we do not enter START_HARVEST_CHAIN for a target
-    that is already visibly impossible this turn."""
+def is_ore_unblocked(player, ct: Controller, target: Position) -> bool:
+    """Lightweight visible check for whether an ore tile still has at least one open cardinal side."""
     if not ct.is_in_vision(target):
         return True
 
@@ -965,6 +974,8 @@ def find_adjacent_foundry_reroute_source(player, ct: Controller, my_pos: Positio
     return best_pos
 
 def get_predicted_enemy_core_pos(player) -> Position | None:
+    if player.enemy_core_pos is not None:
+        return player.enemy_core_pos
     if player.core_pos is None or player.map is None:
         return None
     if player.map.symmetry is not Symmetry.UNKNOWN:
@@ -977,21 +988,121 @@ def get_predicted_enemy_core_pos(player) -> Position | None:
         return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_Y)
     return None
 
-def get_enemy_core_anchor(player) -> Position | None:
-    return player.enemy_core_pos or player.predicted_enemy_core_pos
-
-def get_known_core_intercept_threat(player, reference_pos: Position, log_reason: str | None = None) -> tuple[Position, bool] | None:
-    enemy_core_anchor = get_enemy_core_anchor(player)
-    if enemy_core_anchor is None:
+def get_known_core_intercept_threat(player, reference_pos: Position, log_reason: str | None = None, predicted_enemy_core: Position | None = None) -> tuple[Position, bool] | None:
+    if predicted_enemy_core is None:
+        predicted_enemy_core = get_predicted_enemy_core_pos(player)
+    if predicted_enemy_core is None:
         return None
-    core_tile = get_nearest_core_tile(enemy_core_anchor, reference_pos)
+    core_tile = get_nearest_core_tile(predicted_enemy_core, reference_pos)
     if core_tile is None:
         return None
     if reference_pos.distance_squared(core_tile) > KNOWN_CORE_INTERCEPT_TRIGGER_DIST_SQ:
         return None
     if log_reason is not None:
-        log(f"{log_reason}: using known enemy core tile {core_tile} from anchor {enemy_core_anchor}")
+        log(f"{log_reason}: using known enemy core tile {core_tile} from predicted core {predicted_enemy_core}")
     return core_tile, True
+
+def _infer_broken_chain_resource(player, ct: Controller, bid: int, pos: Position) -> ResourceType:
+    resource = ct.get_stored_resource(bid)
+    if resource is not None:
+        return resource
+
+    has_axionite_input = player.map.input_chain_reaches_resource(pos, ResourceType.RAW_AXIONITE)
+    has_titanium_input = player.map.input_chain_reaches_resource(pos, ResourceType.TITANIUM)
+    if has_axionite_input and not has_titanium_input:
+        return ResourceType.RAW_AXIONITE
+    if has_titanium_input and not has_axionite_input:
+        return ResourceType.TITANIUM
+
+    resources = player.map.get_recent_conveyor_resources(pos)
+    if ResourceType.RAW_AXIONITE in resources and ResourceType.TITANIUM not in resources:
+        return ResourceType.RAW_AXIONITE
+    if ResourceType.TITANIUM in resources and ResourceType.RAW_AXIONITE not in resources:
+        return ResourceType.TITANIUM
+    return ResourceType.TITANIUM
+
+def update_broken_chains(player, ct: Controller, vc: VisionCache) -> None:
+    if player.map is None:
+        return
+
+    for (bid, etype, pos) in vc.ally_conveyors:
+        if etype == EntityType.BRIDGE:
+            output_pos = ct.get_bridge_target(bid)
+        else:
+            output_pos = pos.add(ct.get_direction(bid))
+        if not on_map(output_pos, player.map.width, player.map.height) or not ct.is_in_vision(output_pos):
+            continue
+        if not player.map.has_conveyor_inputs(pos) and not player.map.has_adjacent_harvester(pos):
+            player.broken_chains.pop(output_pos, None)
+            continue
+        if is_core_tile(player.core_pos, output_pos):
+            player.broken_chains.pop(output_pos, None)
+            continue
+
+        out_bid = ct.get_tile_building_id(output_pos)
+        if out_bid is not None:
+            out_etype = ct.get_entity_type(out_bid)
+            out_team = ct.get_team(out_bid)
+            if out_team == player.my_team and (out_etype in CONVEYOR_TYPES or out_etype == EntityType.FOUNDRY):
+                player.broken_chains.pop(output_pos, None)
+                continue
+            if out_team != player.my_team and out_etype in CONVEYOR_TYPES:
+                if player.map.feeds_ally_building_in_vision(output_pos, player.my_team, ct, core_pos=player.core_pos):
+                    player.broken_chains.pop(output_pos, None)
+                    continue
+
+        player.broken_chains[output_pos] = _infer_broken_chain_resource(player, ct, bid, pos)
+
+    for broken_chain in list(player.broken_chains):
+        if not ct.is_in_vision(broken_chain):
+            continue
+        entity = player.map.get_tile_entity(broken_chain)
+        if entity is not None and entity[2] == player.my_team and (entity[1] in CONVEYOR_TYPES or entity[1] == EntityType.FOUNDRY):
+            player.broken_chains.pop(broken_chain, None)
+
+def find_heal_target(player, ct: Controller, my_pos: Position, vc: VisionCache) -> Position | None:
+    best_heal_pos: Position | None = None
+    best_heal_dist = INF
+    for (_eid, etype, epos) in vc.enemy_units:
+        if etype != EntityType.BUILDER_BOT:
+            continue
+        bid = ct.get_tile_building_id(epos)
+        if bid is None:
+            continue
+        if ct.get_team(bid) != player.my_team:
+            continue
+        btype = ct.get_entity_type(bid)
+        if btype not in CONVEYOR_TYPES:
+            continue
+        if ct.get_hp(bid) >= ct.get_max_hp(bid):
+            continue
+        dist = my_pos.distance_squared(epos)
+        if dist < best_heal_dist:
+            best_heal_dist = dist
+            best_heal_pos = epos
+
+    if best_heal_pos is None:
+        return None
+
+    for (_eid, apos) in vc.ally_builder_bots:
+        if apos.distance_squared(best_heal_pos) < best_heal_dist:
+            return None
+    return best_heal_pos
+
+def find_broken_chain_target(player, ct: Controller, my_pos: Position, vc: VisionCache) -> tuple[Position, ResourceType] | None:
+    best_chain_target: tuple[Position, ResourceType] | None = None
+    best_chain_dist = INF
+    for output_pos, resource in player.broken_chains.items():
+        dist = my_pos.distance_squared(output_pos)
+        if dist >= best_chain_dist:
+            continue
+        if not can_repair_broken_chain_now(player, ct, output_pos, vc):
+            continue
+        if count_closer_allies(player, output_pos, my_pos, vc) >= 2:
+            continue
+        best_chain_dist = dist
+        best_chain_target = (output_pos, resource)
+    return best_chain_target
 
 def can_repair_broken_chain_now(player, ct: Controller, output_pos: Position, vc: VisionCache) -> bool:
     """True if output_pos looks repairable under current visible conditions."""
@@ -1016,3 +1127,23 @@ def can_repair_broken_chain_now(player, ct: Controller, output_pos: Position, vc
     if team != player.my_team and ct.is_tile_passable(output_pos):
         return True
     return False
+
+def sync_a_star_destination(player) -> bool:
+    if player.nav.destination is None:
+        player.a_star_nav.clear_destination()
+        return False
+
+    a_star_target = player.nav.original_destination if player.nav.destination_type == "adjacent" else player.nav.destination
+    player.a_star_nav.set_destination(a_star_target, player.nav.destination_type)
+    return True
+
+TURN_CPU_BUDGET_US = 2000
+
+def advance_a_star(player, ct: Controller, reserve_us: int, *, draw: bool) -> int:
+    if not sync_a_star_destination(player):
+        return 0
+
+    budget = max(0, TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - reserve_us)
+    if budget > 0:
+        player.a_star_nav.advance_compute(ct, player.map, budget, draw=draw)
+    return budget

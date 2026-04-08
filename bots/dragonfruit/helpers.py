@@ -1,4 +1,4 @@
-from cambc import Controller, Direction, Position, EntityType
+from cambc import Controller, Direction, Position, EntityType, ResourceType
 
 from globals import CARDINAL_DIRECTIONS
 
@@ -94,3 +94,7 @@ def check_for_resource_increase(player, ct: Controller):
         player.last_global_titanium_increase = ct.get_current_round()
     if player.global_axionite > player.prev_global_axionite:
         player.last_global_axionite_increase = ct.get_current_round()
+
+def get_opposite_ore(map_obj, is_axionite: bool):
+    """Return the ore set of the opposite type."""
+    return map_obj.ore_ti if is_axionite else map_obj.ore_ax

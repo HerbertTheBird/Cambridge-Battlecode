@@ -837,17 +837,14 @@ class Map:
 
         return feeders
 
-    def has_adjacent_ore_harvester(self, output_pos: Position) -> bool:
-        """True if a cardinally adjacent harvester on ore feeds output_pos."""
+    def has_adjacent_harvester(self, pos: Position) -> bool:
+        """True if a cardinally adjacent harvester on ore feeds pos."""
         for d in CARDINAL_DIRECTIONS:
-            adj = output_pos.add(d)
+            adj = pos.add(d)
             if not on_map(adj, self.width, self.height):
                 continue
             entity = self.get_tile_entity(adj)
-            if entity is None or entity[1] != EntityType.HARVESTER:
-                continue
-            env = self.get_tile_env(adj)
-            if env == Environment.ORE_TITANIUM or env == Environment.ORE_AXIONITE:
+            if entity is not None and entity[1] == EntityType.HARVESTER:
                 return True
         return False
 

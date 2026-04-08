@@ -34,11 +34,13 @@ class Player:
 
         self.state: State = State.EXPLORE
         self.timeout_turns = 0
-        self.has_explored_first_destination = False
+        self.should_explore_ray = False
         self.last_fired_round = 0
         self.skipped_firing_turns = 0
         self.harvest_ore_type: ResourceType | None = None
         self.harvest_ore_pos: Position | None = None
+        self.nearest_unserviced: Position | None = None
+        self.nearest_ore: Position | None = None
         self.foundry_pos: Position | None = None
         self.foundry_positions: set | None = None
         
@@ -58,7 +60,6 @@ class Player:
         
         self.last_seen_builder_bot_round = 0
         self.last_support_launcher_round = -2000
-        self.rush_enemy_core = False
 
         
     def run(self, ct: Controller) -> None:
@@ -114,7 +115,8 @@ class Player:
             elif self.etype == EntityType.LAUNCHER:
                 run_launcher(self, ct, my_pos, vc)
             
-
+            self.initialized = True
+    
             # Update previous values for next turn
             
             self.prev_health = self.health
