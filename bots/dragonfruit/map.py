@@ -64,6 +64,9 @@ class Map:
         self.can_flip_x = True
         self.can_flip_y = True
         self.can_rotate = True
+        self.should_update_all_symmetric = False
+        self.symmetric_update_x = 0
+        self.symmetric_update_y = 0
 
     def _idx(self, pos: Position) -> int:
         return pos.y * self.width + pos.x
@@ -220,51 +223,69 @@ class Map:
         if idx is None:
             return []
         return [self._pos(input_idx) for input_idx in self._input_indices[idx]]
-        
-    def get_symmetric_pos(self, pos: Position, symmetry: Symmetry):
+
+    def get_symmetric_idx(self, idx: int, symmetry: Symmetry) -> int:
+        x = idx % self.width
+        y = idx // self.width
         if symmetry == Symmetry.FLIP_X:
-            return Position(self.width - 1 - pos.x, pos.y)
+            return y * self.width + (self.width - 1 - x)
         elif symmetry == Symmetry.FLIP_Y:
-            return Position(pos.x, self.height - 1 - pos.y)
+            return (self.height - 1 - y) * self.width + x
         elif symmetry == Symmetry.ROTATE:
-            return Position(self.width - 1 - pos.x, self.height - 1 - pos.y)
-        return pos
+            return (self.height - 1 - y) * self.width + (self.width - 1 - x)
+        return idx
+
+    def get_symmetric_pos(self, pos: Position, symmetry: Symmetry):
+        return self._pos(self.get_symmetric_idx(self._idx(pos), symmetry))
+
+    def _set_symmetry(self, symmetry: Symmetry):
+        if symmetry == Symmetry.UNKNOWN or self.symmetry == symmetry:
+            return
+        if self.symmetry == Symmetry.UNKNOWN:
+            self.should_update_all_symmetric = True
+            self.symmetric_update_x = 0
+            self.symmetric_update_y = 0
+        self.symmetry = symmetry
+
+    def _apply_env_idx(self, idx: int, env: Environment):
+        pos = self._pos(idx)
+        self._set_tile_env_idx(idx, env)
+        self.ore_ti.discard(pos)
+        self.ore_ax.discard(pos)
+        if env == Environment.ORE_TITANIUM:
+            self.ore_ti.add(pos)
+        elif env == Environment.ORE_AXIONITE:
+            self.ore_ax.add(pos)
         
     def check_symmetry(self, pos: Position, env: Environment):
-        if self.symmetry != Symmetry.UNKNOWN:
-            return
+        idx = self._idx(pos)
         if self.can_flip_x:
-            sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_X)
-            sym_env = self._env[self._idx(sym_pos)]
+            sym_env = self._env[self.get_symmetric_idx(idx, Symmetry.FLIP_X)]
             if sym_env is not None and sym_env != env:
                 self.can_flip_x = False
         if self.can_flip_y:
-            sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_Y)
-            sym_env = self._env[self._idx(sym_pos)]
+            sym_env = self._env[self.get_symmetric_idx(idx, Symmetry.FLIP_Y)]
             if sym_env is not None and sym_env != env:
                 self.can_flip_y = False
         if self.can_rotate:
-            sym_pos = self.get_symmetric_pos(pos, Symmetry.ROTATE)
-            sym_env = self._env[self._idx(sym_pos)]
+            sym_env = self._env[self.get_symmetric_idx(idx, Symmetry.ROTATE)]
             if sym_env is not None and sym_env != env:
                 self.can_rotate = False
                 
     def check_core_symmetry(self, pos: Position):
         if self.symmetry != Symmetry.UNKNOWN:
             return
+        idx = self._idx(pos)
         if self.can_flip_x:
-            sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_X)
-            sym_etype = self.get_tile_entity_type(sym_pos)
+            sym_etype = self._entity_type[self.get_symmetric_idx(idx, Symmetry.FLIP_X)]
             if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_flip_x = False
         if self.can_flip_y:
-            sym_pos = self.get_symmetric_pos(pos, Symmetry.FLIP_Y)
-            sym_etype = self.get_tile_entity_type(sym_pos)
+            sym_etype = self._entity_type[self.get_symmetric_idx(idx, Symmetry.FLIP_Y)]
             if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_flip_y = False
         if self.can_rotate:
-            sym_pos = self.get_symmetric_pos(pos, Symmetry.ROTATE)
-            sym_etype = self.get_tile_entity_type(sym_pos)
+            sym_etype = self._entity_type[self.get_symmetric_idx(idx, Symmetry.ROTATE)]
             if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_rotate = False
 
@@ -273,7 +294,43 @@ class Map:
             return
         key = (self.can_flip_x, self.can_flip_y, self.can_rotate)
         if key in SYMMETRY_MAPPING:
-            self.symmetry = SYMMETRY_MAPPING[key]
+            self._set_symmetry(SYMMETRY_MAPPING[key])
+
+    END_TURN_RESERVE_US = 50
+    TURN_CPU_BUDGET_US = 2000
+
+    def update_all_symmetric_tiles(self, ct: Controller):
+        if not self.should_update_all_symmetric or self.symmetry == Symmetry.UNKNOWN:
+            return
+
+        width = self.width
+        height = self.height
+        
+        log_time(ct, "Start of symmetric update")
+
+        while self.symmetric_update_y < height:
+            idx = self.symmetric_update_y * width + self.symmetric_update_x
+            if idx % 50 == 0:
+                budget = self.TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - self.END_TURN_RESERVE_US
+                if budget <= 0:
+                    return
+
+            if self._env[idx] is None:
+                sym_idx = self.get_symmetric_idx(idx, self.symmetry)
+                sym_env = self._env[sym_idx]
+                if sym_env is not None:
+                    self._apply_env_idx(idx, sym_env)
+
+            self.symmetric_update_x += 1
+            if self.symmetric_update_x == width:
+                self.symmetric_update_x = 0
+                self.symmetric_update_y += 1
+
+        self.symmetric_update_x = 0
+        self.symmetric_update_y = 0
+        self.should_update_all_symmetric = False
+        
+        log_time(ct, "End of symmetric update")
 
     def _resource_to_mask(self, resource: ResourceType | None) -> int:
         if resource == ResourceType.TITANIUM:
@@ -597,6 +654,8 @@ class Map:
         ct_get_bridge_target = ct.get_bridge_target
         ct_get_direction = ct.get_direction
         ct_get_stored_resource = ct.get_stored_resource
+        should_fill_symmetry = self.symmetry != Symmetry.UNKNOWN
+        known_symmetry = self.symmetry
         
         log_time(ct, "After local variable assignment")
 
@@ -613,12 +672,13 @@ class Map:
             env = env_grid[idx]
             if env is None:
                 env = ct_get_tile_env(pos)
-                self._set_tile_env_idx(idx, env)
-                if env == Environment.ORE_TITANIUM:
-                    ore_ti.add(pos)
-                elif env == Environment.ORE_AXIONITE:
-                    ore_ax.add(pos)
-                self.check_symmetry(pos, env)
+                self._apply_env_idx(idx, env)
+                if should_fill_symmetry:
+                    sym_idx = self.get_symmetric_idx(idx, known_symmetry)
+                    if env_grid[sym_idx] is None:
+                        self._apply_env_idx(sym_idx, env)
+                else:
+                    self.check_symmetry(pos, env)
                 
             if env == Environment.WALL:
                 self._clear_tile_entity_idx(idx)
@@ -716,6 +776,10 @@ class Map:
                     dirty_cache_positions.add(ny * width + nx)
 
         log_time(ct, "After processing nearby tiles")
+        
+        if comms.symmetry is not None and self.symmetry == Symmetry.UNKNOWN:
+            self._set_symmetry(comms.symmetry)
+            log(f"symmetry from marker: {self.symmetry.name}")
 
         self.update_symmetry()
         
@@ -1430,3 +1494,18 @@ class Map:
                     ct.draw_indicator_dot(pos, 0, 100, 255)    # blue
                 else:
                     ct.draw_indicator_dot(pos, 180, 0, 255)    # purple
+    
+    def indicate_seen(self, ct: Controller):
+        for idx in range(self.tile_count):
+            env = self._env[idx]
+            if env == None:
+                continue
+            x = idx % self.width
+            y = idx // self.width
+            pos = Position(x, y)
+            if env == Environment.WALL:
+                ct.draw_indicator_dot(pos, 255, 0, 0)      # red
+            elif env == Environment.ORE_TITANIUM:
+                ct.draw_indicator_dot(pos, 0, 255, 255)    # cyan
+            elif env == Environment.ORE_AXIONITE:
+                ct.draw_indicator_dot(pos, 255, 0, 255)    # magenta
