@@ -3,7 +3,6 @@ from enum import Enum
 from cambc import Direction, EntityType
 
 USE_LAUNCHERS = False
-RUSH_CORE = False
 
 INF = float('inf')
 
