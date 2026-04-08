@@ -8,11 +8,12 @@ import map_info
 from pathing import Pathing
 import comms
 import units.states.explore as explore
+import units.states.sabotage as sabotage
 import units.states.harvest as harvest
 import units.states.route as route
 
 rc: Controller
-states = [explore, harvest, route]
+states = [explore, sabotage, harvest, route]
 def init(c: Controller):
     global rc
     rc = c

@@ -99,25 +99,25 @@ class Pathing:
             (-2, 2, bridge_cost),
             (-2, -2, bridge_cost),
 
-            (2, 1, bridge_cost),
-            (2, -1, bridge_cost),
-            (-2, 1, bridge_cost),
-            (-2, -1, bridge_cost),
+            # (2, 1, bridge_cost),
+            # (2, -1, bridge_cost),
+            # (-2, 1, bridge_cost),
+            # (-2, -1, bridge_cost),
 
-            (1, 2, bridge_cost),
-            (1, -2, bridge_cost),
-            (-1, 2, bridge_cost),
-            (-1, -2, bridge_cost),
+            # (1, 2, bridge_cost),
+            # (1, -2, bridge_cost),
+            # (-1, 2, bridge_cost),
+            # (-1, -2, bridge_cost),
 
-            (-2, 0, bridge_cost),
-            (2, 0, bridge_cost),
-            (0, 2, bridge_cost),
-            (0, -2, bridge_cost),
+            # (-2, 0, bridge_cost),
+            # (2, 0, bridge_cost),
+            # (0, 2, bridge_cost),
+            # (0, -2, bridge_cost),
 
-            (-1, -1, bridge_cost),
-            (-1, 1, bridge_cost),
-            (1, -1, bridge_cost),
-            (1, 1, bridge_cost),
+            # (-1, -1, bridge_cost),
+            # (-1, 1, bridge_cost),
+            # (1, -1, bridge_cost),
+            # (1, 1, bridge_cost),
         ]
 
         # --- mask cache (important: many dx/dy repeat) ---
@@ -427,8 +427,11 @@ class Pathing:
                 stuck += 1
                 if stuck >= 11 if routing else 32:
                     break
-            else:
-                stuck = 0
+                i += 1
+                if i >= len(can_visit):
+                    break
+                continue
+            stuck = 0
             if routing:
                 can_visit.extend([0]*(i+bridge_cost+1-len(can_visit)))
                 for step in CONV:
@@ -476,6 +479,7 @@ class Pathing:
         return False
 
     def move_to(self, target: Position | set[Position]):
+        print("move to", target)
         if isinstance(target, Position):
             target = {target}
         if target != self.target_p:

@@ -6,11 +6,34 @@ ID_BITS = 12 # mod 4096
 _ID_MASK = (1 << ID_BITS) - 1
 
 rc: Controller
-
+ENCRYPT = True
+key = 0
 prev_messages = dict()
+def random_hash() -> int:
+    # Force inputs into 32-bit unsigned space
+    a = rc.get_map_width()
+    b = rc.get_map_height()
+    a &= 0xFFFFFFFF
+    b &= 0xFFFFFFFF
+
+    # Combine into 64 bits
+    x = (a << 32) | b
+
+    # SplitMix64-style finalizer
+    x ^= x >> 30
+    x = (x * 0xbf58476d1ce4e5b9) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 27
+    x = (x * 0x94d049bb133111eb) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 31
+
+    # Return 32-bit unsigned int
+    return x & 0xFFFFFFFF
 def init(c: Controller):
     global rc
     rc = c
+    if ENCRYPT:
+        global key
+        key = random_hash()
 
 
 def get_new_messages():
@@ -27,7 +50,7 @@ def get_new_messages():
     
     for id in rc.get_nearby_buildings():
         if get_entity_type(id) == marker_type and get_team(id) == my_team:
-            val = get_marker_value(id)
+            val = get_marker_value(id) ^ key
             if (rc.get_id()&_ID_MASK) == decode_id(val):
                 remove.add(val >> ID_BITS)
                 continue
@@ -39,7 +62,7 @@ def get_new_messages():
     return messages
 def get_messages():
     get_new_messages()
-    return prev_messages.keys()
+    return list(prev_messages.keys())
 def decode_location(v):
     return Position((v >> ID_BITS) & 63, (v >> (6 + ID_BITS)) & 63)
 def decode_id(v):
@@ -49,7 +72,7 @@ def decode_type(v):
 def decode_turn(v):
     return (v >> (ID_BITS + POS_BITS)) & 7
 def encode(target, type):
-    return (rc.get_id()&_ID_MASK) + (target.x << (ID_BITS)) + (target.y << (ID_BITS + 6)) + ((rc.get_current_round()&7)<<(ID_BITS+POS_BITS)) + (type << (ID_BITS + POS_BITS + TURN_BITS))
+    return ((rc.get_id()&_ID_MASK) + (target.x << (ID_BITS)) + (target.y << (ID_BITS + 6)) + ((rc.get_current_round()&7)<<(ID_BITS+POS_BITS)) + (type << (ID_BITS + POS_BITS + TURN_BITS)))^key
 def decode(v):
     return (decode_location(v), decode_id(v), decode_turn(v), decode_type(v))
 def mark(target, type):

@@ -120,6 +120,7 @@ def run():
     if prev_unit_count > current_count:
         num_spawned -= (prev_unit_count - current_count)
 
+
     core_pos = rc.get_position()
     # rc.convert(rc.get_global_resources()[1])
     if rc.get_current_round() == 0:

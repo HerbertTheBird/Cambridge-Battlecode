@@ -7,7 +7,7 @@ import units.builder
 rc: Controller = None
 nav: Pathing = None
 
-comm_flag = 2
+comm_flag = 3
 
 def init(c: Controller):
     global rc, nav
@@ -44,7 +44,7 @@ def _available_ore():
             & ~friendly_blocking)
 
 def score():
-    return 2 if _available_ore() else 0
+    return 3 if _available_ore() else 0
 
 def run():
     print("HARVEST")
