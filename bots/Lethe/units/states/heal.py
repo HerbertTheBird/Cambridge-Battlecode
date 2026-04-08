@@ -66,7 +66,7 @@ def _heal_targets():
         if hp > 0:
             for idx, max_hp in _MAX_HP.items():
                 if bm_et[idx] & lsb:
-                    if hp < max_hp:
+                    if hp < max_hp-2:
                         damaged |= lsb
                     break
         mask ^= lsb
