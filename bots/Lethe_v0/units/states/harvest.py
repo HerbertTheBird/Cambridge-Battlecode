@@ -15,6 +15,7 @@ def init(c: Controller):
     nav = Pathing(rc)
 
 def _available_ore():
+    #filter out spots they can shoot
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
     my_team_idx = map_info._TM_INT[rc.get_team()]
     enemy_idx = 1 - my_team_idx
@@ -41,16 +42,43 @@ def _available_ore():
     w = map_info._width
     # Ore tiles surrounded on all 4 cardinal sides by ore — unreachable by conveyor
     landlocked = ore & (ore >> 1 & map_info._not_left_col) & (ore << 1 & map_info._not_right_col) & (ore >> w) & (ore << w)
+
+    # Enemy hard buildings (not road/marker) cardinally adjacent — can't harvest next to these
+    enemy_hard = (
+        map_info._bm_team[enemy_idx]
+        & ~map_info._bm_et[map_info._IDX_ROAD]
+        & ~map_info._bm_et[map_info._IDX_MARKER]
+    )
+    enemy_hard_adj = map_info.expand_manhattan(enemy_hard)
+
     return (ore
             & ~landlocked
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
             & ~units.builder.forget[comm_flag]
             & ~enemy_blocking
             & ~friendly_blocking
+            & ~enemy_hard_adj
+            & ~map_info._bm_enemy_turret_threat
             & units.builder._harvest_zone)
 
 def score():
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]:
+        return 0
     return 3 if _available_ore() else 0
+
+CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+
+def _move_adj(target):
+    adj = set()
+    for d in Direction:
+        if d == Direction.CENTRE:
+            continue
+        p = target.add(d)
+        if map_info.in_bounds(p) and map_info.is_passable(p):
+            adj.add(p)
+    if not adj:
+        adj.add(target)
+    nav.move_to(adj)
 
 def run():
     print("HARVEST")
@@ -75,47 +103,70 @@ def run():
             break
         reached = map_info.expand_manhattan(reached)
 
-    if best_ore is not None:
-        ore_n = best_ore.x + best_ore.y * width
-        ore_id = map_info._building_id[ore_n]
-        ore_bit = 1 << ore_n
-        my_team_idx = map_info._TM_INT[rc.get_team()]
+    if best_ore is None:
+        return
 
-        if ore_id and (map_info._bm_team[my_team_idx] & ore_bit):
-            # Friendly building on ore — move adjacent and destroy it
-            adj = set()
-            for dir in Direction:
-                if dir == Direction.CENTRE:
-                    continue
-                adj_pos = best_ore.add(dir)
-                if not map_info.is_passable(adj_pos):
-                    continue
-                adj.add(adj_pos)
-            if len(adj) == 0:
-                adj.add(best_ore)
-            nav.move_to(adj)
-            if rc.can_destroy(best_ore):
-                rc.destroy(best_ore)
-                map_info.note_destroy(best_ore)
-        elif ore_id and not (map_info._bm_team[my_team_idx] & ore_bit):
-            # Enemy building on ore — move onto it and fire
-            nav.move_to({best_ore})
-            if rc.can_fire(rc.get_position()):
-                rc.fire(rc.get_position())
-        else:
-            # Clear tile — move adjacent and build harvester
-            adj = set()
-            for dir in Direction:
-                if dir == Direction.CENTRE:
-                    continue
-                adj_pos = best_ore.add(dir)
-                if not map_info.is_passable(adj_pos):
-                    continue
-                adj.add(adj_pos)
-            if len(adj) == 0:
-                adj.add(best_ore)
-            nav.move_to(adj)
-            if rc.can_build_harvester(best_ore):
-                rc.build_harvester(best_ore)
-
+    # Need vision to inspect cardinal neighbors
+    if not rc.is_in_vision(best_ore):
+        nav.move_to({best_ore})
         comms.mark(best_ore, comm_flag)
+        return
+
+    ore_n = best_ore.x + best_ore.y * width
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+
+    # --- Secure each cardinal neighbor ---
+    all_secured = True
+    for d in CARD:
+        p = best_ore.add(d)
+        if not map_info.in_bounds(p):
+            continue
+        if not rc.is_in_vision(p):
+            nav.move_to({best_ore})
+            comms.mark(best_ore, comm_flag)
+            return
+
+        pn = p.x + p.y * width
+        pbit = 1 << pn
+
+        # Wall — naturally secured
+        if map_info._bm_env[map_info._IDX_ENV_WALL] & pbit:
+            continue
+
+        pid = map_info._building_id[pn]
+        is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & pbit)
+        is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
+
+        # Needs barrier if: empty, or road, or marker
+        needs_barrier = (not pid) or is_road or is_marker
+
+        if not needs_barrier:
+            continue  # has a real building — secured
+
+        all_secured = False
+
+        # Enemy road — move onto it and fire
+        if pid and not (map_info._bm_team[my_team_idx] & pbit) and is_road:
+            nav.move_to({p})
+            if rc.can_fire(p):
+                rc.fire(p)
+            comms.mark(best_ore, comm_flag)
+            return
+
+        # Otherwise — move adjacent, destroy if needed, place barrier
+        _move_adj(p)
+        if pid and (map_info._bm_team[my_team_idx] & pbit) and rc.can_destroy(p):
+            rc.destroy(p)
+            map_info.note_destroy(p)
+        if rc.can_build_barrier(p):
+            rc.build_barrier(p)
+        comms.mark(best_ore, comm_flag)
+        return
+
+    # --- All 4 secured — place harvester ---
+    if all_secured:
+        _move_adj(best_ore)
+        if rc.can_build_harvester(best_ore):
+            rc.build_harvester(best_ore)
+
+    comms.mark(best_ore, comm_flag)

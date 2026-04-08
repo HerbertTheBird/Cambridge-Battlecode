@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from collections import deque
 import time
 
+
 _HAS_DIRECTION    = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
     e for e in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR,
@@ -106,6 +107,64 @@ _bm_routable: int = 0           # my team's conveyor-type buildings
 _bm_route_targets: int = 0      # tiles route state can path toward
 _bm_conv_loaded: int = 0        # conveyor-type buildings with a stored resource
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
+_bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
+
+# --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
+_DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
+
+def _precompute_breach_offsets():
+    """Breach: r²≤13, 180° semicircle centered on facing direction."""
+    result = [[] for _ in range(8)]
+    for di in range(8):
+        ddx, ddy = _DIR_VECS[di]
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                if dx == 0 and dy == 0:
+                    continue
+                if dx*dx + dy*dy > 13:
+                    continue
+                dot = dx * ddx + dy * ddy
+                if dot >= 0:
+                    result[di].append((dx, dy))
+    return result
+
+def _precompute_sentinel_offsets():
+    """Sentinel: cardinal=line of 4, diagonal=line of 3, each point expanded 3×3."""
+    result = [[] for _ in range(8)]
+    for di in range(8):
+        ddx, ddy = _DIR_VECS[di]
+        is_cardinal = (ddx == 0 or ddy == 0)
+        line_len = 4 if is_cardinal else 3
+        tiles = set()
+        for step in range(1, line_len + 1):
+            cx, cy = ddx * step, ddy * step
+            for ey in range(-1, 2):
+                for ex in range(-1, 2):
+                    px, py = cx + ex, cy + ey
+                    if px == 0 and py == 0:
+                        continue
+                    tiles.add((px, py))
+        result[di] = list(tiles)
+    return result
+
+def _precompute_gunner_rays():
+    """Gunner: straight line rays in all 8 directions, ordered by distance, r²≤13.
+    Returns dict keyed by facing dir_idx -> list of (ray_dir_idx, [(dx,dy)...])."""
+    rays = []
+    for di in range(8):
+        ddx, ddy = _DIR_VECS[di]
+        ray = []
+        for step in range(1, 8):
+            px, py = ddx * step, ddy * step
+            if px*px + py*py > 13:
+                break
+            ray.append((px, py))
+        rays.append(ray)
+    return rays
+
+_BREACH_OFFSETS = _precompute_breach_offsets()
+_SENTINEL_OFFSETS = _precompute_sentinel_offsets()
+_GUNNER_RAYS = _precompute_gunner_rays()
 
 _not_left_col: int = 0   # mask with all bits EXCEPT x=0 column
 _not_right_col: int = 0  # mask with all bits EXCEPT x=width-1 column
@@ -188,6 +247,133 @@ def expand_manhattan(mask: int) -> int:
     return mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1) | (mask << w) | (mask >> w)
 
 
+# Shift masks for turret aggregate computation (initialized in init())
+_turret_shift_masks: dict[tuple[int,int], int] = {}
+
+def _build_turret_shift_masks():
+    """Build column-aware shift masks for each unique (dx,dy) offset used by turrets."""
+    global _turret_shift_masks
+    w = _width
+    h = _height
+    offsets = set()
+    for di in range(8):
+        for dx, dy in _BREACH_OFFSETS[di]:
+            offsets.add((dx, dy))
+        for dx, dy in _SENTINEL_OFFSETS[di]:
+            offsets.add((dx, dy))
+    _turret_shift_masks = {}
+    for dx, dy in offsets:
+        if abs(dx) >= w or abs(dy) >= h:
+            continue
+        x0 = max(0, -dx)
+        x1 = min(w, w - dx)
+        y0 = max(0, -dy)
+        y1 = min(h, h - dy)
+        if x0 >= x1 or y0 >= y1:
+            continue
+        row_bits = ((1 << (x1 - x0)) - 1) << x0
+        nrows = y1 - y0
+        block = row_bits * ((1 << (nrows * w)) - 1) // ((1 << w) - 1)
+        _turret_shift_masks[(dx, dy)] = block << (y0 * w)
+
+
+def turret_attack_mask(pos_n: int, dir_idx: int, turret_type: int) -> int:
+    """Return bitmask of tiles a turret at pos_n facing dir_idx can attack.
+    turret_type: _IDX_BREACH, _IDX_GUNNER, or _IDX_SENTINEL."""
+    w = _width
+    h = _height
+    px = pos_n % w
+    py = pos_n // w
+    result = 0
+
+    if turret_type == _IDX_BREACH:
+        for dx, dy in _BREACH_OFFSETS[dir_idx]:
+            nx, ny = px + dx, py + dy
+            if 0 <= nx < w and 0 <= ny < h:
+                result |= 1 << (nx + ny * w)
+    elif turret_type == _IDX_SENTINEL:
+        for dx, dy in _SENTINEL_OFFSETS[dir_idx]:
+            nx, ny = px + dx, py + dy
+            if 0 <= nx < w and 0 <= ny < h:
+                result |= 1 << (nx + ny * w)
+    elif turret_type == _IDX_GUNNER:
+        walls = _bm_env[_IDX_ENV_WALL]
+        for ray_di in range(8):
+            for dx, dy in _GUNNER_RAYS[ray_di]:
+                nx, ny = px + dx, py + dy
+                if not (0 <= nx < w and 0 <= ny < h):
+                    break
+                bit = 1 << (nx + ny * w)
+                if walls & bit:
+                    break
+                result |= bit
+    return result
+
+
+def _compute_enemy_turret_threat() -> int:
+    """Compute aggregate bitmask of all tiles enemy turrets can attack.
+    Uses bitmask shifting for breach/sentinel (no wall blocking).
+    Uses per-turret ray for gunner (wall blocking)."""
+    w = _width
+    h = _height
+    my_team_idx = _TM_INT[_rc.get_team()]
+    enemy_idx = 1 - my_team_idx
+    threat = 0
+    building_dir = _building_dir
+    bm_team_enemy = _bm_team[enemy_idx]
+
+    # Breach + Sentinel: aggregate with bitmask shifting per direction
+    for turret_idx, offsets_table in ((_IDX_BREACH, _BREACH_OFFSETS), (_IDX_SENTINEL, _SENTINEL_OFFSETS)):
+        turrets = _bm_et[turret_idx] & bm_team_enemy
+        if not turrets:
+            continue
+        # Split turrets by direction
+        dir_masks = [0] * 8
+        m = turrets
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            di = building_dir[n]
+            dir_masks[di] |= lsb
+            m ^= lsb
+        for di in range(8):
+            dm = dir_masks[di]
+            if not dm:
+                continue
+            for dx, dy in offsets_table[di]:
+                shift_mask = _turret_shift_masks.get((dx, dy))
+                if shift_mask is None:
+                    continue
+                offset = dx + dy * w
+                if offset > 0:
+                    threat |= (dm & shift_mask) << offset
+                else:
+                    threat |= (dm & shift_mask) >> (-offset)
+
+    # Gunner: per-turret, all 8 rays (wall blocking)
+    gunners = _bm_et[_IDX_GUNNER] & bm_team_enemy
+    if gunners:
+        walls = _bm_env[_IDX_ENV_WALL]
+        m = gunners
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            px = n % w
+            py = n // w
+            for ray_di in range(8):
+                for dx, dy in _GUNNER_RAYS[ray_di]:
+                    nx, ny = px + dx, py + dy
+                    if not (0 <= nx < w and 0 <= ny < h):
+                        break
+                    bit = 1 << (nx + ny * w)
+                    if walls & bit:
+                        break
+                    threat |= bit
+            m ^= lsb
+
+    return threat
+
+
 def note_destroy(pos: Position) -> None:
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_dead_end
     if not in_bounds(pos):
@@ -264,6 +450,7 @@ def init(c: Controller):
         right_col |= 1 << ((_width - 1) + y * _width)
     _not_left_col = ~left_col
     _not_right_col = ~right_col
+    _build_turret_shift_masks()
     _bm_my_core_area = 0
     _bm_their_core_area = 0
     _bm_enemy_launch_adj = 0
@@ -518,7 +705,7 @@ def update() -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_dead_end
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_dead_end, _bm_enemy_turret_threat
     global _bm_seen
     rc = _rc
     building_id = _building_id
@@ -791,6 +978,9 @@ def update() -> None:
             if 0 <= nx < width and 0 <= ny < height:
                 _bm_enemy_launch_adj |= 1 << (nx + ny * width)
         mask ^= lsb
+
+    # Enemy turret threat
+    _bm_enemy_turret_threat = _compute_enemy_turret_threat()
 
 def is_tile_empty(pos: Position):
     return in_bounds(pos) and (_rc.is_tile_empty(pos) or (_rc.get_tile_building_id(pos) != None and _rc.get_entity_type(_rc.get_tile_building_id(pos)) is EntityType.MARKER))

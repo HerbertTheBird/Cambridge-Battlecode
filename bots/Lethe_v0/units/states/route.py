@@ -15,7 +15,7 @@ def init(c: Controller):
 
 def _dead_end_conveyors():
     """Bitmask of routable conveyors whose output is not connected to my ore-accepting network."""
-    return map_info._bm_dead_end & ~units.builder.forget[comm_flag]
+    return map_info._bm_dead_end & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
 
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
@@ -37,9 +37,10 @@ def _orphan_harvesters():
     ) & map_info._bm_team[my_team_idx]
 
     served = map_info.expand_chebyshev(my_connected)
-    return my_harvesters & ~served & ~units.builder.forget[comm_flag]
+    return my_harvesters & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
 
 def score():
+    units.builder.draw_mask(_orphan_harvesters(), 0, 0, 255)
     return 4 if (_dead_end_conveyors() or _orphan_harvesters()) else 0
 
 def run():

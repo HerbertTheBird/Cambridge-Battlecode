@@ -114,18 +114,22 @@ def mark(target, type):
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
     for i in rc.get_nearby_tiles(2):
         if not rc.get_tile_building_id(i) and rc.can_place_marker(i):
+            print("mark1", i)
             rc.place_marker(i, encode(target, type, sym))
             return
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i):
+            print("mark2", i)
             rc.place_marker(i, encode(target, type, sym))
             return
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team():
             if rc.can_destroy(i):
+                print("break3", i)
                 rc.destroy(i)
             if rc.can_place_marker(i):
+                print("mark3", i)
                 rc.place_marker(i, encode(target, type, sym))
                 return

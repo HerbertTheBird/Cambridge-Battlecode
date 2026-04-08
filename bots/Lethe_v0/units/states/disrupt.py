@@ -15,6 +15,8 @@ def init(c: Controller):
     nav = Pathing(rc)
 
 def _disruptable_ore():
+    #filter out spots they can shoot, as well as spots with a builder bot within sqrt 20 euclidian distance (check in here using rc.get_nearby_units and filtering for builders)
+    
     """Bitmask of ore tiles outside harvest zone that can have a barrier placed.
     Includes tiles with road or marker (either team) since those can be cleared."""
     all_ore = (map_info._bm_env[map_info._IDX_ENV_ORE_TI]
@@ -27,9 +29,13 @@ def _disruptable_ore():
     return (all_ore
             & (~has_building | clearable)
             & ~units.builder._harvest_zone
-            & ~units.builder.forget[comm_flag])
+            & ~units.builder.forget[comm_flag]
+            & ~map_info._bm_enemy_turret_threat
+            & ~map_info._bm_enemy_launch_adj)
 
 def score():
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]:
+        return 0
     return 2 if _disruptable_ore() else 0
 
 def run():
@@ -78,7 +84,7 @@ def run():
         if rc.can_destroy(best):
             rc.destroy(best)
             map_info.note_destroy(best)
-    elif best_id:
+    elif best_id and (map_info._bm_et[map_info._IDX_ROAD]&best_bit):
         # Enemy road/marker — move onto it and fire
         nav.move_to({best})
         if rc.can_fire(rc.get_position()):

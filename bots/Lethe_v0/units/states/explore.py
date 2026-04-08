@@ -28,7 +28,7 @@ def generate_explore_target():
             return
 
     # If no empty tile found after 2 tries, fallback to completely random
-    if (random.randint(0, 1) == 0) and map_info._bm_conveyors:
+    if (random.randint(0, 2) < 2) and map_info._bm_conveyors:
         explore_target = random.choice(list(map_info.iter_mask(map_info._bm_conveyors)))
     random_x = random.randint(0, map_info._width - 1)
     random_y = random.randint(0, map_info._height - 1)
@@ -43,7 +43,6 @@ def run():
         return
 
     # loop until we find a target we can path to and move.
-    moved = False
     attempts = 0
     while attempts < 2:
         if not nav.move_to(explore_target):

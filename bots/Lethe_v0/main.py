@@ -137,15 +137,15 @@ class Player:
 
             print(f"{elapsed_us/1000000:.3f} ms")
 
-            if end_time - start_time > 2_000_000:
-                print(
-                    "timed out",
-                    c.get_id(),
-                    c.get_current_round(),
-                    f"{elapsed_us / 1000000:.3f} ms",
-                    file=sys.stderr,
-                )
-                c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
+            # if end_time - start_time > 2_000_000:
+            #     print(
+            #         "timed out",
+            #         c.get_id(),
+            #         c.get_current_round(),
+            #         f"{elapsed_us / 1000000:.3f} ms",
+            #         file=sys.stderr,
+            #     )
+            #     c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
 
         except Exception as e:
             print("Error:", e)
