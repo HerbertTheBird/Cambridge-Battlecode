@@ -268,13 +268,10 @@ class Map:
             if sym_etype is not None and sym_etype != EntityType.CORE:
                 self.can_rotate = False
 
-    def get_symmetry_key(self):
-        return (self.can_flip_x, self.can_flip_y, self.can_rotate)    
-    
     def update_symmetry(self):
         if self.symmetry != Symmetry.UNKNOWN:
             return
-        key = self.get_symmetry_key()
+        key = (self.can_flip_x, self.can_flip_y, self.can_rotate)
         if key in SYMMETRY_MAPPING:
             self.symmetry = SYMMETRY_MAPPING[key]
 
@@ -285,13 +282,6 @@ class Map:
             return RESOURCE_MASK_AXIONITE
         return 0
 
-    def _resource_mask_to_set(self, mask: int) -> set[ResourceType]:
-        resources = set()
-        if mask & RESOURCE_MASK_TITANIUM:
-            resources.add(ResourceType.TITANIUM)
-        if mask & RESOURCE_MASK_AXIONITE:
-            resources.add(ResourceType.RAW_AXIONITE)
-        return resources
 
     def _get_cached_resource_mask(self, pos: Position) -> int:
         return self._input_resource_masks[self._idx(pos)]
@@ -348,7 +338,11 @@ class Map:
     def get_cached_conveyor_resources(self, pos: Position) -> set[ResourceType]:
         """Return cached resource evidence for a conveyor chain position."""
         resources = set(self.get_recent_conveyor_resources(pos))
-        resources.update(self._resource_mask_to_set(self._get_cached_resource_mask(pos)))
+        mask = self._get_cached_resource_mask(pos)
+        if mask & RESOURCE_MASK_TITANIUM:
+            resources.add(ResourceType.TITANIUM)
+        if mask & RESOURCE_MASK_AXIONITE:
+            resources.add(ResourceType.RAW_AXIONITE)
         return resources
 
     def get_conveyor_resource_evidence(self, pos: Position, ct: Controller) -> set[ResourceType]:
@@ -421,20 +415,11 @@ class Map:
             return next(iter(cached_resources))
         return None
 
-    def _has_ore_harvester_at(self, pos: Position) -> bool:
-        idx = self._idx_if_on_map(pos)
-        if idx is None:
-            return False
-        return self._has_ore_harvester_idx(idx)
-
-    def _has_adjacent_ally_conveyor(self, pos: Position, my_team: Team) -> bool:
-        idx = self._idx_if_on_map(pos)
-        if idx is None:
-            return False
-        return self._has_adjacent_ally_conveyor_idx(idx, my_team)
-
     def is_unserviced_harvester(self, pos: Position, my_team: Team) -> bool:
-        return self._has_ore_harvester_at(pos) and not self._has_adjacent_ally_conveyor(pos, my_team)
+        idx = self._idx_if_on_map(pos)
+        if idx is None:
+            return False
+        return self._has_ore_harvester_idx(idx) and not self._has_adjacent_ally_conveyor_idx(idx, my_team)
 
     def _collect_downstream_indices(self, dirty_roots: set[int]) -> list[int]:
         positions = []
@@ -442,7 +427,7 @@ class Map:
         stack = list(dirty_roots)
         while stack:
             idx = stack.pop()
-            if idx in seen or idx < 0 or idx >= self.tile_count:
+            if idx in seen:
                 continue
             seen.add(idx)
             positions.append(idx)
@@ -807,22 +792,6 @@ class Map:
                 self._chain_last_visible_cache[pos] = result
         return result
 
-    def would_create_loop(self, build_pos: Position, output_pos: Position) -> bool:
-        """Return True if placing a conveyor at build_pos pointing to output_pos
-        would create a loop (i.e. following the chain from output_pos eventually
-        reaches build_pos)."""
-        cur = self.get_conveyor_output(output_pos)
-        if cur is None:
-            return False
-
-        seen = {build_pos}
-        while cur is not None:
-            if cur in seen:
-                return cur == build_pos
-            seen.add(cur)
-            cur = self.get_conveyor_output(cur)
-        return False
-
     def _would_create_loop_idx(self, build_idx: int, output_idx: int) -> bool:
         cur_idx = self._output_idx[output_idx]
         if cur_idx < 0:
@@ -857,8 +826,6 @@ class Map:
 
         for input_idx in self.iter_conveyor_input_indices(output_pos):
             input_pos = self._pos(input_idx)
-            if not on_map(input_pos, self.width, self.height):
-                continue
             if self.is_visited(input_pos):
                 entity = self.get_tile_entity(input_pos)
                 if entity is None or entity[1] not in CONVEYOR_TYPES:
@@ -1294,11 +1261,11 @@ class Map:
                 return dx * dx + dy * dy
         return _dist_pos, _dist_xy
 
-    def _score_output_candidate(self, adj, adj_idx, dist, build_dist, is_ore,
+    def _score_output_candidate(self, adj, adj_idx, dist, build_dist,
                                 my_team, resource, ct, core_pos, end_positions,
                                 dist_to_terminal, check_splitter_dir=None):
         """Evaluate a candidate output tile after terminal/visited/wall filtering.
-        Returns (effective_dist, is_ore_fallback) or None to skip."""
+        Returns effective_dist (int) or None to skip."""
         etype = self._get_entity_type_idx(adj_idx)
         if etype is not None:
             eteam = self._get_entity_team_idx(adj_idx)
@@ -1328,7 +1295,7 @@ class Map:
                         return None
                     eff_dist = dist_to_terminal(effective_pos)
                     log(f"    {adj}: CHAIN ally {etype} eff_dist²={eff_dist}")
-                    return (eff_dist, False)
+                    return eff_dist
                 else:
                     log(f"    {adj}: SKIP ally {etype} wrong/no resource")
                     return None
@@ -1336,8 +1303,8 @@ class Map:
                 if self.has_input_conflict(resource, adj, ct):
                     log(f"    {adj}: SKIP road/marker has opposite-resource input")
                     return None
-                log(f"    {adj}: {'ORE ' if is_ore else ''}ROAD dist²={dist}")
-                return (dist, is_ore)
+                log(f"    {adj}: ROAD dist²={dist}")
+                return dist
             else:
                 log(f"    {adj}: SKIP occupied by {eteam} {etype}")
                 return None
@@ -1345,13 +1312,15 @@ class Map:
             if self.has_input_conflict(resource, adj, ct):
                 log(f"    {adj}: SKIP empty tile has opposite-resource input")
                 return None
-            log(f"    {adj}: {'ORE ' if is_ore else ''}EMPTY dist²={dist}")
-            return (dist, is_ore)
+            log(f"    {adj}: EMPTY dist²={dist}")
+            return dist
 
-    def get_best_conveyor_output(self, build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
-        """Find the best cardinal-adjacent tile for a conveyor at build_pos.
-        Priority: terminal > best by effective distance (ally chain-followed or empty).
-        Returns (direction, next_pos) or None."""
+    def _get_best_output(self, build_pos: Position, core_pos: Position | None, ct: Controller,
+                         offsets, my_team: Team | None = None, end_positions: set | None = None,
+                         resource: ResourceType | None = None, check_splitter: bool = False,
+                         allow_far_terminals: bool = False, label: str = "output") -> Position | None:
+        """Unified helper for conveyor/bridge output selection.
+        Returns the best output Position, or None."""
         if core_pos is None:
             return None
 
@@ -1361,126 +1330,77 @@ class Map:
         best_terminal_dist = INF
         best_next = None
         best_next_dist = INF
-        best_ore_next = None
-        best_ore_next_dist = INF
         build_idx = self._idx(build_pos)
         end_idx_set = {self._idx(p) for p in end_positions} if end_positions else None
         width = self.width
         height = self.height
-        log(f"  conv_output: build={build_pos} core={core_pos} term_dist²={build_dist} res={resource}")
+        log(f"  {label}: build={build_pos} core={core_pos} term_dist²={build_dist} res={resource}")
 
-        for d, (dx, dy) in zip(CARDINAL_DIRECTIONS, _CARDINAL_OFFSETS):
-            ax = build_pos.x + dx
-            ay = build_pos.y + dy
-            if not on_map_coords(ax, ay, width, height):
+        for dx, dy in offsets:
+            x = build_pos.x + dx
+            y = build_pos.y + dy
+            if not on_map_coords(x, y, width, height):
                 continue
-            adj_idx = ay * width + ax
-            dist = dist_to_terminal_xy(ax, ay)
-            if dist >= build_dist:
+            adj_idx = y * width + x
+            dist = dist_to_terminal_xy(x, y)
+            if not allow_far_terminals and dist >= build_dist:
                 continue
             if self._would_create_loop_idx(build_idx, adj_idx):
                 continue
+
+            adj = Position(x, y)
+
             if self._is_ore_idx(adj_idx):
-                adj = Position(ax, ay)
-                log(f"    {adj} ({d}): SKIP is ore")
                 continue
-            is_terminal = (adj_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(ax - core_pos.x) <= 1 and abs(ay - core_pos.y) <= 1)
+
+            is_terminal = (adj_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(x - core_pos.x) <= 1 and abs(y - core_pos.y) <= 1)
             if is_terminal:
                 if dist < best_terminal_dist:
                     best_terminal_dist = dist
-                    best_terminal = (d, Position(ax, ay))
+                    best_terminal = adj
                 continue
-            adj = Position(ax, ay)
+
+            if allow_far_terminals and dist >= build_dist:
+                continue
             if self.is_adjacent_to_opposite_ore(adj, resource):
                 continue
             if not self._is_visited_idx(adj_idx):
                 continue
             if self._get_tile_env_idx(adj_idx) == Environment.WALL:
                 continue
-            is_ore = self._is_ore_idx(adj_idx)
-            result = self._score_output_candidate(adj, adj_idx, dist, build_dist, is_ore,
-                                                  my_team, resource, ct, core_pos, end_positions,
-                                                  dist_to_terminal, check_splitter_dir=d)
-            if result is None:
-                continue
-            eff_dist, is_ore_fallback = result
-            if is_ore_fallback:
-                if eff_dist < best_ore_next_dist:
-                    best_ore_next_dist = eff_dist
-                    best_ore_next = (d, adj)
-            elif eff_dist < best_next_dist:
-                best_next_dist = eff_dist
-                best_next = (d, adj)
 
-        result = best_terminal or best_next or best_ore_next
-        log(f"  conv_output result: {result}")
+            splitter_dir = build_pos.direction_to(adj) if check_splitter else None
+            eff_dist = self._score_output_candidate(adj, adj_idx, dist, build_dist,
+                                                    my_team, resource, ct, core_pos, end_positions,
+                                                    dist_to_terminal, check_splitter_dir=splitter_dir)
+            if eff_dist is None:
+                continue
+            if eff_dist < best_next_dist:
+                best_next_dist = eff_dist
+                best_next = adj
+
+        result = best_terminal or best_next
+        log(f"  {label} result: {result}")
         return result
+
+    def get_best_conveyor_output(self, build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
+        """Find the best cardinal-adjacent tile for a conveyor at build_pos.
+        Returns (direction, next_pos) or None."""
+        result = self._get_best_output(build_pos, core_pos, ct, _CARDINAL_OFFSETS,
+                                       my_team=my_team, end_positions=end_positions,
+                                       resource=resource, check_splitter=True,
+                                       allow_far_terminals=False, label="conv_output")
+        if result is None:
+            return None
+        return (build_pos.direction_to(result), result)
 
     def get_best_bridge_output(self, bridge_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> Position | None:
-        """Find the best output tile for a bridge at bridge_pos, targeting core_pos.
-        Prefers any core tile reachable within dist² ≤ 9; otherwise the visited,
-        empty, non-wall tile closest to the core."""
-        if core_pos is None:
-            return None
-
-        dist_to_terminal, dist_to_terminal_xy = self._make_dist_fns(end_positions, core_pos)
-        best_terminal = None
-        best_terminal_dist = INF
-        best_next = None
-        best_next_dist = INF
-        best_ore_next = None
-        best_ore_next_dist = INF
-        bridge_dist = dist_to_terminal_xy(bridge_pos.x, bridge_pos.y)
-        bridge_idx = self._idx(bridge_pos)
-        end_idx_set = {self._idx(p) for p in end_positions} if end_positions else None
-        width = self.width
-        height = self.height
-        log(f"  bridge_output: pos={bridge_pos} core={core_pos} bridge_term_dist²={bridge_dist} res={resource}")
-        for dx, dy in _BRIDGE_OFFSETS:
-            x, y = bridge_pos.x + dx, bridge_pos.y + dy
-            if not on_map_coords(x, y, width, height):
-                continue
-            candidate_idx = y * width + x
-            if self._would_create_loop_idx(bridge_idx, candidate_idx):
-                continue
-            candidate = Position(x, y)
-            if self.is_adjacent_to_opposite_ore(candidate, resource):
-                continue
-            if self._is_ore_idx(candidate_idx):
-                candidate = Position(x, y)
-                log(f"    {candidate}: SKIP ore")
-                continue
-            candidate_dist = dist_to_terminal_xy(x, y)
-            is_terminal = (candidate_idx in end_idx_set) if end_idx_set is not None else (core_pos is not None and abs(x - core_pos.x) <= 1 and abs(y - core_pos.y) <= 1)
-            if is_terminal:
-                if candidate_dist < best_terminal_dist:
-                    best_terminal_dist = candidate_dist
-                    best_terminal = candidate
-                continue
-            if candidate_dist >= bridge_dist:
-                continue
-            if not self._is_visited_idx(candidate_idx):
-                continue
-            if self._get_tile_env_idx(candidate_idx) == Environment.WALL:
-                continue
-            is_ore = self._is_ore_idx(candidate_idx)
-            result = self._score_output_candidate(candidate, candidate_idx, candidate_dist, bridge_dist, is_ore,
-                                                  my_team, resource, ct, core_pos, end_positions,
-                                                  dist_to_terminal)
-            if result is None:
-                continue
-            eff_dist, is_ore_fallback = result
-            if is_ore_fallback:
-                if eff_dist < best_ore_next_dist:
-                    best_ore_next_dist = eff_dist
-                    best_ore_next = candidate
-            elif eff_dist < best_next_dist:
-                best_next_dist = eff_dist
-                best_next = candidate
-
-        result = best_terminal or best_next or best_ore_next
-        log(f"  bridge_output result: {result}")
-        return result
+        """Find the best output tile for a bridge at bridge_pos.
+        Returns Position or None."""
+        return self._get_best_output(bridge_pos, core_pos, ct, _BRIDGE_OFFSETS,
+                                     my_team=my_team, end_positions=end_positions,
+                                     resource=resource, check_splitter=False,
+                                     allow_far_terminals=True, label="bridge_output")
 
     def indicate_entity_map(self, ct: Controller, my_team: Team):
         """Draw colored indicator dots for all tracked entities. Purpose of this
