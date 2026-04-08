@@ -208,7 +208,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                             if team_t == player.my_team and etype_t == EntityType.ROAD and ct.can_destroy(target):
                                 safe_destroy(player, ct, target, vc)
                                 log(f"START_CHAIN: destroyed ally road at {target} for barrier")
-                        elif safe_build_barrier(player, ct, target):
+                        if safe_build_barrier(player, ct, target):
                             log(f"START_CHAIN: barrier at {target} (protecting {ore_pos})")
 
                 # All barriers placed (or none needed) — move to bridge side
@@ -639,7 +639,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                                 ):
                                     safe_destroy(player, ct, target, vc)
                                     log(f"DEFEND: destroyed ally road at {target} to build barrier")
-                            elif safe_build_barrier(player, ct, target):
+                            if safe_build_barrier(player, ct, target):
                                 log(f"DEFEND: barrier at {target} (protecting {ore_pos})")
                         # Re-check; if can't build (e.g. no resources), move on
                         remaining = get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
