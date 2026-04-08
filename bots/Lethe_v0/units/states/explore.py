@@ -20,7 +20,7 @@ def score():
 def generate_explore_target():
     global explore_target
 
-    for _ in range(2):  # slightly more aggressive
+    if (random.randint(0, 2) == 0):
         random_x = random.randint(0, map_info._width - 1)
         random_y = random.randint(0, map_info._height - 1)
         if not map_info.seen_at(random_x, random_y):

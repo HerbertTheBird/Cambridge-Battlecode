@@ -113,7 +113,9 @@ def run():
         return
 
     ore_n = best_ore.x + best_ore.y * width
+    ore_bit = 1 << ore_n
     my_team_idx = map_info._TM_INT[rc.get_team()]
+
 
     # --- Secure each cardinal neighbor ---
     all_secured = True
@@ -142,7 +144,6 @@ def run():
 
         if not needs_barrier:
             continue  # has a real building — secured
-
         all_secured = False
         print("not secured", p)
         # Enemy road — move onto it and fire
@@ -165,6 +166,23 @@ def run():
 
     # --- All 4 secured — place harvester ---
     if all_secured:
+        # --- Clear ore tile if it has a road/barrier ---
+        ore_id = map_info._building_id[ore_n]
+        if ore_id:
+            is_enemy = not bool(map_info._bm_team[my_team_idx] & ore_bit)
+            is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
+            is_barrier = bool(map_info._bm_et[map_info._IDX_BARRIER] & ore_bit)
+            if is_enemy and is_road:
+                nav.move_to({best_ore})
+                if rc.can_fire(rc.get_position()):
+                    rc.fire(rc.get_position())
+                comms.mark(best_ore, comm_flag)
+            if not is_enemy and (is_road or is_barrier):
+                _move_adj(best_ore)
+                if rc.can_destroy(best_ore):
+                    rc.destroy(best_ore)
+                    map_info.note_destroy(best_ore)
+                comms.mark(best_ore, comm_flag)
         _move_adj(best_ore)
         if rc.can_build_harvester(best_ore):
             rc.build_harvester(best_ore)
