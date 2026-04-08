@@ -126,6 +126,9 @@ def should_spawn(player, ct: Controller, vc) -> bool:
         current_round - player.last_seen_builder_bot_round > 30 and
         player.global_titanium - builder_cost > 200
     )
+    
+    # if (current_round > 500):
+    #     return True
 
     return (
         no_units or

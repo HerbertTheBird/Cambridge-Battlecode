@@ -179,7 +179,6 @@ _rot_sym = True
 _solved_sym = False
 _rush_tiebroken = 0
 
-
 def ground_at(x, y):
     bit = 1 << (x + y * _width)
     if _bm_env[_IDX_ENV_WALL] & bit: return Environment.WALL

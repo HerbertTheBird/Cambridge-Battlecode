@@ -78,6 +78,9 @@ def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj) -> set[Posi
             x += dx
             y += dy
             cur = Position(x, y)
+            
+            if not ct.is_in_vision(cur):
+                continue
 
             if not on_map(cur, width, height):
                 break
@@ -86,27 +89,21 @@ def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj) -> set[Posi
             if map_obj.get_tile_env(cur) == Environment.WALL:
                 break
 
-            threat_tiles.add(cur)
-
             # builder blocks
             bbid = ct.get_tile_builder_bot_id(cur)
             if bbid is not None:
                 if ct.get_team(bbid) == my_team:
                     break  # ally blocks
-                continue  # enemy doesn't block
 
             # buildings
             bid = ct.get_tile_building_id(cur)
             if bid is not None:
                 etype = ct.get_entity_type(bid)
                 team = ct.get_team(bid)
-
-                if etype == EntityType.MARKER or etype == EntityType.ROAD:
-                    continue
-
-                if team == my_team:
+                if etype != EntityType.MARKER and etype != EntityType.ROAD and team == my_team:
                     break  # ally blocks
-                continue  # enemy doesn't block
+            
+            threat_tiles.add(cur)
 
     return threat_tiles
 

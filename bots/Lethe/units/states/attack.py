@@ -3,104 +3,122 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
 
 comm_flag = 7
 
-# Score weights per entity type index (adjustable)
-_WEIGHTS = {
-    map_info._IDX_CONVEYOR: 1,
-    map_info._IDX_SPLITTER: 2,
-    map_info._IDX_BRIDGE: 4,
-    map_info._IDX_ARMOURED_CONVEYOR: 4,
-    map_info._IDX_HARVESTER: 35,
-    map_info._IDX_FOUNDRY: 55,
-    map_info._IDX_ROAD: 0,
-    map_info._IDX_BARRIER: 4,
-    map_info._IDX_GUNNER: 40,
-    map_info._IDX_SENTINEL: 50,
-    map_info._IDX_BREACH: 60,
-    map_info._IDX_LAUNCHER: 10,
-    map_info._IDX_CORE: 35,
-}
+DIRECTIONS = [
+    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
+    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
+]
+CARDINAL_DIRECTIONS = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
-GUNNER_MULTIPLIER = 2
-SCORE_THRESHOLD = -30  # negative starting score to prevent random shooting of roads
 
 def init(c: Controller):
     global rc, nav
     rc = c
     nav = Pathing(rc)
 
-_CARD_FEED = [(0, -1, 0), (1, 0, 2), (0, 1, 4), (-1, 0, 6)]  # (dx, dy, dir_idx toward neighbor)
 
-def _score_position(pos_n):
-    """Evaluate a position for turret placement.
-    Returns (score, best_dir_idx, best_type) or None if no positive score."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
-    enemy_idx = 1 - my_team_idx
-    enemy = map_info._bm_team[enemy_idx]
+def on_map(pos: Position, width: int, height: int) -> bool:
+    return 0 <= pos.x < width and 0 <= pos.y < height
 
-    w = map_info._width
-    h = map_info._height
-    x = pos_n % w
-    y = pos_n // w
 
-    # Forbidden facing directions: can't face toward feeding conveyor or harvester
-    my_conveyors = (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-    ) & map_info._bm_team[my_team_idx]
-    my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_team_idx]
-    forbidden = 0
-    for dx, dy, di in _CARD_FEED:
-        nx, ny = x + dx, y + dy
-        if 0 <= nx < w and 0 <= ny < h:
-            nn = nx + ny * w
-            nbit = 1 << nn
-            if (nbit & my_conveyors and map_info._building_conv_target[nn] == pos_n) \
-                    or (nbit & my_harvesters):
-                forbidden |= (1 << di)
+def get_blocked_sentinel_directions(intercept_pos: Position) -> set:
+    # Simplified version from dragonfruit, assuming we can't inspect input chains easily
+    # This part might need more complex map analysis if available in Lethe
+    return set()
 
-    best_score = SCORE_THRESHOLD
-    best_dir = 0
-    best_type = None
+def get_sentinel_direction(intercept_pos: Position, enemy_pos: Position) -> Direction | None:
+    """Pick the best direction for a sentinel at intercept_pos facing enemy_pos."""
+    blocked = get_blocked_sentinel_directions(intercept_pos)
 
-    for dir_idx in range(8):
-        if (1 << dir_idx) & forbidden:
-            continue
+    desired = intercept_pos.direction_to(enemy_pos)
+    if desired not in blocked:
+        return desired
+    # Try rotating to find a non-blocked direction
+    for rot in [desired.rotate_left(), desired.rotate_right(),
+                desired.rotate_left().rotate_left(), desired.rotate_right().rotate_right()]:
+        if rot not in blocked:
+            return rot
+    return None
 
-        # Sentinel
-        sentinel_mask = map_info.turret_attack_mask(pos_n, dir_idx, map_info._IDX_SENTINEL)
-        s_score = SCORE_THRESHOLD
-        hittable = sentinel_mask & enemy
-        for idx, weight in _WEIGHTS.items():
-            overlap = map_info._bm_et[idx] & hittable
-            s_score += overlap.bit_count() * weight
-        if s_score > best_score:
-            best_score = s_score
-            best_dir = dir_idx
-            best_type = EntityType.SENTINEL
 
-        # Gunner
-        gunner_mask = map_info.turret_attack_mask(pos_n, dir_idx, map_info._IDX_GUNNER)
-        g_score = SCORE_THRESHOLD
-        hittable = gunner_mask & enemy
-        for idx, weight in _WEIGHTS.items():
-            overlap = map_info._bm_et[idx] & hittable
-            g_score += overlap.bit_count() * weight * GUNNER_MULTIPLIER
-        if g_score > best_score:
-            best_score = g_score
-            best_dir = dir_idx
-            best_type = EntityType.GUNNER
+def is_gunner_position(
+    core_pos: Position | None,
+    pos: Position,
+    primary_threat: Position | None,
+) -> bool:
+    """
+    True if pos is a good gunner location.
+    Adapted from dragonfruit.
+    """
+    if core_pos is not None:
+        dist = core_pos.distance_squared(pos)
+        if 2 < dist <= 18:
+            return True
 
-    if best_score <= 0 or best_type is None:
-        return None
-    return (best_score, best_dir, best_type)
+    if primary_threat is None or not rc.is_in_vision(primary_threat):
+        return False
+
+    my_team = rc.get_team()
+    width = map_info._width
+    height = map_info._height
+
+    for d in DIRECTIONS:
+        dx, dy = d.delta()
+        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+
+        x, y = pos.x, pos.y
+        for _ in range(max_range):
+            x += dx
+            y += dy
+
+            cur = Position(x, y)
+
+            if not on_map(cur, width, height):
+                break
+
+            if map_info.ground_at(x, y) == map_info._IDX_ENV_WALL:
+                break
+
+            if cur == primary_threat:
+                return True
+            
+            bbid = None
+            if rc.is_in_vision(cur):
+                bbid = rc.get_tile_builder_bot_id(cur)
+            if bbid is not None:
+                if rc.get_team(bbid) == my_team:
+                    break
+                continue
+
+            bid = None
+            if rc.is_in_vision(cur):
+                bid = rc.get_tile_builder_bot_id(cur)
+            if bid is not None:
+                etype = rc.get_entity_type(bid)
+                team = rc.get_team(bid)
+
+                if etype == EntityType.MARKER or etype == EntityType.ROAD:
+                    continue
+
+                if team == my_team:
+                    break
+                continue
+
+    return False
+
+def get_best_turret_type(pos: Position, enemy_core_pos: Position | None, primary_threat: Position | None = None) -> EntityType:
+    """Return the preferred turret type for an intercept build at pos."""
+    if is_gunner_position(enemy_core_pos, pos, primary_threat):
+        return EntityType.GUNNER
+    return EntityType.SENTINEL
+
 
 def _my_turret_coverage():
     """Bitmask of all tiles my turrets can attack (regardless of ammo)."""
@@ -224,12 +242,7 @@ def _placement_candidates():
 
     return candidates
 
-def _get_attack_candidates():
-    """Return placement candidates filtered to those that can hit uncovered high-value targets."""
-    candidates = _placement_candidates()
-    if not candidates:
-        return 0
-
+def _get_uncovered_high_value_targets():
     my_team_idx = map_info._TM_INT[rc.get_team()]
     enemy_idx = 1 - my_team_idx
     enemy = map_info._bm_team[enemy_idx]
@@ -249,7 +262,16 @@ def _get_attack_candidates():
 
     # Remove targets already covered by my turrets
     my_coverage = _my_turret_coverage()
-    uncovered = high_value & ~my_coverage
+    return high_value & ~my_coverage
+
+
+def _get_attack_candidates():
+    """Return placement candidates filtered to those that can hit uncovered high-value targets."""
+    candidates = _placement_candidates()
+    if not candidates:
+        return 0
+
+    uncovered = _get_uncovered_high_value_targets()
     if not uncovered:
         return 0
 
@@ -264,7 +286,7 @@ def score():
     return 7 if _get_attack_candidates() else 0
 
 def run():
-    print("ATTACK")
+    log("ATTACK")
     candidates = _get_attack_candidates()
     if not candidates:
         return
@@ -291,18 +313,23 @@ def run():
     if best is None:
         return
 
-    # Full scoring on chosen tile
-    best_n = best.x + best.y * width
-    best_info = _score_position(best_n)
-    if best_info is None:
-        comms.mark(best, comm_flag)
-        return
+    # --- New logic from dragonfruit ---
+    uncovered = _get_uncovered_high_value_targets()
+    primary_threat = None
+    if uncovered:
+        primary_threat = min(map_info.iter_mask(uncovered), key=lambda t: t.distance_squared(best))
 
-    _, dir_idx, turret_type = best_info
-    direction = map_info._INT_DIR[dir_idx]
+    turret_type = get_best_turret_type(best, map_info._their_core, primary_threat)
 
-    best_bit = 1 << best_n
-    best_id = map_info._building_id[best_n]
+    direction = get_sentinel_direction(best, primary_threat) if primary_threat else Direction.NORTH
+    if direction is None:
+        direction = Direction.NORTH # Fallback
+
+    log(f"Attack state: best_pos={best}, threat={primary_threat}, type={turret_type}, dir={direction}")
+    # --- End new logic ---
+
+    best_bit = 1 << (best.x + best.y * width)
+    best_id = map_info._building_id[best.x + best.y * width]
     my_team_idx = map_info._TM_INT[rc.get_team()]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
 
@@ -340,6 +367,7 @@ def run():
             rc.build_sentinel(best, direction)
     elif turret_type == EntityType.GUNNER:
         if rc.can_build_gunner(best, direction):
-            rc.build_gunner(best, direction)
+            gunner_direction = best.direction_to(primary_threat) if primary_threat is not None else direction
+            rc.build_gunner(best, gunner_direction)
 
     comms.mark(best, comm_flag)

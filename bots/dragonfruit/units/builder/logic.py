@@ -438,7 +438,11 @@ def is_gunner_position(
         return False
 
     if ct.get_tile_builder_bot_id(primary_threat) is not None:
-        return False
+        building_id = ct.get_tile_building_id(primary_threat)
+        if not building_id:
+            return False
+        if not ct.get_entity_type(building_id) in CONVEYOR_TYPES or ct.get_hp(building_id) == ct.get_max_hp(building_id):
+            return False
 
     my_team = ct.get_team()
     width = map_obj.width
