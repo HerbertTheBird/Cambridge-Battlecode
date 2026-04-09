@@ -23,7 +23,7 @@ _WEIGHTS = {
     map_info._IDX_SENTINEL: 50,
     map_info._IDX_BREACH: 60,
     map_info._IDX_LAUNCHER: 10,
-    map_info._IDX_CORE: 100,
+    map_info._IDX_CORE: 35,
 }
 
 GUNNER_MULTIPLIER = 2
