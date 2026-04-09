@@ -66,20 +66,15 @@ def pick_three_directions(core_pos, width, height, valid_dirs):
 
     return list(best_triplet)
 
-def prioritize_direction(directions: list[Direction], preferred_dir: Direction) -> list[Direction]:
-    """Move preferred_dir to the front, adding it if needed."""
-    ordered = [d for d in directions if d != preferred_dir]
-    return [preferred_dir, *ordered][:3]
-
 def choose_spawn_plan(player, ct: Controller, my_pos: Position):
     valid_dirs = get_valid_directions(ct, my_pos, player.map.width, player.map.height)
     rotational_core_dir = my_pos.direction_to(player.map.get_symmetric_pos(my_pos, Symmetry.ROTATE))
 
     if len(valid_dirs) == 0:
-        return prioritize_direction(random.sample(DIRECTIONS, 3), rotational_core_dir)
+        return random.sample(DIRECTIONS, 3)
 
     chosen = pick_three_directions(my_pos, player.map.width, player.map.height, valid_dirs)
-    return prioritize_direction([d for (d, _) in chosen], rotational_core_dir)
+    return [d for (d, _) in chosen]
 
 def draw_spawn_plan(ct: Controller, my_pos: Position, spawn_plan, width: int, height: int) -> None:
     for d in spawn_plan:
