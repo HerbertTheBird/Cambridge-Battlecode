@@ -1,6 +1,6 @@
 import random
 
-from cambc import Controller, Position
+from cambc import Controller, EntityType, Position
 
 from globals import DIRECTIONS
 from units.core.spawn import *
@@ -33,6 +33,7 @@ def run_core(player, ct: Controller, my_pos: Position, vc) -> None:
 
         # Spawn if possible
         if spawn_pos is not None and ct.can_spawn(spawn_pos):
-            ct.spawn_builder(spawn_pos)
+            bid = ct.spawn_builder(spawn_pos)
+            vc.add_entity(player, bid, EntityType.BUILDER_BOT, player.my_team, spawn_pos)
             player.num_spawned += 1
             player.last_spawn_round = ct.get_current_round()

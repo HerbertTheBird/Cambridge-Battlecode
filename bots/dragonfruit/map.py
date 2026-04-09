@@ -1326,7 +1326,7 @@ class Map:
                                 my_team, resource, ct, core_pos, end_positions,
                                 dist_to_terminal, check_splitter_dir=None):
         """Evaluate a candidate output tile after terminal/visited/wall filtering.
-        Returns effective_dist (int) or None to skip."""
+        Returns (effective_dist, is_fallback) or None to skip."""
         etype = self._get_entity_type_idx(adj_idx)
         if etype is not None:
             eteam = self._get_entity_team_idx(adj_idx)
@@ -1356,7 +1356,11 @@ class Map:
                         return None
                     eff_dist = dist_to_terminal(effective_pos)
                     log(f"    {adj}: CHAIN ally {etype} eff_dist²={eff_dist}")
-                    return eff_dist
+                    is_fallback = False
+                    if resource == ResourceType.TITANIUM and ResourceType.TITANIUM in self.get_conveyor_resource_evidence(adj, ct):
+                        log(f"    {adj}: FALLBACK ally {etype} observed titanium on chain")
+                        is_fallback = True
+                    return (eff_dist, is_fallback)
                 else:
                     log(f"    {adj}: SKIP ally {etype} wrong/no resource")
                     return None
@@ -1365,7 +1369,7 @@ class Map:
                     log(f"    {adj}: SKIP road/marker has opposite-resource input")
                     return None
                 log(f"    {adj}: ROAD dist²={dist}")
-                return dist
+                return (dist, False)
             else:
                 log(f"    {adj}: SKIP occupied by {eteam} {etype}")
                 return None
@@ -1374,16 +1378,16 @@ class Map:
                 log(f"    {adj}: SKIP empty tile has opposite-resource input")
                 return None
             log(f"    {adj}: EMPTY dist²={dist}")
-            return dist
+            return (dist, False)
 
-    def _get_best_output(self, build_pos: Position, core_pos: Position | None, ct: Controller,
-                         offsets, my_team: Team | None = None, end_positions: set | None = None,
-                         resource: ResourceType | None = None, check_splitter: bool = False,
-                         allow_far_terminals: bool = False, label: str = "output") -> Position | None:
+    def _get_best_output_with_fallback(self, build_pos: Position, core_pos: Position | None, ct: Controller,
+                                       offsets, my_team: Team | None = None, end_positions: set | None = None,
+                                       resource: ResourceType | None = None, check_splitter: bool = False,
+                                       allow_far_terminals: bool = False, label: str = "output") -> tuple[Position | None, bool]:
         """Unified helper for conveyor/bridge output selection.
-        Returns the best output Position, or None."""
+        Returns (best output Position or None, whether it is fallback)."""
         if core_pos is None:
-            return None
+            return (None, False)
 
         dist_to_terminal, dist_to_terminal_xy = self._make_dist_fns(end_positions, core_pos)
         build_dist = dist_to_terminal_xy(build_pos.x, build_pos.y)
@@ -1391,6 +1395,8 @@ class Map:
         best_terminal_dist = INF
         best_next = None
         best_next_dist = INF
+        best_fallback = None
+        best_fallback_dist = INF
         build_idx = self._idx(build_pos)
         end_idx_set = {self._idx(p) for p in end_positions} if end_positions else None
         width = self.width
@@ -1431,17 +1437,37 @@ class Map:
                 continue
 
             splitter_dir = build_pos.direction_to(adj) if check_splitter else None
-            eff_dist = self._score_output_candidate(adj, adj_idx, dist, build_dist,
-                                                    my_team, resource, ct, core_pos, end_positions,
-                                                    dist_to_terminal, check_splitter_dir=splitter_dir)
-            if eff_dist is None:
+            candidate = self._score_output_candidate(adj, adj_idx, dist, build_dist,
+                                                     my_team, resource, ct, core_pos, end_positions,
+                                                     dist_to_terminal, check_splitter_dir=splitter_dir)
+            if candidate is None:
                 continue
-            if eff_dist < best_next_dist:
+            eff_dist, is_fallback = candidate
+            if is_fallback:
+                if eff_dist < best_fallback_dist:
+                    best_fallback_dist = eff_dist
+                    best_fallback = adj
+            elif eff_dist < best_next_dist:
                 best_next_dist = eff_dist
                 best_next = adj
 
-        result = best_terminal or best_next
+        result = best_terminal or best_next or best_fallback
+        is_fallback = result is not None and best_terminal is None and best_next is None
         log(f"  {label} result: {result}")
+        return (result, is_fallback)
+
+    def _get_best_output(self, build_pos: Position, core_pos: Position | None, ct: Controller,
+                         offsets, my_team: Team | None = None, end_positions: set | None = None,
+                         resource: ResourceType | None = None, check_splitter: bool = False,
+                         allow_far_terminals: bool = False, label: str = "output") -> Position | None:
+        """Unified helper for conveyor/bridge output selection.
+        Returns the best output Position, or None."""
+        result, _ = self._get_best_output_with_fallback(
+            build_pos, core_pos, ct, offsets,
+            my_team=my_team, end_positions=end_positions,
+            resource=resource, check_splitter=check_splitter,
+            allow_far_terminals=allow_far_terminals, label=label,
+        )
         return result
 
     def get_best_conveyor_output(self, build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
@@ -1462,6 +1488,29 @@ class Map:
                                      my_team=my_team, end_positions=end_positions,
                                      resource=resource, check_splitter=False,
                                      allow_far_terminals=True, label="bridge_output")
+
+    def get_best_conveyor_output_with_fallback(self, build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
+        """Find the best cardinal-adjacent tile for a conveyor at build_pos.
+        Returns ((direction, next_pos) or None, whether it is fallback)."""
+        result, is_fallback = self._get_best_output_with_fallback(
+            build_pos, core_pos, ct, _CARDINAL_OFFSETS,
+            my_team=my_team, end_positions=end_positions,
+            resource=resource, check_splitter=True,
+            allow_far_terminals=False, label="conv_output",
+        )
+        if result is None:
+            return (None, False)
+        return ((build_pos.direction_to(result), result), is_fallback)
+
+    def get_best_bridge_output_with_fallback(self, bridge_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
+        """Find the best output tile for a bridge at bridge_pos.
+        Returns (Position or None, whether it is fallback)."""
+        return self._get_best_output_with_fallback(
+            bridge_pos, core_pos, ct, _BRIDGE_OFFSETS,
+            my_team=my_team, end_positions=end_positions,
+            resource=resource, check_splitter=False,
+            allow_far_terminals=True, label="bridge_output",
+        )
 
     def indicate_entity_map(self, ct: Controller, my_team: Team):
         """Draw colored indicator dots for all tracked entities. Purpose of this

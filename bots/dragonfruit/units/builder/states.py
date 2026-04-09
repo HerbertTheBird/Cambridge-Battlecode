@@ -25,7 +25,13 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
         clear_state(player)
         return
 
-    if count_closer_allies(player, ore_pos, my_pos, vc) >= 2:
+    bbid = ct.get_tile_builder_bot_id(ore_pos) if ct.is_in_vision(ore_pos) else None
+    if bbid is not None and bbid != ct.get_id():
+        log(f"another builder {bbid} targeting {ore_pos} -> abandoning harvest")
+        clear_state(player)
+        return
+
+    if count_closer_allies(player, ore_pos, my_pos, vc) >= 1:
         log(f"2+ closer allies to {ore_pos} -> abandoning harvest")
         clear_state(player)
         return
@@ -92,7 +98,7 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
     )
 
     bbid = ct.get_tile_builder_bot_id(ore_pos)
-    if (bbid is None or bbid == ct.get_id()) and ct.can_destroy(ore_pos):
+    if (bbid is None or bbid == ct.get_id()) and ct.can_destroy(ore_pos) and player.global_titanium >= ct.get_harvester_cost()[0]:
         safe_destroy(player, ct, ore_pos, vc)
 
     barrier_targets = []
@@ -101,11 +107,6 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
             pos for pos in get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
             if pos != bridge_pos
         ]
-
-    barrier_cost = len(barrier_targets) * ct.get_barrier_cost()[0]
-    harvester_cost = ct.get_harvester_cost()[0]
-    if player.global_titanium < barrier_cost + harvester_cost:
-        barrier_targets = []
 
     if (
         my_pos.distance_squared(ore_pos) <= 2
@@ -126,7 +127,8 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
             if bid_t is not None:
                 team_t = ct.get_team(bid_t)
                 etype_t = ct.get_entity_type(bid_t)
-                if team_t == player.my_team and etype_t == EntityType.ROAD and ct.can_destroy(target):
+                bbid_t = ct.get_tile_builder_bot_id(target)
+                if team_t == player.my_team and etype_t == EntityType.ROAD and ct.can_destroy(target) and (bbid_t is None or bbid_t == ct.get_id()) and player.global_titanium >= ct.get_barrier_cost()[0]:
                     safe_destroy(player, ct, target, vc)
                     log(f"START_CHAIN: destroyed ally road at {target} for barrier")
             if safe_build_barrier(player, ct, target):
@@ -144,9 +146,11 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
             player.nav.set_destination(bridge_pos, "exact")
         elif safe_build_harvester(player, ct, ore_pos):
             log(f"built harvester at {ore_pos}")
+        elif my_pos == ore_pos:
+            remember_non_passable_build(player, ore_pos, EntityType.HARVESTER)
         return
 
-    if my_pos == bridge_pos:
+    if my_pos == bridge_pos and not barrier_targets:
         bbid = ct.get_tile_builder_bot_id(ore_pos)
         if (
             ore_entity is not None
@@ -159,9 +163,22 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
             safe_destroy(player, ct, ore_pos, vc)
         if safe_build_harvester(player, ct, ore_pos):
             log(f"built harvester at {ore_pos}")
+        elif my_pos == ore_pos:
+            remember_non_passable_build(player, ore_pos, EntityType.HARVESTER)
         return
+    
+    barrier_targets = []
+    if is_titanium_ore and bridge_pos is not None and my_pos.distance_squared(ore_pos) <= 2:
+        barrier_targets = [
+            pos for pos in get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
+            if pos != bridge_pos
+        ]
 
-    if player.nav.original_destination != ore_pos or player.nav.destination_type != "exact":
+    if barrier_targets:
+        player.nav.set_destination(ore_pos, "exact")
+    elif bridge_pos is not None:
+        player.nav.set_destination(bridge_pos, "exact")
+    else:
         bid = ct.get_tile_building_id(ore_pos)
         etype = ct.get_entity_type(bid) if bid is not None else None
         if bid is None or etype in CONVEYOR_TYPES or etype == EntityType.ROAD or etype == EntityType.MARKER:
@@ -209,19 +226,24 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
         and ct.is_in_vision(dest)
         and my_pos.distance_squared(dest) <= 2
     ):
-        builder_on_dest = ct.get_tile_builder_bot_id(dest) is not None
+        builder_on_dest = ct.get_tile_builder_bot_id(dest)
         if (
             player.global_titanium >= 1500
-            and not builder_on_dest
+            and (builder_on_dest is None or builder_on_dest == ct.get_id())
             and can_build_foundry_here(dest, ct, my_pos, player.my_team, player.map, vc=vc)
         ):
             bid = ct.get_tile_building_id(dest)
             bbid = ct.get_tile_builder_bot_id(dest)
-            if bid is not None and (bbid is None or bbid == ct.get_id()) and safe_destroy(player, ct, dest, vc):
+            if bid is not None and (bbid is None or bbid == ct.get_id()) and player.global_titanium >= ct.get_foundry_cost()[0] and safe_destroy(player, ct, dest, vc):
                 log("destroyed to build foundry")
             if safe_build_foundry(player, ct, dest):
                 log(f"BUILT foundry at {dest}")
-            clear_state(player)
+                clear_state(player)
+            else:
+                clear_state(player)
+            return
+        if player.global_titanium >= 1500 and my_pos == dest:
+            remember_non_passable_build(player, dest, EntityType.FOUNDRY)
             return
 
         existing_bid = ct.get_tile_building_id(dest)
@@ -233,7 +255,8 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
             and player.global_titanium >= ct.get_conveyor_cost()[0]
             and can_build_conveyor_here(dest, core_dir, ct, my_pos, player.my_team, player.map, vc=vc)
         ):
-            if existing_bid is not None and safe_destroy(player, ct, dest, vc):
+            bbid_conv = ct.get_tile_builder_bot_id(dest)
+            if existing_bid is not None and (bbid_conv is None or bbid_conv == ct.get_id()) and safe_destroy(player, ct, dest, vc):
                 log("destroyed to build conveyor")
             if safe_build_conveyor(player, ct, dest, core_dir):
                 if player.harvest_ore_type is not None:
@@ -338,13 +361,15 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
         ):
             chain_resource = player.harvest_ore_type
             allow_launcher_replacement = existing_etype == EntityType.LAUNCHER and existing_team == player.my_team and len(vc.enemy_units) == 0
-            conveyor_info = player.map.get_best_conveyor_output(
+            conveyor_info, conveyor_is_fallback = player.map.get_best_conveyor_output_with_fallback(
                 build_pos, player.core_pos, ct, player.my_team, end_positions=end_positions, resource=chain_resource
             )
-            if conveyor_info is None:
-                bridge_output_pos = player.map.get_best_bridge_output(
+            if conveyor_info is None or conveyor_is_fallback:
+                bridge_output_pos, bridge_is_fallback = player.map.get_best_bridge_output_with_fallback(
                     build_pos, player.core_pos, ct, player.my_team, end_positions=end_positions, resource=chain_resource
                 )
+                if conveyor_info is not None and not bridge_is_fallback:
+                    conveyor_info = None
             else:
                 bridge_output_pos = None
 
@@ -400,7 +425,8 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
                     build_pos, conv_dir, ct, my_pos, player.my_team, player.map, vc=vc, allow_launchers=allow_launcher_replacement
                 )
                 if can_build:
-                    if ct.get_tile_building_id(build_pos) is not None:
+                    bbid_bp = ct.get_tile_builder_bot_id(build_pos)
+                    if ct.get_tile_building_id(build_pos) is not None and (bbid_bp is None or bbid_bp == ct.get_id()):
                         safe_destroy(player, ct, build_pos, vc)
                     if use_splitter:
                         if safe_build_splitter(player, ct, build_pos, splitter_dir):
@@ -414,7 +440,8 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
             elif bridge_output_pos and can_build_bridge_here(
                 build_pos, bridge_output_pos, ct, my_pos, player.my_team, player.map, vc=vc, allow_launchers=allow_launcher_replacement
             ):
-                if ct.get_tile_building_id(build_pos) is not None:
+                bbid_br = ct.get_tile_builder_bot_id(build_pos)
+                if ct.get_tile_building_id(build_pos) is not None and (bbid_br is None or bbid_br == ct.get_id()):
                     safe_destroy(player, ct, build_pos, vc)
                 if safe_build_bridge(player, ct, build_pos, bridge_output_pos):
                     log(f"BUILT bridge at {build_pos} -> {bridge_output_pos}")
@@ -458,7 +485,8 @@ def run_reroute_titanium(player, ct: Controller, vc) -> None:
     if ti_source is not None:
         ti_pos = ti_source
         if my_pos.distance_squared(ti_pos) <= 2:
-            if safe_destroy(player, ct, ti_pos, vc):
+            bbid_ti = ct.get_tile_builder_bot_id(ti_pos)
+            if (bbid_ti is None or bbid_ti == ct.get_id()) and player.global_titanium >= ct.get_conveyor_cost()[0] and safe_destroy(player, ct, ti_pos, vc):
                 log(f"destroyed titanium conveyor at {ti_pos} for foundry reroute")
                 player.nav.set_destination(ti_pos, "adjacent")
                 player.state = State.EXTEND_HARVEST_CHAIN
@@ -472,7 +500,6 @@ def run_reroute_titanium(player, ct: Controller, vc) -> None:
         player.nav.set_destination(nearest_ti, "adjacent")
     if player.nav.is_destination_reached(ct, player.map):
         clear_state(player)
-
 
 def run_intercept(player, ct: Controller, vc) -> None:
     my_pos = player.my_pos
@@ -490,14 +517,27 @@ def run_intercept(player, ct: Controller, vc) -> None:
 
     log(f"threat at {enemy_result[0]} -> trying to intercept")
     enemy_pos = enemy_result[0]
-    direction = get_sentinel_direction(intercept_pos, enemy_pos, ct, player.map)
+    is_core_threat = enemy_result[1]
+    turret_type = get_best_turret_type(intercept_pos, predicted_enemy_core, ct, enemy_pos, player.map)
+
+    direction = get_turret_direction(
+        intercept_pos,
+        enemy_pos,
+        ct,
+        player.map,
+        turret_type,
+        is_core_threat=is_core_threat,
+    )
+
     if direction is None:
         return
 
     bid = ct.get_tile_building_id(intercept_pos)
     if bid is None:
-        if build_best_turret(ct, intercept_pos, direction, predicted_enemy_core, enemy_pos, player.map):
+        if build_turret(player, ct, intercept_pos, direction, turret_type):
             clear_state(player)
+        elif my_pos == intercept_pos:
+            remember_non_passable_build(player, intercept_pos, turret_type, direction)
         return
 
     bid_team = ct.get_team(bid)
@@ -505,7 +545,7 @@ def run_intercept(player, ct: Controller, vc) -> None:
     if (
         bid_team == player.my_team
         and bid_etype in TURRET_TYPES
-        and bid_etype == get_best_turret_type(intercept_pos, predicted_enemy_core, ct, None, player.map)
+        and bid_etype == turret_type
         and ct.get_direction(bid) == direction
     ):
         clear_state(player)
@@ -526,11 +566,14 @@ def run_intercept(player, ct: Controller, vc) -> None:
             clear_state(player)
         return
 
+    turret_cost = ct.get_gunner_cost()[0] if turret_type == EntityType.GUNNER else ct.get_sentinel_cost()[0]
     bbid = ct.get_tile_builder_bot_id(intercept_pos)
-    if (bbid is None or bbid == ct.get_id()) and ct.can_destroy(intercept_pos) and safe_destroy(player, ct, intercept_pos, vc):
+    if (bbid is None or bbid == ct.get_id()) and player.global_titanium >= turret_cost and ct.can_destroy(intercept_pos) and safe_destroy(player, ct, intercept_pos, vc):
         log("destroyed to build turret")
-    if build_best_turret(ct, intercept_pos, direction, predicted_enemy_core, enemy_pos, player.map):
+    if build_turret(player, ct, intercept_pos, direction, turret_type):
         clear_state(player)
+    elif my_pos == intercept_pos:
+        remember_non_passable_build(player, intercept_pos, turret_type, direction)
 
 
 def run_defend(player, ct: Controller, vc) -> None:
@@ -553,7 +596,9 @@ def run_defend(player, ct: Controller, vc) -> None:
             if ct.can_build_barrier(ore_pos):
                 ct.build_barrier(ore_pos)
                 log(f"DEFEND: barrier on bare ore at {ore_pos}")
-            clear_state(player)
+                clear_state(player)
+            elif my_pos == ore_pos:
+                remember_non_passable_build(player, ore_pos, EntityType.BARRIER)
         return
 
     if ore_etype == EntityType.HARVESTER:
@@ -580,11 +625,13 @@ def run_defend(player, ct: Controller, vc) -> None:
                 bbid = ct.get_tile_builder_bot_id(target)
                 if bid is not None:
                     etype = ct.get_entity_type(bid)
-                    if (bbid is None or bbid == ct.get_id()) and ct.get_team(bid) == player.my_team and etype == EntityType.ROAD:
+                    if (bbid is None or bbid == ct.get_id()) and ct.get_team(bid) == player.my_team and etype == EntityType.ROAD and player.global_titanium >= ct.get_barrier_cost()[0]:
                         safe_destroy(player, ct, target, vc)
                         log(f"DEFEND: destroyed ally road at {target} to build barrier")
                 if safe_build_barrier(player, ct, target):
                     log(f"DEFEND: barrier at {target} (protecting {ore_pos})")
+                elif my_pos == target:
+                    remember_non_passable_build(player, target, EntityType.BARRIER)
             remaining = get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
             if not remaining:
                 clear_state(player)
@@ -608,42 +655,4 @@ def run_explore(player, ct: Controller, vc) -> None:
 
 
 def run_sabotage(player, ct: Controller, vc) -> None:
-    my_pos = player.my_pos
-    predicted_enemy_core = player.predicted_enemy_core_pos
-    dest = player.nav.original_destination
-    need_retarget = dest is None or dest == predicted_enemy_core
-    if not need_retarget and dest is not None and ct.is_in_vision(dest):
-        if not get_sabotage_target_priority(player, ct, dest, vc):
-            need_retarget = True
-    if need_retarget:
-        sd_result = find_sabotage_target(player, ct, my_pos, vc)
-        if sd_result is not None:
-            sd_target = sd_result[0]
-            log(f"sabotage: targeting enemy building at {sd_target}")
-            player.nav.set_destination(sd_target, "exact")
-        elif predicted_enemy_core is None:
-            player.state = State.EXPLORE
-            player.nav.clear_destination()
-        elif dest != predicted_enemy_core:
-            player.nav.set_destination(predicted_enemy_core, "exact")
-
-    if player.global_titanium < 20 or (player.attack_target is None and player.global_titanium < 100):
-        clear_state(player)
-        log("no resources to sabotage -> abandoning")
-        return
-
-    if player.attack_target is not None:
-        return
-
-    for d in ALL_DIRECTIONS:
-        if d != Direction.CENTRE and not ct.can_move(d):
-            continue
-        target_pos = my_pos.add(d)
-        if not on_map(target_pos, player.map.width, player.map.height) or not ct.is_in_vision(target_pos):
-            continue
-        sabotage_priority = get_sabotage_target_priority(player, ct, target_pos, vc)
-        if sabotage_priority > 0:
-            player.attack_target = target_pos
-            player.attack_reason = "sabotage"
-            log(f"sabotage: targeting enemy building at {player.attack_target}")
-            return
+    pass

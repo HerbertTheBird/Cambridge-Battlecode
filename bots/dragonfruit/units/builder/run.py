@@ -25,6 +25,9 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     # States can set this to request attacking a tile
     player.attack_target = None
     player.attack_reason = ""
+    player.build_pos = None
+    player.build_direction = None
+    player.build_type = None
 
     # First explore destination follows ray outwards from core
     if not player.initialized and player.core_pos is not None and ct.get_current_round() < 100:
@@ -105,6 +108,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
 
     # Attack a building if needed
     attacked = False
+    print("attack target: ", player.attack_target, "reason: ", player.attack_reason)
     if player.attack_target is not None and my_pos.distance_squared(player.attack_target) <= 2:
         if my_pos != player.attack_target:
             move_dir = my_pos.direction_to(player.attack_target)
@@ -154,6 +158,11 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
             log(f"destination={player.nav.destination}")
         else:
             sync_a_star_destination(player)
+
+    if not attacked:
+        if try_build_remembered(player, ct, vc):
+            my_pos = ct.get_position()
+            player.my_pos = my_pos
 
     # Greedy heal
     try_heal(ct, my_pos, player.my_team, player.map.width, player.map.height)

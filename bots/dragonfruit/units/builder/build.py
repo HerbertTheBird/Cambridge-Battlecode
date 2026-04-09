@@ -91,7 +91,8 @@ def safe_build_conveyor(player, ct: Controller, pos: Position, direction) -> boo
         return False
     if not ct.can_build_conveyor(pos, direction):
         return False
-    ct.build_conveyor(pos, direction)
+    bid = ct.build_conveyor(pos, direction)
+    player.vc.add_entity(player, bid, EntityType.CONVEYOR, player.my_team, pos)
     return True
 
 def safe_build_splitter(player, ct: Controller, pos: Position, direction) -> bool:
@@ -99,37 +100,43 @@ def safe_build_splitter(player, ct: Controller, pos: Position, direction) -> boo
         return False
     if not ct.can_build_splitter(pos, direction):
         return False
-    ct.build_splitter(pos, direction)
+    bid = ct.build_splitter(pos, direction)
+    player.vc.add_entity(player, bid, EntityType.SPLITTER, player.my_team, pos)
     return True
 
 def safe_build_bridge(player, ct: Controller, pos: Position, target: Position) -> bool:
     if not ct.can_build_bridge(pos, target):
         return False
-    ct.build_bridge(pos, target)
+    bid = ct.build_bridge(pos, target)
+    player.vc.add_entity(player, bid, EntityType.BRIDGE, player.my_team, pos)
     return True
 
 def safe_build_foundry(player, ct: Controller, pos: Position) -> bool:
     if not ct.can_build_foundry(pos):
         return False
-    ct.build_foundry(pos)
+    bid = ct.build_foundry(pos)
+    player.vc.add_entity(player, bid, EntityType.FOUNDRY, player.my_team, pos)
     return True
 
 def safe_build_barrier(player, ct: Controller, pos: Position) -> bool:
     if not ct.can_build_barrier(pos):
         return False
-    ct.build_barrier(pos)
+    bid = ct.build_barrier(pos)
+    player.vc.add_entity(player, bid, EntityType.BARRIER, player.my_team, pos)
     return True
 
 def safe_build_harvester(player, ct: Controller, pos: Position) -> bool:
     if not ct.can_build_harvester(pos):
         return False
-    ct.build_harvester(pos)
+    bid = ct.build_harvester(pos)
+    player.vc.add_entity(player, bid, EntityType.HARVESTER, player.my_team, pos)
     return True
 
 def safe_build_launcher(player, ct: Controller, pos: Position) -> bool:
     if not ct.can_build_launcher(pos):
         return False
-    ct.build_launcher(pos)
+    bid = ct.build_launcher(pos)
+    player.vc.add_entity(player, bid, EntityType.LAUNCHER, player.my_team, pos)
     player.last_support_launcher_round = ct.get_current_round()
     return True
 

@@ -206,7 +206,7 @@ def _has_matching_ally_intercept_turret(bid: int | None, etype: EntityType | Non
         )
     return False
 
-def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: VisionCache, threat_pos: Position, map_obj, enemy_only: bool = False, global_titanium: int = 0, enemy_core_pos: Position | None = None) -> Position | None:
+def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: VisionCache, threat_pos: Position, map_obj, enemy_only: bool = False, global_titanium: int = 0, enemy_core_pos: Position | None = None, is_core_threat: bool = False) -> Position | None:
     """Find the nearest position that is the output of a conveyor-type entity."""
     best_pos = None
     best_dist = INF
@@ -214,9 +214,6 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
     fallback_dist = INF
     gunner_cost = ct.get_gunner_cost()[0]
     sentinel_cost = ct.get_sentinel_cost()[0]
-
-    def _is_fed(output):
-        return map_obj.has_adjacent_harvester(output) or map_obj.has_valid_input_chain(output)
 
     def _is_candidate(output: Position) -> bool:
         return (
@@ -240,27 +237,30 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
             gunner_cost, sentinel_cost,
             map_obj=map_obj, enemy_core_pos=enemy_core_pos
         )
+        print(f"    considering {output}: validity={validity} dist²={dist} bid={bid} etype={etype} team={team}")
         if validity == 0:
             return
 
         if validity == 1 and (dist >= fallback_dist or best_dist != INF):
             return
 
-        if not _is_fed(output):
-            return
-
-        direction = get_sentinel_direction(output, threat_pos, ct, map_obj)
+        direction = get_turret_direction(output, threat_pos, ct, map_obj, EntityType.SENTINEL, is_core_threat=is_core_threat)
         if direction is None:
+            print(f"      rejected: no valid turret direction")
             return
 
         if _has_matching_ally_intercept_turret(bid, etype, team, ct, output, direction, my_team, enemy_core_pos):
+            print(f"      rejected: already has matching ally turret")
             return
 
         if etype == EntityType.HARVESTER or etype == EntityType.CORE:
+            print(f"      rejected: cannot build on {etype}")
             return
 
         builder_id = ct.get_tile_builder_bot_id(output)
         if builder_id is not None and output != my_pos:
+            print(f"      rejected: {builder_id} on tile")
+
             return
 
         if validity == 2:
@@ -289,13 +289,15 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
     # Conveyors
     conveyors = vc.enemy_conveyors if enemy_only else chain(vc.ally_conveyors, vc.enemy_conveyors)
     for (bid, etype, pos) in conveyors:
+        is_fed = False
         resource = ct.get_stored_resource(bid)
-        if resource not in _INTERCEPT_RESOURCES:
-            tracked = map_obj.get_recent_conveyor_resources(pos)
-            if not any(r in tracked for r in _INTERCEPT_RESOURCES):
-                continue
+        if resource in _INTERCEPT_RESOURCES:
+            is_fed = True
 
-        if not map_obj.has_valid_input_chain(pos):
+        if map_obj.has_valid_input_chain(pos):
+            is_fed = True
+        
+        if not is_fed:
             continue
 
         if etype is EntityType.BRIDGE:
@@ -308,39 +310,13 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
     candidates = list(candidate_outputs)
     candidates.sort(key=lambda p: p.distance_squared(threat_pos))  # prioritize outputs closer to the threat
 
+    print("Intercept candidates: ", candidates)
+
     for output in candidates:
         _consider(output)
 
     return best_pos if best_pos is not None else fallback_pos
 
-def is_valid_intercept_pos(pos: Position, ct: Controller, my_team: Team, threat_pos: Position, my_pos: Position, map_obj, global_titanium: int = 0, enemy_core_pos: Position | None = None) -> bool:
-    """Lightweight check: is an existing intercept position still valid?
-    Runs the same checks as _consider() in find_intercept_pos but for a single position."""
-    if not ct.is_in_vision(pos):
-        return True  # can't see it, assume still valid
-    gunner_cost = ct.get_gunner_cost()[0]
-    sentinel_cost = ct.get_sentinel_cost()[0]
-    validity, bid, etype, team = _get_intercept_output_state(
-        pos, ct, my_team, global_titanium, gunner_cost, sentinel_cost,
-        map_obj=map_obj, enemy_core_pos=enemy_core_pos
-    )
-    if validity == 0:
-        return False
-    if pos.distance_squared(threat_pos) > _INTERCEPT_THREAT_RADIUS_SQ:
-        return False
-    if not (map_obj.has_adjacent_harvester(pos) or map_obj.has_valid_input_chain(pos)):
-        return False
-    direction = get_sentinel_direction(pos, threat_pos, ct, map_obj)
-    if direction is None:
-        return False
-    if _has_matching_ally_intercept_turret(bid, etype, team, ct, pos, direction, my_team, enemy_core_pos):
-        return False
-    if etype in (EntityType.HARVESTER, EntityType.CORE):
-        return False
-    builder_id = ct.get_tile_builder_bot_id(pos)
-    if builder_id is not None and pos != my_pos:
-        return False
-    return True
 
 def should_intercept(vc: VisionCache, my_pos: Position, core_pos: Position | None = None) -> bool:
     """True if we see an enemy core, an enemy combat unit, 2+ enemy builder bots,
@@ -400,19 +376,32 @@ def get_blocked_sentinel_directions(intercept_pos: Position, ct: Controller, map
         return {feeder_dirs[0]}
     return set()
 
-def get_sentinel_direction(intercept_pos: Position, enemy_pos: Position, ct: Controller, map_obj) -> Direction | None:
-    """Pick the best direction for a sentinel at intercept_pos facing enemy_pos,
-    avoiding directions blocked by feeding conveyors/harvesters."""
+def get_turret_direction(intercept_pos: Position, enemy_pos: Position, ct: Controller, map_obj, entity_type: EntityType, is_core_threat: bool = False) -> Direction | None:
+    """Pick the best direction for a turret at intercept_pos facing enemy_pos,
+    avoiding directions blocked by feeding conveyors/harvesters.
+    Only considers directions where the target is actually in the attackable tiles.
+    If is_core_threat is True, checks all 9 core tiles instead of just enemy_pos."""
     blocked = get_blocked_sentinel_directions(intercept_pos, ct, map_obj)
+    print(f"  blocked directions for turret at {intercept_pos}: {blocked}")
+    if is_core_threat:
+        target_tiles = [
+            Position(enemy_pos.x + dx, enemy_pos.y + dy)
+            for dx in range(-1, 2) for dy in range(-1, 2)
+        ]
+    else:
+        target_tiles = [enemy_pos]
 
     desired = intercept_pos.direction_to(enemy_pos)
-    if desired not in blocked:
-        return desired
-    # Try rotating to find a non-blocked direction
-    for rot in [desired.rotate_left(), desired.rotate_right(),
-                desired.rotate_left().rotate_left(), desired.rotate_right().rotate_right()]:
-        if rot not in blocked:
-            return rot
+    candidates = [desired, desired.rotate_left(), desired.rotate_right(),
+                  desired.rotate_left().rotate_left(), desired.rotate_right().rotate_right()]
+    for d in candidates:
+        if d in blocked:
+            continue
+        print(f"    considering turret direction {d}")
+        attackable = ct.get_attackable_tiles_from(intercept_pos, d, entity_type)
+        print(f"      attackable tiles: {attackable}")
+        if any((t.x, t.y) in {(a.x, a.y) for a in attackable} for t in target_tiles):
+            return d
     return None
 
 def is_gunner_position(
@@ -494,20 +483,26 @@ def get_best_turret_type(pos: Position, enemy_core_pos: Position | None, ct: Con
         return EntityType.GUNNER
     return EntityType.SENTINEL
 
-def build_best_turret(ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None, primary_threat: Position | None = None, map_obj = None) -> bool:
-    """Try to build a gunner (if valid position near enemy core) or sentinel at pos.
-    Returns True if a turret was built."""
-    turret_type = get_best_turret_type(pos, enemy_core_pos, ct, primary_threat, map_obj)
+def build_turret(player, ct: Controller, pos: Position, direction: Direction, turret_type: EntityType) -> bool:
+    """Try to build the specified turret type at pos facing direction.
+    Returns True if successful."""
     if turret_type == EntityType.GUNNER and ct.can_build_gunner(pos, direction):
-        gunner_direction = pos.direction_to(primary_threat) if primary_threat is not None else direction
-        ct.build_gunner(pos, gunner_direction)
-        log(f"BUILT gunner at {pos} facing {gunner_direction}")
+        bid = ct.build_gunner(pos, direction)
+        player.vc.add_entity(player, bid, EntityType.GUNNER, player.my_team, pos)
+        log(f"BUILT gunner at {pos} facing {direction}")
         return True
     if turret_type == EntityType.SENTINEL and ct.can_build_sentinel(pos, direction):
-        ct.build_sentinel(pos, direction)
+        bid = ct.build_sentinel(pos, direction)
+        player.vc.add_entity(player, bid, EntityType.SENTINEL, player.my_team, pos)
         log(f"BUILT sentinel at {pos} facing {direction}")
         return True
     return False
+
+def build_best_turret(player, ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None, primary_threat: Position | None = None, map_obj = None) -> bool:
+    """Try to build a gunner (if valid position near enemy core) or sentinel at pos.
+    Returns True if a turret was built."""
+    turret_type = get_best_turret_type(pos, enemy_core_pos, ct, primary_threat, map_obj)
+    return build_turret(player, ct, pos, direction, turret_type)
 
 def find_nearest_titanium_conveyor(ct: Controller, my_pos: Position, vc: VisionCache, map_obj, my_team: Team, target_foundry: Position | None = None) -> Position | None:
     best_pos = None
@@ -530,7 +525,7 @@ def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height
     """Heal nearby friendly builder bots or buildings with priority:
     builder > core > other, with builder-on-core as tie breaker."""
     
-    if ct.get_global_resources()[0] < 25 or ct.get_action_cooldown() > 0:
+    if ct.get_action_cooldown() > 0:
         return
     
     best_heal_pos = None
@@ -589,12 +584,6 @@ def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height
         if score > best_score:
             best_score = score
             best_heal_pos = heal_pos
-    
-    # Resource constraint for non-builders
-    if best_score[0] == 0 and ct.get_global_resources()[0] < 50:
-        return
-    if best_score[0] == 1 and ct.get_global_resources()[0] < 10:
-        return
     
     if best_heal_pos is not None and ct.can_heal(best_heal_pos):
         ct.heal(best_heal_pos)
@@ -680,6 +669,8 @@ def try_build_support_launcher(player, ct: Controller, my_pos: Position, vc: Vis
     if safe_build_launcher(player, ct, site):
         log(f"BUILT launcher at {site} for anchors {anchors}")
         return True
+    if my_pos == site:
+        remember_non_passable_build(player, site, EntityType.LAUNCHER)
     return False
 
 def try_issue_launcher_order(player, ct: Controller, my_pos: Position) -> bool:
@@ -738,7 +729,76 @@ def clear_state(player):
     player.harvest_ore_type = None
     player.harvest_ore_pos = None
     player.foundry_pos = None
+    player.build_pos = None
+    player.build_direction = None
+    player.build_type = None
     player.timeout_turns = 0
+
+def remember_non_passable_build(player, pos: Position, build_type: EntityType, build_direction: Direction | None = None) -> bool:
+    """Remember a same-turn non-passable build that failed only because we were standing on the tile."""
+    if player.my_pos != pos:
+        return False
+    if build_type in (EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD):
+        return False
+    player.build_pos = pos
+    player.build_direction = build_direction
+    player.build_type = build_type
+    player.nav.set_destination(pos, "adjacent")
+    facing = f" facing {build_direction}" if build_direction is not None else ""
+    log(f"remembered {build_type.name} build at {pos}{facing} after moving off tile")
+    return True
+
+def try_build_remembered(player, ct: Controller, vc: VisionCache) -> bool:
+    """Retry a remembered same-turn non-passable build after navigation."""
+    pos = player.build_pos
+    build_direction = player.build_direction
+    build_type = player.build_type
+    if pos is None or build_type is None or player.my_pos is None:
+        return False
+    if player.my_pos == pos or player.my_pos.distance_squared(pos) > 2:
+        return False
+
+    built = False
+    if build_type == EntityType.HARVESTER and ct.can_build_harvester(pos):
+        bid = ct.build_harvester(pos)
+        vc.add_entity(player, bid, build_type, player.my_team, pos)
+        built = True
+    elif build_type == EntityType.BARRIER and ct.can_build_barrier(pos):
+        bid = ct.build_barrier(pos)
+        vc.add_entity(player, bid, build_type, player.my_team, pos)
+        built = True
+    elif build_type == EntityType.FOUNDRY and ct.can_build_foundry(pos):
+        bid = ct.build_foundry(pos)
+        vc.add_entity(player, bid, build_type, player.my_team, pos)
+        built = True
+    elif build_type == EntityType.LAUNCHER and ct.can_build_launcher(pos):
+        bid = ct.build_launcher(pos)
+        vc.add_entity(player, bid, build_type, player.my_team, pos)
+        player.last_support_launcher_round = ct.get_current_round()
+        built = True
+    elif build_direction is not None:
+        if build_type == EntityType.GUNNER and ct.can_build_gunner(pos, build_direction):
+            bid = ct.build_gunner(pos, build_direction)
+            vc.add_entity(player, bid, build_type, player.my_team, pos)
+            built = True
+        elif build_type == EntityType.SENTINEL and ct.can_build_sentinel(pos, build_direction):
+            bid = ct.build_sentinel(pos, build_direction)
+            vc.add_entity(player, bid, build_type, player.my_team, pos)
+            built = True
+        elif build_type == EntityType.BREACH and ct.can_build_breach(pos, build_direction):
+            bid = ct.build_breach(pos, build_direction)
+            vc.add_entity(player, bid, build_type, player.my_team, pos)
+            built = True
+
+    if not built:
+        return False
+
+    facing = f" facing {build_direction}" if build_direction is not None else ""
+    log(f"BUILT remembered {build_type.name} at {pos}{facing}")
+    player.build_pos = None
+    player.build_direction = None
+    player.build_type = None
+    return True
 
 def is_ore_unblocked(player, ct: Controller, target: Position) -> bool:
     """Lightweight visible check for whether an ore tile still has at least one open cardinal side."""
@@ -764,7 +824,8 @@ def is_ore_unblocked(player, ct: Controller, target: Position) -> bool:
 def get_sabotage_target_priority(player, ct: Controller, pos: Position, vc: VisionCache, ally_bot_positions: set | None = None) -> int:
     """Check if an enemy conveyor/bridge at pos is a valid sabotage target.
     Follows the chain in both directions to validate.
-    Returns 0 = not valid, 1 = valid chain, 2 = feeds enemy turret, 3 = feeds enemy core."""
+    Returns 0 = not valid, 1 = upstream only, 2 = valid chain both directions,
+    3 = feeds enemy turret, 4 = feeds enemy core."""
     bid = ct.get_tile_building_id(pos)
     if bid is None:
         return 0
@@ -859,7 +920,8 @@ def get_sabotage_target_priority(player, ct: Controller, pos: Position, vc: Visi
             continue
         break
 
-    return player.map.get_sabotage_downstream_priority(pos, player.my_team)
+    downstream_priority = player.map.get_sabotage_downstream_priority(pos, player.my_team)
+    return 1 if downstream_priority == 0 else downstream_priority + 1
 
 def find_sabotage_target(player, ct: Controller, my_pos: Position, vc: VisionCache) -> tuple[Position, int] | None:
     """Find the best visible enemy conveyor/bridge to sabotage.
@@ -880,8 +942,9 @@ def find_sabotage_target(player, ct: Controller, my_pos: Position, vc: VisionCac
         dist = my_pos.distance_squared(pos)
         if dist > 13:
             continue
-        downstream_priority = player.map.get_sabotage_downstream_priority(pos, player.my_team) if player.map is not None else 1
-        if downstream_priority == 0:
+        is_ally = ct.get_team(bid) == player.my_team
+        downstream_priority = player.map.get_sabotage_downstream_priority(pos, player.my_team) + 1
+        if is_ally and downstream_priority <= 1:
             continue
         if downstream_priority < best_type:
             continue
@@ -1167,7 +1230,7 @@ def find_broken_chain_target(player, ct: Controller, my_pos: Position, vc: Visio
             continue
         if not can_repair_broken_chain_now(player, ct, output_pos, vc):
             continue
-        if count_closer_allies(player, output_pos, my_pos, vc) >= 2:
+        if count_closer_allies(player, output_pos, my_pos, vc) >= 1:
             continue
         best_chain_dist = dist
         best_chain_target = (output_pos, resource)

@@ -1,7 +1,7 @@
 import sys
 import traceback
 
-from cambc import Controller, EntityType, Position, ResourceType, Team
+from cambc import Controller, Direction, EntityType, Position, ResourceType, Team
 
 from globals import *
 from nav import Navigator
@@ -58,6 +58,9 @@ class Player:
 
         self.attack_target: Position | None = None
         self.attack_reason: str | None = None
+        self.build_pos: Position | None = None
+        self.build_direction: Direction | None = None
+        self.build_type: EntityType | None = None
         
         self.last_seen_builder_bot_round = 0
         self.last_support_launcher_round = -2000

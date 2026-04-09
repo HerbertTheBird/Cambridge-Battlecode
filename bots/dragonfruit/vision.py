@@ -161,3 +161,62 @@ class VisionCache:
         except ValueError:
             # Item not found in the list, safe to ignore since we wanted to remove it anyways
             pass
+
+    def add_entity(self, player, entity_id, entity_type, team, pos):
+        """Add a visible entity to the cached lists after we create it."""
+
+        if entity_type is EntityType.MARKER:
+            return
+
+        if entity_type is EntityType.HARVESTER:
+            item = (entity_id, pos, team)
+            if item not in self.harvesters:
+                self.harvesters.append(item)
+            return
+
+        if team == player.my_team:
+            if entity_type is EntityType.CORE:
+                if player.core_pos is None:
+                    player.core_pos = pos
+                return
+            if entity_type is EntityType.BUILDER_BOT:
+                item = (entity_id, pos)
+                if item not in self.ally_builder_bots:
+                    self.ally_builder_bots.append(item)
+                return
+            if entity_type in TURRET_TYPES:
+                item = (entity_id, entity_type, pos)
+                if item not in self.ally_turrets:
+                    self.ally_turrets.append(item)
+                return
+            if entity_type is EntityType.LAUNCHER:
+                item = (entity_id, entity_type, pos)
+                if item not in self.ally_launchers:
+                    self.ally_launchers.append(item)
+                return
+            if entity_type in CONVEYOR_TYPES:
+                item = (entity_id, entity_type, pos)
+                if item not in self.ally_conveyors:
+                    self.ally_conveyors.append(item)
+                return
+            item = (entity_id, entity_type, pos)
+            if item not in self.ally_other:
+                self.ally_other.append(item)
+            return
+
+        if entity_type is EntityType.CORE:
+            if player.enemy_core_pos is None:
+                player.enemy_core_pos = pos
+
+        item = (entity_id, entity_type, pos)
+        if entity_type is EntityType.CORE or entity_type is EntityType.BUILDER_BOT or entity_type in TURRET_TYPES:
+            if item not in self.enemy_units:
+                self.enemy_units.append(item)
+        elif entity_type is EntityType.LAUNCHER:
+            if item not in self.enemy_launchers:
+                self.enemy_launchers.append(item)
+        elif entity_type in CONVEYOR_TYPES:
+            if item not in self.enemy_conveyors:
+                self.enemy_conveyors.append(item)
+        elif item not in self.enemy_other:
+            self.enemy_other.append(item)
