@@ -382,7 +382,6 @@ def get_turret_direction(intercept_pos: Position, enemy_pos: Position, ct: Contr
     Only considers directions where the target is actually in the attackable tiles.
     If is_core_threat is True, checks all 9 core tiles instead of just enemy_pos."""
     blocked = get_blocked_sentinel_directions(intercept_pos, ct, map_obj)
-    print(f"  blocked directions for turret at {intercept_pos}: {blocked}")
     if is_core_threat:
         target_tiles = [
             Position(enemy_pos.x + dx, enemy_pos.y + dy)
@@ -397,9 +396,7 @@ def get_turret_direction(intercept_pos: Position, enemy_pos: Position, ct: Contr
     for d in candidates:
         if d in blocked:
             continue
-        print(f"    considering turret direction {d}")
         attackable = ct.get_attackable_tiles_from(intercept_pos, d, entity_type)
-        print(f"      attackable tiles: {attackable}")
         if any((t.x, t.y) in {(a.x, a.y) for a in attackable} for t in target_tiles):
             return d
     return None
