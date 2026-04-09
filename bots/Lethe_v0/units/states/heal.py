@@ -49,7 +49,7 @@ def _heal_targets():
         | map_info._bm_et[map_info._IDX_CORE]
     )
 
-    candidates = my_buildings & healable_types & ~units.builder.forget[comm_flag]
+    candidates = my_buildings & healable_types
     if not candidates:
         return 0
 
