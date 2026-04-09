@@ -8,7 +8,7 @@ from log import log, log_time
 
 def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> State:
     # INTERCEPT if enemy threat and good turret build position/direction
-    threat_result = get_nearest_enemy_threat_pos(vc, my_pos) if should_intercept(vc, my_pos, player.core_pos) else None
+    threat_result = get_nearest_enemy_threat_pos(vc, my_pos)
     if threat_result is None:
         threat_result = get_known_core_intercept_threat(player, my_pos, "synthetic threat")
     threat_pos = None
@@ -17,12 +17,17 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
         threat_pos, threat_is_core = threat_result
     
     log_time(ct, "After checking threats")
-    
+
+    # Pre-compute sabotage info so we know which ally tiles feed the enemy
+    sabotage_worthy_ally_positions: set[Position] = set()
+    sd_result = find_sabotage_target(player, ct, my_pos, vc, sabotage_worthy_ally_positions) if player.global_titanium >= 20 else None
+    log_time(ct, "After pre-computing sabotage info")
+
     if threat_pos is not None:
         print(f"considering intercept against threat at {threat_pos} (core={threat_is_core})")
         if threat_is_core or count_ally_turrets_covering(ct, vc, threat_pos) < 2:
             log("trying to find intercept pos")
-            intercept = find_intercept_pos(
+            intercept, prio = find_intercept_pos(
                 ct,
                 my_pos,
                 player.my_team,
@@ -34,14 +39,17 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
                 enemy_core_pos=player.predicted_enemy_core_pos,
                 is_core_threat=threat_is_core,
             )
+            print(intercept, prio)
             log_time(ct, "After find intercept pos")
             if intercept is not None:
-                log(f"intercept target at {intercept}")
-                player.nav.set_destination(intercept, "adjacent")
-                return State.INTERCEPT
+                if prio == 3 or should_intercept(vc, my_pos, player.core_pos):
+                    log(f"intercept target at {intercept}")
+                    player.nav.set_destination(intercept, "adjacent")
+                    return State.INTERCEPT
         
     # HEAL if an enemy is standing on a damaged ally conveyor
-    heal_pos = find_heal_target(player, ct, my_pos, vc)
+    # Skip ally tiles that feed the enemy (sabotage-worthy)
+    heal_pos = find_heal_target(player, ct, my_pos, vc, sabotage_worthy_ally_positions)
     if heal_pos is not None:
         log(f"heal target at {heal_pos}")
         player.nav.set_destination(heal_pos, "adjacent")
@@ -63,6 +71,12 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
 
     if player.state not in (State.EXPLORE, State.HEAL, State.INTERCEPT, State.SABOTAGE):
         return player.state
+
+    # Look for nearby ores we should harvest
+    player.nearest_unserviced = player.map.get_nearest_unserviced_harvester(my_pos, ct)
+    if player.nearest_unserviced is None:
+        player.nearest_unharvested = player.map.get_nearest_ore_without_harvester(my_pos, ct) if player.nearest_unserviced is None else None
+
 
     # START_HARVEST_CHAIN if there is an unserviced or unharvested ore, we can start a chain, and allies aren't too close
     target = player.nearest_unserviced or player.nearest_unharvested
@@ -100,10 +114,9 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             return State.EXTEND_HARVEST_CHAIN
 
     # SABOTAGE if we see a good sabotage target and have enough titanium
+    # Reuse pre-computed sabotage result from earlier
     if player.global_titanium >= 20:
-        sd_result = find_sabotage_target(player, ct, my_pos, vc)
         log(f"sabotage target: {sd_result}")
-        log_time(ct, "After finding sabotage target")
         if sd_result is not None:
             sd_target, prio = sd_result
             log(f"sabotage target: {sd_target} with priority {prio}")

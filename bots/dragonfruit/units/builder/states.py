@@ -31,12 +31,19 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
         clear_state(player)
         return
 
-    if count_closer_allies(player, ore_pos, my_pos, vc) >= 1:
+    if count_closer_allies(player, ore_pos, my_pos, vc) >= 2:
         log(f"2+ closer allies to {ore_pos} -> abandoning harvest")
         clear_state(player)
         return
 
     if not ct.is_in_vision(ore_pos):
+        return
+    
+    is_titanium_ore = player.map.get_tile_env(ore_pos) == Environment.ORE_TITANIUM
+    if not is_ore_unblocked(player, ct, ore_pos):
+        clear_state(player)
+        player.map.unreachable_harvesters.add(ore_pos)
+        log(f"marked {ore_pos} as unreachable due to barriers")
         return
 
     ore_entity = player.map.get_tile_entity(ore_pos)
@@ -46,36 +53,30 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
             clear_state(player)
             return
 
-        best_build_pos = get_best_bridge_build_pos(
-            ore_pos,
-            player.core_pos,
-            ct,
-            player.my_team,
-            player.map,
-            vc,
-            opposite_ore=get_opposite_ore(player.map, ore_pos in player.map.ore_ax),
-        )
-        if best_build_pos is None:
-            player.timeout_turns += 1
-            if player.timeout_turns >= TIMEOUT_TURNS:
-                log(f"timeout trying to build bridge from {ore_pos} -> abandoning")
-                clear_state(player)
-                player.timeout_turns = 0
-                player.map.unreachable_harvesters.add(ore_pos)
+        if is_ore_guaranteed_unblocked(player, ct, ore_pos):
+            best_build_pos = get_best_bridge_build_pos(
+                ore_pos,
+                player.core_pos,
+                ct,
+                player.my_team,
+                player.map,
+                vc,
+                opposite_ore=get_opposite_ore(player.map, ore_pos in player.map.ore_ax),
+            )
+            if best_build_pos is None:
+                player.timeout_turns += 1
+                if player.timeout_turns >= TIMEOUT_TURNS:
+                    log(f"timeout trying to build bridge from {ore_pos} -> abandoning")
+                    clear_state(player)
+                    player.timeout_turns = 0
+                    player.map.unreachable_harvesters.add(ore_pos)
+                return
+
+            player.nav.set_destination(best_build_pos, "adjacent")
+            player.state = State.EXTEND_HARVEST_CHAIN
+            player.harvest_ore_type = ResourceType.RAW_AXIONITE if ore_pos in player.map.ore_ax else ResourceType.TITANIUM
+            player.harvest_ore_pos = ore_pos
             return
-
-        player.nav.set_destination(best_build_pos, "adjacent")
-        player.state = State.EXTEND_HARVEST_CHAIN
-        player.harvest_ore_type = ResourceType.RAW_AXIONITE if ore_pos in player.map.ore_ax else ResourceType.TITANIUM
-        player.harvest_ore_pos = ore_pos
-        return
-
-    is_titanium_ore = player.map.get_tile_env(ore_pos) == Environment.ORE_TITANIUM
-    if not is_ore_unblocked(player, ct, ore_pos):
-        clear_state(player)
-        player.map.unreachable_harvesters.add(ore_pos)
-        log(f"marked {ore_pos} as unreachable due to barriers")
-        return
 
     if (
         ore_entity is not None

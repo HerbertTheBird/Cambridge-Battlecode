@@ -41,10 +41,6 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
             if player.map.get_tile_env(p) != Environment.WALL
         }
 
-    # Look for nearby ores we should harvest
-    player.nearest_unserviced = player.map.get_nearest_unserviced_harvester(my_pos, ct)
-    player.nearest_unharvested = player.map.get_nearest_ore_without_harvester(my_pos, ct) if player.nearest_unserviced is None else None
-
     log_time(ct, "After map checks")
 
     # Upgrade foundry placeholders if possible
