@@ -40,14 +40,14 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
         
     # HEAL if an enemy is standing on a damaged ally conveyor
     heal_pos = find_heal_target(player, ct, my_pos, vc)
-    if heal_pos is not None:
+    if heal_pos is not None and player.global_titanium >= 50:
         log(f"heal target at {heal_pos}")
         player.nav.set_destination(heal_pos, "adjacent")
         return State.HEAL
 
     # HEAL if we see a damaged ally core
     # Do not require this bot to be the closest ally since core loss ends the game.
-    if player.core_pos is not None and ct.is_in_vision(player.core_pos):
+    if player.core_pos is not None and ct.is_in_vision(player.core_pos) and player.global_titanium >= 10:
         core_id = ct.get_tile_building_id(player.core_pos)
         if (
             core_id is not None

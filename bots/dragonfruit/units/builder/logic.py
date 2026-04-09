@@ -523,13 +523,14 @@ def find_nearest_titanium_conveyor(ct: Controller, my_pos: Position, vc: VisionC
     return best_pos
 
 def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height: int):
-    """Heal nearby friendly builder bots or buildings, prioritizing builder bots."""
+    """Heal nearby friendly builder bots or buildings with priority:
+    builder > core > other, with builder-on-core as tie breaker."""
+    
     if ct.get_global_resources()[0] < 25 or ct.get_action_cooldown() > 0:
         return
     
     best_heal_pos = None
-    best_can_heal_builder = False
-    best_heal_amount = 0
+    best_score = (-1, -1, -1)  # (priority, builder_on_core, heal_amount)
     
     for direction in ALL_DIRECTIONS:
         heal_pos = my_pos.add(direction)
@@ -540,17 +541,25 @@ def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height
         bid = ct.get_tile_building_id(heal_pos)
         
         heal_amount = 0
-        can_heal_builder = False
+        priority = -1
+        builder_on_core = 0
         
+        # --- Builder logic ---
         if bbid is not None and ct.get_team(bbid) == my_team:
             deficit = ct.get_max_hp(bbid) - ct.get_hp(bbid)
-            heal_amount += min(deficit, GameConstants.HEAL_AMOUNT)
             if deficit > 0:
-                can_heal_builder = True
+                heal_amount += min(deficit, GameConstants.HEAL_AMOUNT)
+                priority = 2  # builder
+                
+                # Check if standing on a core
+                if (
+                    bid is not None
+                    and ct.get_team(bid) == my_team
+                    and ct.get_entity_type(bid) == EntityType.CORE
+                ):
+                    builder_on_core = 1
         
-        if not can_heal_builder and best_can_heal_builder:
-            continue
-            
+        # --- Building logic ---
         if (
             bid is not None
             and ct.get_team(bid) == my_team
@@ -558,22 +567,34 @@ def try_heal(ct: Controller, my_pos: Position, my_team: Team, width: int, height
             and ct.get_entity_type(bid) != EntityType.ROAD
         ):
             deficit = ct.get_max_hp(bid) - ct.get_hp(bid)
-            heal_amount += min(deficit, GameConstants.HEAL_AMOUNT)
-            
-        if can_heal_builder and not best_can_heal_builder:
+            if deficit > 0:
+                heal_amount += min(deficit, GameConstants.HEAL_AMOUNT)
+                
+                if priority < 2:  # don't override builder
+                    if ct.get_entity_type(bid) == EntityType.CORE:
+                        priority = 1
+                    else:
+                        priority = 0
+        
+        # Skip if nothing to heal
+        if heal_amount <= 0 or priority < 0:
+            continue
+        
+        score = (priority, builder_on_core, heal_amount)
+        
+        if score > best_score:
+            best_score = score
             best_heal_pos = heal_pos
-            best_can_heal_builder = True
-            best_heal_amount = heal_amount
-        elif can_heal_builder == best_can_heal_builder and heal_amount > best_heal_amount:
-            best_heal_pos = heal_pos
-            best_heal_amount = heal_amount
-            
-    if not best_can_heal_builder and ct.get_global_resources()[0] < 50:
+    
+    # Resource constraint for non-builders
+    if best_score[0] == 0 and ct.get_global_resources()[0] < 50:
         return
-
+    if best_score[0] == 1 and ct.get_global_resources()[0] < 10:
+        return
+    
     if best_heal_pos is not None and ct.can_heal(best_heal_pos):
         ct.heal(best_heal_pos)
-        log(f"HEAL at {best_heal_pos} amount={best_heal_amount} can_heal_builder={best_can_heal_builder}")
+        log(f"HEAL at {best_heal_pos} score={best_score}")
 
 def get_visible_allied_launchers(player, ct: Controller) -> list[tuple[int, Position]]:
     launchers = []
