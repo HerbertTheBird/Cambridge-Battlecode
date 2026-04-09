@@ -61,7 +61,7 @@ def _tile_score(tile):
 def run():
     global _no_ammo_turns
 
-    if rc.get_ammo_amount() < 5:
+    if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
         if _no_ammo_turns >= 10 and not _should_stay():
             rc.self_destruct()

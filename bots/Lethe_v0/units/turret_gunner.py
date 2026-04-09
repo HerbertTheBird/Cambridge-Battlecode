@@ -148,6 +148,7 @@ def run():
             rc.rotate(best_dir)
             return
 
-    # No targets in any direction
-    if not _should_stay():
+    # No targets in any direction — count toward no-ammo self-destruct timer
+    _no_ammo_turns += 1
+    if _no_ammo_turns >= 10 and not _should_stay():
         rc.self_destruct()

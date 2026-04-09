@@ -49,7 +49,7 @@ def _heal_targets():
         | map_info._bm_et[map_info._IDX_CORE]
     )
 
-    candidates = my_buildings & healable_types
+    candidates = my_buildings & healable_types & ~units.builder.forget[comm_flag]
     if not candidates:
         return 0
 
@@ -112,7 +112,7 @@ def run():
     if not adj:
         adj.add(best)
     nav.move_to(adj)
-
+    print("want to heal", best, rc.get_action_cooldown(), adj)
     if rc.can_heal(best):
         rc.heal(best)
 

@@ -71,7 +71,7 @@ def get_new_messages():
 
             if (rc.get_id()&_ID_MASK) == decode_id(val):
                 remove.add(val >> ID_BITS)
-                continue
+                remove.add((val^(1<<(ID_BITS+POS_BITS))) >> ID_BITS)
             if val in prev_messages:
                 continue
             prev_messages[val] = rc.get_current_round()
@@ -88,8 +88,7 @@ def get_new_messages():
             prev_messages.pop(old_val, None)
     for pos_n in to_remove:
         del _marker_at[pos_n]
-
-    messages[:] = [x for x in messages if ((x >> ID_BITS) not in remove or x&_ID_MASK < rc.get_id()&_ID_MASK)]
+    messages[:] = [x for x in messages if ((x >> ID_BITS) not in remove)]
     return messages
 def get_messages():
     get_new_messages()
@@ -114,22 +113,18 @@ def mark(target, type):
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
     for i in rc.get_nearby_tiles(2):
         if not rc.get_tile_building_id(i) and rc.can_place_marker(i):
-            print("mark1", i)
             rc.place_marker(i, encode(target, type, sym))
             return
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i):
-            print("mark2", i)
             rc.place_marker(i, encode(target, type, sym))
             return
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team():
             if rc.can_destroy(i):
-                print("break3", i)
                 rc.destroy(i)
             if rc.can_place_marker(i):
-                print("mark3", i)
                 rc.place_marker(i, encode(target, type, sym))
                 return

@@ -1000,6 +1000,7 @@ def is_passable(pos: Position):
          | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
          | _bm_et[_IDX_ROAD] | _bm_et[_IDX_MARKER]
          | (_bm_et[_IDX_BARRIER] & _bm_team[my_team_idx])
+         | (_bm_et[_IDX_CORE] & _bm_team[my_team_idx])
         ) & bit
     )
 
@@ -1009,14 +1010,17 @@ def get_avoid(
     avoid_ore: bool,
 ) -> int:
     """Return a bitmask of tiles to avoid during pathfinding."""
-    avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
+    # avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
     mask = _bm_blocked
     if avoid_conveyors:
         mask |= _bm_conveyors | _bm_conveyor_targets
     if avoid_ore:
-        mask |= _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
-    if avoid_core:
-        mask |= _bm_my_core_area
+        ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
+        w = _width
+        landlocked = ore & (ore >> 1 & _not_right_col) & (ore << 1 & _not_left_col) & (ore >> w) & (ore << w)
+        mask |= ore & ~landlocked
+    # if avoid_core:
+    #     mask |= _bm_my_core_area
     if avoid_builders:
         for unit in _rc.get_nearby_units():
             if _rc.get_entity_type(unit) is EntityType.BUILDER_BOT:

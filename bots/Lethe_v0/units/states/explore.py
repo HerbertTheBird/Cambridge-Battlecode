@@ -30,9 +30,10 @@ def generate_explore_target():
     # If no empty tile found after 2 tries, fallback to completely random
     if (random.randint(0, 2) < 2) and map_info._bm_conveyors:
         explore_target = random.choice(list(map_info.iter_mask(map_info._bm_conveyors)))
-    random_x = random.randint(0, map_info._width - 1)
-    random_y = random.randint(0, map_info._height - 1)
-    explore_target = Position(random_x, random_y)
+    else:
+        random_x = random.randint(0, map_info._width - 1)
+        random_y = random.randint(0, map_info._height - 1)
+        explore_target = Position(random_x, random_y)
 def run():
     print("EXPLORE")
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]:

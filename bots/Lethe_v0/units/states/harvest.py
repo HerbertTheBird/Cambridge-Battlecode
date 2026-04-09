@@ -41,7 +41,7 @@ def _available_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     w = map_info._width
     # Ore tiles surrounded on all 4 cardinal sides by ore — unreachable by conveyor
-    landlocked = ore & (ore >> 1 & map_info._not_left_col) & (ore << 1 & map_info._not_right_col) & (ore >> w) & (ore << w)
+    landlocked = ore & (ore >> 1 & map_info._not_right_col) & (ore << 1 & map_info._not_left_col) & (ore >> w) & (ore << w)
 
     # Enemy hard buildings (not road/marker) cardinally adjacent — can't harvest next to these
     enemy_hard = (

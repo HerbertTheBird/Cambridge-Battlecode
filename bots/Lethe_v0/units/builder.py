@@ -45,6 +45,7 @@ def handle_comms():
         flag = comms.decode_type(v)
         forget[flag] |= 1 << idx
         _forget_rounds[flag][idx] = current_round
+        # print("forget", pos, flag, comms.decode_id(v))
         # Harvest claims also reserve cardinal neighbors (for barriers)
         if flag == 3:
             w = map_info._width
@@ -58,7 +59,7 @@ def handle_comms():
     for p in rc.get_nearby_tiles():
         idx = p.x + p.y * map_info._width
         for i in range(len(forget)):
-            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 20 < current_round:
+            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 5 < current_round:
                 del _forget_rounds[i][idx]
                 forget[i] &= ~(1 << idx)
 def draw_mask(mask, r, g, b):
@@ -84,3 +85,5 @@ def run():
             best_score = score
             best_state = i
     best_state.run()
+    if rc.can_heal(rc.get_position()):
+        rc.heal(rc.get_position())

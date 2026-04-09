@@ -80,9 +80,9 @@ def count_incoming_titanium():
                 if res is not None and res == ResourceType.TITANIUM:
                     # check it points toward core
                     d = rc.get_direction(bid)
-                    dx, dy = d.delta()
-                    out_x = pos.x + dx
-                    out_y = pos.y + dy
+                    ddx, ddy = d.delta()
+                    out_x = pos.x + ddx
+                    out_y = pos.y + ddy
                     if abs(out_x - core_pos.x) <= 1 and abs(out_y - core_pos.y) <= 1:
                         count += 1
             except GameError:
@@ -111,10 +111,11 @@ def run():
             lost_conveyors = bool(scaling_delta < -0.99)
 
     max_spawn = 3
-    if titanium > 600:
-        max_spawn = 5
-    elif titanium > 800:
-        max_spawn = 7
+    
+    if titanium > 800:
+        max_spawn = 8
+    elif titanium > 600:
+        max_spawn = 6
 
     current_count = rc.get_unit_count()
     if prev_unit_count > current_count:

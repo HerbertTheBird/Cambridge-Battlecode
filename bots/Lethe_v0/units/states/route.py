@@ -32,15 +32,16 @@ def _orphan_harvesters():
         | map_info._bm_et[map_info._IDX_GUNNER]
         | map_info._bm_et[map_info._IDX_SENTINEL]
         | map_info._bm_et[map_info._IDX_BREACH]
-        | map_info._bm_et[map_info._IDX_LAUNCHER]
         | map_info._bm_et[map_info._IDX_CORE]
     ) & map_info._bm_team[my_team_idx]
 
-    served = map_info.expand_chebyshev(my_connected)
+    served = map_info.expand_manhattan(my_connected)
     return my_harvesters & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
 
 def score():
-    units.builder.draw_mask(_orphan_harvesters(), 0, 0, 255)
+    # units.builder.draw_mask(_orphan_harvesters(), 0, 0, 255)
+    # units.builder.draw_mask(_dead_end_conveyors() , 0, 255, 0)
+
     return 4 if (_dead_end_conveyors() or _orphan_harvesters()) else 0
 
 def run():
@@ -68,7 +69,7 @@ def run():
             n = lsb.bit_length() - 1
             best = Position(n % width, n // width)
             break
-        reached = map_info.expand_chebyshev(reached)
+        reached = map_info.expand_manhattan(reached)
 
     if best is None:
         return
@@ -78,9 +79,12 @@ def run():
 
     if is_harvester:
         path = nav.calculate_conveyor_path(best, update=False)
+        if not path:
+            comms.mark(best, comm_flag)
+            return
 
         # Move adjacent to target conveyor to place
-        to_move = path[0] if path else best
+        to_move = path[0]
         adj = set()
         for d in Direction:
             if d == Direction.CENTRE:
