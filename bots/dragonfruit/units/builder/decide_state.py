@@ -67,18 +67,38 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             player.nav.set_destination(player.core_pos, "adjacent")
             return State.HEAL
             
-    log_time(ct, "After checking heals")
+    # SABOTAGE if we see a good sabotage target and have enough titanium
+    # Reuse pre-computed sabotage result from earlier
+    if player.global_titanium >= 20:
+        log(f"sabotage target: {sd_result}")
+        if sd_result is not None:
+            sd_target, prio = sd_result
+            log(f"sabotage target: {sd_target} with priority {prio}")
+            if prio > 0:
+                log(f"sabotaging target")
+                player.nav.set_destination(sd_target, "exact")
+                player.attack_target = sd_target
+                player.attack_reason = "sabotage"
+                return State.SABOTAGE
 
     if player.state not in (State.EXPLORE, State.HEAL, State.INTERCEPT, State.SABOTAGE):
         return player.state
 
-    # Look for nearby ores we should harvest
+    # EXTEND_HARVEST_CHAIN if we can extend a broken harvest chain
+    if player.broken_chains:
+        broken_chain_target = find_broken_chain_target(player, ct, my_pos, vc)
+        if broken_chain_target is not None:
+            best_chain_pos, best_chain_resource = broken_chain_target
+            player.nav.set_destination(best_chain_pos, "adjacent")
+            player.harvest_ore_type = best_chain_resource
+            log(f"extending broken chain at {best_chain_pos} on turn {ct.get_current_round()}")
+            return State.EXTEND_HARVEST_CHAIN
+
+    # START_HARVEST_CHAIN if there is an unserviced or unharvested ore, we can start a chain, and allies aren't too close
     player.nearest_unserviced = player.map.get_nearest_unserviced_harvester(my_pos, ct)
     if player.nearest_unserviced is None:
         player.nearest_unharvested = player.map.get_nearest_ore_without_harvester(my_pos, ct) if player.nearest_unserviced is None else None
 
-
-    # START_HARVEST_CHAIN if there is an unserviced or unharvested ore, we can start a chain, and allies aren't too close
     target = player.nearest_unserviced or player.nearest_unharvested
 
     if target is not None:
@@ -112,20 +132,6 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             player.harvest_ore_type = ResourceType.RAW_AXIONITE
             player.harvest_ore_pos = None
             return State.EXTEND_HARVEST_CHAIN
-
-    # SABOTAGE if we see a good sabotage target and have enough titanium
-    # Reuse pre-computed sabotage result from earlier
-    if player.global_titanium >= 20:
-        log(f"sabotage target: {sd_result}")
-        if sd_result is not None:
-            sd_target, prio = sd_result
-            log(f"sabotage target: {sd_target} with priority {prio}")
-            if prio > 0:
-                log(f"sabotaging target")
-                player.nav.set_destination(sd_target, "exact")
-                player.attack_target = sd_target
-                player.attack_reason = "sabotage"
-                return State.SABOTAGE
         
     # DEFEND if we see a harvester with infrastructure or bare titanium ore
     defend_target = find_defend_target(player, ct, my_pos, vc)
@@ -134,16 +140,6 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
         player.nav.set_destination(defend_target, "adjacent")
         log(f"defend target at {defend_target}")
         return State.DEFEND
-
-    # EXTEND_HARVEST_CHAIN if we can extend a broken harvest chain
-    if player.broken_chains:
-        broken_chain_target = find_broken_chain_target(player, ct, my_pos, vc)
-        if broken_chain_target is not None:
-            best_chain_pos, best_chain_resource = broken_chain_target
-            player.nav.set_destination(best_chain_pos, "adjacent")
-            player.harvest_ore_type = best_chain_resource
-            log(f"extending broken chain at {best_chain_pos} on turn {ct.get_current_round()}")
-            return State.EXTEND_HARVEST_CHAIN
 
     # EXPLORE as a last resort
     if player.should_explore_ray:

@@ -265,6 +265,20 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
                 log(f"placed axionite conveyor at {dest} as foundry placeholder")
             else:
                 log(f"failed to place axionite conveyor at {dest} as foundry placeholder")
+            clear_state(player)
+            return
+
+        # If an enemy building blocks the placeholder, mark it for attack
+        if (
+            existing_bid is not None
+            and ct.get_team(existing_bid) != player.my_team
+            and core_dir is not None
+        ):
+            player.attack_target = dest
+            player.attack_reason = "enemy building blocking foundry placeholder"
+            log(f"marking enemy {existing_etype} at {dest} for attack to clear for placeholder")
+            return  # Stay in state, run.py attack logic handles the rest
+
         clear_state(player)
         return
 
