@@ -48,7 +48,7 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
                     return State.INTERCEPT
         
     # HEAL if an enemy is standing on a damaged ally conveyor
-    # Skip ally tiles that feed the enemy (sabotage-worthy)
+    # Skip ally tiles that feed the enemy (i.e. tiles we would want to sabotage anyways)
     heal_pos = find_heal_target(player, ct, my_pos, vc, sabotage_worthy_ally_positions)
     if heal_pos is not None:
         log(f"heal target at {heal_pos}")
@@ -68,7 +68,6 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             return State.HEAL
             
     # SABOTAGE if we see a good sabotage target and have enough titanium
-    # Reuse pre-computed sabotage result from earlier
     log(f"sabotage target: {sd_result}")
     if sd_result is not None:
         sd_target, prio = sd_result
@@ -80,6 +79,7 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             player.attack_reason = "sabotage"
             return State.SABOTAGE
             
+    # Set destination to predicted enemy core if rushing (don't bother trying to harvest/chain/etc)
     if player.rushing_enemy and player.predicted_enemy_core_pos is not None:
         if my_pos.distance_squared(player.predicted_enemy_core_pos) <= 13:
             player.rushing_enemy = False
@@ -88,6 +88,7 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             player.nav.set_destination(player.predicted_enemy_core_pos, "adjacent")
             return State.EXPLORE
 
+    # Sticky state so we don't oscillate between tasks
     if player.state not in (State.EXPLORE, State.HEAL, State.INTERCEPT, State.SABOTAGE):
         return player.state
 
