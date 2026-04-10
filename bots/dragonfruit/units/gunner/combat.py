@@ -110,16 +110,16 @@ def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj) -> set[Posi
 def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, map_obj) -> Direction | None:
     current_dir = ct.get_direction()
     rotate_dir = None
-    rotate_dist = INF
+    rotate_dist = 14
 
     for (eid, etype, tpos) in enemy_units:
         if etype not in TURRET_TYPES:
             continue
 
-        threat_tiles = get_gunner_threat_tiles(ct, tpos, map_obj)
+        threat_tiles = get_gunner_threat_tiles(ct, my_pos, map_obj)
 
         # --- core check ---
-        if my_pos not in threat_tiles:
+        if tpos not in threat_tiles:
             continue
 
         dist = my_pos.distance_squared(tpos)

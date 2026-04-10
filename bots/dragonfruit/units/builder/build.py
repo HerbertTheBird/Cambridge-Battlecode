@@ -86,6 +86,13 @@ def safe_destroy(player, ct: Controller, pos: Position, vc: VisionCache) -> bool
     vc.remove_entity(player, bid, etype, team, pos)
     return True
 
+def safe_build_road(player, ct: Controller, pos: Position) -> bool:
+    if not ct.can_build_road(pos):
+        return False
+    bid = ct.build_road(pos)
+    player.vc.add_entity(player, bid, EntityType.ROAD, player.my_team, pos)
+    return True
+
 def safe_build_conveyor(player, ct: Controller, pos: Position, direction) -> bool:
     if direction not in CARDINAL_DIRECTIONS:
         return False
