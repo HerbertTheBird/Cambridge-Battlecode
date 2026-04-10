@@ -2,7 +2,7 @@ import random
 
 from cambc import Controller, EntityType, Position
 
-from globals import DIRECTIONS
+from globals import DIRECTIONS, NUM_RUSHING
 from units.core.spawn import *
 
 def run_core(player, ct: Controller, my_pos: Position, vc) -> None:
@@ -19,10 +19,13 @@ def run_core(player, ct: Controller, my_pos: Position, vc) -> None:
         # Prioritize spawning toward enemies to protect core
         if sees_enemy:
             spawn_pos = choose_enemy_facing_spawn(my_pos, vc.enemy_units)
+        
+        elif player.num_spawned < NUM_RUSHING:
+            spawn_pos = choose_rushing_spawn(ct, my_pos, player.predicted_enemy_core_pos)
             
         # Follow spawn plan for first few builder bots
-        elif player.num_spawned < len(player.initial_spawn_plan):
-            spawn_dir = player.initial_spawn_plan[player.num_spawned]
+        elif player.num_spawned - NUM_RUSHING < len(player.initial_spawn_plan):
+            spawn_dir = player.initial_spawn_plan[player.num_spawned - NUM_RUSHING]
             spawn_pos = my_pos.add(spawn_dir)
             draw_spawn_plan(ct, my_pos, player.initial_spawn_plan, player.map.width, player.map.height)
             

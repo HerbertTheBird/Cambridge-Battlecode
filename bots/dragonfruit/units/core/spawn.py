@@ -92,7 +92,7 @@ def should_spawn(player, ct: Controller, vc) -> bool:
     no_units = ct.get_unit_count() <= 1
     
     # Spawn some builder bots at start
-    initial_units = player.num_spawned < SPAWN_INITIAL_COUNT
+    initial_units = player.num_spawned < SPAWN_INITIAL_COUNT + NUM_RUSHING
     
     # Spawn more bots once we've found titanium
     resource_intake = (
@@ -145,3 +145,9 @@ def choose_enemy_facing_spawn(my_pos: Position, enemy_units) -> Position | None:
     spawn_dir = my_pos.direction_to(nearest_enemy_pos)
     return my_pos.add(spawn_dir)
 
+def choose_rushing_spawn(ct: Controller, my_pos: Position, predicted_core: Position) -> Position | None:
+    spawn_dir = my_pos.direction_to(predicted_core)
+    bbid = ct.get_tile_builder_bot_id(my_pos.add(spawn_dir))
+    if bbid is not None:
+        return my_pos.add(spawn_dir.rotate_left())
+    return my_pos.add(spawn_dir)

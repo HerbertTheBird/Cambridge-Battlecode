@@ -40,6 +40,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
             for p in get_foundry_positions(player.core_pos, player.map.width, player.map.height)
             if player.map.get_tile_env(p) != Environment.WALL
         }
+        
+        
+    if ct.get_current_round() < NUM_RUSHING + 1:
+        player.rushing_enemy = True
 
     log_time(ct, "After map checks")
 

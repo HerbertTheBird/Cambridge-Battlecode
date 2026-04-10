@@ -833,7 +833,7 @@ def is_ore_guaranteed_unblocked(player, ct: Controller, target: Position) -> boo
                 barrier_count += 1
     return barrier_count < 4
 
-def get_sabotage_target_priority(player, ct: Controller, pos: Position, vc: VisionCache, ally_bot_positions: set | None = None) -> int:
+def get_sabotage_target_priority(player, ct: Controller, pos: Position) -> int:
     """Check if an enemy conveyor/bridge at pos is a valid sabotage target.
     Follows the chain in both directions to validate.
     Returns 0 = not valid, 1 = upstream only, 2 = valid chain both directions,
@@ -841,45 +841,12 @@ def get_sabotage_target_priority(player, ct: Controller, pos: Position, vc: Visi
     bid = ct.get_tile_building_id(pos)
     if bid is None:
         return 0
-    team = ct.get_team(bid)
     btype = ct.get_entity_type(bid)
     if btype != EntityType.BRIDGE and btype != EntityType.CONVEYOR:
         return 0
 
-    if player.map is None:
-        return 1
-
     if player.map.feeds_ally_turret(pos, player.my_team):
         return 0
-
-    if ally_bot_positions is None:
-        ally_bot_positions = {p for (_, p) in vc.ally_builder_bots}
-    target_damage = ct.get_max_hp(bid) - ct.get_hp(bid)
-
-    def is_low_priority_tile(check_pos: Position) -> bool:
-        if check_pos not in ally_bot_positions:
-            return False
-        check_bid = ct.get_tile_building_id(check_pos)
-        if check_bid is None:
-            return False
-        check_damage = ct.get_max_hp(check_bid) - ct.get_hp(check_bid)
-        return check_damage >= target_damage + 4 and target_damage <= 10
-
-    def adj_to_ti_harvester(p: Position) -> bool:
-        for d in CARDINAL_DIRECTIONS:
-            adj = p.add(d)
-            if not on_map(adj, player.map.width, player.map.height):
-                continue
-            entity = player.map.get_tile_entity(adj)
-            if entity is None or entity[1] != EntityType.HARVESTER:
-                continue
-            env = player.map.get_tile_env(adj)
-            if env == Environment.ORE_TITANIUM:
-                return True
-        return False
-
-    if adj_to_ti_harvester(pos) and team != player.my_team:
-        return 1
 
     def get_input_prio(pos: Position) -> int:
         queue = [pos]
@@ -897,8 +864,6 @@ def get_sabotage_target_priority(player, ct: Controller, pos: Position, vc: Visi
                 if input_pos in visited_in:
                     continue
                 visited_in.add(input_pos)
-                if is_low_priority_tile(input_pos):
-                    return 0
                 if not ct.is_in_vision(input_pos):
                     continue
                 entity = player.map.get_tile_entity(input_pos)
@@ -911,27 +876,7 @@ def get_sabotage_target_priority(player, ct: Controller, pos: Position, vc: Visi
 
     if input_prio == 0:
         return 0
-
-    cur = pos
-    visited_out = {pos}
-    while player.map.has_conveyor_output(cur):
-        next_pos = player.map.get_conveyor_output(cur)
-        if next_pos is None:
-            break
-        if next_pos in visited_out:
-            break
-        visited_out.add(next_pos)
-        if is_low_priority_tile(next_pos):
-            return 0
-        entity = player.map.get_tile_entity(next_pos)
-        if entity is None:
-            break
-        _, etype, _team = entity
-        if etype in CONVEYOR_TYPES:
-            cur = next_pos
-            continue
-        break
-
+    
     downstream_priority = player.map.get_sabotage_downstream_priority(pos, player.my_team)
     return 1 if downstream_priority == 0 else downstream_priority + 1
 
@@ -956,6 +901,8 @@ def find_sabotage_target(player, ct: Controller, my_pos: Position, vc: VisionCac
         dist = my_pos.distance_squared(pos)
         if dist > 13:
             continue
+        if pos in ally_bot_positions and pos != my_pos:
+            continue
         is_ally = ct.get_team(bid) == player.my_team
         downstream_priority = player.map.get_sabotage_downstream_priority(pos, player.my_team) + 1
         if is_ally and downstream_priority >= 2 and sabotage_worthy_ally_positions is not None:
@@ -966,9 +913,10 @@ def find_sabotage_target(player, ct: Controller, my_pos: Position, vc: VisionCac
             continue
         if downstream_priority == best_type and dist >= best_dist:
             continue
-        sabotage_priority = get_sabotage_target_priority(player, ct, pos, vc, ally_bot_positions)
+        sabotage_priority = get_sabotage_target_priority(player, ct, pos)
         if sabotage_priority == 0:
             continue
+        print(pos, sabotage_priority)
         if sabotage_priority > best_type or (sabotage_priority == best_type and dist < best_dist):
             best_type = sabotage_priority
             best_dist = dist

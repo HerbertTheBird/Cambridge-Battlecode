@@ -69,17 +69,24 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
             
     # SABOTAGE if we see a good sabotage target and have enough titanium
     # Reuse pre-computed sabotage result from earlier
-    if player.global_titanium >= 20:
-        log(f"sabotage target: {sd_result}")
-        if sd_result is not None:
-            sd_target, prio = sd_result
-            log(f"sabotage target: {sd_target} with priority {prio}")
-            if prio > 0:
-                log(f"sabotaging target")
-                player.nav.set_destination(sd_target, "exact")
-                player.attack_target = sd_target
-                player.attack_reason = "sabotage"
-                return State.SABOTAGE
+    log(f"sabotage target: {sd_result}")
+    if sd_result is not None:
+        sd_target, prio = sd_result
+        log(f"sabotage target: {sd_target} with priority {prio}")
+        if prio > 0:
+            log(f"sabotaging target")
+            player.nav.set_destination(sd_target, "exact")
+            player.attack_target = sd_target
+            player.attack_reason = "sabotage"
+            return State.SABOTAGE
+            
+    if player.rushing_enemy and player.predicted_enemy_core_pos is not None:
+        if my_pos.distance_squared(player.predicted_enemy_core_pos) <= 13:
+            player.rushing_enemy = False
+        else:
+            log(f"rushing enemy core at {player.predicted_enemy_core_pos}")
+            player.nav.set_destination(player.predicted_enemy_core_pos, "adjacent")
+            return State.EXPLORE
 
     if player.state not in (State.EXPLORE, State.HEAL, State.INTERCEPT, State.SABOTAGE):
         return player.state

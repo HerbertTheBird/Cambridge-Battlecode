@@ -64,10 +64,16 @@ class Player:
         
         self.last_seen_builder_bot_round = 0
         self.last_support_launcher_round = -2000
+        
+        self.rushing_enemy = False
 
         
     def run(self, ct: Controller) -> None:
         try:
+            
+            if self.rushing_enemy:
+                log("RUSHING")
+    
             # Init info that depends on ct
             
             if not self.initialized:
