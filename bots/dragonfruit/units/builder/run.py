@@ -104,7 +104,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
 
     # Attack a building if needed
     attacked = False
-    print("attack target: ", player.attack_target, "reason: ", player.attack_reason)
+    log("attack target: ", player.attack_target, "reason: ", player.attack_reason)
     if player.attack_target is not None and my_pos.distance_squared(player.attack_target) <= 2:
         if my_pos != player.attack_target:
             move_dir = my_pos.direction_to(player.attack_target)

@@ -24,7 +24,7 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
     log_time(ct, "After pre-computing sabotage info")
 
     if threat_pos is not None:
-        print(f"considering intercept against threat at {threat_pos} (core={threat_is_core})")
+        log(f"considering intercept against threat at {threat_pos} (core={threat_is_core})")
         if threat_is_core or count_ally_turrets_covering(ct, vc, threat_pos) < 2:
             log("trying to find intercept pos")
             intercept, prio = find_intercept_pos(
@@ -39,7 +39,7 @@ def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> St
                 enemy_core_pos=player.predicted_enemy_core_pos,
                 is_core_threat=threat_is_core,
             )
-            print(intercept, prio)
+            log(intercept, prio)
             log_time(ct, "After find intercept pos")
             if intercept is not None:
                 if prio == 3 or should_intercept(vc, my_pos, player.core_pos):

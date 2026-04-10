@@ -237,7 +237,7 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
             gunner_cost, sentinel_cost,
             map_obj=map_obj, enemy_core_pos=enemy_core_pos
         )
-        print(f"{output}: validity={validity}")
+        log(f"{output}: validity={validity}")
         if validity == 0:
             return
 
@@ -246,7 +246,7 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, vc: Visi
 
         # direction = get_turret_direction(output, threat_pos, ct, map_obj, EntityType.SENTINEL, is_core_threat=is_core_threat)
         # if direction is None:
-        #     print(f"      rejected: no valid turret direction")
+        #     log(f"      rejected: no valid turret direction")
         #     return
 
         if _has_matching_ally_intercept_turret(bid, etype, team, ct, output, my_team, enemy_core_pos):
