@@ -18,11 +18,6 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
     
     log_time(ct, "After checking threats")
 
-    # Pre-compute sabotage info so we know which ally tiles feed the enemy
-    sabotage_worthy_ally_positions: set[Position] = set()
-    sd_result = find_sabotage_target(player, ct, my_pos, vc, sabotage_worthy_ally_positions) if player.global_titanium >= 20 else None
-    log_time(ct, "After pre-computing sabotage info")
-
     if threat_pos is not None:
         log(f"considering intercept against threat at {threat_pos} (core={threat_is_core})")
         if threat_is_core or count_ally_turrets_covering(ct, vc, threat_pos) < 2:
@@ -46,6 +41,11 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
                     log(f"intercept target at {intercept}")
                     player.nav.set_destination(intercept, "adjacent")
                     return State.INTERCEPT
+            
+    # Pre-compute sabotage info so we know which ally tiles feed the enemy
+    sabotage_worthy_ally_positions: set[Position] = set()
+    sd_result = find_sabotage_target(player, ct, my_pos, vc, sabotage_worthy_ally_positions) if player.global_titanium >= 20 else None
+    log_time(ct, "After pre-computing sabotage info")
         
     # HEAL if an enemy is standing on a damaged ally conveyor
     # Skip ally tiles that feed the enemy (i.e. tiles we would want to sabotage anyways)
