@@ -4,7 +4,7 @@ from globals import *
 from helpers import get_foundry_positions
 from log import log, log_time
 from units.builder.build import *
-from units.builder.decide_state import decideState
+from units.builder.decide_state import decide_state
 from units.builder.logic import *
 from units.builder.states import (
     run_defend,
@@ -57,10 +57,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     log_time(ct, "After broken chain scan")
 
     # State machine
-    player.state = decideState(player, ct, my_pos, vc)
+    player.state = decide_state(player, ct, my_pos, vc)
     log(f"state={player.state}")
 
-    log_time(ct, "After decideState")
+    log_time(ct, "After decide_state")
 
     if player.state == State.START_HARVEST_CHAIN:
         run_start_harvest_chain(player, ct, vc)
@@ -96,7 +96,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                 bid_etype = ct.get_entity_type(bid)
                 if (
                     bid_team != player.my_team
-                    and not is_marker_building(ct, bid)
+                    and bid_etype != EntityType.MARKER
                     and (ct.is_tile_passable(harvest_dest) or my_pos == harvest_dest)
                     and (player.map is None or not player.map.feeds_ally_turret(harvest_dest, player.my_team))
                 ):

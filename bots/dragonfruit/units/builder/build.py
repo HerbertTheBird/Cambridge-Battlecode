@@ -76,9 +76,11 @@ def can_build_foundry_here(pos: Position, ct: Controller, my_pos: Position, my_t
 def safe_destroy(player, ct: Controller, pos: Position, vc: VisionCache) -> bool:
     """Destroy a non-marker building at pos. Returns True if destroyed."""
     bid = ct.get_tile_building_id(pos)
-    if bid is None or ct.get_entity_type(bid) == EntityType.MARKER:
+    if bid is None:
         return False
     etype = ct.get_entity_type(bid)
+    if etype == EntityType.MARKER:
+        return False
     team = ct.get_team(bid)
     if not ct.can_destroy(pos):
         return False

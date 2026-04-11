@@ -48,7 +48,7 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
             clear_state(player)
             return
 
-        if is_ore_guaranteed_unblocked(player, ct, ore_pos):
+        if is_ore_unblocked(player, ct, ore_pos, allow_out_of_vision=False):
             best_build_pos = get_best_bridge_build_pos(
                 ore_pos,
                 player.core_pos,
@@ -512,7 +512,7 @@ def run_intercept(player, ct: Controller, vc) -> None:
     log(f"threat at {enemy_result[0]} -> trying to intercept")
     enemy_pos = enemy_result[0]
     is_core_threat = enemy_result[1]
-    turret_type = get_best_turret_type(intercept_pos, predicted_enemy_core, ct, enemy_pos, player.map)
+    turret_type = get_best_turret_type(intercept_pos, predicted_enemy_core, ct, player.my_team, enemy_pos, player.map)
 
     direction = get_turret_direction(
         intercept_pos,

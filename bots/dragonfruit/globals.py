@@ -12,8 +12,8 @@ CARDINAL_DIRECTIONS = (Direction.NORTH, Direction.EAST, Direction.SOUTH, Directi
 
 DELTAS: dict[Direction, tuple[int, int]] = {d: d.delta() for d in Direction}
 
-CONVEYOR_TYPES = (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER)
-TURRET_TYPES = (EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH)
+CONVEYOR_TYPES = frozenset((EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER))
+TURRET_TYPES = frozenset((EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH))
 
 class State(Enum):
     EXPLORE = 0

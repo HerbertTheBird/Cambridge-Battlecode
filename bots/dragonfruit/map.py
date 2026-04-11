@@ -4,11 +4,17 @@ from collections import defaultdict
 
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType, Team
 
-from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF
+from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF, DELTAS
 from comms import Comms
-from helpers import on_map, on_map_coords, get_foundry_positions, is_core_tile
+from helpers import get_foundry_positions, is_core_tile
 
 from log import log, log_time
+
+def on_map_coords(x: int, y: int, width: int, height: int) -> bool:
+    return 0 <= x < width and 0 <= y < height
+
+def on_map(pos: Position, width: int, height: int) -> bool:
+    return 0 <= pos.x < width and 0 <= pos.y < height
 
 SYMMETRY_MAPPING = {
     (True,  False, False): Symmetry.FLIP_X,
@@ -179,7 +185,7 @@ class Map:
         px = pos.x
         py = pos.y
         for d in DIRECTIONS:
-            dx, dy = d.delta()
+            dx, dy = DELTAS[d]
             x = px + dx
             y = py + dy
             if not on_map_coords(x, y, self.width, self.height):
@@ -1217,10 +1223,8 @@ class Map:
             for conv_pos in input_positions
         )
 
-    def find_single_input_foundry(self, core_pos: Position | None, my_team) -> Position | None:
+    def find_single_input_foundry(self, core_pos: Position, my_team) -> Position | None:
         """Find an ally foundry near core with at most 1 conveyor/bridge input."""
-        if core_pos is None:
-            return None
         for pos in get_foundry_positions(core_pos, self.width, self.height):
             if self.is_single_input_foundry(pos, my_team):
                 return pos

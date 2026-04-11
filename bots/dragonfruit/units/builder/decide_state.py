@@ -6,7 +6,7 @@ from units.builder.logic import *
 from vision import VisionCache
 from log import log, log_time
 
-def decideState(player, ct: Controller, my_pos: Position, vc: VisionCache) -> State:
+def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> State:
     # INTERCEPT if enemy threat and good turret build position/direction
     threat_result = get_nearest_enemy_threat_pos(vc, my_pos)
     if threat_result is None:

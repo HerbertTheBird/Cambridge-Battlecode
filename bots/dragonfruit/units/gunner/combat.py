@@ -1,7 +1,7 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment
 
-from globals import INF, TURRET_TYPES, DIRECTIONS, CARDINAL_DIRECTIONS
-from helpers import on_map
+from globals import INF, TURRET_TYPES, DIRECTIONS, CARDINAL_DIRECTIONS, DELTAS
+from map import on_map
 
 def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Position | None:
     """Pick the gunner's shot by scanning its short forward ray."""
@@ -62,15 +62,14 @@ def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Pos
 
     return ray_tiles[first_enemy_idx]
 
-def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj) -> set[Position]:
+def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj, my_team) -> set[Position]:
     threat_tiles = set()
 
-    my_team = ct.get_team()
     width = map_obj.width
     height = map_obj.height
 
     for d in DIRECTIONS:
-        dx, dy = d.delta()
+        dx, dy = DELTAS[d]
         max_range = 3 if d in CARDINAL_DIRECTIONS else 2
 
         x, y = tpos.x, tpos.y
@@ -107,16 +106,16 @@ def get_gunner_threat_tiles(ct: Controller, tpos: Position, map_obj) -> set[Posi
 
     return threat_tiles
 
-def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, map_obj) -> Direction | None:
+def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, map_obj, my_team) -> Direction | None:
     current_dir = ct.get_direction()
     rotate_dir = None
     rotate_dist = 14
 
+    threat_tiles = get_gunner_threat_tiles(ct, my_pos, map_obj, my_team)
+
     for (eid, etype, tpos) in enemy_units:
         if etype not in TURRET_TYPES:
             continue
-
-        threat_tiles = get_gunner_threat_tiles(ct, my_pos, map_obj)
 
         # --- core check ---
         if tpos not in threat_tiles:
