@@ -67,6 +67,7 @@ class Player:
         self.last_support_launcher_round = -2000
         
         self.rushing_enemy = False
+        self.initialized_explore_ray = False
 
         
     def run(self, ct: Controller) -> None:
@@ -96,6 +97,7 @@ class Player:
             
                 self.prev_global_titanium, self.prev_global_axionite = ct.get_global_resources()
             
+                self.initialized = True
             
             # Update turn info
      
@@ -133,8 +135,6 @@ class Player:
 
             elif self.etype == EntityType.LAUNCHER:
                 run_launcher(self, ct, my_pos, vc)
-            
-            self.initialized = True
     
             # Update previous values for next turn
             

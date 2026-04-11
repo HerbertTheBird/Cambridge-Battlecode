@@ -66,6 +66,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
             log(f"heal core at {player.core_pos}")
             player.nav.set_destination(player.core_pos, "adjacent")
             return State.HEAL
+        
+    log_time(ct, "After checking heal targets")
             
     # SABOTAGE if we see a good sabotage target and have enough titanium
     log(f"sabotage target: {sd_result}")
@@ -78,6 +80,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
             player.attack_target = sd_target
             player.attack_reason = "sabotage"
             return State.SABOTAGE
+        
+    log_time(ct, "After checking sabotage targets")
             
     # Set destination to predicted enemy core if rushing (don't bother trying to harvest/chain/etc)
     if player.rushing_enemy and player.predicted_enemy_core_pos is not None:
@@ -87,6 +91,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
             log(f"rushing enemy core at {player.predicted_enemy_core_pos}")
             player.nav.set_destination(player.predicted_enemy_core_pos, "adjacent")
             return State.EXPLORE
+        
+    log_time(ct, "After checking rush conditions")
 
     # Sticky state so we don't oscillate between tasks
     if player.state not in (State.EXPLORE, State.HEAL, State.INTERCEPT, State.SABOTAGE):
@@ -101,6 +107,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
             player.harvest_ore_type = best_chain_resource
             log(f"extending broken chain at {best_chain_pos} on turn {ct.get_current_round()}")
             return State.EXTEND_HARVEST_CHAIN
+    
+    log_time(ct, "After checking broken chains")
 
     # START_HARVEST_CHAIN if there is an unserviced or unharvested ore, we can start a chain, and allies aren't too close
     player.nearest_unserviced = player.map.get_nearest_unserviced_harvester(my_pos, ct)
@@ -108,6 +116,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
         player.nearest_unharvested = player.map.get_nearest_ore_without_harvester(my_pos, ct) if player.nearest_unserviced is None else None
 
     target = player.nearest_unserviced or player.nearest_unharvested
+    
+    log_time(ct, "After finding nearest unserviced/unharvested")
 
     if target is not None:
         bbid = ct.get_tile_builder_bot_id(target) if ct.is_in_vision(target) else None
@@ -122,6 +132,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
             player.harvest_ore_pos = target
             player.nav.set_destination(target, "adjacent")
             return State.START_HARVEST_CHAIN
+        
+    log_time(ct, "After checking harvest chain start conditions")
 
     # REROUTE_TITANIUM if we see a foundry with just one input
     if player.core_pos is not None and player.global_titanium >= 1500:
@@ -129,6 +141,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
         if foundry is not None:
             player.foundry_pos = foundry
             return State.REROUTE_TITANIUM
+    
+    log_time(ct, "After checking foundry reroute conditions")
 
     # EXTEND_HARVEST_CHAIN if we see a foundry placeholder
     if player.core_pos is not None and player.global_titanium >= 1500:
@@ -141,6 +155,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
             player.harvest_ore_pos = None
             return State.EXTEND_HARVEST_CHAIN
         
+    log_time(ct, "After checking foundry placeholder conditions")
+        
     # DEFEND if we see a harvester with infrastructure or bare titanium ore
     defend_target = find_defend_target(player, ct, my_pos, vc)
     if defend_target is not None and my_pos.distance_squared(defend_target) <= 32 and count_closer_allies(player, defend_target, my_pos, vc) < 2:
@@ -148,6 +164,8 @@ def decide_state(player, ct: Controller, my_pos: Position, vc: VisionCache) -> S
         player.nav.set_destination(defend_target, "adjacent")
         log(f"defend target at {defend_target}")
         return State.DEFEND
+    
+    log_time(ct, "After checking defend targets")
 
     # EXPLORE as a last resort
     if player.should_explore_ray:

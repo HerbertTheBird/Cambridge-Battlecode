@@ -26,8 +26,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     player.build_type = None
 
     # First explore destination follows ray outwards from core
-    if not player.initialized and player.core_pos is not None and ct.get_current_round() < 100:
-        player.should_explore_ray = True
+    if not player.initialized_explore_ray:
+        if player.core_pos is not None and ct.get_current_round() < 100:
+            player.should_explore_ray = True
+        player.initialized_explore_ray = True
 
     # Initialize ideal foundry positions so we can route back to them
     if player.foundry_positions is None and player.core_pos is not None:
