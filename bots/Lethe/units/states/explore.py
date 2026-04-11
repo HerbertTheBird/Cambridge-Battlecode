@@ -48,7 +48,7 @@ def generate_explore_target():
     frontier = seeds
     prev_frontier = frontier
     c = 0
-    while frontier and c < 5:
+    while frontier and c < 10:
         prev_frontier = frontier
         expanded = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1) | (frontier << w) | (frontier >> w)
         frontier = expanded & passable & ~visited

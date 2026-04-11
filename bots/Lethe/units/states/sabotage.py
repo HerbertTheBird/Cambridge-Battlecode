@@ -34,6 +34,21 @@ def _sabotage_targets():
     danger = map_info._bm_enemy_turret_threat | map_info._bm_enemy_launch_adj
     targets &= ~danger
     targets &= ~units.builder.forget[comm_flag]
+
+    # Avoid enemy builder bots within 6 manhattan
+    w = map_info._width
+    enemy_team_val = Team.B if rc.get_team() == Team.A else Team.A
+    enemy_bots = 0
+    for uid in rc.get_nearby_units():
+        if rc.get_team(uid) == enemy_team_val and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
+            ep = rc.get_position(uid)
+            enemy_bots |= 1 << (ep.x + ep.y * w)
+    if enemy_bots:
+        danger_zone = enemy_bots
+        for _ in range(6):
+            danger_zone = map_info.expand_manhattan(danger_zone)
+        targets &= ~danger_zone
+
     return targets
 
 def score():

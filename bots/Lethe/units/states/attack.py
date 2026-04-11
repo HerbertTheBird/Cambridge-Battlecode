@@ -14,7 +14,6 @@ DIRECTIONS = [
     Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
     Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
 ]
-CARDINAL_DIRECTIONS = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 
 def init(c: Controller):
@@ -23,100 +22,117 @@ def init(c: Controller):
     nav = Pathing(rc)
 
 
-def on_map(pos: Position, width: int, height: int) -> bool:
-    return 0 <= pos.x < width and 0 <= pos.y < height
+BUILDING_SCORE = [0] * map_info._NUM_ET
+BUILDING_SCORE[map_info._IDX_CORE] = 100
+BUILDING_SCORE[map_info._IDX_HARVESTER] = 10
+BUILDING_SCORE[map_info._IDX_FOUNDRY] = 15
+BUILDING_SCORE[map_info._IDX_GUNNER] = 20
+BUILDING_SCORE[map_info._IDX_SENTINEL] = 20
+BUILDING_SCORE[map_info._IDX_BREACH] = 25
+BUILDING_SCORE[map_info._IDX_LAUNCHER] = 15
+BUILDING_SCORE[map_info._IDX_CONVEYOR] = 2
+BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 3
+BUILDING_SCORE[map_info._IDX_BARRIER] = 1
+BUILDING_SCORE[map_info._IDX_BRIDGE] = 2
+BUILDING_SCORE[map_info._IDX_SPLITTER] = 2
 
 
-def get_blocked_sentinel_directions(intercept_pos: Position) -> set:
-    # Simplified version from dragonfruit, assuming we can't inspect input chains easily
-    # This part might need more complex map analysis if available in Lethe
-    return set()
+def _get_loaders(pos):
+    """Return list of direction indices (0-7) from pos toward buildings that feed it."""
+    w = map_info._width
+    h = map_info._height
+    px, py = pos.x, pos.y
+    pos_n = px + py * w
+    loaders = []
 
-def get_sentinel_direction(intercept_pos: Position, enemy_pos: Position) -> Direction | None:
-    """Pick the best direction for a sentinel at intercept_pos facing enemy_pos."""
-    blocked = get_blocked_sentinel_directions(intercept_pos)
+    harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
+    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]
+                 | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
 
-    desired = intercept_pos.direction_to(enemy_pos)
-    if desired not in blocked:
-        return desired
-    # Try rotating to find a non-blocked direction
-    for rot in [desired.rotate_left(), desired.rotate_right(),
-                desired.rotate_left().rotate_left(), desired.rotate_right().rotate_right()]:
-        if rot not in blocked:
-            return rot
-    return None
+    # Cardinal-adjacent harvesters
+    for di, (dx, dy) in zip([0, 2, 4, 6], [(0, -1), (1, 0), (0, 1), (-1, 0)]):
+        nx, ny = px + dx, py + dy
+        if 0 <= nx < w and 0 <= ny < h:
+            if harvesters & (1 << (nx + ny * w)):
+                loaders.append(di)
+
+    # Any neighbor conveyor whose output targets this tile
+    for di in range(8):
+        dx, dy = map_info._DIR_VECS[di]
+        nx, ny = px + dx, py + dy
+        if 0 <= nx < w and 0 <= ny < h:
+            nn = nx + ny * w
+            if (conveyors & (1 << nn)) and map_info._building_conv_target[nn] == pos_n:
+                if di not in loaders:
+                    loaders.append(di)
+
+    return loaders
 
 
-def is_gunner_position(
-    core_pos: Position | None,
-    pos: Position,
-    primary_threat: Position | None,
-) -> bool:
-    """
-    True if pos is a good gunner location.
-    Adapted from dragonfruit.
-    """
-    if core_pos is not None:
-        dist = core_pos.distance_squared(pos)
-        if 2 < dist <= 18:
-            return True
+def get_best_direction(pos):
+    """Pick the best (direction, turret_type) for a turret at pos.
+    Blocked: turret cannot face toward a loading building.
+    Exception: gunner with 2+ loaders can face any direction.
+    Score = sum of BUILDING_SCORE for enemy buildings the turret can hit."""
+    w = map_info._width
+    h = map_info._height
+    px, py = pos.x, pos.y
 
-    if primary_threat is None or not rc.is_in_vision(primary_threat):
-        return False
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    enemy_buildings = map_info._bm_team[1 - my_team_idx]
+    my_buildings = map_info._bm_team[my_team_idx]
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
 
-    my_team = rc.get_team()
-    width = map_info._width
-    height = map_info._height
+    loaders = _get_loaders(pos)
+    loader_dirs = set(loaders)
+    sentinel_blocked = loader_dirs
+    gunner_blocked = set() if len(loaders) >= 2 else loader_dirs
 
-    for d in DIRECTIONS:
-        dx, dy = d.delta()
-        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+    best_dir = Direction.NORTH
+    best_score = -1
+    best_type = EntityType.SENTINEL
 
-        x, y = pos.x, pos.y
-        for _ in range(max_range):
-            x += dx
-            y += dy
+    for di in range(8):
+        # Sentinel score
+        if di not in sentinel_blocked:
+            s_score = 0
+            for dx, dy in map_info._SENTINEL_OFFSETS[di]:
+                sx, sy = px + dx, py + dy
+                if 0 <= sx < w and 0 <= sy < h:
+                    sbit = 1 << (sx + sy * w)
+                    if enemy_buildings & sbit:
+                        for i in range(map_info._NUM_ET):
+                            if map_info._bm_et[i] & sbit:
+                                s_score += BUILDING_SCORE[i]
+                                break
+            if s_score > best_score:
+                best_score = s_score
+                best_dir = DIRECTIONS[di]
+                best_type = EntityType.SENTINEL
 
-            cur = Position(x, y)
-
-            if not on_map(cur, width, height):
-                break
-
-            if map_info.ground_at(x, y) == map_info._IDX_ENV_WALL:
-                break
-
-            if cur == primary_threat:
-                return True
-            
-            bbid = None
-            if rc.is_in_vision(cur):
-                bbid = rc.get_tile_builder_bot_id(cur)
-            if bbid is not None:
-                if rc.get_team(bbid) == my_team:
+        # Gunner score — single ray, wall/friendly-blocked
+        if di not in gunner_blocked:
+            g_score = 0
+            for dx, dy in map_info._GUNNER_RAYS[di]:
+                sx, sy = px + dx, py + dy
+                if not (0 <= sx < w and 0 <= sy < h):
                     break
-                continue
-
-            bid = None
-            if rc.is_in_vision(cur):
-                bid = rc.get_tile_builder_bot_id(cur)
-            if bid is not None:
-                etype = rc.get_entity_type(bid)
-                team = rc.get_team(bid)
-
-                if etype == EntityType.MARKER or etype == EntityType.ROAD:
-                    continue
-
-                if team == my_team:
+                sbit = 1 << (sx + sy * w)
+                if walls & sbit:
                     break
-                continue
+                if my_buildings & sbit:
+                    break
+                if enemy_buildings & sbit:
+                    for i in range(map_info._NUM_ET):
+                        if map_info._bm_et[i] & sbit:
+                            g_score += BUILDING_SCORE[i]
+                            break
+            if g_score > best_score:
+                best_score = g_score
+                best_dir = DIRECTIONS[di]
+                best_type = EntityType.GUNNER
 
-    return False
-
-def get_best_turret_type(pos: Position, enemy_core_pos: Position | None, primary_threat: Position | None = None) -> EntityType:
-    """Return the preferred turret type for an intercept build at pos."""
-    if is_gunner_position(enemy_core_pos, pos, primary_threat):
-        return EntityType.GUNNER
-    return EntityType.SENTINEL
+    return best_dir, best_type
 
 
 def _my_turret_coverage():
@@ -127,7 +143,6 @@ def _my_turret_coverage():
     h = map_info._height
     coverage = 0
 
-    # Breach + Sentinel: use shift masks like _compute_enemy_turret_threat
     for turret_idx, offsets_table in ((map_info._IDX_BREACH, map_info._BREACH_OFFSETS),
                                       (map_info._IDX_SENTINEL, map_info._SENTINEL_OFFSETS)):
         turrets = map_info._bm_et[turret_idx] & my_team_bm
@@ -155,7 +170,6 @@ def _my_turret_coverage():
                 else:
                     coverage |= (dm & shift_mask) >> (-offset)
 
-    # Gunner: per-turret rays with wall blocking
     gunners = map_info._bm_et[map_info._IDX_GUNNER] & my_team_bm
     if gunners:
         walls = map_info._bm_env[map_info._IDX_ENV_WALL]
@@ -178,30 +192,30 @@ def _my_turret_coverage():
 
     return coverage
 
-def _sentinel_reachable(targets):
-    """Bitmask of positions from which a sentinel (any direction) could hit at least one target tile.
-    Computed by shifting targets by reversed sentinel offsets."""
-    w = map_info._width
-    reachable = 0
-    for di in range(8):
-        for dx, dy in map_info._SENTINEL_OFFSETS[di]:
-            # Reverse: if sentinel at A hits A+(dx,dy)=B, then from B we need A = B+(-dx,-dy)
-            rdx, rdy = -dx, -dy
-            shift_mask = map_info._turret_shift_masks.get((rdx, rdy))
-            if shift_mask is None:
-                continue
-            offset = rdx + rdy * w
-            if offset > 0:
-                reachable |= (targets & shift_mask) << offset
-            else:
-                reachable |= (targets & shift_mask) >> (-offset)
-    return reachable
+
+def _high_value_targets():
+    """Bitmask of enemy high-value buildings not already covered by my turrets."""
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    enemy_idx = 1 - my_team_idx
+    enemy = map_info._bm_team[enemy_idx]
+
+    high_value = (
+        map_info._bm_et[map_info._IDX_FOUNDRY]
+        | map_info._bm_et[map_info._IDX_GUNNER]
+        | map_info._bm_et[map_info._IDX_SENTINEL]
+        | map_info._bm_et[map_info._IDX_BREACH]
+        | map_info._bm_et[map_info._IDX_CORE]
+    ) & enemy
+
+    if not high_value:
+        return 0
+
+    my_coverage = _my_turret_coverage()
+    return high_value & ~my_coverage
+
 
 def _placement_candidates():
-    """Bitmask of tiles where a turret could be placed.
-    Location: all conveyor outputs + cardinally adjacent to harvesters.
-    Tile must be: empty, or my conveyor/barrier/road/marker, or enemy marker/road.
-    Excluded: enemy turret threat, enemy launcher adjacency, walls."""
+    """Bitmask of tiles where a turret could be placed."""
     my_team_idx = map_info._TM_INT[rc.get_team()]
     enemy_idx = 1 - my_team_idx
     my_team = map_info._bm_team[my_team_idx]
@@ -220,8 +234,7 @@ def _placement_candidates():
     empty = ~has_building
 
     my_clearable = (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_BARRIER]
+        map_info._bm_et[map_info._IDX_BARRIER]
         | map_info._bm_et[map_info._IDX_ROAD]
         | map_info._bm_et[map_info._IDX_MARKER]
     ) & my_team
@@ -241,140 +254,128 @@ def _placement_candidates():
     # Exclude tiles with any builder bots
     w = map_info._width
     for uid in rc.get_nearby_units():
-        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
+        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT and uid != rc.get_id():
             ep = rc.get_position(uid)
             candidates &= ~(1 << (ep.x + ep.y * w))
 
+    # Avoid enemy builder bots within 6 manhattan
+    enemy_team_val = Team.B if rc.get_team() == Team.A else Team.A
+    enemy_bots = 0
+    for uid in rc.get_nearby_units():
+        if rc.get_team(uid) == enemy_team_val and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
+            ep = rc.get_position(uid)
+            enemy_bots |= 1 << (ep.x + ep.y * w)
+    if enemy_bots:
+        danger = enemy_bots
+        for _ in range(6):
+            danger = map_info.expand_manhattan(danger)
+        candidates &= ~danger
+
     return candidates
 
-def _get_uncovered_high_value_targets():
-    my_team_idx = map_info._TM_INT[rc.get_team()]
-    enemy_idx = 1 - my_team_idx
-    enemy = map_info._bm_team[enemy_idx]
 
-    # High-value enemy targets only
-    high_value = (
-        map_info._bm_et[map_info._IDX_HARVESTER]
-        | map_info._bm_et[map_info._IDX_FOUNDRY]
-        | map_info._bm_et[map_info._IDX_GUNNER]
-        | map_info._bm_et[map_info._IDX_SENTINEL]
-        | map_info._bm_et[map_info._IDX_BREACH]
-        | map_info._bm_et[map_info._IDX_CORE]
-    ) & enemy
+def _sentinel_all_offsets():
+    """Union of all sentinel offsets across all 8 directions as (dx, dy) set."""
+    offsets = set()
+    for di in range(8):
+        for dx, dy in map_info._SENTINEL_OFFSETS[di]:
+            offsets.add((dx, dy))
+    return offsets
 
-    if not high_value:
-        return 0
+_sentinel_all_reach_cache = None
 
-    # Remove targets already covered by my turrets
-    my_coverage = _my_turret_coverage()
-    return high_value & ~my_coverage
+def _sentinel_all_reach(targets):
+    """Bitmask of positions from which a sentinel (any direction) could hit at least one target.
+    Uses reverse-shift of the union of all direction offsets."""
+    global _sentinel_all_reach_cache
+    if _sentinel_all_reach_cache is None:
+        _sentinel_all_reach_cache = list(_sentinel_all_offsets())
+    w = map_info._width
+    reachable = 0
+    for dx, dy in _sentinel_all_reach_cache:
+        rdx, rdy = -dx, -dy
+        shift_mask = map_info._turret_shift_masks.get((rdx, rdy))
+        if shift_mask is None:
+            continue
+        offset = rdx + rdy * w
+        if offset > 0:
+            reachable |= (targets & shift_mask) << offset
+        else:
+            reachable |= (targets & shift_mask) >> (-offset)
+    return reachable
 
 
 def _get_attack_candidates():
-    """Return placement candidates filtered to those that can hit uncovered high-value targets."""
+    """Return (non_roaded, roaded) candidate bitmasks."""
     candidates = _placement_candidates()
     if not candidates:
-        return 0
+        return 0, 0
 
-    uncovered = _get_uncovered_high_value_targets()
-    if not uncovered:
-        return 0
+    targets = _high_value_targets()
+    if not targets:
+        return 0, 0
 
-    # Broad filter first
-    reachable = _sentinel_reachable(uncovered)
-    candidates &= reachable
-    if not candidates:
-        return 0
+    # Filter to candidates that can hit at least one target in some direction
+    reachable = _sentinel_all_reach(targets)
+    filtered = candidates & reachable
 
-    # Per-candidate: remove feeders (harvesters/conveyors that would feed the turret)
-    w = map_info._width
-    h = map_info._height
-    harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
-    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]
-                 | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
-    CARD_DELTAS = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+    if not filtered:
+        return 0, 0
 
-    result = 0
-    m = candidates
-    while m:
-        lsb = m & -m
-        n = lsb.bit_length() - 1
-        tx, ty = n % w, n // w
+    # Split into non-enemy-roaded vs enemy-roaded
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    enemy_idx = 1 - my_team_idx
+    enemy_roads = map_info._bm_et[map_info._IDX_ROAD] & map_info._bm_team[enemy_idx]
 
-        feeders = 0
-        for dx, dy in CARD_DELTAS:
-            nx, ny = tx + dx, ty + dy
-            if not (0 <= nx < w and 0 <= ny < h):
-                continue
-            nbit = 1 << (nx + ny * w)
-            if harvesters & nbit:
-                feeders |= nbit
-            if conveyors & nbit:
-                bdir = map_info._building_dir[nx + ny * w]
-                if bdir < 8:
-                    ddx, ddy = DIRECTIONS[bdir].delta()
-                    if ddx == -dx and ddy == -dy:
-                        feeders |= nbit
+    roaded = filtered & enemy_roads
+    non_roaded = filtered & ~enemy_roads
 
-        non_feeder = uncovered & ~feeders
-        if non_feeder:
-            for di in range(8):
-                hit = False
-                for odx, ody in map_info._SENTINEL_OFFSETS[di]:
-                    sx, sy = tx + odx, ty + ody
-                    if 0 <= sx < w and 0 <= sy < h:
-                        if non_feeder & (1 << (sx + sy * w)):
-                            hit = True
-                            break
-                if hit:
-                    result |= lsb
-                    break
+    return non_roaded, roaded
 
-        m ^= lsb
-
-    return result
 
 def score():
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:
         return 0
-    return 6 if _get_attack_candidates() else 0
+    non_roaded, roaded = _get_attack_candidates()
+    return 6 if (non_roaded or roaded) else 0
+
 
 def run():
     print("ATTACK")
-    candidates = _get_attack_candidates()
-    if not candidates:
+    non_roaded, roaded = _get_attack_candidates()
+    if not non_roaded and not roaded:
         return
 
     width = map_info._width
-    units.builder.draw_mask(candidates, 255, 0, 0)
-    best, _ = nav.closest(candidates)
+    my_team_idx = map_info._TM_INT[rc.get_team()]
 
+    # Prefer non-roaded, fall back to roaded
+    if non_roaded:
+        # units.builder.draw_mask(non_roaded, 255, 0, 0)
+        best, _ = nav.closest(non_roaded)
+    else:
+        best = None
+
+    if best is None and roaded:
+        # units.builder.draw_mask(roaded, 255, 128, 0)
+        best, _ = nav.closest(roaded)
     if best is None:
         return
 
-    # --- New logic from dragonfruit ---
-    uncovered = _get_uncovered_high_value_targets()
-    primary_threat = None
-    if uncovered:
-        primary_threat = min(map_info.iter_mask(uncovered), key=lambda t: t.distance_squared(best))
-
-    turret_type = get_best_turret_type(best, map_info._their_core, primary_threat)
-
-    direction = get_sentinel_direction(best, primary_threat) if primary_threat else Direction.NORTH
-    if direction is None:
-        direction = Direction.NORTH # Fallback
-
-    print(f"Attack state: best_pos={best}, threat={primary_threat}, type={turret_type}, dir={direction}")
-    # --- End new logic ---
-
-    best_bit = 1 << (best.x + best.y * width)
-    best_id = map_info._building_id[best.x + best.y * width]
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    best_n = best.x + best.y * width
+    best_bit = 1 << best_n
+    best_id = map_info._building_id[best_n]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
+    is_enemy_road = bool(
+        (map_info._bm_et[map_info._IDX_ROAD] & map_info._bm_team[1 - my_team_idx]) & best_bit
+    )
 
-    if best_id and not is_mine:
-        # Enemy road/marker — move onto it, fire, then step off to place
-        nav.move_to({best})
+    direction, turret_type = get_best_direction(best)
+    print(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
+
+    if is_enemy_road:
+        # Move onto enemy road, fire it, step off
+        nav.move_to(best)
         if rc.can_fire(best):
             rc.fire(best)
         for d in Direction:
@@ -385,22 +386,22 @@ def run():
                 map_info.update_move()
                 break
     else:
-        # Move adjacent to build position
+        # Move adjacent and destroy own building if needed
         nav.move_adjacent(best)
-
         if best_id and is_mine:
             if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
+                print(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)
 
-    if turret_type == EntityType.SENTINEL:
+    # Place turret
+    if turret_type == EntityType.GUNNER:
+        if rc.can_build_gunner(best, direction):
+            rc.build_gunner(best, direction)
+            map_info.update_at(best)
+    else:
         if rc.can_build_sentinel(best, direction):
             rc.build_sentinel(best, direction)
-            map_info.update_at(best)
-    elif turret_type == EntityType.GUNNER:
-        if rc.can_build_gunner(best, direction):
-            gunner_direction = best.direction_to(primary_threat) if primary_threat is not None else direction
-            rc.build_gunner(best, gunner_direction)
             map_info.update_at(best)
 
     comms.mark(best, comm_flag)

@@ -20,20 +20,7 @@ def _healable_mask():
     my_team_idx = map_info._TM_INT[rc.get_team()]
     my_buildings = map_info._bm_team[my_team_idx]
 
-    healable_types = (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_GUNNER]
-        | map_info._bm_et[map_info._IDX_SENTINEL]
-        | map_info._bm_et[map_info._IDX_BREACH]
-        | map_info._bm_et[map_info._IDX_LAUNCHER]
-        | map_info._bm_et[map_info._IDX_HARVESTER]
-        | map_info._bm_et[map_info._IDX_CORE]
-    )
-
-    return my_buildings & healable_types
+    return my_buildings
 
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
@@ -127,7 +114,7 @@ def run():
         return
 
     # Follow enemy bots threatening my conveyors
-    units.builder.draw_mask(targets, 255, 0, 0)
+    # units.builder.draw_mask(targets, 255, 0, 0)
     best, dist = nav.closest(targets)
     if best is None:
         enemy_pos = _enemy_near_conveyors()

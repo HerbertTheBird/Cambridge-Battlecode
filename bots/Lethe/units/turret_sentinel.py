@@ -46,8 +46,32 @@ def _should_stay():
     return False
 
 
-def _tile_score(tile):
+def _get_feeder_positions():
+    """Return set of positions that feed this sentinel (don't shoot these)."""
+    my_pos = rc.get_position()
+    feeders = set()
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(my_pos.x + dx, my_pos.y + dy)
+        if not map_info.in_bounds(p):
+            continue
+        bid = rc.get_tile_building_id(p)
+        if not bid:
+            continue
+        etype = rc.get_entity_type(bid)
+        if etype == EntityType.HARVESTER:
+            feeders.add(p)
+        elif etype in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
+            d = rc.get_direction(bid)
+            ddx, ddy = d.delta()
+            if p.x + ddx == my_pos.x and p.y + ddy == my_pos.y:
+                feeders.add(p)
+    return feeders
+
+
+def _tile_score(tile, feeders):
     my_team = rc.get_team()
+    if tile in feeders:
+        return 0
     # Turrets hit builder bot first if present
     builder_id = rc.get_tile_builder_bot_id(tile)
     if builder_id and rc.get_team(builder_id) != my_team:
@@ -74,13 +98,14 @@ def run():
     if rc.get_ammo_amount() < 5:
         return
 
+    feeders = _get_feeder_positions()
     best_target = None
     best_score = 0
 
     for tile in rc.get_attackable_tiles():
         if not rc.can_fire(tile):
             continue
-        s = _tile_score(tile)
+        s = _tile_score(tile, feeders)
         if s > best_score:
             best_score = s
             best_target = tile
