@@ -12,9 +12,11 @@ from helpers import bot_path_color, check_for_resource_increase, get_predicted_e
 from vision import VisionCache
 from log import log, log_time
 from units import run_core, run_builder, run_gunner, run_turret, run_launcher
-
+import random
 class Player:
     def __init__(self):
+        random.seed(42)
+
         self.initialized = False
         
         self.nav = Navigator()

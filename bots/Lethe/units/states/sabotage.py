@@ -7,7 +7,7 @@ from cambc import *
 rc: Controller = None
 nav: Pathing = None
 
-comm_flag = 6
+comm_flag = 5
 
 def init(c: Controller):
     global rc, nav
@@ -37,7 +37,7 @@ def _sabotage_targets():
     return targets
 
 def score():
-    return 6 if _sabotage_targets() else 0
+    return 5 if _sabotage_targets() else 0
 
 def run():
     print("SABOTAGE")
@@ -45,23 +45,7 @@ def run():
     if not targets:
         return
 
-    core = map_info._my_core
-    if core is None:
-        return
-
-    width = map_info._width
-    reached = 1 << (core.x + core.y * width)
-    best = None
-
-    for _ in range(width + map_info._height):
-        found = targets & reached
-        if found:
-            lsb = found & -found
-            n = lsb.bit_length() - 1
-            best = Position(n % width, n // width)
-            break
-        reached = map_info.expand_manhattan(reached)
-
+    best, _ = nav.closest(targets)
     if best is None:
         return
 

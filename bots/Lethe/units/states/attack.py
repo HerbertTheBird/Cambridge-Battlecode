@@ -3,13 +3,12 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
-from log import log
 
 
 rc: Controller = None
 nav: Pathing = None
 
-comm_flag = 7
+comm_flag = 6
 
 DIRECTIONS = [
     Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
@@ -236,9 +235,15 @@ def _placement_candidates():
 
     # Exclusions
     candidates &= ~map_info._bm_enemy_turret_threat
-    candidates &= ~map_info._bm_enemy_launch_adj
     candidates &= ~map_info._bm_env[map_info._IDX_ENV_WALL]
     candidates &= ~units.builder.forget[comm_flag]
+
+    # Exclude tiles with any builder bots
+    w = map_info._width
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
+            ep = rc.get_position(uid)
+            candidates &= ~(1 << (ep.x + ep.y * w))
 
     return candidates
 
@@ -275,40 +280,74 @@ def _get_attack_candidates():
     if not uncovered:
         return 0
 
-    # Positions from which a sentinel could hit any uncovered target
+    # Broad filter first
     reachable = _sentinel_reachable(uncovered)
+    candidates &= reachable
+    if not candidates:
+        return 0
 
-    return candidates & reachable
+    # Per-candidate: remove feeders (harvesters/conveyors that would feed the turret)
+    w = map_info._width
+    h = map_info._height
+    harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
+    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]
+                 | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
+    CARD_DELTAS = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+
+    result = 0
+    m = candidates
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        tx, ty = n % w, n // w
+
+        feeders = 0
+        for dx, dy in CARD_DELTAS:
+            nx, ny = tx + dx, ty + dy
+            if not (0 <= nx < w and 0 <= ny < h):
+                continue
+            nbit = 1 << (nx + ny * w)
+            if harvesters & nbit:
+                feeders |= nbit
+            if conveyors & nbit:
+                bdir = map_info._building_dir[nx + ny * w]
+                if bdir < 8:
+                    ddx, ddy = DIRECTIONS[bdir].delta()
+                    if ddx == -dx and ddy == -dy:
+                        feeders |= nbit
+
+        non_feeder = uncovered & ~feeders
+        if non_feeder:
+            for di in range(8):
+                hit = False
+                for odx, ody in map_info._SENTINEL_OFFSETS[di]:
+                    sx, sy = tx + odx, ty + ody
+                    if 0 <= sx < w and 0 <= sy < h:
+                        if non_feeder & (1 << (sx + sy * w)):
+                            hit = True
+                            break
+                if hit:
+                    result |= lsb
+                    break
+
+        m ^= lsb
+
+    return result
 
 def score():
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:
         return 0
-    return 7 if _get_attack_candidates() else 0
+    return 6 if _get_attack_candidates() else 0
 
 def run():
-    log("ATTACK")
+    print("ATTACK")
     candidates = _get_attack_candidates()
     if not candidates:
         return
 
-    core = map_info._my_core
-    if core is None:
-        return
-
     width = map_info._width
-
-    # Find closest candidate to core via Manhattan expansion
-    reached = 1 << (core.x + core.y * width)
-    best = None
-
-    for _ in range(width + map_info._height):
-        found = candidates & reached
-        if found:
-            lsb = found & -found
-            n = lsb.bit_length() - 1
-            best = Position(n % width, n // width)
-            break
-        reached = map_info.expand_manhattan(reached)
+    units.builder.draw_mask(candidates, 255, 0, 0)
+    best, _ = nav.closest(candidates)
 
     if best is None:
         return
@@ -325,7 +364,7 @@ def run():
     if direction is None:
         direction = Direction.NORTH # Fallback
 
-    log(f"Attack state: best_pos={best}, threat={primary_threat}, type={turret_type}, dir={direction}")
+    print(f"Attack state: best_pos={best}, threat={primary_threat}, type={turret_type}, dir={direction}")
     # --- End new logic ---
 
     best_bit = 1 << (best.x + best.y * width)
@@ -343,31 +382,25 @@ def run():
                 continue
             if rc.can_move(d):
                 rc.move(d)
+                map_info.update_move()
                 break
     else:
         # Move adjacent to build position
-        adj = set()
-        for d in Direction:
-            if d == Direction.CENTRE:
-                continue
-            p = best.add(d)
-            if map_info.in_bounds(p) and map_info.is_passable(p):
-                adj.add(p)
-        if not adj:
-            return
-        nav.move_to(adj)
+        nav.move_adjacent(best)
 
         if best_id and is_mine:
-            if rc.can_destroy(best):
+            if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
                 rc.destroy(best)
-                map_info.note_destroy(best)
+                map_info.update_at(best)
 
     if turret_type == EntityType.SENTINEL:
         if rc.can_build_sentinel(best, direction):
             rc.build_sentinel(best, direction)
+            map_info.update_at(best)
     elif turret_type == EntityType.GUNNER:
         if rc.can_build_gunner(best, direction):
             gunner_direction = best.direction_to(primary_threat) if primary_threat is not None else direction
             rc.build_gunner(best, gunner_direction)
+            map_info.update_at(best)
 
     comms.mark(best, comm_flag)

@@ -107,24 +107,42 @@ def encode(target, type, sym=0):
     return ((rc.get_id()&_ID_MASK) + (target.x << (ID_BITS)) + (target.y << (ID_BITS + 6)) + ((rc.get_current_round()&_TURN_MASK)<<(ID_BITS+POS_BITS)) + (sym << (ID_BITS + POS_BITS + TURN_BITS)) + (type << (ID_BITS + POS_BITS + TURN_BITS + SYM_BITS)))^key
 def decode(v):
     return (decode_location(v), decode_id(v), decode_turn(v), decode_sym(v), decode_type(v))
+def _is_bad_marker_spot(pos):
+    """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
+    w = map_info._width
+    bit = 1 << (pos.x + pos.y * w)
+    if map_info._bm_conveyor_targets & bit:
+        return True
+    harv = map_info._bm_et[map_info._IDX_HARVESTER]
+    if harv:
+        harv_adj = map_info.expand_manhattan(harv)
+        if harv_adj & bit:
+            return True
+    return False
+
 def mark(target, type):
     rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
     print("mark", target, type)
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
+    val = encode(target, type, sym)
+    # Pass 1: empty tiles, not bad spots
     for i in rc.get_nearby_tiles(2):
-        if not rc.get_tile_building_id(i) and rc.can_place_marker(i):
-            rc.place_marker(i, encode(target, type, sym))
+        if not rc.get_tile_building_id(i) and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
+            rc.place_marker(i, val)
             return
+    # Pass 2: overwrite my marker, not bad spots
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
-        if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i):
-            rc.place_marker(i, encode(target, type, sym))
+        if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
+            rc.place_marker(i, val)
             return
+    # Pass 3: destroy my road, not bad spots
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
-        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team():
+        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and not _is_bad_marker_spot(i) and not rc.get_tile_builder_bot_id(i):
             if rc.can_destroy(i):
                 rc.destroy(i)
+                map_info.update_at(i)
             if rc.can_place_marker(i):
-                rc.place_marker(i, encode(target, type, sym))
+                rc.place_marker(i, val)
                 return

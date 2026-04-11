@@ -7,32 +7,16 @@ from cambc import *
 rc: Controller = None
 nav: Pathing = None
 
-comm_flag = 5
+comm_flag = 7
 
-# Max HP lookup per entity type index
-_MAX_HP = {
-    map_info._IDX_CONVEYOR: 20,
-    map_info._IDX_ARMOURED_CONVEYOR: 50,
-    map_info._IDX_BRIDGE: 20,
-    map_info._IDX_SPLITTER: 20,
-    map_info._IDX_HARVESTER: 30,
-    map_info._IDX_FOUNDRY: 50,
-    map_info._IDX_ROAD: 5,
-    map_info._IDX_BARRIER: 30,
-    map_info._IDX_GUNNER: 40,
-    map_info._IDX_SENTINEL: 30,
-    map_info._IDX_BREACH: 60,
-    map_info._IDX_LAUNCHER: 30,
-    map_info._IDX_CORE: 500,
-}
 
 def init(c: Controller):
     global rc, nav
     rc = c
     nav = Pathing(rc)
 
-def _heal_targets():
-    """Bitmask of friendly buildings not at full HP (conveyors + turrets + core)."""
+def _healable_mask():
+    """Bitmask of friendly healable building types."""
     my_team_idx = map_info._TM_INT[rc.get_team()]
     my_buildings = map_info._bm_team[my_team_idx]
 
@@ -49,71 +33,137 @@ def _heal_targets():
         | map_info._bm_et[map_info._IDX_CORE]
     )
 
-    candidates = my_buildings & healable_types & ~units.builder.forget[comm_flag]
-    if not candidates:
-        return 0
+    return my_buildings & healable_types
 
-    # Filter to damaged only
-    building_hp = map_info._building_hp
-    bm_et = map_info._bm_et
-    width = map_info._width
-    damaged = 0
-    mask = candidates
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        hp = building_hp[n]
-        if hp > 0:
-            for idx, max_hp in _MAX_HP.items():
-                if bm_et[idx] & lsb:
-                    if hp < max_hp-2:
-                        damaged |= lsb
-                    break
-        mask ^= lsb
-    return damaged
+def _heal_targets():
+    """Bitmask of friendly damaged buildings."""
+    return _healable_mask() & map_info._bm_damaged & ~units.builder.forget[comm_flag]
+
+def _very_damaged_targets():
+    """Bitmask of friendly buildings with > 2 damage."""
+    return _healable_mask() & map_info._bm_very_damaged
 
 def score():
-    return 8 if _heal_targets() else 0
+    if _very_damaged_targets():
+        return 7
+    if _enemy_near_conveyors() is not None:
+        return 7
+    if _heal_targets():
+        return 5.5
+    return 0
+
+def _enemy_near_conveyors():
+    """Find an enemy builder bot within 4 Chebyshev of my conveyors, only if no ally is already adjacent."""
+    my_team = rc.get_team()
+    my_team_idx = map_info._TM_INT[my_team]
+    my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    if not my_convs:
+        return None
+    conv_adj = my_convs
+    for _ in range(4):
+        conv_adj = map_info.expand_chebyshev(conv_adj)
+    my_pos = rc.get_position()
+    # Collect allied builder bot positions for adjacency check
+    allies = []
+    for uid in rc.get_nearby_units():
+        if rc.get_team(uid) == my_team and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
+            ap = rc.get_position(uid)
+            if ap != my_pos:
+                allies.append(ap)
+    # Check all enemies, skip those already covered by an ally
+    for uid in rc.get_nearby_units():
+        if rc.get_team(uid) != my_team and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
+            ep = rc.get_position(uid)
+            if not (conv_adj & (1 << (ep.x + ep.y * map_info._width))):
+                continue
+            ally_adjacent = False
+            for ap in allies:
+                if max(abs(ap.x - ep.x), abs(ap.y - ep.y)) <= 1:
+                    ally_adjacent = True
+                    break
+            if not ally_adjacent:
+                return ep
+    return None
 
 def run():
     print("HEAL")
-    targets = _heal_targets()
+    very_damaged = _very_damaged_targets()
+    if very_damaged:
+        # Find most damaged among very damaged
+        worst_damage = 0
+        mask = very_damaged
+        while mask:
+            lsb = mask & -mask
+            n = lsb.bit_length() - 1
+            hp = map_info._building_hp[n]
+            for i in range(map_info._NUM_ET):
+                if map_info._bm_et[i] & lsb:
+                    damage = map_info._MAX_HP_BY_IDX[i] - hp
+                    if damage > worst_damage:
+                        worst_damage = damage
+                    break
+            mask ^= lsb
+        # Target all very damaged within 2 damage of the worst
+        threshold = worst_damage - 2
+        targets = 0
+        mask = very_damaged
+        while mask:
+            lsb = mask & -mask
+            n = lsb.bit_length() - 1
+            hp = map_info._building_hp[n]
+            for i in range(map_info._NUM_ET):
+                if map_info._bm_et[i] & lsb:
+                    damage = map_info._MAX_HP_BY_IDX[i] - hp
+                    if damage >= threshold:
+                        targets |= lsb
+                    break
+            mask ^= lsb
+    else:
+        targets = _heal_targets()
     if not targets:
+        enemy_pos = _enemy_near_conveyors()
+        if enemy_pos is not None:
+            nav.move_to(enemy_pos, avoid_empty=True)
         return
 
-    core = map_info._my_core
-    if core is None:
+    # Follow enemy bots threatening my conveyors
+    units.builder.draw_mask(targets, 255, 0, 0)
+    best, dist = nav.closest(targets)
+    if best is None:
+        enemy_pos = _enemy_near_conveyors()
+        if enemy_pos is not None:
+            nav.move_to(enemy_pos, avoid_empty=True)
         return
 
     width = map_info._width
-    reached = 1 << (core.x + core.y * width)
-    best = None
 
-    for _ in range(width + map_info._height):
-        found = targets & reached
-        if found:
-            lsb = found & -found
-            n = lsb.bit_length() - 1
-            best = Position(n % width, n // width)
-            break
-        reached = map_info.expand_manhattan(reached)
+    nav.move_adjacent(best, avoid_turret=False, avoid_empty=True)
+    print("want to heal", best, dist, rc.get_action_cooldown())
 
-    if best is None:
-        return
-
-    danger = map_info._bm_enemy_turret_threat | map_info._bm_enemy_launch_adj
-    adj = set()
+    # Heal the most damaged adjacent building we can
+    healable = _healable_mask() & map_info._bm_damaged
+    best_heal = None
+    best_heal_damage = -1
     for d in Direction:
-        if d == Direction.CENTRE:
+        p = rc.get_position().add(d)
+        if not map_info.in_bounds(p):
             continue
-        p = best.add(d)
-        if map_info.in_bounds(p) and map_info.is_passable(p) and not (danger & (1 << (p.x + p.y * width))):
-            adj.add(p)
-    if not adj:
-        adj.add(best)
-    nav.move_to(adj)
-    print("want to heal", best, rc.get_action_cooldown(), adj)
-    if rc.can_heal(best):
-        rc.heal(best)
+        pbit = 1 << (p.x + p.y * width)
+        if not (healable & pbit):
+            continue
+        if not rc.can_heal(p):
+            continue
+        n = p.x + p.y * width
+        hp = map_info._building_hp[n]
+        for i in range(map_info._NUM_ET):
+            if map_info._bm_et[i] & pbit:
+                damage = map_info._MAX_HP_BY_IDX[i] - hp
+                print(p, damage)
+                if damage > best_heal_damage:
+                    best_heal_damage = damage
+                    best_heal = p
+                break
+    if best_heal is not None:
+        rc.heal(best_heal)
 
-    comms.mark(best, comm_flag)
+    # comms.mark(best, comm_flag)

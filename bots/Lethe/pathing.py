@@ -25,42 +25,34 @@ Step: TypeAlias = tuple[int, int, int, int]
 
 bridge_cost = 10
 barrier_cost = 10
-adj_launch_cost = 20
+threat_cost = 20
 conveyor_cost = 10
 
 
-def _is_builder_nav(pathing: "Pathing") -> bool:
-    return getattr(builder, "nav", None) is pathing
 
 
-def _is_builder_ore_nav(pathing: "Pathing") -> bool:
-    return getattr(builder, "ore_nav", None) is pathing
 destroyed_barriers = dict()
-def rebuild_broken_barriers(rc):
-    # print("broken", self.destroyed_barriers)
+def rebuild_broken_barriers(rc: Controller):
     built = []
     barrier_cost = rc.get_barrier_cost()[0]
     my_pos = rc.get_position()
     for p in destroyed_barriers:
         if not rc.is_in_vision(p):
             continue
-        if destroyed_barriers[p]+2 > rc.get_current_round():
+        if destroyed_barriers[p]+1 > rc.get_current_round():
             continue
         if p == my_pos:
             continue
         if rc.get_global_resources()[0] < barrier_cost:
             continue
         id = rc.get_tile_building_id(p)
-        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p):
-            # print("barrier place break", p)
+        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p):
             rc.destroy(p)
-            map_info.note_destroy(p)
+            map_info.update_at(p)
         if rc.can_build_barrier(p):
-            # print("barrier place", p)
             rc.build_barrier(p)
+            map_info.update_at(p)
             built.append(p)
-    # print("put back", built)
-
     for p in built:
         destroyed_barriers.pop(p)
 class Pathing:
@@ -82,6 +74,42 @@ class Pathing:
     path_idx = 0
 
 
+
+    def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
+        """Find closest bit in *targets* from *pos*, avoiding get_avoid(F,F,F).
+
+        Uses Chebyshev flood-fill on bitmasks.  Returns (position, distance) or
+        (None, -1) if unreachable.
+        """
+        if targets == 0:
+            return None, -1
+        if pos is None:
+            pos = self.rc.get_position()
+        w = map_info._width
+        board = (1 << (w * map_info._height)) - 1
+        avoid = map_info.get_avoid(False, False, False)
+        passable = (~avoid & board) |  targets
+        start = 1 << (pos.x + pos.y * w)
+        if start & targets:
+            return pos, 0
+        visited = start
+        frontier = start
+        dist = 0
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        while frontier:
+            dist += 1
+            h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+            expanded = h | (h << w) | (h >> w)
+            frontier = expanded & passable & ~visited
+            hit = frontier & targets
+            if hit:
+                lsb = hit & -hit
+                n = lsb.bit_length() - 1
+
+                return Position(n % w, n // w), dist
+            visited |= frontier
+        return None, -1
 
     def __init__(self, c: Controller):
         self.width = c.get_map_width()
@@ -199,21 +227,21 @@ class Pathing:
         ]
 
     def _bridge_zone(self, center: Position) -> int:
-        cx, cy = center.x, center.y
-        w, h = self.width, self.height
-        mask = 0
-        for dx, dy in self._bridge_offsets:
-            nx, ny = cx + dx, cy + dy
-            if 0 <= nx < w and 0 <= ny < h:
-                mask |= 1 << (nx + ny * w)
-        return mask
+        return 0
+        # cx, cy = center.x, center.y
+        # w, h = self.width, self.height
+        # mask = 0
+        # for dx, dy in self._bridge_offsets:
+        #     nx, ny = cx + dx, cy + dy
+        #     if 0 <= nx < w and 0 <= ny < h:
+        #         mask |= 1 << (nx + ny * w)
+        # return mask
 
     def move(self, dir: Direction):
         rc = self.rc
         px, py = rc.get_position().x, rc.get_position().y
         dx, dy = dir.delta()
         new_pos = Position(px + dx, py + dy)
-        # print("move pre", rc.get_position())
         if not map_info.in_bounds(new_pos):
             return False
         id = rc.get_tile_building_id(new_pos)
@@ -221,15 +249,16 @@ class Pathing:
             return False
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos):
             rc.destroy(new_pos)
-            map_info.note_destroy(new_pos)
+            map_info.update_at(new_pos)
             destroyed_barriers[new_pos] = rc.get_current_round()
         if rc.can_build_road(new_pos):
             rc.build_road(new_pos)
+            map_info.update_at(new_pos)
         if rc.can_move(dir):
             rc.move(dir)
+            map_info.update_move()
             self.last_last_dir = self.last_dir
             self.last_dir = dir.delta()
-            # print("move post", rc.get_position())
             return True
         return False
 
@@ -241,7 +270,7 @@ class Pathing:
         start: int,
         target: int,
         barriers: int,
-        adj_launch: int,
+        threat: int = 0,
         routing: bool = False,
     ) -> list[Position] | None:
         width = self.width
@@ -274,7 +303,7 @@ class Pathing:
         h_minus_1 = height - 1
 
         _barrier_cost = barrier_cost
-        _adj_launch_cost = adj_launch_cost
+        _threat_cost = threat_cost
 
         while not (current & target):
             cur_idx = current.bit_length() - 1
@@ -301,8 +330,8 @@ class Pathing:
                 extra_cost = 0
                 if current & barriers:
                     extra_cost += _barrier_cost
-                if current & adj_launch:
-                    extra_cost += _adj_launch_cost
+                if current & threat:
+                    extra_cost += _threat_cost
 
                 # Compute preferred_family once per outer iteration
                 preferred_family = 0  # 0 = no preference
@@ -371,7 +400,7 @@ class Pathing:
 
         return [Position((b.bit_length() - 1) % width, (b.bit_length() - 1) // width) for b in path_bits]
 
-    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: int | None = None, routing = False, bridge_zone: int | None = None) -> list[Position] | None:
+    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: int | None = None, routing = False, bridge_zone: int | None = None, avoid_turret = True) -> list[Position] | None:
         width = self.width
         if avoid_p is None:
             avoid_p = map_info.get_avoid(False, True, False)
@@ -404,17 +433,20 @@ class Pathing:
 
         start_time = time.perf_counter_ns()
 
-        # Barriers and enemy launch adjacency directly from bitmasks
+        # Barriers directly from bitmasks
         my_team_idx = map_info._TM_INT[self.rc.get_team()]
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
-        adj_launch = map_info._bm_enemy_launch_adj | map_info._bm_enemy_turret_threat
         barriers &= ~start
-        adj_launch &= ~start
-        # builder.draw_mask(adj_launch, 255, 0, 0)
 
+        # Threat as soft cost — only active when not hard-avoided (bot is inside threat zone)
+        threat = map_info._bm_enemy_launch_adj
+        if avoid_turret:
+            threat |= map_info._bm_enemy_turret_threat
+        if threat & start:
+            threat &= ~start
         convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
         if not routing:
-            max_start = barrier_cost + adj_launch_cost
+            max_start = barrier_cost + threat_cost
             can_visit = [0] * (max_start + 1)
             m = target
             while m:
@@ -422,8 +454,8 @@ class Pathing:
                 cost = 0
                 if barriers & lsb:
                     cost += barrier_cost
-                if adj_launch & lsb:
-                    cost += adj_launch_cost
+                if threat & lsb:
+                    cost += threat_cost
                 can_visit[cost] |= lsb
                 m ^= lsb
         else:
@@ -440,7 +472,7 @@ class Pathing:
             visited |= frontier
             if frontier & start:
                 end_time = time.perf_counter_ns()
-                self.path = self.reconstruct_path(can_visit, start, target, barriers, adj_launch, routing)
+                self.path = self.reconstruct_path(can_visit, start, target, barriers, threat, routing)
                 self.path_idx = 0
                 print("bfs time " + str((end_time-start_time)/1000) + "us")
 
@@ -461,25 +493,18 @@ class Pathing:
                         new &= ~bridge_zone
                     can_visit[(i+step[2])] |= new
             else:
-                can_visit.extend([0]*(i+1+barrier_cost+adj_launch_cost+1-len(can_visit)))
+                can_visit.extend([0]*(i+1+barrier_cost+threat_cost+1-len(can_visit)))
                 for step in DIRS:
                     offset = step[0]+step[1]*width
                     new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
-                    can_visit[i+step[2]] |= (new & ~barriers & ~adj_launch)
-                    can_visit[i+step[2]+barrier_cost] |= (new & barriers & ~adj_launch)
-                    can_visit[i+step[2]+adj_launch_cost] |= (new & ~barriers & adj_launch)
-                    can_visit[i+step[2]+barrier_cost+adj_launch_cost] |= (new & barriers & adj_launch)
+                    can_visit[i+step[2]] |= (new & ~barriers & ~threat)
+                    can_visit[i+step[2]+barrier_cost] |= (new & barriers & ~threat)
+                    can_visit[i+step[2]+threat_cost] |= (new & ~barriers & threat)
+                    can_visit[i+step[2]+barrier_cost+threat_cost] |= (new & barriers & threat)
             i+=1
         self.path = None
         return None
 
-    def moves_through_impassible(self, path: list[Position], avoid: int) -> bool:
-        width = self.width
-        for i in range(1, len(path) - 1):
-            p = path[i]
-            if avoid & (1 << (p.x + p.y * width)):
-                return True
-        return False
 
     def execute_path(self, sample_path=None, path_idx_in=None):
         if sample_path is None:
@@ -498,15 +523,43 @@ class Pathing:
             return True
         return False
 
-    def move_to(self, target: Position | set[Position]):
+    def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
+        """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
+        rc = self.rc
+        adj = set()
+        for d in ALL_DIRS:
+            if d == Direction.CENTRE:
+                continue
+            p = pos.add(d)
+            if not map_info.in_bounds(p):
+                continue
+            if p == rc.get_position():
+                adj.add(p)
+                continue
+            if not map_info.is_passable(p):
+                continue
+            if rc.is_in_vision(p) and rc.get_tile_builder_bot_id(p):
+                continue
+            adj.add(p)
+        if not adj:
+            if fallback is not None:
+                adj.add(fallback)
+            else:
+                adj.add(pos)
+        return self.move_to(adj, **kwargs)
+
+    def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
         print("move to", target)
         if isinstance(target, Position):
             target = {target}
         if target != self.target_p:
             self.forget_launcher.clear()
-        # print("move to ", target)
         avoid = map_info.get_avoid(False, True, False)
-        # builder.draw_mask(avoid, 255, 0, 0)
+        if avoid_empty:
+            has_building = 0
+            for i in range(map_info._NUM_ET):
+                has_building |= map_info._bm_et[i]
+            avoid |= map_info._bm_seen & ~has_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = self.rc.get_position()
         if target == self.target_p and self.rc.get_position() == self.prev_pos and self.rc.get_position() not in target:
             self.stuck_turns += 1
@@ -518,57 +571,13 @@ class Pathing:
             for i in ALL_DIRS:
                 if self.rc.can_move(i):
                     self.rc.move(i)
+                    map_info.update_move()
                     return True
 
-        path = self.bfs(my_pos, target, avoid, False)
+        path = self.bfs(my_pos, target, avoid, False, avoid_turret=avoid_turret)
         if path:
             for i in range(len(path)-1):
                 self.rc.draw_indicator_line(path[i], path[i+1], 0, 255, 255)
-        marked = False
-        rc = self.rc
-        if len(destroyed_barriers) == 0:
-            for dr, (dx, dy) in ALL_DIRS_DELTAS:
-                pos = Position(my_pos.x + dx, my_pos.y + dy)
-                if not map_info.in_bounds(pos):
-                    continue
-                id = rc.get_tile_building_id(pos)
-                if id and rc.get_entity_type(id) == EntityType.LAUNCHER and rc.get_team(id) == rc.get_team() and pos not in self.forget_launcher:
-                    for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
-                        p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
-                        if not map_info.in_bounds(p2):
-                            continue
-                        if rc.can_place_marker(p2):
-                            closest = None
-                            for t in target:
-                                if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
-                                    closest = t
-                            rc.place_marker(p2, comms.encode_launch(closest))
-                            self.forget_launcher.add(pos)
-                            marked = True
-                            break
-                    if not marked:
-                        for dr2, (dx2, dy2) in ALL_DIRS_DELTAS:
-                            p2 = Position(my_pos.x + dx2, my_pos.y + dy2)
-                            if not map_info.in_bounds(p2):
-                                continue
-                            id2 = rc.get_tile_building_id(p2)
-                            if id2 and rc.get_team(id2) == rc.get_team() and rc.get_entity_type(
-                                    id2) == EntityType.ROAD and rc.can_destroy(p2) and dr != Direction.CENTRE:
-                                rc.destroy(p2)
-                                map_info.note_destroy(p2)
-                            if rc.can_place_marker(p2):
-                                closest = None
-                                for t in target:
-                                    if closest is None or t.distance_squared(pos) < closest.distance_squared(pos):
-                                        closest = t
-                                rc.place_marker(p2, comms.encode_launch(closest))
-                                self.forget_launcher.add(pos)
-                                marked = True
-                                break
-                if marked:
-                    break
-            if marked:
-                return True
         if not path:
             return False
         self.execute_path(path)
@@ -597,7 +606,23 @@ class Pathing:
             self.rc.draw_indicator_dot(path[i], 255, 0, 255)
         return path
 
-
+    def conveyor_cost(self, path, scaling = None):
+        if scaling is None:
+            scaling = self.rc.get_scale_percent()/100
+        if not path:
+            return None
+        cost = 0
+        rc = self.rc
+        scaling = rc.get_scale_percent()/100
+        for i in range(len(path) - 1):
+            is_bridge = path[i].distance_squared(path[i + 1]) > 1
+            if is_bridge:
+                cost += 20*scaling
+                scaling += 0.1
+            else:
+                cost += 3*scaling
+                scaling += 0.01
+        return cost
     def _get_conveyor_targets_and_avoid(
         self,
     ):
