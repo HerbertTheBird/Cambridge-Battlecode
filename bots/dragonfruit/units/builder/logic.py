@@ -2,7 +2,7 @@ from itertools import chain
 
 from cambc import Controller, Direction, Environment, GameConstants, Position, EntityType, ResourceType, Team
 
-from globals import DIRECTIONS, ALL_DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, State, Symmetry, INF, DELTAS, TURN_CPU_BUDGET_US
+from globals import DIRECTIONS, ALL_DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, State, Symmetry, INF, DELTAS, get_remaining_turn_budget_us
 
 from helpers import (
     get_nearest_core_tile,
@@ -1266,7 +1266,7 @@ def advance_a_star(player, ct: Controller, reserve_us: int, *, draw: bool) -> in
     if not sync_a_star_destination(player):
         return 0
 
-    budget = max(0, TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - reserve_us)
+    budget = get_remaining_turn_budget_us(ct.get_cpu_time_elapsed(), reserve_us)
     if budget > 0:
         player.a_star_nav.advance_compute(ct, player.map, budget, draw=draw)
     return budget

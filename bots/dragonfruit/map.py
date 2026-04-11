@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType, Team
 
-from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF, DELTAS, TURN_CPU_BUDGET_US, END_TURN_RESERVE_US
+from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF, DELTAS, TURN_CPU_BUDGET_US, END_TURN_RESERVE_US, CPU_SAFETY_MARGIN_US
 from comms import Comms
 from helpers import get_foundry_positions, is_core_tile
 
@@ -317,7 +317,7 @@ class Map:
         while self.symmetric_update_y < height:
             idx = self.symmetric_update_y * width + self.symmetric_update_x
             if idx % 50 == 0:
-                budget = TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - END_TURN_RESERVE_US
+                budget = TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - END_TURN_RESERVE_US - CPU_SAFETY_MARGIN_US
                 if budget <= 0:
                     return
 

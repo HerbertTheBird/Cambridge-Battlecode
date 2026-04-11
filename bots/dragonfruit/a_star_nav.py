@@ -3,16 +3,17 @@ from array import array
 
 from cambc import Controller, EntityType, Environment, Position
 
-from globals import CONVEYOR_TYPES
+from globals import (
+    ASTAR_CPU_CHECK_INTERVAL,
+    ASTAR_MIN_COMPUTE_BUDGET_US,
+    CONVEYOR_TYPES,
+)
 
 WEIGHT = 2.0
 MIN_WEIGHT = 1.5
-MAX_CPU_US = 1900
-CPU_CHECK_INTERVAL = 16
 BARRIER_PENALTY = 15
 ALLY_LAUNCHER_PENALTY = 30
 LAUNCHER_ADJ_PENALTY = 2
-MIN_COMPUTE_BUDGET_US = 120
 
 DIRS = [
     (0, -1),
@@ -139,9 +140,7 @@ class AStarNavigator:
     def advance_compute(self, ct: Controller, map_obj, budget_us: int, draw: bool = False):
         if self.destination is None:
             return
-        if ct.get_cpu_time_elapsed() >= MAX_CPU_US:
-            return
-        if budget_us < MIN_COMPUTE_BUDGET_US:
+        if budget_us < ASTAR_MIN_COMPUTE_BUDGET_US:
             return
         targets = self._get_astar_targets(map_obj)
         if not targets:
@@ -274,10 +273,10 @@ class AStarNavigator:
         for pos in avoid:
             self.avoid_stamp[pos.y * self.width + pos.x] = self.avoid_id
 
-        deadline_us = min(MAX_CPU_US, ct.get_cpu_time_elapsed() + budget_us)
+        deadline_us = ct.get_cpu_time_elapsed() + budget_us
 
         while self.heap:
-            if self.iter % CPU_CHECK_INTERVAL == 0 and ct.get_cpu_time_elapsed() >= deadline_us:
+            if self.iter % ASTAR_CPU_CHECK_INTERVAL == 0 and ct.get_cpu_time_elapsed() >= deadline_us:
                 return None
             self.iter += 1
             if self.iter > self.max_iter:
