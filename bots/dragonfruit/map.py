@@ -181,9 +181,9 @@ class Map:
             return 0
         return self._enemy_launcher_adj[idx]
 
-    def _mark_enemy_launcher_adj(self, pos: Position):
-        px = pos.x
-        py = pos.y
+    def _adjust_enemy_launcher_adj_idx(self, launcher_idx: int, delta: int):
+        px = launcher_idx % self.width
+        py = launcher_idx // self.width
         for d in DIRECTIONS:
             dx, dy = DELTAS[d]
             x = px + dx
@@ -191,8 +191,11 @@ class Map:
             if not on_map_coords(x, y, self.width, self.height):
                 continue
             idx = y * self.width + x
-            if self._enemy_launcher_adj[idx] < 255:
-                self._enemy_launcher_adj[idx] += 1
+            if delta > 0:
+                if self._enemy_launcher_adj[idx] < 255:
+                    self._enemy_launcher_adj[idx] += 1
+            elif self._enemy_launcher_adj[idx] > 0:
+                self._enemy_launcher_adj[idx] -= 1
 
     def get_conveyor_output(self, pos: Position) -> Position | None:
         idx = self._idx_if_on_map(pos)
@@ -629,7 +632,6 @@ class Map:
     def update_vision(self, ct: Controller, comms: Comms):
         log_time(ct, "Start of update vision")
         self.current_round = ct.get_current_round()
-        self._enemy_launcher_adj = bytearray(self.tile_count)
         self._feeds_turret_cache.clear()
         self._feeds_building_cache.clear()
         self._feeds_building_in_vision_cache.clear()
@@ -670,6 +672,7 @@ class Map:
             y = pos.y
             idx = y * width + x
             prev_output_idx = output_idx[idx]
+            prev_was_enemy_launcher = entity_types[idx] == EntityType.LAUNCHER and entity_teams[idx] != my_team
             prev_was_ore_harvester = False
             if tile_flags[idx] & FLAG_SEEN and entity_types[idx] == EntityType.HARVESTER:
                 prev_env = env_grid[idx]
@@ -703,58 +706,58 @@ class Map:
                 if etype == EntityType.MARKER:
                     if team == my_team:
                         comms.read_marker(ct_get_marker_value(bid), pos, bid, self.current_round)
-                    self._clear_tile_entity_idx(idx)
-                    tile_flags[idx] &= _CLEAR_ENTITY_FLAGS
-                    if output_idx[idx] >= 0:
-                        self._remove_conveyor_tracking(pos)
-                else:
-                    if etype == EntityType.CORE:
-                        if cached_bid != bid:
-                            self.check_core_symmetry(pos)
-                    assert etype is not None
-                    assert team is not None
-                    self._set_tile_entity_idx(idx, bid, etype, team)
-                    tile_flags[idx] &= _CLEAR_ENTITY_FLAGS
-                    if self._is_ore_idx(idx):
-                        if etype == EntityType.BARRIER and team != my_team:
-                            self.unreachable_ores.add(pos)
-                        else:
-                            self.unreachable_ores.discard(pos)
-                    if etype == EntityType.LAUNCHER and team != my_team:
-                        self._mark_enemy_launcher_adj(pos)
-                    if etype == EntityType.BARRIER and team == my_team:
-                        tile_flags[idx] |= FLAG_ALLY_BARRIER
-                    elif etype == EntityType.LAUNCHER and team == my_team:
-                        tile_flags[idx] |= FLAG_ALLY_LAUNCHER
-                    elif (
-                        (etype == EntityType.CORE and team != my_team)
-                        or (etype not in CONVEYOR_TYPES and etype != EntityType.ROAD and etype != EntityType.CORE and not (etype == EntityType.BARRIER and team == my_team) and not (etype == EntityType.LAUNCHER and team == my_team))
-                    ):
-                        tile_flags[idx] |= FLAG_BLOCKED
+                    bid = None
+            if bid is not None:
+                if etype == EntityType.CORE:
+                    if cached_bid != bid:
+                        self.check_core_symmetry(pos)
+                assert etype is not None
+                assert team is not None
+                is_enemy_launcher = etype == EntityType.LAUNCHER and team != my_team
+                if prev_was_enemy_launcher != is_enemy_launcher:
+                    self._adjust_enemy_launcher_adj_idx(idx, 1 if is_enemy_launcher else -1)
+                self._set_tile_entity_idx(idx, bid, etype, team)
+                tile_flags[idx] &= _CLEAR_ENTITY_FLAGS
+                if self._is_ore_idx(idx):
+                    if etype == EntityType.BARRIER and team != my_team:
+                        self.unreachable_ores.add(pos)
+                    else:
+                        self.unreachable_ores.discard(pos)
+                if etype == EntityType.BARRIER and team == my_team:
+                    tile_flags[idx] |= FLAG_ALLY_BARRIER
+                elif etype == EntityType.LAUNCHER and team == my_team:
+                    tile_flags[idx] |= FLAG_ALLY_LAUNCHER
+                elif (
+                    (etype == EntityType.CORE and team != my_team)
+                    or (etype not in CONVEYOR_TYPES and etype != EntityType.ROAD and etype != EntityType.CORE and not (etype == EntityType.BARRIER and team == my_team) and not (etype == EntityType.LAUNCHER and team == my_team))
+                ):
+                    tile_flags[idx] |= FLAG_BLOCKED
 
-                    # Track conveyor outputs and resources
-                    if etype in CONVEYOR_TYPES:
-                        if cached_bid != 0 and cached_bid == bid:
-                            new_output_idx = prev_output_idx
+                # Track conveyor outputs and resources
+                if etype in CONVEYOR_TYPES:
+                    if cached_bid != 0 and cached_bid == bid:
+                        new_output_idx = prev_output_idx
+                    else:
+                        new_output = ct_get_bridge_target(bid) if etype == EntityType.BRIDGE else pos.add(ct_get_direction(bid))
+                        if 0 <= new_output.x < width and 0 <= new_output.y < height:
+                            new_output_idx = new_output.y * width + new_output.x
                         else:
-                            new_output = ct_get_bridge_target(bid) if etype == EntityType.BRIDGE else pos.add(ct_get_direction(bid))
-                            if 0 <= new_output.x < width and 0 <= new_output.y < height:
-                                new_output_idx = new_output.y * width + new_output.x
-                            else:
-                                new_output_idx = -1
-                        old_output_idx = output_idx[idx]
-                        if old_output_idx != new_output_idx:
-                            if old_output_idx >= 0:
-                                input_indices[old_output_idx].discard(idx)
-                            output_idx[idx] = new_output_idx
-                            if new_output_idx >= 0:
-                                input_indices[new_output_idx].add(idx)
-                        resource = ct_get_stored_resource(bid)
-                        if resource is not None:
-                            self._record_conveyor_resource(pos, resource)
-                    elif output_idx[idx] >= 0:
-                        self._remove_conveyor_tracking(pos)
+                            new_output_idx = -1
+                    old_output_idx = output_idx[idx]
+                    if old_output_idx != new_output_idx:
+                        if old_output_idx >= 0:
+                            input_indices[old_output_idx].discard(idx)
+                        output_idx[idx] = new_output_idx
+                        if new_output_idx >= 0:
+                            input_indices[new_output_idx].add(idx)
+                    resource = ct_get_stored_resource(bid)
+                    if resource is not None:
+                        self._record_conveyor_resource(pos, resource)
+                elif output_idx[idx] >= 0:
+                    self._remove_conveyor_tracking(pos)
             else:
+                if prev_was_enemy_launcher:
+                    self._adjust_enemy_launcher_adj_idx(idx, -1)
                 self._clear_tile_entity_idx(idx)
                 tile_flags[idx] &= _CLEAR_ENTITY_FLAGS
                 if self._is_ore_idx(idx):
@@ -782,7 +785,6 @@ class Map:
                     dirty_cache_positions.add(ny * width + nx)
 
         log_time(ct, "After processing nearby tiles")
-        
         if comms.symmetry is not None and self.symmetry == Symmetry.UNKNOWN:
             self._set_symmetry(comms.symmetry)
             log(f"symmetry from marker: {self.symmetry.name}")
