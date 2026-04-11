@@ -3,6 +3,7 @@ from enum import Enum
 from cambc import Direction, EntityType
 
 USE_LAUNCHERS = False
+USE_BREACHES = False
 
 INF = float('inf')
 

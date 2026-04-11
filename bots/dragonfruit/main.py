@@ -12,7 +12,7 @@ from comms import Comms
 from helpers import bot_path_color, check_for_resource_increase, get_predicted_enemy_core_pos
 from vision import VisionCache
 from log import log, log_time
-from units import run_core, run_builder, run_gunner, run_sentinel, run_launcher
+from units import run_core, run_builder, run_breach, run_gunner, run_sentinel, run_launcher
 
 class Player:
     def __init__(self):
@@ -132,6 +132,9 @@ class Player:
 
             elif self.etype == EntityType.SENTINEL:
                 run_sentinel(self, ct, my_pos, vc)
+
+            elif self.etype == EntityType.BREACH:
+                run_breach(self, ct, my_pos, vc)
 
             elif self.etype == EntityType.LAUNCHER:
                 run_launcher(self, ct, my_pos, vc)
