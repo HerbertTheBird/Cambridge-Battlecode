@@ -16,8 +16,6 @@ from units import run_core, run_builder, run_breach, run_gunner, run_sentinel, r
 
 class Player:
     def __init__(self):
-        random.seed(42)
-
         self.initialized = False
         
         self.nav = Navigator()
