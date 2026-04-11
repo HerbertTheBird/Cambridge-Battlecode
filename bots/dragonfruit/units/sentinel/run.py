@@ -4,7 +4,7 @@ from globals import *
 from units.sentinel.combat import choose_target, choose_passive_target
 from log import log
 
-def run_turret(player, ct: Controller, my_pos: Position, vc) -> None:
+def run_sentinel(player, ct: Controller, my_pos: Position, vc) -> None:
     # Initialize last fired round on first turn
     if player.last_fired_round == 0:
         player.last_fired_round = ct.get_current_round()

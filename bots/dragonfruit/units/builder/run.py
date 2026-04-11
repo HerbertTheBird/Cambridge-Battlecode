@@ -4,7 +4,7 @@ from globals import *
 from helpers import get_foundry_positions
 from log import log, log_time
 from units.builder.build import *
-from units.builder.decide_state import decideState
+from units.builder.decide_state import decide_state
 from units.builder.logic import *
 from units.builder.states import (
     run_defend,
@@ -16,11 +16,14 @@ from units.builder.states import (
     run_start_harvest_chain,
 )
 
-BUGNAV_RESERVE_US = 200
-END_TURN_RESERVE_US = 50
-
-
 def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
+    armoured_ti_cost, armoured_ax_cost = ct.get_armoured_conveyor_cost()
+    player.use_armoured_conveyors = (
+        USE_ARMOURED_CONVEYORS
+        and player.global_titanium >= START_USING_ARMOURED_CONVEYORS_THRESHOLD
+        and player.global_titanium >= armoured_ti_cost
+        and player.global_axionite >= armoured_ax_cost
+    )
     
     # States can set this to request attacking a tile
     player.attack_target = None
@@ -30,8 +33,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     player.build_type = None
 
     # First explore destination follows ray outwards from core
-    if not player.initialized and player.core_pos is not None and ct.get_current_round() < 100:
-        player.should_explore_ray = True
+    if not player.initialized_explore_ray:
+        if player.core_pos is not None and ct.get_current_round() < 100:
+            player.should_explore_ray = True
+        player.initialized_explore_ray = True
 
     # Initialize ideal foundry positions so we can route back to them
     if player.foundry_positions is None and player.core_pos is not None:
@@ -57,10 +62,10 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     log_time(ct, "After broken chain scan")
 
     # State machine
-    player.state = decideState(player, ct, my_pos, vc)
+    player.state = decide_state(player, ct, my_pos, vc)
     log(f"state={player.state}")
 
-    log_time(ct, "After decideState")
+    log_time(ct, "After decide_state")
 
     if player.state == State.START_HARVEST_CHAIN:
         run_start_harvest_chain(player, ct, vc)
@@ -96,7 +101,8 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                 bid_etype = ct.get_entity_type(bid)
                 if (
                     bid_team != player.my_team
-                    and not is_marker_building(ct, bid)
+                    and bid_etype != EntityType.MARKER
+                    and not is_enemy_armoured_conveyor(bid_etype, bid_team, player.my_team)
                     and (ct.is_tile_passable(harvest_dest) or my_pos == harvest_dest)
                     and (player.map is None or not player.map.feeds_ally_turret(harvest_dest, player.my_team))
                 ):
@@ -167,6 +173,8 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     # Greedy heal
     try_heal(ct, my_pos, player.my_team, player.map.width, player.map.height)
     log_time(ct, "After heal")
+    try_upgrade_conveyor(player, ct, my_pos, vc)
+    log_time(ct, "After conveyor upgrade")
 
     # Spam markers to communicate map symmetry
     if not issued_launcher_order and player.map.symmetry != Symmetry.UNKNOWN:

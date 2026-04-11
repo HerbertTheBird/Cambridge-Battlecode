@@ -1,5 +1,6 @@
 import sys
 import traceback
+import random
 
 from cambc import Controller, Direction, EntityType, Position, ResourceType, Team
 
@@ -11,8 +12,8 @@ from comms import Comms
 from helpers import bot_path_color, check_for_resource_increase, get_predicted_enemy_core_pos
 from vision import VisionCache
 from log import log, log_time
-from units import run_core, run_builder, run_gunner, run_turret, run_launcher
-import random
+from units import run_core, run_builder, run_breach, run_gunner, run_sentinel, run_launcher
+
 class Player:
     def __init__(self):
         random.seed(42)
@@ -53,6 +54,7 @@ class Player:
         self.prev_health: int
         self.global_titanium = 0
         self.global_axionite = 0
+        self.use_armoured_conveyors = False
         self.prev_global_titanium: int
         self.prev_global_axionite: int
         self.last_global_titanium_increase = -2000
@@ -68,6 +70,7 @@ class Player:
         self.last_support_launcher_round = -2000
         
         self.rushing_enemy = False
+        self.initialized_explore_ray = False
 
         
     def run(self, ct: Controller) -> None:
@@ -80,6 +83,8 @@ class Player:
             
             if not self.initialized:
                 self.my_id = ct.get_id()
+                
+                random.seed(self.my_id)
                 
                 self.a_star_nav.path_color = bot_path_color(self.my_id)
                 
@@ -95,6 +100,7 @@ class Player:
             
                 self.prev_global_titanium, self.prev_global_axionite = ct.get_global_resources()
             
+                self.initialized = True
             
             # Update turn info
      
@@ -127,13 +133,14 @@ class Player:
             elif self.etype == EntityType.GUNNER:
                 run_gunner(self, ct, my_pos, vc)
 
-            elif self.etype in TURRET_TYPES:
-                run_turret(self, ct, my_pos, vc)
+            elif self.etype == EntityType.SENTINEL:
+                run_sentinel(self, ct, my_pos, vc)
+
+            elif self.etype == EntityType.BREACH:
+                run_breach(self, ct, my_pos, vc)
 
             elif self.etype == EntityType.LAUNCHER:
                 run_launcher(self, ct, my_pos, vc)
-            
-            self.initialized = True
     
             # Update previous values for next turn
             

@@ -106,7 +106,7 @@ def should_spawn(player, ct: Controller, vc) -> bool:
         rounds_since_spawn >= SPAWN_WEALTHY_INTERVAL and
         player.global_titanium >= bridge_cost * SPAWN_WEALTHY_BRIDGE_MULT and
         player.global_titanium >= builder_cost * SPAWN_WEALTHY_BUILDER_MULT and
-        player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD
+        (player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD and player.num_spawned < SPAWN_WEALTHY_RESOURCE_THRESHOLD_NUM_BOTS or player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD_EXTRA)
     )
     
     # Spawn if enemy spotted and no ally builder bots nearby

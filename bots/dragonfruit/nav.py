@@ -12,7 +12,7 @@ class Navigator:
         # target
         self.destination: Position | None = None
         self.destination_type: str | None = None  # 'exact' | 'adjacent' | 'sensed' | 'visited'
-        self.original_destination: Position | None = None  # set when type == "adjacent"
+        self.original_destination: Position | None = None  # set when destination_type == "adjacent"
 
         # bugnav state
         self.states = None
@@ -36,9 +36,9 @@ class Navigator:
         self.height = height
         self.my_id = my_id
 
-    def set_destination(self, target: Position | None, type: str | None = None):
+    def set_destination(self, target: Position, destination_type: str):
         self.destination = target
-        self.destination_type = type
+        self.destination_type = destination_type
         self.original_destination = target
 
     def clear_destination(self):
@@ -47,7 +47,7 @@ class Navigator:
         self.original_destination = None
 
     def refresh_adjacent(self, ct, map_obj):
-        """If type is 'adjacent', update destination to the nearest passable adjacent tile."""
+        """If destination_type is 'adjacent', update destination to the nearest passable adjacent tile."""
         if self.destination_type != "adjacent" or self.original_destination is None:
             return
         adj = self.get_adjacent_target(self.original_destination, ct)
@@ -56,7 +56,7 @@ class Navigator:
         else:
             self.destination = self.original_destination
 
-    def is_destination_reached(self, ct, map):
+    def is_destination_reached(self, ct, map_obj):
         if self.destination is None:
             return True
         if self.destination_type == "exact":
@@ -68,7 +68,7 @@ class Navigator:
         if self.destination_type == "sensed":
             return ct.is_in_vision(self.destination)
         # "visited" or None
-        return map is not None and map.is_visited(self.destination)
+        return map_obj is not None and map_obj.is_visited(self.destination)
 
     def get_adjacent_target(self, pos: Position, ct) -> Position | None:
         """Return the passable tile adjacent to pos that is closest to our current position."""
@@ -151,15 +151,15 @@ class Navigator:
 
         # === BUG MODE ===
         if self.last_obstacle_found is not None:
-            dir = my_loc.direction_to(self.last_obstacle_found)
+            direction = my_loc.direction_to(self.last_obstacle_found)
         else:
-            dir = my_loc.direction_to(target)
+            direction = my_loc.direction_to(target)
 
-        if self.can_pass(ct, dir, my_loc):
-            self.execute_move(ct, dir, my_loc)
+        if self.can_pass(ct, direction, my_loc):
+            self.execute_move(ct, direction, my_loc)
             if self.last_obstacle_found is not None:
                 self.turns_moving_to_obstacle += 1
-                ddx, ddy = DELTAS[dir]
+                ddx, ddy = DELTAS[direction]
                 ox, oy = mlx + ddx, mly + ddy
                 if (
                     self.turns_moving_to_obstacle >= self.MAX_TURNS_MOVING_TO_OBSTACLE
@@ -172,15 +172,15 @@ class Navigator:
         else:
             self.turns_moving_to_obstacle = 0
 
-        self.check_rotate(ct, my_loc, target, dir)
+        self.check_rotate(ct, my_loc, target, direction)
 
         # === BUG LOOP ===
         for _ in range(16):
-            if self.can_pass(ct, dir, my_loc):
-                self.execute_move(ct, dir, my_loc)
+            if self.can_pass(ct, direction, my_loc):
+                self.execute_move(ct, direction, my_loc)
                 return
 
-            ddx, ddy = DELTAS[dir]
+            ddx, ddy = DELTAS[direction]
             nx, ny = mlx + ddx, mly + ddy
 
             if not (0 <= nx < w and 0 <= ny < h):
@@ -188,22 +188,22 @@ class Navigator:
             else:
                 self.last_obstacle_found = Position(nx, ny)
 
-            dir = dir.rotate_right() if self.rotate_right else dir.rotate_left()
+            direction = direction.rotate_right() if self.rotate_right else direction.rotate_left()
 
-        if self.can_pass(ct, dir, my_loc):
-            self.execute_move(ct, dir, my_loc)
+        if self.can_pass(ct, direction, my_loc):
+            self.execute_move(ct, direction, my_loc)
 
     def try_greedy_move(self, ct, my_loc, target, map_obj):
-        dir = my_loc.direction_to(target)
+        direction = my_loc.direction_to(target)
         mx, my = my_loc
         tx, ty = target
         dist = _dist_sq(mx, my, tx, ty)
 
-        dir1 = dir.rotate_right()
-        dir2 = dir.rotate_left()
+        dir1 = direction.rotate_right()
+        dir2 = direction.rotate_left()
 
         candidates = []
-        for turn_cost, candidate_dir in ((0, dir), (1, dir1), (1, dir2)):
+        for turn_cost, candidate_dir in ((0, direction), (1, dir1), (1, dir2)):
             if not self.can_pass(ct, candidate_dir, my_loc):
                 continue
             ddx, ddy = DELTAS[candidate_dir]
@@ -221,12 +221,12 @@ class Navigator:
 
         return False
 
-    def check_rotate(self, ct, my_loc, target, dir):
+    def check_rotate(self, ct, my_loc, target, direction):
         if self.rotate_right is not None:
             return
 
-        dir_left = dir
-        dir_right = dir
+        dir_left = direction
+        dir_right = direction
 
         for _ in range(8):
             if not self.can_pass(ct, dir_left, my_loc):
@@ -283,33 +283,33 @@ class Navigator:
 
         self.states[my_loc.x][my_loc.y] = state
 
-    def can_pass(self, ct, dir, my_pos):
-        if dir is None or dir == Direction.CENTRE:
+    def can_pass(self, ct, direction, my_pos):
+        if direction is None or direction == Direction.CENTRE:
             return False
 
-        ddx, ddy = DELTAS[dir]
+        ddx, ddy = DELTAS[direction]
 
         nx, ny = my_pos.x + ddx, my_pos.y + ddy
         if not (0 <= nx < self.width and 0 <= ny < self.height):
             return False
 
-        if ct.can_move(dir):
+        if ct.can_move(direction):
             return True
         next_pos = Position(nx, ny)
         bid = ct.get_tile_builder_bot_id(next_pos)
         return ct.can_build_road(next_pos) and (bid is None or bid == self.my_id)
 
-    def execute_move(self, ct, dir, my_pos):
-        if dir is None or dir == Direction.CENTRE:
+    def execute_move(self, ct, direction, my_pos):
+        if direction is None or direction == Direction.CENTRE:
             return
 
         # Case 1: already movable
-        if ct.can_move(dir):
-            ct.move(dir)
+        if ct.can_move(direction):
+            ct.move(direction)
             return
 
         # Case 2: need to build road first
-        ddx, ddy = DELTAS[dir]
+        ddx, ddy = DELTAS[direction]
         nx, ny = my_pos.x + ddx, my_pos.y + ddy
         if not (0 <= nx < self.width and 0 <= ny < self.height):
             return
@@ -319,5 +319,5 @@ class Navigator:
             ct.build_road(next_pos)
 
             # after building, try to move
-            if ct.can_move(dir):
-                ct.move(dir)
+            if ct.can_move(direction):
+                ct.move(direction)

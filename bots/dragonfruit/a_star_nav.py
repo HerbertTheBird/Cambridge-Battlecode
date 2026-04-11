@@ -3,16 +3,17 @@ from array import array
 
 from cambc import Controller, EntityType, Environment, Position
 
-from globals import CONVEYOR_TYPES
+from globals import (
+    ASTAR_CPU_CHECK_INTERVAL,
+    ASTAR_MIN_COMPUTE_BUDGET_US,
+    CONVEYOR_TYPES,
+)
 
 WEIGHT = 2.0
 MIN_WEIGHT = 1.5
-MAX_CPU_US = 1900
-CPU_CHECK_INTERVAL = 16
 BARRIER_PENALTY = 15
 ALLY_LAUNCHER_PENALTY = 30
 LAUNCHER_ADJ_PENALTY = 2
-MIN_COMPUTE_BUDGET_US = 120
 
 DIRS = [
     (0, -1),
@@ -80,7 +81,7 @@ class AStarNavigator:
         self.ready = False
         self.changed = True
 
-    def set_destination(self, target: Position | None, destination_type: str | None = None):
+    def set_destination(self, target: Position, destination_type: str):
         if target != self.destination or destination_type != self.destination_type:
             self.destination = target
             self.destination_type = destination_type
@@ -111,13 +112,16 @@ class AStarNavigator:
             return True
 
         bid = ct.get_tile_building_id(nxt)
-        if bid is not None and ct.get_team(bid) == self.my_team and ct.get_entity_type(bid) in (EntityType.BARRIER, EntityType.LAUNCHER):
-            if ct.can_destroy(nxt):
-                ct.destroy(nxt)
-                if ct.can_move(direction):
-                    ct.move(direction)
-                    self.path_idx += 1
-                    return True
+        if bid is not None:
+            team = ct.get_team(bid)
+            etype = ct.get_entity_type(bid)
+            if team == self.my_team and etype in (EntityType.BARRIER, EntityType.LAUNCHER):
+                if ct.can_destroy(nxt):
+                    ct.destroy(nxt)
+                    if ct.can_move(direction):
+                        ct.move(direction)
+                        self.path_idx += 1
+                        return True
 
         if ct.get_tile_builder_bot_id(nxt) not in (None, self.my_id):
             self.ready = False
@@ -133,12 +137,10 @@ class AStarNavigator:
         self.ready = False
         return False
 
-    def advance_compute(self, ct: Controller, map_obj, budget_us: int | None = None, draw: bool = False):
+    def advance_compute(self, ct: Controller, map_obj, budget_us: int, draw: bool = False):
         if self.destination is None:
             return
-        if ct.get_cpu_time_elapsed() >= MAX_CPU_US:
-            return
-        if budget_us is not None and budget_us < MIN_COMPUTE_BUDGET_US:
+        if budget_us < ASTAR_MIN_COMPUTE_BUDGET_US:
             return
         targets = self._get_astar_targets(map_obj)
         if not targets:
@@ -257,25 +259,24 @@ class AStarNavigator:
             out.append(pos)
         return out
 
-    def _run_search(self, start: Position, avoid: set[Position], map_obj, ct: Controller, budget_us: int | None = None):
+    def _run_search(self, start: Position, avoid: set[Position], map_obj, ct: Controller, budget_us: int):
         assert self.start_stamp is not None
         assert self.avoid_stamp is not None
         assert self.seen is not None
         assert self.best_g is not None
         assert self.parent is not None
+        assert self.destination is not None
         self.avoid_id += 1
         start_idx = start.y * self.width + start.x
-        dest_idx = self.destination.y * self.width + self.destination.x if self.destination is not None else -1
+        dest_idx = self.destination.y * self.width + self.destination.x
         self.start_stamp[start_idx] = self.run_id
         for pos in avoid:
             self.avoid_stamp[pos.y * self.width + pos.x] = self.avoid_id
 
-        deadline_us = MAX_CPU_US
-        if budget_us is not None:
-            deadline_us = min(MAX_CPU_US, ct.get_cpu_time_elapsed() + budget_us)
+        deadline_us = ct.get_cpu_time_elapsed() + budget_us
 
         while self.heap:
-            if self.iter % CPU_CHECK_INTERVAL == 0 and ct.get_cpu_time_elapsed() >= deadline_us:
+            if self.iter % ASTAR_CPU_CHECK_INTERVAL == 0 and ct.get_cpu_time_elapsed() >= deadline_us:
                 return None
             self.iter += 1
             if self.iter > self.max_iter:
