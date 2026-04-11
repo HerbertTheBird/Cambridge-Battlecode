@@ -2,7 +2,7 @@ from itertools import chain
 
 from cambc import Controller, Direction, Environment, GameConstants, Position, EntityType, ResourceType, Team
 
-from globals import DIRECTIONS, ALL_DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, State, Symmetry, INF, DELTAS
+from globals import DIRECTIONS, ALL_DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, State, Symmetry, INF, DELTAS, TURN_CPU_BUDGET_US
 
 from helpers import (
     get_nearest_core_tile,
@@ -1261,8 +1261,6 @@ def sync_a_star_destination(player) -> bool:
     a_star_target = player.nav.original_destination if player.nav.destination_type == "adjacent" else player.nav.destination
     player.a_star_nav.set_destination(a_star_target, player.nav.destination_type)
     return True
-
-TURN_CPU_BUDGET_US = 2000
 
 def advance_a_star(player, ct: Controller, reserve_us: int, *, draw: bool) -> int:
     if not sync_a_star_destination(player):

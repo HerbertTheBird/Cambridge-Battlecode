@@ -16,10 +16,6 @@ from units.builder.states import (
     run_start_harvest_chain,
 )
 
-BUGNAV_RESERVE_US = 200
-END_TURN_RESERVE_US = 50
-
-
 def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     
     # States can set this to request attacking a tile

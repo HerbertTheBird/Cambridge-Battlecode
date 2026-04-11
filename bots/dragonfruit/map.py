@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType, Team
 
-from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF, DELTAS
+from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF, DELTAS, TURN_CPU_BUDGET_US, END_TURN_RESERVE_US
 from comms import Comms
 from helpers import get_foundry_positions, is_core_tile
 
@@ -305,9 +305,6 @@ class Map:
         if key in SYMMETRY_MAPPING:
             self._set_symmetry(SYMMETRY_MAPPING[key])
 
-    END_TURN_RESERVE_US = 50
-    TURN_CPU_BUDGET_US = 2000
-
     def update_all_symmetric_tiles(self, ct: Controller):
         if not self.should_update_all_symmetric or self.symmetry == Symmetry.UNKNOWN:
             return
@@ -320,7 +317,7 @@ class Map:
         while self.symmetric_update_y < height:
             idx = self.symmetric_update_y * width + self.symmetric_update_x
             if idx % 50 == 0:
-                budget = self.TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - self.END_TURN_RESERVE_US
+                budget = TURN_CPU_BUDGET_US - ct.get_cpu_time_elapsed() - END_TURN_RESERVE_US
                 if budget <= 0:
                     return
 
