@@ -716,7 +716,7 @@ class Map:
                 self._set_tile_entity_idx(idx, bid, etype, team)
                 tile_flags[idx] &= _CLEAR_ENTITY_FLAGS
                 if self._is_ore_idx(idx):
-                    if etype == EntityType.BARRIER and team != my_team:
+                    if team != my_team and (etype == EntityType.BARRIER or etype == EntityType.ARMOURED_CONVEYOR):
                         self.unreachable_ores.add(pos)
                     else:
                         self.unreachable_ores.discard(pos)

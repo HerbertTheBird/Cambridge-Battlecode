@@ -52,6 +52,7 @@ class Player:
         self.prev_health: int
         self.global_titanium = 0
         self.global_axionite = 0
+        self.use_armoured_conveyors = False
         self.prev_global_titanium: int
         self.prev_global_axionite: int
         self.last_global_titanium_increase = -2000

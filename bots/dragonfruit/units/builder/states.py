@@ -232,13 +232,12 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
         if (
             existing_etype not in CONVEYOR_TYPES
             and core_dir is not None
-            and player.global_titanium >= ct.get_conveyor_cost()[0]
-            and can_build_conveyor_here(dest, core_dir, ct, my_pos, player.my_team, player.map, vc=vc)
+            and can_build_selected_conveyor_here(player, dest, core_dir, ct, my_pos, player.my_team, player.map, vc=vc)
         ):
             bbid_conv = ct.get_tile_builder_bot_id(dest)
             if existing_bid is not None and (bbid_conv is None or bbid_conv == ct.get_id()) and safe_destroy(player, ct, dest, vc):
                 log("destroyed to build conveyor")
-            if safe_build_conveyor(player, ct, dest, core_dir):
+            if safe_build_selected_conveyor(player, ct, dest, core_dir):
                 if player.harvest_ore_type is not None:
                     player.map.tag_conveyor_resource(dest, player.harvest_ore_type)
                 log(f"placed axionite conveyor at {dest} as foundry placeholder")
@@ -251,6 +250,7 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
         if (
             existing_bid is not None
             and ct.get_team(existing_bid) != player.my_team
+            and not is_enemy_armoured_conveyor(existing_etype, ct.get_team(existing_bid), player.my_team)
             and core_dir is not None
         ):
             player.attack_target = dest
@@ -337,7 +337,11 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
             elif player.core_pos is not None and next_pos.distance_squared(player.core_pos) < build_pos.distance_squared(player.core_pos):
                 player.nav.set_destination(next_pos, "adjacent")
                 log(f"enemy {existing_etype.name} at {build_pos} outputs toward core -> following to {next_pos}")
-            elif (ct.is_tile_passable(build_pos) or my_pos == build_pos) and (len(vc.enemy_units) == 0 or not player.map.feeds_ally_turret(build_pos, player.my_team)):
+            elif (
+                not is_enemy_armoured_conveyor(existing_etype, existing_team, player.my_team)
+                and (ct.is_tile_passable(build_pos) or my_pos == build_pos)
+                and (len(vc.enemy_units) == 0 or not player.map.feeds_ally_turret(build_pos, player.my_team))
+            ):
                 player.attack_target = build_pos
                 player.attack_reason = "enemy conveyor blocking chain"
                 log(f"enemy {existing_etype.name} at {build_pos} blocks chain -> firing to destroy")
@@ -415,8 +419,8 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
                         build_pos, splitter_dir, ct, my_pos, player.my_team, player.map, vc=vc, allow_launchers=allow_launcher_replacement
                     )
                 )
-                can_build = use_splitter or can_build_conveyor_here(
-                    build_pos, conv_dir, ct, my_pos, player.my_team, player.map, vc=vc, allow_launchers=allow_launcher_replacement
+                can_build = use_splitter or can_build_selected_conveyor_here(
+                    player, build_pos, conv_dir, ct, my_pos, player.my_team, player.map, vc=vc, allow_launchers=allow_launcher_replacement
                 )
                 if can_build:
                     bbid_bp = ct.get_tile_builder_bot_id(build_pos)
@@ -427,7 +431,7 @@ def run_extend_harvest_chain(player, ct: Controller, vc) -> None:
                             log(f"BUILT splitter at {build_pos} facing {splitter_dir}")
                             built = True
                             player.nav.set_destination(conv_target, "adjacent")
-                    elif safe_build_conveyor(player, ct, build_pos, conv_dir):
+                    elif safe_build_selected_conveyor(player, ct, build_pos, conv_dir):
                         log(f"BUILT conveyor at {build_pos} -> {conv_target}")
                         built = True
                         player.nav.set_destination(conv_target, "adjacent")
@@ -480,7 +484,13 @@ def run_reroute_titanium(player, ct: Controller, vc) -> None:
         ti_pos = ti_source
         if my_pos.distance_squared(ti_pos) <= 2:
             bbid_ti = ct.get_tile_builder_bot_id(ti_pos)
-            if (bbid_ti is None or bbid_ti == ct.get_id()) and player.global_titanium >= ct.get_conveyor_cost()[0] and safe_destroy(player, ct, ti_pos, vc):
+            conveyor_ti_cost, conveyor_ax_cost = get_selected_conveyor_cost(player, ct)
+            if (
+                (bbid_ti is None or bbid_ti == ct.get_id())
+                and player.global_titanium >= conveyor_ti_cost
+                and player.global_axionite >= conveyor_ax_cost
+                and safe_destroy(player, ct, ti_pos, vc)
+            ):
                 log(f"destroyed titanium conveyor at {ti_pos} for foundry reroute")
                 player.nav.set_destination(ti_pos, "adjacent")
                 player.state = State.EXTEND_HARVEST_CHAIN
@@ -550,7 +560,12 @@ def run_intercept(player, ct: Controller, vc) -> None:
         clear_state(player)
         return
 
-    if bid_team != player.my_team and bid_etype != EntityType.MARKER and (ct.is_tile_passable(intercept_pos) or my_pos == intercept_pos):
+    if (
+        bid_team != player.my_team
+        and bid_etype != EntityType.MARKER
+        and not is_enemy_armoured_conveyor(bid_etype, bid_team, player.my_team)
+        and (ct.is_tile_passable(intercept_pos) or my_pos == intercept_pos)
+    ):
         kill_cost = attack_cost_to_destroy(ct, bid)
         if player.global_titanium >= kill_cost:
             player.attack_target = intercept_pos

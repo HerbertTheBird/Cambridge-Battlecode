@@ -38,6 +38,19 @@ def can_build_conveyor_here(pos: Position, direction: Direction, ct: Controller,
     return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_conveyor_cost()[0])
 
+def can_build_armoured_conveyor_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
+    """True if we can build a conveyor at pos facing direction — either directly,
+    or because the tile holds an ally road/sentinel we can first destroy."""
+    if direction not in CARDINAL_DIRECTIONS:
+        return False
+    if ct.can_build_armoured_conveyor(pos, direction):
+        return True
+    titanium, axionite = ct.get_global_resources()
+    titanium_cost, axionite_cost = ct.get_armoured_conveyor_cost()
+    return (can_build_over_existing(pos, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers)
+            and titanium >= titanium_cost and axionite >= axionite_cost)
+
+
 def can_build_splitter_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
     """True if we can build a splitter at pos facing direction — either directly,
     or because the tile holds an ally road/sentinel we can first destroy."""
@@ -102,6 +115,34 @@ def safe_build_conveyor(player, ct: Controller, pos: Position, direction) -> boo
         return False
     bid = ct.build_conveyor(pos, direction)
     player.vc.add_entity(player, bid, EntityType.CONVEYOR, player.my_team, pos)
+    return True
+
+def get_selected_conveyor_cost(player, ct: Controller) -> tuple[int, int]:
+    if player.use_armoured_conveyors:
+        return ct.get_armoured_conveyor_cost()
+    return ct.get_conveyor_cost()
+
+def can_build_selected_conveyor_here(player, pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, map_obj, vc: VisionCache, allow_launchers: bool = False) -> bool:
+    if player.use_armoured_conveyors:
+        return can_build_armoured_conveyor_here(
+            pos, direction, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers
+        )
+    return can_build_conveyor_here(
+        pos, direction, ct, my_pos, my_team, map_obj, vc, allow_launchers=allow_launchers
+    )
+
+def safe_build_selected_conveyor(player, ct: Controller, pos: Position, direction: Direction) -> bool:
+    if player.use_armoured_conveyors:
+        return safe_build_armoured_conveyor(player, ct, pos, direction)
+    return safe_build_conveyor(player, ct, pos, direction)
+
+def safe_build_armoured_conveyor(player, ct: Controller, pos: Position, direction) -> bool:
+    if direction not in CARDINAL_DIRECTIONS:
+        return False
+    if not ct.can_build_armoured_conveyor(pos, direction):
+        return False
+    bid = ct.build_armoured_conveyor(pos, direction)
+    player.vc.add_entity(player, bid, EntityType.ARMOURED_CONVEYOR, player.my_team, pos)
     return True
 
 def safe_build_splitter(player, ct: Controller, pos: Position, direction) -> bool:
