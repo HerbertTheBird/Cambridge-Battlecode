@@ -2,10 +2,12 @@ from itertools import chain
 
 from cambc import Controller, EntityType, Position, Team
 
-from vision import VisionCache
+import map as map_mod
+import vision as vc
+
 from globals import CONVEYOR_TYPES, INF, DIRECTIONS, TURRET_PRIORITY, TURRET_PASSIVE_PRIORITY
 
-def choose_target(ct: Controller, my_pos: Position, vc: VisionCache) -> Position | None:
+def choose_target(ct: Controller, my_pos: Position) -> Position | None:
     """Return the position of the best target to attack, or None if there are no targets."""
     best_target = None
     best_prio = INF
@@ -37,7 +39,7 @@ def choose_target(ct: Controller, my_pos: Position, vc: VisionCache) -> Position
             best_target = fire_pos
     return best_target
 
-def choose_passive_target(ct: Controller, my_pos: Position, my_team: Team, vc: VisionCache, map_obj=None) -> Position | None:
+def choose_passive_target(ct: Controller, my_pos: Position, my_team: Team) -> Position | None:
     """Pick the best enemy building to shoot at when no enemy units are in range."""
     best_pos = None
     best_prio = INF
@@ -58,7 +60,7 @@ def choose_passive_target(ct: Controller, my_pos: Position, my_team: Team, vc: V
             continue
         # Skip conveyors/bridges/splitters/armoured conveyors if output chain feeds ally building
         if etype in CONVEYOR_TYPES:
-            if map_obj is not None and map_obj.feeds_ally_building_idx(map_obj.pos_to_idx(pos), my_team):
+            if map_mod.feeds_ally_building_idx(map_mod.pos_to_idx(pos), my_team):
                 continue
         dist = my_pos.distance_squared(pos)
         if prio < best_prio or (prio == best_prio and dist < best_dist):

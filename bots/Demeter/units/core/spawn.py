@@ -2,6 +2,9 @@ import random
 
 from cambc import Controller, Direction, EntityType, Position
 
+import map as map_mod
+import vision as vc
+
 from globals import *
 
 def dir_distance(a, b):
@@ -66,14 +69,14 @@ def pick_three_directions(core_pos, width, height, valid_dirs):
 
     return list(best_triplet)
 
-def choose_spawn_plan(player, ct: Controller, my_pos: Position):
-    valid_dirs = get_valid_directions(ct, my_pos, player.map.width, player.map.height)
-    rotational_core_dir = my_pos.direction_to(player.map.get_symmetric_pos(my_pos, Symmetry.ROTATE))
+def choose_spawn_plan(ct: Controller, my_pos: Position):
+    valid_dirs = get_valid_directions(ct, my_pos, map_mod.width, map_mod.height)
+    rotational_core_dir = my_pos.direction_to(map_mod.get_symmetric_pos(my_pos, Symmetry.ROTATE))
 
     if len(valid_dirs) == 0:
         return random.sample(DIRECTIONS, 3)
 
-    chosen = pick_three_directions(my_pos, player.map.width, player.map.height, valid_dirs)
+    chosen = pick_three_directions(my_pos, map_mod.width, map_mod.height, valid_dirs)
     return [d for (d, _) in chosen]
 
 def draw_spawn_plan(ct: Controller, my_pos: Position, spawn_plan, width: int, height: int) -> None:
@@ -81,7 +84,7 @@ def draw_spawn_plan(ct: Controller, my_pos: Position, spawn_plan, width: int, he
         endpoint = get_ray_endpoint(my_pos, d, width, height)
         ct.draw_indicator_line(my_pos, endpoint, 0, 255, 0)
 
-def should_spawn(player, ct: Controller, vc) -> bool:
+def should_spawn(player, ct: Controller) -> bool:
     builder_cost = ct.get_builder_bot_cost()[0]
     bridge_cost = ct.get_bridge_cost()[0]
     sees_enemy = len(vc.enemy_units) > 0

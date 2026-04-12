@@ -1,5 +1,11 @@
 from cambc import Controller, Position
 
+import map as map_mod
+import nav
+import bfs_nav
+import comms
+import vision as vc
+
 from globals import *
 from helpers import get_foundry_position_idxs
 from log import log, log_time
@@ -16,7 +22,7 @@ from units.builder.states import (
     run_start_harvest_chain,
 )
 
-def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
+def run_builder(player, ct: Controller, my_pos: Position) -> None:
     armoured_ti_cost, armoured_ax_cost = ct.get_armoured_conveyor_cost()
     player.use_armoured_conveyors = (
         USE_ARMOURED_CONVEYORS
@@ -42,8 +48,8 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     if player.foundry_position_idxs is None and player.core_pos is not None:
         player.foundry_position_idxs = {
             idx
-            for idx in get_foundry_position_idxs(player.core_pos, player.map.width, player.map.height)
-            if not player.map.is_wall(player.map.idx_to_pos(idx))
+            for idx in get_foundry_position_idxs(player.core_pos, map_mod.width, map_mod.height)
+            if not map_mod.is_wall(map_mod.idx_to_pos(idx))
         }
         
         
@@ -93,18 +99,18 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
 
     # Check if we need to attack a blocking building
     if player.attack_target is None and player.state in (State.START_HARVEST_CHAIN, State.EXTEND_HARVEST_CHAIN):
-        harvest_dest = player.nav.original_destination
+        harvest_dest = nav.original_destination
         if harvest_dest is not None and ct.is_in_vision(harvest_dest):
-            bid = player.map.get_tile_entity_id(harvest_dest)
+            bid = map_mod.get_tile_entity_id(harvest_dest)
             if bid is not None:
-                bid_team = player.map.get_tile_entity_team(harvest_dest)
-                bid_etype = player.map.get_tile_entity_type(harvest_dest)
+                bid_team = map_mod.get_tile_entity_team(harvest_dest)
+                bid_etype = map_mod.get_tile_entity_type(harvest_dest)
                 if (
                     bid_team != player.my_team
                     and bid_etype != EntityType.MARKER
                     and not is_enemy_armoured_conveyor(bid_etype, bid_team, player.my_team)
                     and (ct.is_tile_passable(harvest_dest) or my_pos == harvest_dest)
-                    and (player.map is None or not player.map.feeds_ally_turret_idx(player.map.pos_to_idx(harvest_dest), player.my_team))
+                    and (map_mod is None or not map_mod.feeds_ally_turret_idx(map_mod.pos_to_idx(harvest_dest), player.my_team))
                 ):
                     player.attack_target = harvest_dest
                     player.attack_reason = "chain blocked by enemy passable building"
@@ -124,7 +130,7 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
                 player.my_pos = my_pos
         if ct.can_destroy(player.attack_target):
             bbid = ct.get_tile_builder_bot_id(player.attack_target)
-            if (bbid is None or bbid == ct.get_id()) and safe_destroy(player, ct, player.attack_target, vc):
+            if (bbid is None or bbid == ct.get_id()) and safe_destroy(player, ct, player.attack_target):
                 log(f"Destroyed ally {player.attack_target} for reason: {player.attack_reason}")
                 attacked = True
         if ct.can_fire(player.attack_target):
@@ -140,20 +146,20 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
         if USE_LAUNCHERS:
             issued_launcher_order = try_issue_launcher_order(player, ct, my_pos)
         
-        player.nav.refresh_adjacent(ct, player.map)
+        nav.refresh_adjacent(ct)
 
         # Don't move if we are waiting on launcher
         if issued_launcher_order:
             log_time(ct, "After launcher request")
             
         # Try calculating global BFS
-        elif player.nav.destination is not None:
-            advance_bfs(player, ct, BUGNAV_RESERVE_US, draw=False)
+        elif nav.destination is not None:
+            advance_bfs(ct, BUGNAV_RESERVE_US, draw=False)
             log_time(ct, "After possible BFS compute")
 
             # Try stepping BFS nav but fall back to bugnav if not ready
-            if not player.bfs_nav.step_if_ready(player, ct, player.map, vc):
-                player.nav.go_to(ct, player.map)
+            if not bfs_nav.step_if_ready(player, ct):
+                nav.go_to(ct)
                 log_time(ct, "After bugnav")
             else:
                 log_time(ct, "After BFS step")
@@ -161,9 +167,9 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
             # Refresh position
             my_pos = ct.get_position()
             player.my_pos = my_pos
-            log(f"destination={player.nav.destination}")
+            log(f"destination={nav.destination}")
         else:
-            sync_bfs_destination(player)
+            sync_bfs_destination()
 
     if not attacked:
         if try_build_remembered(player, ct, vc):
@@ -171,17 +177,17 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
             player.my_pos = my_pos
 
     # Greedy heal
-    try_heal(ct, my_pos, player.my_team, player.map.width, player.map.height)
+    try_heal(ct, my_pos, player.my_team, map_mod.width, map_mod.height)
     log_time(ct, "After heal")
     try_upgrade_conveyor(player, ct, my_pos, vc)
     log_time(ct, "After conveyor upgrade")
 
     # Spam markers to communicate map symmetry
-    if not issued_launcher_order and player.map.symmetry != Symmetry.UNKNOWN:
-        marker_value = player.comms.encode_symmetry(player.map.symmetry)
+    if not issued_launcher_order and map_mod.symmetry != Symmetry.UNKNOWN:
+        marker_value = comms.encode_symmetry(map_mod.symmetry)
         for d in DIRECTIONS:
             marker_pos = my_pos.add(d)
-            if on_map(marker_pos, player.map.width, player.map.height) and safe_place_marker(player, ct, marker_pos, marker_value):
+            if on_map(marker_pos, map_mod.width, map_mod.height) and safe_place_marker(player, ct, marker_pos, marker_value):
                 break
 
     log_time(ct, "After marker spam")
@@ -192,6 +198,6 @@ def run_builder(player, ct: Controller, my_pos: Position, vc) -> None:
     player.prev_global_axionite = player.global_axionite
 
     # Continue computing global BFS until turn end
-    player.nav.refresh_adjacent(ct, player.map)
-    advance_bfs(player, ct, END_TURN_RESERVE_US, draw=True)
+    nav.refresh_adjacent(ct)
+    advance_bfs(ct, END_TURN_RESERVE_US, draw=True)
     log_time(ct, "After end-turn BFS compute")

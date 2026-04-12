@@ -86,21 +86,23 @@ def check_for_resource_increase(player, ct: Controller):
     if player.global_axionite > player.prev_global_axionite:
         player.last_global_axionite_increase = ct.get_current_round()
 
-def get_opposite_ore_mask(map_obj, is_axionite: bool) -> int:
+def get_opposite_ore_mask(is_axionite: bool) -> int:
     """Return the ore mask of the opposite type."""
-    return map_obj.get_titanium_ore_mask() if is_axionite else map_obj.get_axionite_ore_mask()
+    import map as map_mod
+    return map_mod.get_titanium_ore_mask() if is_axionite else map_mod.get_axionite_ore_mask()
 
 def get_predicted_enemy_core_pos(player) -> Position | None:
+    import map as map_mod
     if player.enemy_core_pos is not None:
         return player.enemy_core_pos
-    if player.core_pos is None or player.map is None:
+    if player.core_pos is None:
         return None
-    if player.map.symmetry is not Symmetry.UNKNOWN:
-        return player.map.get_symmetric_pos(player.core_pos, player.map.symmetry)
-    if player.map.can_rotate:
-        return player.map.get_symmetric_pos(player.core_pos, Symmetry.ROTATE)
-    if player.map.can_flip_x:
-        return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_X)
-    if player.map.can_flip_y:
-        return player.map.get_symmetric_pos(player.core_pos, Symmetry.FLIP_Y)
+    if map_mod.symmetry is not Symmetry.UNKNOWN:
+        return map_mod.get_symmetric_pos(player.core_pos, map_mod.symmetry)
+    if map_mod.can_rotate:
+        return map_mod.get_symmetric_pos(player.core_pos, Symmetry.ROTATE)
+    if map_mod.can_flip_x:
+        return map_mod.get_symmetric_pos(player.core_pos, Symmetry.FLIP_X)
+    if map_mod.can_flip_y:
+        return map_mod.get_symmetric_pos(player.core_pos, Symmetry.FLIP_Y)
     return None

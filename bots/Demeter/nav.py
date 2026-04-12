@@ -7,317 +7,352 @@ def _dist_sq(ax: int, ay: int, bx: int, by: int) -> int:
     dy = ay - by
     return dx * dx + dy * dy
 
-class Navigator:
-    def __init__(self):
-        # target
-        self.destination: Position | None = None
-        self.destination_type: str | None = None  # 'exact' | 'adjacent' | 'sensed' | 'visited'
-        self.original_destination: Position | None = None  # set when destination_type == "adjacent"
+# target
+destination: Position | None = None
+destination_type: str | None = None  # 'exact' | 'adjacent' | 'sensed' | 'visited'
+original_destination: Position | None = None
 
-        # bugnav state
-        self.states = None
-        self.bug_path_index = 0
-        self.rotate_right = None
-        self.last_obstacle_found = None
-        self.prev_target = None
-        self.min_dist_to_target = INF
-        self.min_location_to_target = None
-        self.turns_moving_to_obstacle = 0
+# bugnav state
+states = None
+bug_path_index = 0
+rotate_right = None
+last_obstacle_found = None
+prev_target = None
+min_dist_to_target = INF
+min_location_to_target = None
+turns_moving_to_obstacle = 0
 
-        # constants
-        self.MAX_TURNS_MOVING_TO_OBSTACLE = 2
-        self.MIN_DIST_RESET = 3
-        
-        self.width = 0
-        self.height = 0
+# constants
+MAX_TURNS_MOVING_TO_OBSTACLE = 2
+MIN_DIST_RESET = 3
 
-    def set_statics(self, width, height, my_id):
-        self.width = width
-        self.height = height
-        self.my_id = my_id
+width = 0
+height = 0
+my_id = 0
 
-    def set_destination(self, target: Position, destination_type: str):
-        self.destination = target
-        self.destination_type = destination_type
-        self.original_destination = target
+def init():
+    global destination, destination_type, original_destination
+    global states, bug_path_index, rotate_right, last_obstacle_found
+    global prev_target, min_dist_to_target, min_location_to_target, turns_moving_to_obstacle
+    destination = None
+    destination_type = None
+    original_destination = None
+    states = None
+    bug_path_index = 0
+    rotate_right = None
+    last_obstacle_found = None
+    prev_target = None
+    min_dist_to_target = INF
+    min_location_to_target = None
+    turns_moving_to_obstacle = 0
 
-    def clear_destination(self):
-        self.destination = None
-        self.destination_type = None
-        self.original_destination = None
+def set_statics(w, h, mid):
+    global width, height, my_id
+    width = w
+    height = h
+    my_id = mid
 
-    def refresh_adjacent(self, ct, map_obj):
-        """If destination_type is 'adjacent', update destination to the nearest passable adjacent tile."""
-        if self.destination_type != "adjacent" or self.original_destination is None:
-            return
-        adj = self.get_adjacent_target(self.original_destination, ct)
-        if adj is not None:
-            self.destination = adj
-        else:
-            self.destination = self.original_destination
+def set_destination(target: Position, dest_type: str):
+    global destination, destination_type, original_destination
+    destination = target
+    destination_type = dest_type
+    original_destination = target
 
-    def is_destination_reached(self, ct, map_obj):
-        if self.destination is None:
-            return True
-        if self.destination_type == "exact":
-            return ct.get_position() == self.destination
-        if self.destination_type == "adjacent":
-            ref = self.original_destination or self.destination
-            my_pos = ct.get_position()
-            return 0 < _dist_sq(my_pos.x, my_pos.y, ref.x, ref.y) <= 2
-        if self.destination_type == "sensed":
-            return ct.is_in_vision(self.destination)
-        # "visited" or None
-        return map_obj is not None and map_obj.is_visited(self.destination)
+def clear_destination():
+    global destination, destination_type, original_destination
+    destination = None
+    destination_type = None
+    original_destination = None
 
-    def get_adjacent_target(self, pos: Position, ct) -> Position | None:
-        """Return the passable tile adjacent to pos that is closest to our current position."""
+def refresh_adjacent(ct):
+    global destination
+    if destination_type != "adjacent" or original_destination is None:
+        return
+    adj = get_adjacent_target(original_destination, ct)
+    if adj is not None:
+        destination = adj
+    else:
+        destination = original_destination
+
+def is_destination_reached(ct):
+    import map as map_mod
+    if destination is None:
+        return True
+    if destination_type == "exact":
+        return ct.get_position() == destination
+    if destination_type == "adjacent":
+        ref = original_destination or destination
         my_pos = ct.get_position()
-        mx, my = my_pos
-        px, py = pos
-        w, h = self.width, self.height
-        best: Position | None = None
-        best_dist = INF
-        for d in DIRECTIONS:
-            ddx, ddy = DELTAS[d]
-            ax, ay = px + ddx, py + ddy
-            if not (0 <= ax < w and 0 <= ay < h):
-                continue
-            dist = _dist_sq(mx, my, ax, ay)
-            if dist >= best_dist:
-                continue
-            adj = Position(ax, ay)
-            if not ct.is_in_vision(adj):
-                continue
-            if adj != my_pos and not ct.is_tile_passable(adj):
-                continue
+        return 0 < _dist_sq(my_pos.x, my_pos.y, ref.x, ref.y) <= 2
+    if destination_type == "sensed":
+        return ct.is_in_vision(destination)
+    # "visited" or None
+    return map_mod.is_visited(destination)
 
-            best_dist = dist
-            best = adj
-        return best
+def get_adjacent_target(pos: Position, ct) -> Position | None:
+    my_pos = ct.get_position()
+    mx, my = my_pos
+    px, py = pos
+    w, h = width, height
+    best: Position | None = None
+    best_dist = INF
+    for d in DIRECTIONS:
+        ddx, ddy = DELTAS[d]
+        ax, ay = px + ddx, py + ddy
+        if not (0 <= ax < w and 0 <= ay < h):
+            continue
+        dist = _dist_sq(mx, my, ax, ay)
+        if dist >= best_dist:
+            continue
+        adj = Position(ax, ay)
+        if not ct.is_in_vision(adj):
+            continue
+        if adj != my_pos and not ct.is_tile_passable(adj):
+            continue
 
-    def init(self, ct, map_obj):
-        if self.states is None:
-            width = map_obj.width
-            height = map_obj.height
-            self.states = [[0] * height for _ in range(width)]
+        best_dist = dist
+        best = adj
+    return best
 
-    def go_to(self, ct, map_obj):
-        target = self.destination
-        if target is None:
-            return
+def _init_states(ct):
+    global states
+    if states is None:
+        states = [[0] * height for _ in range(width)]
 
-        self.init(ct, map_obj)
+def go_to(ct):
+    global prev_target, min_dist_to_target, min_location_to_target
+    target = destination
+    if target is None:
+        return
 
-        my_loc = ct.get_position()
-        mlx, mly = my_loc
-        tx, ty = target
-        w, h = self.width, self.height
+    _init_states(ct)
 
-        # === TARGET CHANGE HANDLING ===
-        if self.prev_target is None:
-            self.reset_pathfinding()
-            self.rotate_right = None
-        else:
-            dist = _dist_sq(tx, ty, self.prev_target.x, self.prev_target.y)
-            if dist > 0:
-                if dist >= self.MIN_DIST_RESET:
-                    self.rotate_right = None
-                    self.reset_pathfinding()
-                else:
-                    self.soft_reset(target)
+    my_loc = ct.get_position()
+    mlx, mly = my_loc
+    tx, ty = target
+    w, h = width, height
 
-        self.prev_target = target
-
-        self.check_state(my_loc)
-
-        d = _dist_sq(mlx, mly, tx, ty)
-        if d == 0:
-            return
-        
-        if ct.get_move_cooldown() > 0:
-            return
-
-        if d < self.min_dist_to_target:
-            self.reset_pathfinding()
-            self.min_dist_to_target = d
-            self.min_location_to_target = my_loc
-
-        # === GREEDY ===
-        if self.last_obstacle_found is None:
-            if self.try_greedy_move(ct, my_loc, target, map_obj):
-                self.reset_pathfinding()
-                return
-
-        # === BUG MODE ===
-        if self.last_obstacle_found is not None:
-            direction = my_loc.direction_to(self.last_obstacle_found)
-        else:
-            direction = my_loc.direction_to(target)
-
-        if self.can_pass(ct, direction, my_loc):
-            self.execute_move(ct, direction, my_loc)
-            if self.last_obstacle_found is not None:
-                self.turns_moving_to_obstacle += 1
-                ddx, ddy = DELTAS[direction]
-                ox, oy = mlx + ddx, mly + ddy
-                if (
-                    self.turns_moving_to_obstacle >= self.MAX_TURNS_MOVING_TO_OBSTACLE
-                    or not (0 <= ox < w and 0 <= oy < h)
-                ):
-                    self.reset_pathfinding()
-                else:
-                    self.last_obstacle_found = Position(ox, oy)
-            return
-        else:
-            self.turns_moving_to_obstacle = 0
-
-        self.check_rotate(ct, my_loc, target, direction)
-
-        # === BUG LOOP ===
-        for _ in range(16):
-            if self.can_pass(ct, direction, my_loc):
-                self.execute_move(ct, direction, my_loc)
-                return
-
-            ddx, ddy = DELTAS[direction]
-            nx, ny = mlx + ddx, mly + ddy
-
-            if not (0 <= nx < w and 0 <= ny < h):
-                self.rotate_right = not self.rotate_right
+    # === TARGET CHANGE HANDLING ===
+    if prev_target is None:
+        reset_pathfinding()
+        _set_rotate_right(None)
+    else:
+        dist = _dist_sq(tx, ty, prev_target.x, prev_target.y)
+        if dist > 0:
+            if dist >= MIN_DIST_RESET:
+                _set_rotate_right(None)
+                reset_pathfinding()
             else:
-                self.last_obstacle_found = Position(nx, ny)
+                soft_reset(target)
 
-            direction = direction.rotate_right() if self.rotate_right else direction.rotate_left()
+    prev_target = target
 
-        if self.can_pass(ct, direction, my_loc):
-            self.execute_move(ct, direction, my_loc)
+    check_state(my_loc)
 
-    def try_greedy_move(self, ct, my_loc, target, map_obj):
+    d = _dist_sq(mlx, mly, tx, ty)
+    if d == 0:
+        return
+
+    if ct.get_move_cooldown() > 0:
+        return
+
+    if d < min_dist_to_target:
+        reset_pathfinding()
+        min_dist_to_target = d
+        min_location_to_target = my_loc
+
+    # === GREEDY ===
+    if last_obstacle_found is None:
+        if try_greedy_move(ct, my_loc, target):
+            reset_pathfinding()
+            return
+
+    # === BUG MODE ===
+    if last_obstacle_found is not None:
+        direction = my_loc.direction_to(last_obstacle_found)
+    else:
         direction = my_loc.direction_to(target)
-        mx, my = my_loc
-        tx, ty = target
-        dist = _dist_sq(mx, my, tx, ty)
 
-        dir1 = direction.rotate_right()
-        dir2 = direction.rotate_left()
+    if can_pass(ct, direction, my_loc):
+        execute_move(ct, direction, my_loc)
+        if last_obstacle_found is not None:
+            _inc_turns_moving()
+            ddx, ddy = DELTAS[direction]
+            ox, oy = mlx + ddx, mly + ddy
+            if (
+                turns_moving_to_obstacle >= MAX_TURNS_MOVING_TO_OBSTACLE
+                or not (0 <= ox < w and 0 <= oy < h)
+            ):
+                reset_pathfinding()
+            else:
+                _set_last_obstacle(Position(ox, oy))
+        return
+    else:
+        _reset_turns_moving()
 
-        candidates = []
-        for turn_cost, candidate_dir in ((0, direction), (1, dir1), (1, dir2)):
-            if not self.can_pass(ct, candidate_dir, my_loc):
-                continue
-            ddx, ddy = DELTAS[candidate_dir]
-            nx, ny = mx + ddx, my + ddy
-            next_dist = _dist_sq(nx, ny, tx, ty)
-            if next_dist >= dist:
-                continue
-            risk = map_obj.get_enemy_launcher_adj_count(Position(nx, ny))
-            candidates.append(((risk, next_dist, turn_cost), candidate_dir))
+    check_rotate(ct, my_loc, target, direction)
 
-        if candidates:
-            _, best_dir = min(candidates, key=lambda item: item[0])
-            self.execute_move(ct, best_dir, my_loc)
-            return True
+    # === BUG LOOP ===
+    for _ in range(16):
+        if can_pass(ct, direction, my_loc):
+            execute_move(ct, direction, my_loc)
+            return
 
+        ddx, ddy = DELTAS[direction]
+        nx, ny = mlx + ddx, mly + ddy
+
+        if not (0 <= nx < w and 0 <= ny < h):
+            _set_rotate_right(not rotate_right if rotate_right is not None else True)
+        else:
+            _set_last_obstacle(Position(nx, ny))
+
+        direction = direction.rotate_right() if rotate_right else direction.rotate_left()
+
+    if can_pass(ct, direction, my_loc):
+        execute_move(ct, direction, my_loc)
+
+def try_greedy_move(ct, my_loc, target):
+    import map as map_mod
+    direction = my_loc.direction_to(target)
+    mx, my = my_loc
+    tx, ty = target
+    dist = _dist_sq(mx, my, tx, ty)
+
+    dir1 = direction.rotate_right()
+    dir2 = direction.rotate_left()
+
+    candidates = []
+    for turn_cost, candidate_dir in ((0, direction), (1, dir1), (1, dir2)):
+        if not can_pass(ct, candidate_dir, my_loc):
+            continue
+        ddx, ddy = DELTAS[candidate_dir]
+        nx, ny = mx + ddx, my + ddy
+        next_dist = _dist_sq(nx, ny, tx, ty)
+        if next_dist >= dist:
+            continue
+        risk = map_mod.get_enemy_launcher_adj_count(Position(nx, ny))
+        candidates.append(((risk, next_dist, turn_cost), candidate_dir))
+
+    if candidates:
+        _, best_dir = min(candidates, key=lambda item: item[0])
+        execute_move(ct, best_dir, my_loc)
+        return True
+
+    return False
+
+def check_rotate(ct, my_loc, target, direction):
+    if rotate_right is not None:
+        return
+
+    dir_left = direction
+    dir_right = direction
+
+    for _ in range(8):
+        if not can_pass(ct, dir_left, my_loc):
+            dir_left = dir_left.rotate_left()
+        else:
+            break
+
+    for _ in range(8):
+        if not can_pass(ct, dir_right, my_loc):
+            dir_right = dir_right.rotate_right()
+        else:
+            break
+
+    mx, my = my_loc
+    tx, ty = target
+    dlx, dly = DELTAS[dir_left]
+    drx, dry = DELTAS[dir_right]
+    dist_left = _dist_sq(mx + dlx, my + dly, tx, ty)
+    dist_right = _dist_sq(mx + drx, my + dry, tx, ty)
+
+    _set_rotate_right(dist_right < dist_left)
+
+def reset_pathfinding():
+    global last_obstacle_found, min_dist_to_target, bug_path_index, turns_moving_to_obstacle
+    last_obstacle_found = None
+    min_dist_to_target = INF
+    bug_path_index += 1
+    turns_moving_to_obstacle = 0
+
+def soft_reset(target):
+    global min_dist_to_target
+    if min_location_to_target is not None:
+        min_dist_to_target = _dist_sq(
+            min_location_to_target.x, min_location_to_target.y,
+            target.x, target.y
+        )
+    else:
+        reset_pathfinding()
+
+def check_state(my_loc):
+    if states is None:
+        return
+
+    if last_obstacle_found is None:
+        x, y = 61, 61
+    else:
+        x, y = last_obstacle_found.x, last_obstacle_found.y
+
+    state = (bug_path_index << 14) | (x << 8) | (y << 2)
+
+    if rotate_right is not None:
+        state |= 1 if rotate_right else 2
+
+    if states[my_loc.x][my_loc.y] == state:
+        reset_pathfinding()
+
+    states[my_loc.x][my_loc.y] = state
+
+def can_pass(ct, direction, my_pos):
+    if direction is None or direction == Direction.CENTRE:
         return False
 
-    def check_rotate(self, ct, my_loc, target, direction):
-        if self.rotate_right is not None:
-            return
+    ddx, ddy = DELTAS[direction]
 
-        dir_left = direction
-        dir_right = direction
+    nx, ny = my_pos.x + ddx, my_pos.y + ddy
+    if not (0 <= nx < width and 0 <= ny < height):
+        return False
 
-        for _ in range(8):
-            if not self.can_pass(ct, dir_left, my_loc):
-                dir_left = dir_left.rotate_left()
-            else:
-                break
+    if ct.can_move(direction):
+        return True
+    next_pos = Position(nx, ny)
+    bid = ct.get_tile_builder_bot_id(next_pos)
+    return ct.can_build_road(next_pos) and (bid is None or bid == my_id)
 
-        for _ in range(8):
-            if not self.can_pass(ct, dir_right, my_loc):
-                dir_right = dir_right.rotate_right()
-            else:
-                break
+def execute_move(ct, direction, my_pos):
+    if direction is None or direction == Direction.CENTRE:
+        return
 
-        mx, my = my_loc
-        tx, ty = target
-        dlx, dly = DELTAS[dir_left]
-        drx, dry = DELTAS[dir_right]
-        dist_left = _dist_sq(mx + dlx, my + dly, tx, ty)
-        dist_right = _dist_sq(mx + drx, my + dry, tx, ty)
+    if ct.can_move(direction):
+        ct.move(direction)
+        return
 
-        self.rotate_right = dist_right < dist_left
+    ddx, ddy = DELTAS[direction]
+    nx, ny = my_pos.x + ddx, my_pos.y + ddy
+    if not (0 <= nx < width and 0 <= ny < height):
+        return
 
-    def reset_pathfinding(self):
-        self.last_obstacle_found = None
-        self.min_dist_to_target = INF
-        self.bug_path_index += 1
-        self.turns_moving_to_obstacle = 0
+    next_pos = Position(nx, ny)
+    if ct.can_build_road(next_pos):
+        ct.build_road(next_pos)
 
-    def soft_reset(self, target):
-        if self.min_location_to_target is not None:
-            self.min_dist_to_target = _dist_sq(
-                self.min_location_to_target.x, self.min_location_to_target.y,
-                target.x, target.y
-            )
-        else:
-            self.reset_pathfinding()
-
-    def check_state(self, my_loc):
-        if self.states is None:
-            return
-
-        if self.last_obstacle_found is None:
-            x, y = 61, 61
-        else:
-            x, y = self.last_obstacle_found.x, self.last_obstacle_found.y
-
-        state = (self.bug_path_index << 14) | (x << 8) | (y << 2)
-
-        if self.rotate_right is not None:
-            state |= 1 if self.rotate_right else 2
-
-        if self.states[my_loc.x][my_loc.y] == state:
-            self.reset_pathfinding()
-
-        self.states[my_loc.x][my_loc.y] = state
-
-    def can_pass(self, ct, direction, my_pos):
-        if direction is None or direction == Direction.CENTRE:
-            return False
-
-        ddx, ddy = DELTAS[direction]
-
-        nx, ny = my_pos.x + ddx, my_pos.y + ddy
-        if not (0 <= nx < self.width and 0 <= ny < self.height):
-            return False
-
-        if ct.can_move(direction):
-            return True
-        next_pos = Position(nx, ny)
-        bid = ct.get_tile_builder_bot_id(next_pos)
-        return ct.can_build_road(next_pos) and (bid is None or bid == self.my_id)
-
-    def execute_move(self, ct, direction, my_pos):
-        if direction is None or direction == Direction.CENTRE:
-            return
-
-        # Case 1: already movable
         if ct.can_move(direction):
             ct.move(direction)
-            return
 
-        # Case 2: need to build road first
-        ddx, ddy = DELTAS[direction]
-        nx, ny = my_pos.x + ddx, my_pos.y + ddy
-        if not (0 <= nx < self.width and 0 <= ny < self.height):
-            return
+# Helper setters for global state
+def _set_rotate_right(val):
+    global rotate_right
+    rotate_right = val
 
-        next_pos = Position(nx, ny)
-        if ct.can_build_road(next_pos):
-            ct.build_road(next_pos)
+def _set_last_obstacle(pos):
+    global last_obstacle_found
+    last_obstacle_found = pos
 
-            # after building, try to move
-            if ct.can_move(direction):
-                ct.move(direction)
+def _inc_turns_moving():
+    global turns_moving_to_obstacle
+    turns_moving_to_obstacle += 1
+
+def _reset_turns_moving():
+    global turns_moving_to_obstacle
+    turns_moving_to_obstacle = 0

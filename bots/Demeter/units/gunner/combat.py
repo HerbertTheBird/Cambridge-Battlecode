@@ -1,5 +1,7 @@
 from cambc import Controller, Direction, EntityType, Environment, Position, Team
 
+import map as map_mod
+
 from globals import INF, TURRET_TYPES, DIRECTIONS, CARDINAL_DIRECTIONS, DELTAS
 from map import on_map, on_map_coords
 
@@ -66,12 +68,12 @@ def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Pos
 
     return ray_tiles[first_enemy_idx]
 
-def get_gunner_threat_mask(ct: Controller, tpos: Position, map_obj, my_team) -> int:
+def get_gunner_threat_mask(ct: Controller, tpos: Position, my_team) -> int:
     threat_mask = 0
 
-    width = map_obj.width
-    height = map_obj.height
-    bm_wall = map_obj.get_env_mask(Environment.WALL)
+    width = map_mod.width
+    height = map_mod.height
+    bm_wall = map_mod.get_env_mask(Environment.WALL)
 
     for d in DIRECTIONS:
         dx, dy = DELTAS[d]
@@ -110,19 +112,19 @@ def get_gunner_threat_mask(ct: Controller, tpos: Position, map_obj, my_team) -> 
 
     return threat_mask
 
-def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, map_obj, my_team) -> Direction | None:
+def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, my_team) -> Direction | None:
     current_dir = ct.get_direction()
     rotate_dir = None
     rotate_dist = 14
 
-    threat_mask = get_gunner_threat_mask(ct, my_pos, map_obj, my_team)
+    threat_mask = get_gunner_threat_mask(ct, my_pos, my_team)
 
     for (eid, etype, tpos) in enemy_units:
         if etype not in TURRET_TYPES:
             continue
 
         # --- core check ---
-        tile_idx = tpos.y * map_obj.width + tpos.x
+        tile_idx = tpos.y * map_mod.width + tpos.x
         if not ((threat_mask >> tile_idx) & 1):
             continue
 

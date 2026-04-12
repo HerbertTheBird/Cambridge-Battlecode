@@ -1,7 +1,5 @@
 from cambc import Controller, Position, Team
 
-from vision import VisionCache
-
 def _get_farthest_core_tile(my_pos, enemy_core_pos):
     """Return the enemy core tile farthest from this breach within the core's 3x3 footprint."""
     if enemy_core_pos is None:
@@ -26,7 +24,7 @@ def _get_farthest_core_tile(my_pos, enemy_core_pos):
     return best_tile
 
 # Breach defaults to attacking farthest enemy core tile to avoid hitting foundry feeding it
-def choose_target(ct: Controller, my_pos: Position, vc: VisionCache, enemy_core_pos: Position | None) -> Position | None:
+def choose_target(ct: Controller, my_pos: Position, enemy_core_pos: Position | None) -> Position | None:
     """Return the farthest enemy core tile that this breach can fire at."""
     target = _get_farthest_core_tile(my_pos, enemy_core_pos)
     if target is None or not ct.can_fire(target):

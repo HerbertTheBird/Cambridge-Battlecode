@@ -226,17 +226,6 @@ class Pathing:
             if 5 < dx * dx + dy * dy <= 18
         ]
 
-    def _bridge_zone(self, center: Position) -> int:
-        return 0
-        # cx, cy = center.x, center.y
-        # w, h = self.width, self.height
-        # mask = 0
-        # for dx, dy in self._bridge_offsets:
-        #     nx, ny = cx + dx, cy + dy
-        #     if 0 <= nx < w and 0 <= ny < h:
-        #         mask |= 1 << (nx + ny * w)
-        # return mask
-
     def move(self, dir: Direction):
         rc = self.rc
         px, py = rc.get_position().x, rc.get_position().y
@@ -400,7 +389,7 @@ class Pathing:
 
         return [Position((b.bit_length() - 1) % width, (b.bit_length() - 1) // width) for b in path_bits]
 
-    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: int | None = None, routing = False, bridge_zone: int | None = None, avoid_turret = True) -> list[Position] | None:
+    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: int | None = None, routing = False, avoid_turret = True) -> list[Position] | None:
         width = self.width
         if avoid_p is None:
             avoid_p = map_info.get_avoid(False, True, False)
@@ -489,8 +478,6 @@ class Pathing:
                 for step in CONV:
                     offset = step[0]+step[1]*width
                     new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
-                    if bridge_zone is not None and step[2] <= 1:
-                        new &= ~bridge_zone
                     can_visit[(i+step[2])] |= new
             else:
                 can_visit.extend([0]*(i+1+barrier_cost+threat_cost+1-len(can_visit)))
@@ -591,14 +578,13 @@ class Pathing:
         # builder.draw_mask(target, 0, 255, 0)
         if not target:
             return None
-        bz = self._bridge_zone(map_info._my_core)
         if not update:
             new_start = set()
             for dir in CARD_DIR:
                 if map_info.in_bounds(start.add(dir)) and (avoid >> ((start.x + dir.delta()[0]) + (start.y + dir.delta()[1]) * self.width) & 1) == 0:
                     new_start.add(start.add(dir))
             start = new_start
-        path = self.bfs(start, target, avoid, True, bz)
+        path = self.bfs(start, target, avoid, True)
         if not path:
             return None
         for i in range(len(path)-1):
