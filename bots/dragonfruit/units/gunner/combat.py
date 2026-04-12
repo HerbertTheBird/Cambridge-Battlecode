@@ -1,6 +1,6 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment
 
-from globals import INF, TURRET_TYPES, DIRECTIONS, CARDINAL_DIRECTIONS, DELTAS
+from globals import INF, TURRET_TYPES, DIRECTIONS, CARDINAL_DIRECTIONS, DELTAS, CONVEYOR_TYPES
 from map import on_map
 
 def choose_gunner_target(ct: Controller, my_pos: Position, my_team: Team) -> Position | None:
@@ -114,7 +114,7 @@ def choose_rotate_dir(ct: Controller, my_pos: Position, enemy_units, map_obj, my
     threat_tiles = get_gunner_threat_tiles(ct, my_pos, map_obj, my_team)
 
     for (eid, etype, tpos) in enemy_units:
-        if etype not in TURRET_TYPES:
+        if etype not in TURRET_TYPES and etype != EntityType.LAUNCHER and etype not in CONVEYOR_TYPES:
             continue
 
         # --- core check ---

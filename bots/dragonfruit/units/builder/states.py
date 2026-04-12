@@ -111,14 +111,47 @@ def run_start_harvest_chain(player, ct: Controller, vc) -> None:
         player.nav.set_destination(bridge_pos, "exact")
 
     if my_pos == ore_pos and barrier_targets:
-        current_barrier_targets = [
+        current_targets = [
             pos for pos in get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
             if pos != bridge_pos
         ]
-        if current_barrier_targets:
-            target = current_barrier_targets[0]
-            if safe_build_road(player, ct, target):
-                log(f"START_CHAIN: road at {target} (protecting {ore_pos})")
+        if current_targets:
+            target = current_targets[0]
+
+            if ct.get_tile_env(target) != Environment.ORE_TITANIUM:
+                # check for unsafe nearby tiles
+                unsafe_positions = get_unsafe_targets(ore_pos, player.core_pos, ct, player.map, bridge_pos)
+
+                # Find unsafe positions within range of this barrier target
+                relevant_unsafe = [
+                    pos for pos in unsafe_positions
+                    if pos.distance_squared(target) <= 2
+                ]
+
+                # Try to build gunner if any unsafe tile is not covered
+                for unsafe_pos in relevant_unsafe:
+                    if not has_gunner_covering(player, ct, unsafe_pos):
+                        turret_type = EntityType.GUNNER
+                        direction = get_turret_direction(
+                            target,
+                            unsafe_pos,
+                            ct,
+                            player.map,
+                            turret_type,
+                            is_core_threat=False,
+                        )
+
+                        if direction is not None:
+                            if build_turret(player, ct, target, direction, turret_type):
+                                log(f"DEFEND: built gunner at {target} facing {unsafe_pos}")
+                                return
+                            elif my_pos == target:
+                                remember_non_passable_build(player, target, turret_type, direction)
+                                return
+
+            # fallback: build barrier
+            if safe_build_barrier(player, ct, target):
+                log(f"START_CHAIN: barrier at {target} (protecting {ore_pos})")
         return
 
     if my_pos == ore_pos and not barrier_targets:
@@ -628,7 +661,39 @@ def run_defend(player, ct: Controller, vc) -> None:
             current_targets = get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
             if current_targets:
                 target = current_targets[0]
-                if safe_build_road(player, ct, target):
+
+                # check for unsafe nearby tiles
+                unsafe_positions = get_unsafe_targets(ore_pos, player.core_pos, ct, player.map)
+
+                # Find unsafe positions within range of this barrier target
+                relevant_unsafe = [
+                    pos for pos in unsafe_positions
+                    if pos.distance_squared(target) <= 2
+                ]
+
+                # Try to build gunner if any unsafe tile is not covered
+                for unsafe_pos in relevant_unsafe:
+                    if not has_gunner_covering(player, ct, unsafe_pos):
+                        turret_type = EntityType.GUNNER
+                        direction = get_turret_direction(
+                            target,
+                            unsafe_pos,
+                            ct,
+                            player.map,
+                            turret_type,
+                            is_core_threat=False,
+                        )
+
+                        if direction is not None:
+                            if build_turret(player, ct, target, direction, turret_type):
+                                log(f"DEFEND: built gunner at {target} facing {unsafe_pos}")
+                                return
+                            elif my_pos == target:
+                                remember_non_passable_build(player, target, turret_type, direction)
+                                return
+
+                # fallback: build barrier
+                if safe_build_barrier(player, ct, target):
                     log(f"DEFEND: barrier at {target} (protecting {ore_pos})")
             remaining = get_barrier_targets(ore_pos, player.core_pos, ct, player.map)
             if not remaining:
