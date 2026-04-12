@@ -1,8 +1,22 @@
-from cambc import Controller, EntityType, Position, ResourceType
+from cambc import Controller, Position, ResourceType
 
-from globals import *
-from helpers import *
-from units.builder.logic import *
+from globals import State
+from helpers import is_in_vision
+from units.builder.logic import (
+    get_nearest_enemy_threat_pos,
+    get_known_core_intercept_threat,
+    find_intercept_pos,
+    count_ally_turrets_covering,
+    should_intercept,
+    find_sabotage_target,
+    find_heal_target,
+    find_broken_chain_target,
+    find_upgradeable_axionite_placeholder,
+    find_defend_target,
+    count_closer_allies,
+    is_ore_unblocked,
+    get_ray_endpoint,
+)
 import map as map_mod
 import nav
 import vision as vc
@@ -10,7 +24,7 @@ from log import log, log_time
 
 def decide_state(player, ct: Controller, my_pos: Position) -> State:
     # INTERCEPT if enemy threat and good turret build position/direction
-    threat_result = get_nearest_enemy_threat_pos(vc, my_pos)
+    threat_result = get_nearest_enemy_threat_pos(my_pos)
     if threat_result is None:
         threat_result = get_known_core_intercept_threat(player, my_pos, "synthetic threat")
     threat_pos = None
@@ -22,13 +36,12 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
 
     if threat_pos is not None:
         log(f"considering intercept against threat at {threat_pos} (core={threat_is_core})")
-        if threat_is_core or count_ally_turrets_covering(ct, vc, threat_pos) < 2:
+        if threat_is_core or count_ally_turrets_covering(ct, threat_pos) < 2:
             log("trying to find intercept pos")
             intercept, prio = find_intercept_pos(
                 ct,
                 my_pos,
                 player.my_team,
-                vc,
                 threat_pos,
                 enemy_only=False,
                 global_titanium=player.global_titanium,
@@ -38,7 +51,7 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
             log(intercept, prio)
             log_time(ct, "After find intercept pos")
             if intercept is not None:
-                if prio == 3 or should_intercept(vc, my_pos, player.core_pos):
+                if prio == 3 or should_intercept(my_pos, player.core_pos):
                     log(f"intercept target at {intercept}")
                     nav.set_destination(intercept, "adjacent")
                     return State.INTERCEPT
@@ -60,7 +73,7 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
 
     # HEAL if we see a damaged ally core
     # Do not require this bot to be the closest ally since core loss ends the game.
-    if player.core_pos is not None and ct.is_in_vision(player.core_pos):
+    if player.core_pos is not None and is_in_vision(my_pos, player.core_pos):
         core_id = map_mod.get_tile_entity_id(player.core_pos)
         if (
             core_id is not None
@@ -123,11 +136,11 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
     log_time(ct, "After finding nearest unserviced/unharvested")
 
     if target is not None:
-        bbid = ct.get_tile_builder_bot_id(target) if ct.is_in_vision(target) else None
+        bbid = ct.get_tile_builder_bot_id(target) if is_in_vision(my_pos, target) else None
         # Allow one closer ally in case it is busy with something else.
         if (
-            count_closer_allies(player, target, my_pos, vc) < 2
-            and is_ore_unblocked(player, ct, target)
+            count_closer_allies(player, target, my_pos) < 2
+            and is_ore_unblocked(player, ct, target, my_pos)
             and bbid is None
         ):
             log(f"new harvest target at {target}")
@@ -151,7 +164,7 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
     if player.core_pos is not None and player.global_titanium >= 1500:
         foundry_placeholder = find_upgradeable_axionite_placeholder(player, ct, my_pos)
         if (foundry_placeholder is not None
-            and count_closer_allies(player, foundry_placeholder, my_pos, vc) < 2):
+            and count_closer_allies(player, foundry_placeholder, my_pos) < 2):
             log(f"upgrade foundry placeholder at {foundry_placeholder}")
             nav.set_destination(foundry_placeholder, "adjacent")
             player.harvest_ore_type = ResourceType.RAW_AXIONITE
@@ -162,7 +175,7 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
         
     # DEFEND if we see a harvester with infrastructure or bare titanium ore
     defend_target = find_defend_target(player, ct, my_pos)
-    if defend_target is not None and my_pos.distance_squared(defend_target) <= 32 and count_closer_allies(player, defend_target, my_pos, vc) < 2:
+    if defend_target is not None and my_pos.distance_squared(defend_target) <= 32 and count_closer_allies(player, defend_target, my_pos) < 2:
         player.harvest_ore_pos = defend_target
         nav.set_destination(defend_target, "adjacent")
         log(f"defend target at {defend_target}")
@@ -179,7 +192,7 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
         log(f"initial explore dest={endpoint} using direction {spawn_dir}")
     else:
         max_iters = 10
-        while max_iters > 0 and nav.is_destination_reached(ct):
+        while max_iters > 0 and nav.is_destination_reached(my_pos):
             nav.set_destination(map_mod.get_random_tile(), "sensed")
             max_iters -= 1
         log(f"explore target={nav.destination} type={nav.destination_type}")

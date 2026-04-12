@@ -1,16 +1,17 @@
 from cambc import Controller, Direction, Position, EntityType, Team
 
 from globals import CARDINAL_DIRECTIONS, TURRET_TYPES
+from helpers import is_in_vision
 
 import map as map_mod
 import vision as vc
 
-def can_build_over_existing(pos: Position, ct: Controller, my_pos: Position, my_team: Team, allow_launchers: bool = False) -> bool:
+def can_build_over_existing(pos: Position, my_pos: Position, my_team: Team, allow_launchers: bool = False) -> bool:
     """True if pos has an ally road/sentinel within action range that can be destroyed to build something.
     If enemies are visible, refuses to destroy ally sentinels."""
     if my_pos.distance_squared(pos) > 2:
         return False
-    if not ct.is_in_vision(pos):
+    if not is_in_vision(my_pos, pos):
         return False
     if map_mod.is_wall(pos):
         return False
@@ -39,7 +40,7 @@ def can_build_conveyor_here(pos: Position, direction: Direction, ct: Controller,
         return False
     if ct.can_build_conveyor(pos, direction):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, allow_launchers=allow_launchers)
+    return (can_build_over_existing(pos, my_pos, my_team, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_conveyor_cost()[0])
 
 def can_build_armoured_conveyor_here(pos: Position, direction: Direction, ct: Controller, my_pos: Position, my_team: Team, allow_launchers: bool = False) -> bool:
@@ -51,7 +52,7 @@ def can_build_armoured_conveyor_here(pos: Position, direction: Direction, ct: Co
         return True
     titanium, axionite = ct.get_global_resources()
     titanium_cost, axionite_cost = ct.get_armoured_conveyor_cost()
-    return (can_build_over_existing(pos, ct, my_pos, my_team, allow_launchers=allow_launchers)
+    return (can_build_over_existing(pos, my_pos, my_team, allow_launchers=allow_launchers)
             and titanium >= titanium_cost and axionite >= axionite_cost)
 
 
@@ -62,7 +63,7 @@ def can_build_splitter_here(pos: Position, direction: Direction, ct: Controller,
         return False
     if ct.can_build_splitter(pos, direction):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, allow_launchers=allow_launchers)
+    return (can_build_over_existing(pos, my_pos, my_team, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_splitter_cost()[0])
 
 def can_build_bridge_here(pos: Position, output: Position, ct: Controller, my_pos: Position, my_team: Team, allow_launchers: bool = False) -> bool:
@@ -70,7 +71,7 @@ def can_build_bridge_here(pos: Position, output: Position, ct: Controller, my_po
     or because the tile holds an ally road/sentinel we can first destroy."""
     if ct.can_build_bridge(pos, output):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, allow_launchers=allow_launchers)
+    return (can_build_over_existing(pos, my_pos, my_team, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_bridge_cost()[0])
 
 def can_build_launcher_here(pos: Position, ct: Controller, my_pos: Position, my_team: Team, allow_launchers: bool = False) -> bool:
@@ -79,7 +80,7 @@ def can_build_launcher_here(pos: Position, ct: Controller, my_pos: Position, my_
         return False
     if ct.can_build_launcher(pos):
         return True
-    return (can_build_over_existing(pos, ct, my_pos, my_team, allow_launchers=allow_launchers)
+    return (can_build_over_existing(pos, my_pos, my_team, allow_launchers=allow_launchers)
             and ct.get_global_resources()[0] >= ct.get_launcher_cost()[0])
 
 def can_build_foundry_here(pos: Position, ct: Controller, my_pos: Position, my_team: Team) -> bool:
@@ -88,7 +89,7 @@ def can_build_foundry_here(pos: Position, ct: Controller, my_pos: Position, my_t
         return False
     if ct.can_build_foundry(pos):
         return True
-    return can_build_over_existing(pos, ct, my_pos, my_team)
+    return can_build_over_existing(pos, my_pos, my_team)
 
 def safe_destroy(player, ct: Controller, pos: Position) -> bool:
     """Destroy a non-marker building at pos. Returns True if destroyed."""

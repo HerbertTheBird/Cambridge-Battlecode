@@ -1,11 +1,11 @@
 from cambc import Controller, Position, GameConstants
 
-import vision as vc
-
-from globals import *
-from units.gunner.combat import choose_gunner_target, choose_rotate_dir
-from helpers import *
 from log import log
+import vision as vc
+from units.gunner.combat import (
+    choose_gunner_target, 
+    choose_rotate_dir
+)
 
 def run_gunner(player, ct: Controller, my_pos: Position) -> None:
     # Initialize last fired round on first turn

@@ -1,6 +1,5 @@
 from cambc import Controller, Position
 
-from globals import *
 from units.breach.combat import choose_target
 from log import log
 

@@ -1,6 +1,7 @@
 from cambc import EntityType
 
 from globals import CONVEYOR_TYPES, TURRET_TYPES
+import map as map_mod
 
 enemy_units = []
 enemy_conveyors = []
@@ -22,7 +23,6 @@ def init():
 
 def refresh(ct, player):
     global ally_builder_mask, enemy_builder_mask
-    import map as map_mod
     my_team = player.my_team
     width = map_mod.width
 
@@ -113,7 +113,6 @@ def refresh(ct, player):
 
 def remove_entity(player, entity_id, entity_type, team, pos):
     global ally_builder_mask, enemy_builder_mask
-    import map as map_mod
     bit = 1 << (pos.x + pos.y * map_mod.width)
 
     try:
@@ -163,7 +162,6 @@ def remove_entity(player, entity_id, entity_type, team, pos):
 
 def add_entity(player, entity_id, entity_type, team, pos):
     global ally_builder_mask, enemy_builder_mask
-    import map as map_mod
     bit = 1 << (pos.x + pos.y * map_mod.width)
 
     if entity_type is EntityType.MARKER:

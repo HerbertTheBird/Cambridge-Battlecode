@@ -1,10 +1,11 @@
 from cambc import Controller, Position
 
-import vision as vc
-
-from globals import *
-from units.sentinel.combat import choose_target, choose_passive_target
 from log import log
+import vision as vc
+from units.sentinel.combat import (
+    choose_target, 
+    choose_passive_target
+)
 
 def run_sentinel(player, ct: Controller, my_pos: Position) -> None:
     # Initialize last fired round on first turn

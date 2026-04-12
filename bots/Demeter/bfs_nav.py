@@ -1,12 +1,14 @@
 import heapq
 
-from cambc import Controller, EntityType, Environment, Position
+from cambc import Controller, EntityType, Environment, Position, Team
 
 from globals import (
     BFS_CPU_CHECK_INTERVAL,
     BFS_MIN_COMPUTE_BUDGET_US,
     CONVEYOR_TYPES,
 )
+import map as map_mod
+import vision as vc
 
 DIRS = (
     (0, -1),
@@ -30,7 +32,7 @@ board_mask = 0
 not_left_col = 0
 not_right_col = 0
 my_id = 0
-my_team = None
+my_team: Team
 path_color: tuple[int, int, int] = (0, 100, 255)
 
 destination: Position | None = None
@@ -114,7 +116,6 @@ def set_destination(target: Position, dest_type: str):
 
 def advance_compute(ct: Controller, budget_us: int, draw: bool = False):
     global search_complete, field_revision, path
-    import map as map_mod
     if destination is None or budget_us < BFS_MIN_COMPUTE_BUDGET_US:
         return
 
@@ -136,8 +137,6 @@ def advance_compute(ct: Controller, budget_us: int, draw: bool = False):
 
 def step_if_ready(player, ct: Controller) -> bool:
     global path
-    import map as map_mod
-    import vision as vc
     if destination is None or goal_mask == 0:
         return False
 
@@ -171,7 +170,6 @@ def step_if_ready(player, ct: Controller) -> bool:
 
 def _start_global_search():
     global goal_mask, global_layers, global_frontier, global_visited, path, search_complete, changed
-    import map as map_mod
     goal_mask = _get_goal_mask()
     global_layers = []
     global_frontier = goal_mask
@@ -203,8 +201,6 @@ def _advance_global_bfs(ct: Controller, walkable_mask: int, budget_us: int):
     search_complete = True
 
 def _compute_local_costs(start_idx: int) -> tuple[dict[int, int], dict[int, int], int]:
-    import map as map_mod
-    import vision as vc
     start_bit = 1 << start_idx
     visible_passable = map_mod.get_visible_mask() & map_mod.get_walkable_mask()
     visible_passable |= map_mod.get_entity_mask(EntityType.BARRIER) & map_mod.get_team_mask(my_team)
@@ -306,7 +302,6 @@ def _bit_to_pos(bit: int) -> Position:
     return Position(idx % width, idx // width)
 
 def _tile_penalty(idx: int) -> int:
-    import map as map_mod
     penalty = map_mod.get_enemy_launcher_adj_count_idx(idx) * LAUNCHER_ADJ_PENALTY
     if map_mod.is_ally_barrier_idx(idx):
         penalty += BARRIER_PENALTY
@@ -315,8 +310,6 @@ def _tile_penalty(idx: int) -> int:
     return penalty
 
 def _execute_step(player, ct: Controller, direction, next_pos: Position) -> bool:
-    import map as map_mod
-    import vision as vc
     if ct.can_move(direction):
         ct.move(direction)
         return True
@@ -348,7 +341,6 @@ def _execute_step(player, ct: Controller, direction, next_pos: Position) -> bool
     return False
 
 def _is_standable_target_idx(idx: int) -> bool:
-    import map as map_mod
     bit = 1 << idx
     if map_mod.get_env_mask(Environment.WALL) & bit:
         return False

@@ -4,15 +4,31 @@ import random
 
 from cambc import Controller, Direction, EntityType, Position, ResourceType, Team
 
-from globals import *
+from log import (
+    log, 
+    log_time
+)
+from globals import (
+    State,
+    SPAWN_WEALTHY_INTERVAL,
+)
 import nav
 import bfs_nav
 import map as map_mod
-import comms
 import vision as vc
-from helpers import bot_path_color, check_for_resource_increase, get_predicted_enemy_core_pos
-from log import log, log_time
-from units import run_core, run_builder, run_breach, run_gunner, run_sentinel, run_launcher
+from helpers import (
+    bot_path_color, 
+    check_for_resource_increase, 
+    get_predicted_enemy_core_pos
+)
+from units import (
+    run_core, 
+    run_builder, 
+    run_breach, 
+    run_gunner, 
+    run_sentinel, 
+    run_launcher
+)
 
 class Player:
     def __init__(self):

@@ -79,6 +79,3 @@ ASTAR_MIN_COMPUTE_BUDGET_US = 120
 ASTAR_CPU_CHECK_INTERVAL = 16
 BFS_MIN_COMPUTE_BUDGET_US = ASTAR_MIN_COMPUTE_BUDGET_US
 BFS_CPU_CHECK_INTERVAL = ASTAR_CPU_CHECK_INTERVAL
-
-def get_remaining_turn_budget_us(elapsed_us: int, reserve_us: int = 0) -> int:
-    return max(0, TURN_CPU_BUDGET_US - elapsed_us - reserve_us - CPU_SAFETY_MARGIN_US)

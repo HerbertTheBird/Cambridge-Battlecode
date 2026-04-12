@@ -1,26 +1,45 @@
-from cambc import Controller, Position
+from cambc import Controller, Position, EntityType
 
 import map as map_mod
 import nav
 import bfs_nav
 import comms
-import vision as vc
-
-from globals import *
-from helpers import get_foundry_position_idxs
-from log import log, log_time
-from units.builder.build import *
-from units.builder.decide_state import decide_state
-from units.builder.logic import *
-from units.builder.states import (
-    run_defend,
-    run_explore,
-    run_extend_harvest_chain,
-    run_intercept,
-    run_reroute_titanium,
-    run_sabotage,
-    run_start_harvest_chain,
+from globals import (
+    State,
+    Symmetry,
+    DIRECTIONS,
+    USE_ARMOURED_CONVEYORS,
+    USE_LAUNCHERS,
+    START_USING_ARMOURED_CONVEYORS_THRESHOLD,
+    NUM_RUSHING,
+    BUGNAV_RESERVE_US,
+    END_TURN_RESERVE_US,
 )
+from helpers import get_foundry_position_idxs, is_in_vision
+from log import log, log_time
+from units.builder.decide_state import decide_state
+from units.builder.build import safe_destroy
+from units.builder.logic import (
+    try_upgrade_foundry_placeholder,
+    update_broken_chains,
+    is_enemy_armoured_conveyor,
+    try_issue_launcher_order,
+    try_build_remembered,
+    try_heal,
+    try_upgrade_conveyor,
+    advance_bfs,
+    sync_bfs_destination,
+    safe_place_marker,
+)
+from map import on_map
+
+from units.builder.states import start_harvest_chain
+from units.builder.states import extend_harvest_chain
+from units.builder.states import reroute_titanium
+from units.builder.states import intercept
+from units.builder.states import defend
+from units.builder.states import sabotage
+from units.builder.states import explore
 
 def run_builder(player, ct: Controller, my_pos: Position) -> None:
     armoured_ti_cost, armoured_ax_cost = ct.get_armoured_conveyor_cost()
@@ -59,40 +78,40 @@ def run_builder(player, ct: Controller, my_pos: Position) -> None:
     log_time(ct, "After map checks")
 
     # Upgrade foundry placeholders if possible
-    try_upgrade_foundry_placeholder(player, ct, my_pos, vc)
+    try_upgrade_foundry_placeholder(player, ct, my_pos)
     log_time(ct, "After checking foundry upgrades")
 
     # Check for incomplete chains
-    update_broken_chains(player, ct, vc)
+    update_broken_chains(player, ct, my_pos)
     log(f"broken chains: {player.broken_chains}")
     log_time(ct, "After broken chain scan")
 
     # State machine
-    player.state = decide_state(player, ct, my_pos, vc)
+    player.state = decide_state(player, ct, my_pos)
     log(f"state={player.state}")
 
     log_time(ct, "After decide_state")
 
     if player.state == State.START_HARVEST_CHAIN:
-        run_start_harvest_chain(player, ct, vc)
+        start_harvest_chain.run(player, ct)
 
     if player.state == State.EXTEND_HARVEST_CHAIN:
-        run_extend_harvest_chain(player, ct, vc)
+        extend_harvest_chain.run(player, ct)
 
     if player.state == State.REROUTE_TITANIUM:
-        run_reroute_titanium(player, ct, vc)
+        reroute_titanium.run(player, ct)
 
     if player.state == State.INTERCEPT:
-        run_intercept(player, ct, vc)
+        intercept.run(player, ct)
 
     if player.state == State.DEFEND:
-        run_defend(player, ct, vc)
+        defend.run(player, ct)
 
     if player.state == State.SABOTAGE:
-        run_sabotage(player, ct, vc)
-        
+        sabotage.run(player, ct)
+
     if player.state == State.EXPLORE:
-        run_explore(player, ct, vc)
+        explore.run(player, ct)
 
     log_time(ct, "After executing state")
     my_pos = player.my_pos
@@ -100,7 +119,7 @@ def run_builder(player, ct: Controller, my_pos: Position) -> None:
     # Check if we need to attack a blocking building
     if player.attack_target is None and player.state in (State.START_HARVEST_CHAIN, State.EXTEND_HARVEST_CHAIN):
         harvest_dest = nav.original_destination
-        if harvest_dest is not None and ct.is_in_vision(harvest_dest):
+        if harvest_dest is not None and is_in_vision(my_pos, harvest_dest):
             bid = map_mod.get_tile_entity_id(harvest_dest)
             if bid is not None:
                 bid_team = map_mod.get_tile_entity_team(harvest_dest)
@@ -172,14 +191,14 @@ def run_builder(player, ct: Controller, my_pos: Position) -> None:
             sync_bfs_destination()
 
     if not attacked:
-        if try_build_remembered(player, ct, vc):
+        if try_build_remembered(player, ct):
             my_pos = ct.get_position()
             player.my_pos = my_pos
 
     # Greedy heal
     try_heal(ct, my_pos, player.my_team, map_mod.width, map_mod.height)
     log_time(ct, "After heal")
-    try_upgrade_conveyor(player, ct, my_pos, vc)
+    try_upgrade_conveyor(player, ct, my_pos)
     log_time(ct, "After conveyor upgrade")
 
     # Spam markers to communicate map symmetry

@@ -1,6 +1,12 @@
 from cambc import Direction, Position
 
-from globals import DIRECTIONS, INF, DELTAS
+from globals import (
+    DIRECTIONS, 
+    INF, 
+    DELTAS
+)
+from helpers import is_in_vision
+import map as map_mod
 
 def _dist_sq(ax: int, ay: int, bx: int, by: int) -> int:
     dx = ax - bx
@@ -74,18 +80,16 @@ def refresh_adjacent(ct):
     else:
         destination = original_destination
 
-def is_destination_reached(ct):
-    import map as map_mod
+def is_destination_reached(my_pos):
     if destination is None:
         return True
     if destination_type == "exact":
-        return ct.get_position() == destination
+        return my_pos == destination
     if destination_type == "adjacent":
         ref = original_destination or destination
-        my_pos = ct.get_position()
         return 0 < _dist_sq(my_pos.x, my_pos.y, ref.x, ref.y) <= 2
     if destination_type == "sensed":
-        return ct.is_in_vision(destination)
+        return is_in_vision(my_pos, destination)
     # "visited" or None
     return map_mod.is_visited(destination)
 
@@ -105,7 +109,7 @@ def get_adjacent_target(pos: Position, ct) -> Position | None:
         if dist >= best_dist:
             continue
         adj = Position(ax, ay)
-        if not ct.is_in_vision(adj):
+        if not is_in_vision(my_pos, adj):
             continue
         if adj != my_pos and not ct.is_tile_passable(adj):
             continue
@@ -114,7 +118,7 @@ def get_adjacent_target(pos: Position, ct) -> Position | None:
         best = adj
     return best
 
-def _init_states(ct):
+def _init_states():
     global states
     if states is None:
         states = [[0] * height for _ in range(width)]
@@ -125,10 +129,10 @@ def go_to(ct):
     if target is None:
         return
 
-    _init_states(ct)
+    _init_states()
 
-    my_loc = ct.get_position()
-    mlx, mly = my_loc
+    my_pos = ct.get_position()
+    mlx, mly = my_pos
     tx, ty = target
     w, h = width, height
 
@@ -147,7 +151,7 @@ def go_to(ct):
 
     prev_target = target
 
-    check_state(my_loc)
+    check_state(my_pos)
 
     d = _dist_sq(mlx, mly, tx, ty)
     if d == 0:
@@ -159,22 +163,22 @@ def go_to(ct):
     if d < min_dist_to_target:
         reset_pathfinding()
         min_dist_to_target = d
-        min_location_to_target = my_loc
+        min_location_to_target = my_pos
 
     # === GREEDY ===
     if last_obstacle_found is None:
-        if try_greedy_move(ct, my_loc, target):
+        if try_greedy_move(ct, my_pos, target):
             reset_pathfinding()
             return
 
     # === BUG MODE ===
     if last_obstacle_found is not None:
-        direction = my_loc.direction_to(last_obstacle_found)
+        direction = my_pos.direction_to(last_obstacle_found)
     else:
-        direction = my_loc.direction_to(target)
+        direction = my_pos.direction_to(target)
 
-    if can_pass(ct, direction, my_loc):
-        execute_move(ct, direction, my_loc)
+    if can_pass(ct, direction, my_pos):
+        execute_move(ct, direction, my_pos)
         if last_obstacle_found is not None:
             _inc_turns_moving()
             ddx, ddy = DELTAS[direction]
@@ -190,12 +194,12 @@ def go_to(ct):
     else:
         _reset_turns_moving()
 
-    check_rotate(ct, my_loc, target, direction)
+    check_rotate(ct, my_pos, target, direction)
 
     # === BUG LOOP ===
     for _ in range(16):
-        if can_pass(ct, direction, my_loc):
-            execute_move(ct, direction, my_loc)
+        if can_pass(ct, direction, my_pos):
+            execute_move(ct, direction, my_pos)
             return
 
         ddx, ddy = DELTAS[direction]
@@ -208,13 +212,12 @@ def go_to(ct):
 
         direction = direction.rotate_right() if rotate_right else direction.rotate_left()
 
-    if can_pass(ct, direction, my_loc):
-        execute_move(ct, direction, my_loc)
+    if can_pass(ct, direction, my_pos):
+        execute_move(ct, direction, my_pos)
 
-def try_greedy_move(ct, my_loc, target):
-    import map as map_mod
-    direction = my_loc.direction_to(target)
-    mx, my = my_loc
+def try_greedy_move(ct, my_pos, target):
+    direction = my_pos.direction_to(target)
+    mx, my = my_pos
     tx, ty = target
     dist = _dist_sq(mx, my, tx, ty)
 
@@ -223,7 +226,7 @@ def try_greedy_move(ct, my_loc, target):
 
     candidates = []
     for turn_cost, candidate_dir in ((0, direction), (1, dir1), (1, dir2)):
-        if not can_pass(ct, candidate_dir, my_loc):
+        if not can_pass(ct, candidate_dir, my_pos):
             continue
         ddx, ddy = DELTAS[candidate_dir]
         nx, ny = mx + ddx, my + ddy
@@ -235,12 +238,12 @@ def try_greedy_move(ct, my_loc, target):
 
     if candidates:
         _, best_dir = min(candidates, key=lambda item: item[0])
-        execute_move(ct, best_dir, my_loc)
+        execute_move(ct, best_dir, my_pos)
         return True
 
     return False
 
-def check_rotate(ct, my_loc, target, direction):
+def check_rotate(ct, my_pos, target, direction):
     if rotate_right is not None:
         return
 
@@ -248,18 +251,18 @@ def check_rotate(ct, my_loc, target, direction):
     dir_right = direction
 
     for _ in range(8):
-        if not can_pass(ct, dir_left, my_loc):
+        if not can_pass(ct, dir_left, my_pos):
             dir_left = dir_left.rotate_left()
         else:
             break
 
     for _ in range(8):
-        if not can_pass(ct, dir_right, my_loc):
+        if not can_pass(ct, dir_right, my_pos):
             dir_right = dir_right.rotate_right()
         else:
             break
 
-    mx, my = my_loc
+    mx, my = my_pos
     tx, ty = target
     dlx, dly = DELTAS[dir_left]
     drx, dry = DELTAS[dir_right]
@@ -285,7 +288,7 @@ def soft_reset(target):
     else:
         reset_pathfinding()
 
-def check_state(my_loc):
+def check_state(my_pos):
     if states is None:
         return
 
@@ -299,10 +302,10 @@ def check_state(my_loc):
     if rotate_right is not None:
         state |= 1 if rotate_right else 2
 
-    if states[my_loc.x][my_loc.y] == state:
+    if states[my_pos.x][my_pos.y] == state:
         reset_pathfinding()
 
-    states[my_loc.x][my_loc.y] = state
+    states[my_pos.x][my_pos.y] = state
 
 def can_pass(ct, direction, my_pos):
     if direction is None or direction == Direction.CENTRE:

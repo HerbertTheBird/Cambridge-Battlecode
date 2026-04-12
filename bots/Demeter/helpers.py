@@ -1,6 +1,11 @@
-from cambc import Controller, Direction, Position, EntityType, ResourceType
+from cambc import Controller, Direction, Position, GameConstants
 
-from globals import CARDINAL_DIRECTIONS, Symmetry
+from globals import (
+    Symmetry,
+    CARDINAL_DIRECTIONS, 
+    TURN_CPU_BUDGET_US, 
+    CPU_SAFETY_MARGIN_US
+)
 
 # Used to differentiate bot paths by color
 
@@ -106,3 +111,11 @@ def get_predicted_enemy_core_pos(player) -> Position | None:
     if map_mod.can_flip_y:
         return map_mod.get_symmetric_pos(player.core_pos, Symmetry.FLIP_Y)
     return None
+
+_BUILDER_BOT_VISION_RADIUS_SQ = GameConstants.BUILDER_BOT_VISION_RADIUS_SQ
+
+def is_in_vision(my_pos, pos):
+    return my_pos.distance_squared(pos) <= _BUILDER_BOT_VISION_RADIUS_SQ
+
+def get_remaining_turn_budget_us(elapsed_us: int, reserve_us: int = 0) -> int:
+    return max(0, TURN_CPU_BUDGET_US - elapsed_us - reserve_us - CPU_SAFETY_MARGIN_US)

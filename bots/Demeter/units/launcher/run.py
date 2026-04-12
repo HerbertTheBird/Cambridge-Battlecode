@@ -1,6 +1,9 @@
 from cambc import Controller, Direction, EntityType, Position
 
-from globals import *
+from globals import (
+    DIRECTIONS,
+    DELTAS,
+)
 import map as map_mod
 import comms
 import vision as vc

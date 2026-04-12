@@ -5,7 +5,13 @@ from cambc import Controller, EntityType, Position, Team
 import map as map_mod
 import vision as vc
 
-from globals import CONVEYOR_TYPES, INF, DIRECTIONS, TURRET_PRIORITY, TURRET_PASSIVE_PRIORITY
+from globals import (
+    CONVEYOR_TYPES, 
+    INF, 
+    DIRECTIONS, 
+    TURRET_PRIORITY, 
+    TURRET_PASSIVE_PRIORITY,
+)
 
 def choose_target(ct: Controller, my_pos: Position) -> Position | None:
     """Return the position of the best target to attack, or None if there are no targets."""

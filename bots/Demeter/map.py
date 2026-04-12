@@ -4,10 +4,25 @@ from collections import defaultdict
 
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType, Team
 
-from globals import DIRECTIONS, CARDINAL_DIRECTIONS, CONVEYOR_TYPES, TURRET_TYPES, Symmetry, INF, DELTAS, DELTA_TO_DIRECTION, TURN_CPU_BUDGET_US, END_TURN_RESERVE_US, CPU_SAFETY_MARGIN_US
-from helpers import get_foundry_position_idxs, is_core_tile
-
 from log import log, log_time
+from globals import (
+    Symmetry,
+    DIRECTIONS, 
+    CARDINAL_DIRECTIONS, 
+    CONVEYOR_TYPES, 
+    TURRET_TYPES, 
+    INF, 
+    DELTAS, 
+    DELTA_TO_DIRECTION, 
+    TURN_CPU_BUDGET_US, 
+    END_TURN_RESERVE_US, 
+    CPU_SAFETY_MARGIN_US
+)
+from helpers import (
+    get_foundry_position_idxs, 
+    is_core_tile,
+    is_in_vision,
+)
 
 _ET_INT = {t: i for i, t in enumerate(EntityType)}
 _INT_ET = {i: t for i, t in enumerate(EntityType)}
@@ -815,8 +830,8 @@ def get_cached_conveyor_resources(pos: Position) -> set[ResourceType]:
         resources.add(ResourceType.RAW_AXIONITE)
     return resources
 
-def get_conveyor_resource_evidence(pos: Position, ct: Controller) -> set[ResourceType]:
-    if ct.is_in_vision(pos):
+def get_conveyor_resource_evidence(pos: Position, ct: Controller, my_pos: Position) -> set[ResourceType]:
+    if is_in_vision(my_pos, pos):
         bid = get_tile_entity_id(pos)
         if bid is not None and get_tile_entity_type(pos) in CONVEYOR_TYPES:
             stored = ct.get_stored_resource(bid)
@@ -824,8 +839,8 @@ def get_conveyor_resource_evidence(pos: Position, ct: Controller) -> set[Resourc
                 return {stored}
     return get_cached_conveyor_resources(pos)
 
-def _get_conveyor_resource_state(pos: Position, ct: Controller, resource: ResourceType) -> int:
-    if ct.is_in_vision(pos):
+def _get_conveyor_resource_state(pos: Position, ct: Controller, my_pos: Position, resource: ResourceType) -> int:
+    if is_in_vision(my_pos, pos):
         bid = get_tile_entity_id(pos)
         if bid is not None and get_tile_entity_type(pos) in CONVEYOR_TYPES:
             stored = ct.get_stored_resource(bid)
@@ -904,11 +919,11 @@ def _get_conveyor_resource_state_idx(idx: int, ct: Controller, resource: Resourc
         return 1
     return 0
 
-def infer_chain_resource_at_output(output_pos: Position, ct: Controller) -> ResourceType | None:
+def infer_chain_resource_at_output(output_pos: Position, ct: Controller, my_pos: Position) -> ResourceType | None:
     live_resources = set()
     for input_idx in iter_conveyor_input_indices(output_pos):
         input_pos = _pos(input_idx)
-        if not ct.is_in_vision(input_pos):
+        if not is_in_vision(my_pos, input_pos):
             continue
         bid = _entity_id[input_idx]
         if bid == 0 or _entity_type_idx[input_idx] not in _CONVEYOR_TYPE_IDXS:
@@ -1412,6 +1427,7 @@ def _feeds_ally_chain_idx(
     cache: dict[tuple[int, Team], bool],
     success_predicate,
     ct: Controller | None = None,
+    my_pos: Position | None = None,
     core_pos: Position | None = None,
     require_visible: bool = False,
 ) -> bool:
@@ -1436,8 +1452,9 @@ def _feeds_ally_chain_idx(
         cur_idx = next_idx
         if require_visible:
             assert ct is not None
+            assert my_pos is not None
             cur = _pos(cur_idx)
-            if not ct.is_in_vision(cur):
+            if not is_in_vision(my_pos, cur):
                 cache[key] = False
                 return False
             if is_core_tile(core_pos, cur):
@@ -1466,24 +1483,26 @@ def _feeds_ally_chain_idx(
     cache[key] = False
     return False
 
-def feeds_ally_building_in_vision(pos: Position, my_team: Team, ct: Controller, core_pos: Position | None = None) -> bool:
+def feeds_ally_building_in_vision(pos: Position, my_team: Team, ct: Controller, my_pos: Position, core_pos: Position | None = None) -> bool:
     return _feeds_ally_chain_idx(
         _idx(pos),
         my_team,
         _feeds_building_in_vision_cache,
         lambda etype, team, cur: team == my_team,
         ct=ct,
+        my_pos=my_pos,
         core_pos=core_pos,
         require_visible=True,
     )
 
-def feeds_ally_building_in_vision_idx(idx: int, my_team: Team, ct: Controller, core_pos: Position | None = None) -> bool:
+def feeds_ally_building_in_vision_idx(idx: int, my_team: Team, ct: Controller, my_pos: Position, core_pos: Position | None = None) -> bool:
     return _feeds_ally_chain_idx(
         idx,
         my_team,
         _feeds_building_in_vision_cache,
         lambda etype, team, cur: team == my_team,
         ct=ct,
+        my_pos=my_pos,
         core_pos=core_pos,
         require_visible=True,
     )
@@ -1825,7 +1844,7 @@ def is_adjacent_to_opposite_ore_idx(idx: int, resource: ResourceType | None) -> 
             return True
     return False
 
-def has_adjacent_opposite_resource_chain(ore_pos: Position, resource: ResourceType | None, ct: Controller) -> bool:
+def has_adjacent_opposite_resource_chain(ore_pos: Position, resource: ResourceType | None, ct: Controller, my_pos: Position) -> bool:
     if resource == ResourceType.TITANIUM:
         opposite = ResourceType.RAW_AXIONITE
     elif resource == ResourceType.RAW_AXIONITE:
@@ -1835,7 +1854,7 @@ def has_adjacent_opposite_resource_chain(ore_pos: Position, resource: ResourceTy
 
     ore_idx = _idx(ore_pos)
     if _entity_type_idx[ore_idx] in _CONVEYOR_TYPE_IDXS:
-        if _get_conveyor_resource_state(ore_pos, ct, opposite) == 1:
+        if _get_conveyor_resource_state(ore_pos, ct, my_pos, opposite) == 1:
             return True
 
     for d in CARDINAL_DIRECTIONS:
@@ -1845,7 +1864,7 @@ def has_adjacent_opposite_resource_chain(ore_pos: Position, resource: ResourceTy
         adj_idx = _idx(adj)
         if _entity_type_idx[adj_idx] not in _CONVEYOR_TYPE_IDXS:
             continue
-        if _get_conveyor_resource_state(adj, ct, opposite) == 1:
+        if _get_conveyor_resource_state(adj, ct, my_pos, opposite) == 1:
             return True
     return False
 
@@ -1907,7 +1926,7 @@ def _terminal_xy_from_idx_set(end_idx_set: set[int] | None, w: int) -> tuple[tup
     return tuple((idx % w, idx // w) for idx in end_idx_set)
 
 def _score_output_candidate_idx(adj_idx, adj_x, adj_y, dist, build_dist,
-                                my_team, resource, ct, core_pos, end_idx_set,
+                                my_team, resource, ct, my_pos, core_pos, end_idx_set,
                                 dist_to_terminal, check_splitter_dir=None):
     adj_label = f"({adj_x}, {adj_y})"
     etype_i = _entity_type_idx[adj_idx]
@@ -1957,7 +1976,7 @@ def _score_output_candidate_idx(adj_idx, adj_x, adj_y, dist, build_dist,
 
         effective_pos = _pos(effective_idx)
         eff_dist = dist_to_terminal(effective_pos)
-        is_fallback = resource == ResourceType.TITANIUM and ResourceType.TITANIUM in get_conveyor_resource_evidence(Position(adj_x, adj_y), ct)
+        is_fallback = resource == ResourceType.TITANIUM and ResourceType.TITANIUM in get_conveyor_resource_evidence(Position(adj_x, adj_y), ct, my_pos)
         if is_fallback:
             log(f"    {adj_label}: fallback ally {etype} observed titanium")
         else:
@@ -1974,7 +1993,7 @@ def _score_output_candidate_idx(adj_idx, adj_x, adj_y, dist, build_dist,
     log(f"    {adj_label}: skip occupied by {eteam} {etype}")
     return None
 
-def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller,
+def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position,
                                    offsets, my_team: Team | None = None, end_positions: set | None = None,
                                    end_position_idxs: set[int] | None = None,
                                    resource: ResourceType | None = None, check_splitter: bool = False,
@@ -2033,7 +2052,7 @@ def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | Non
         splitter_dir = DELTA_TO_DIRECTION[(dx, dy)] if check_splitter else None
         candidate = _score_output_candidate_idx(
             adj_idx, x, y, dist, build_dist,
-            my_team, resource, ct, core_pos, end_idx_set,
+            my_team, resource, ct, my_pos, core_pos, end_idx_set,
             dist_to_terminal, check_splitter_dir=splitter_dir,
         )
         if candidate is None:
@@ -2052,21 +2071,21 @@ def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | Non
     log(f"  {label} result: {result}")
     return (result, is_fallback)
 
-def _get_best_output(build_pos: Position, core_pos: Position | None, ct: Controller,
+def _get_best_output(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position,
                      offsets, my_team: Team | None = None, end_positions: set | None = None,
                      end_position_idxs: set[int] | None = None,
                      resource: ResourceType | None = None, check_splitter: bool = False,
                      allow_far_terminals: bool = False, label: str = "output") -> Position | None:
     result, _ = _get_best_output_with_fallback(
-        build_pos, core_pos, ct, offsets,
+        build_pos, core_pos, ct, my_pos, offsets,
         my_team=my_team, end_positions=end_positions, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=check_splitter,
         allow_far_terminals=allow_far_terminals, label=label,
     )
     return result
 
-def get_best_conveyor_output(build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
-    result = _get_best_output(build_pos, core_pos, ct, _CARDINAL_OFFSETS,
+def get_best_conveyor_output(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
+    result = _get_best_output(build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
                                my_team=my_team, end_positions=end_positions,
                                resource=resource, check_splitter=True,
                                allow_far_terminals=False, label="conv_output")
@@ -2074,8 +2093,8 @@ def get_best_conveyor_output(build_pos: Position, core_pos: Position | None, ct:
         return None
     return (build_pos.direction_to(result), result)
 
-def get_best_conveyor_output_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
-    result = _get_best_output(build_pos, core_pos, ct, _CARDINAL_OFFSETS,
+def get_best_conveyor_output_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
+    result = _get_best_output(build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
                                my_team=my_team, end_position_idxs=end_position_idxs,
                                resource=resource, check_splitter=True,
                                allow_far_terminals=False, label="conv_output")
@@ -2083,21 +2102,21 @@ def get_best_conveyor_output_idx(build_pos: Position, core_pos: Position | None,
         return None
     return (build_pos.direction_to(result), result)
 
-def get_best_bridge_output(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> Position | None:
-    return _get_best_output(bridge_pos, core_pos, ct, _BRIDGE_OFFSETS,
+def get_best_bridge_output(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> Position | None:
+    return _get_best_output(bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
                              my_team=my_team, end_positions=end_positions,
                              resource=resource, check_splitter=False,
                              allow_far_terminals=True, label="bridge_output")
 
-def get_best_bridge_output_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> Position | None:
-    return _get_best_output(bridge_pos, core_pos, ct, _BRIDGE_OFFSETS,
+def get_best_bridge_output_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> Position | None:
+    return _get_best_output(bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
                              my_team=my_team, end_position_idxs=end_position_idxs,
                              resource=resource, check_splitter=False,
                              allow_far_terminals=True, label="bridge_output")
 
-def get_best_conveyor_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
+def get_best_conveyor_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
     result, is_fallback = _get_best_output_with_fallback(
-        build_pos, core_pos, ct, _CARDINAL_OFFSETS,
+        build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
         my_team=my_team, end_positions=end_positions,
         resource=resource, check_splitter=True,
         allow_far_terminals=False, label="conv_output",
@@ -2106,9 +2125,9 @@ def get_best_conveyor_output_with_fallback(build_pos: Position, core_pos: Positi
         return (None, False)
     return ((build_pos.direction_to(result), result), is_fallback)
 
-def get_best_conveyor_output_with_fallback_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
+def get_best_conveyor_output_with_fallback_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
     result, is_fallback = _get_best_output_with_fallback(
-        build_pos, core_pos, ct, _CARDINAL_OFFSETS,
+        build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
         my_team=my_team, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=True,
         allow_far_terminals=False, label="conv_output",
@@ -2117,17 +2136,17 @@ def get_best_conveyor_output_with_fallback_idx(build_pos: Position, core_pos: Po
         return (None, False)
     return ((build_pos.direction_to(result), result), is_fallback)
 
-def get_best_bridge_output_with_fallback(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
+def get_best_bridge_output_with_fallback(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
     return _get_best_output_with_fallback(
-        bridge_pos, core_pos, ct, _BRIDGE_OFFSETS,
+        bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
         my_team=my_team, end_positions=end_positions,
         resource=resource, check_splitter=False,
         allow_far_terminals=True, label="bridge_output",
     )
 
-def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
+def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
     return _get_best_output_with_fallback(
-        bridge_pos, core_pos, ct, _BRIDGE_OFFSETS,
+        bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
         my_team=my_team, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=False,
         allow_far_terminals=True, label="bridge_output",

@@ -5,8 +5,17 @@ from cambc import Controller, EntityType, Position
 import map as map_mod
 import vision as vc
 
-from globals import DIRECTIONS, NUM_RUSHING
-from units.core.spawn import *
+from globals import (
+    DIRECTIONS, 
+    NUM_RUSHING
+)
+from units.core.spawn import (
+    choose_enemy_facing_spawn,
+    choose_rushing_spawn,
+    choose_spawn_plan,
+    should_spawn,
+    draw_spawn_plan,
+)
 
 def run_core(player, ct: Controller, my_pos: Position) -> None:
     # Calculate initial directions we should spawn in
