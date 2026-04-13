@@ -57,7 +57,7 @@ def _sabotage_targets():
     # THIS IS IN PROGRESS
     pruned_targets = []
     for p in map_info.iter_mask(targets):
-        target_type = map_info.type_at(p)
+        target_type = map_info.type_at(p.x, p.y)
         if map_info.is_conveyor(target_type): # redundancy check
             if target_type == map_info._ET_CONVEYOR:
                 continue
