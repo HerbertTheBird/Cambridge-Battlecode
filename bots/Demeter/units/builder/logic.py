@@ -103,6 +103,9 @@ def get_best_bridge_build_pos(harvester_pos: Position, core_pos: Position | None
         if not is_in_vision(my_pos, pos):
             log(f"    {pos} ({d}): SKIP not in vision")
             continue
+        if map_mod.is_confirmed_unreachable(pos):
+            log(f"    {pos} ({d}): SKIP confirmed unreachable")
+            continue
         if map_mod.is_wall(pos):
             log(f"    {pos} ({d}): SKIP wall")
             continue
@@ -168,6 +171,8 @@ def get_barrier_targets(ore_pos: Position, core_pos: Position | None, ct: Contro
             continue
         adj = Position(x, y)
         if not is_in_vision(my_pos, adj):
+            continue
+        if map_mod.is_confirmed_unreachable(adj):
             continue
         if map_mod.is_wall(adj):
             continue
@@ -1129,6 +1134,8 @@ def find_defend_target(player, ct: Controller, my_pos: Position) -> Position | N
     best_core_dist = INF
 
     for (_bid, pos, _team) in vc.harvesters:
+        if map_mod.is_confirmed_unreachable(pos):
+            continue
         if not map_mod.is_titanium_ore(pos):
             continue
         has_ally_infra = False
@@ -1157,6 +1164,8 @@ def find_defend_target(player, ct: Controller, my_pos: Position) -> Position | N
         return best_pos
 
     for ore_pos in map_mod.iter_titanium_ores():
+        if map_mod.is_confirmed_unreachable(ore_pos):
+            continue
         if map_mod.has_entity(ore_pos):
             continue
         dist = my_pos.distance_squared(ore_pos)
@@ -1183,6 +1192,8 @@ def find_upgradeable_axionite_placeholder(player, ct: Controller, my_pos: Positi
     best_pos = None
     best_dist = INF
     for (bid, etype, pos) in vc.ally_conveyors:
+        if map_mod.is_confirmed_unreachable(pos):
+            continue
         if etype not in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) or not is_foundry_position(player.core_pos, pos):
             continue
         if not ct.can_destroy(pos):
@@ -1261,6 +1272,8 @@ def find_adjacent_foundry_reroute_source(player, ct: Controller, my_pos: Positio
     for d in CARDINAL_DIRECTIONS:
         pos = foundry_pos.add(d)
         if not on_map(pos, map_mod.width, map_mod.height) or not is_in_vision(my_pos, pos):
+            continue
+        if map_mod.is_confirmed_unreachable(pos):
             continue
         bid = ct.get_tile_building_id(pos)
         if bid is None or ct.get_team(bid) != player.my_team:
@@ -1398,6 +1411,8 @@ def find_broken_chain_target(player, ct: Controller, my_pos: Position) -> tuple[
         if blocked_output_mask & (1 << output_idx):
             continue
         output_pos = map_mod.idx_to_pos(output_idx)
+        if map_mod.is_confirmed_unreachable(output_pos):
+            continue
         dist = my_pos.distance_squared(output_pos)
         if dist >= best_chain_dist:
             continue

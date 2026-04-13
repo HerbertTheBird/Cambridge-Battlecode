@@ -125,7 +125,7 @@ class Player:
             check_for_resource_increase(self, ct)
 
             vc.refresh(ct, self)
-            map_mod.update_vision(ct)
+            map_mod.update_vision(ct, self.core_pos, self.enemy_core_pos)
 
             self.predicted_enemy_core_pos = get_predicted_enemy_core_pos(self)
             log(f"predicted enemy core position at {self.predicted_enemy_core_pos}")

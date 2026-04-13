@@ -13,7 +13,7 @@ from log import log
 
 def run_launcher(player, ct: Controller, my_pos: Position) -> None:
     comms.reset_turn(ct.get_current_round())
-    map_mod.update_vision(ct)
+    map_mod.update_vision(ct, player.core_pos, player.enemy_core_pos)
 
     # Find allies we could pick up
     adjacent_ally_builders = []

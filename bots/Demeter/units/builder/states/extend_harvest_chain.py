@@ -63,6 +63,10 @@ def run(player, ct: Controller) -> None:
         log("error: no destination for harvest chain")
         clear_state(player)
         return
+    if map_mod.is_confirmed_unreachable(dest):
+        log(f"harvest-chain destination {dest} is confirmed unreachable -> abandoning")
+        clear_state(player)
+        return
     if is_core_tile(player.core_pos, dest):
         log("chain reaches core -> done")
         clear_state(player)

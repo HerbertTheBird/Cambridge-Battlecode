@@ -40,6 +40,11 @@ def run(player, ct: Controller) -> None:
         log("no harvest target found on START_HARVEST_CHAIN")
         clear_state(player)
         return
+    if map_mod.is_confirmed_unreachable(ore_pos):
+        log(f"harvest target {ore_pos} is confirmed unreachable -> abandoning")
+        clear_state(player)
+        map_mod.add_unreachable_harvester(ore_pos)
+        return
 
     bbid = ct.get_tile_builder_bot_id(ore_pos) if is_in_vision(my_pos, ore_pos) else None
     if bbid is not None and bbid != ct.get_id():
@@ -85,6 +90,11 @@ def run(player, ct: Controller) -> None:
                     clear_state(player)
                     player.timeout_turns = 0
                     map_mod.add_unreachable_harvester(ore_pos)
+                return
+            if map_mod.is_confirmed_unreachable(best_build_pos):
+                log(f"bridge build pos {best_build_pos} is confirmed unreachable -> abandoning")
+                clear_state(player)
+                map_mod.add_unreachable_harvester(ore_pos)
                 return
 
             nav.set_destination(best_build_pos, "adjacent")

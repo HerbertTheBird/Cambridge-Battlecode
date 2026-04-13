@@ -20,6 +20,10 @@ def run(player, ct: Controller) -> None:
     if ore_pos is None:
         clear_state(player)
         return
+    if map_mod.is_confirmed_unreachable(ore_pos):
+        log(f"defend target {ore_pos} is confirmed unreachable -> abandoning")
+        clear_state(player)
+        return
     if map_mod.is_axionite_ore(ore_pos):
         clear_state(player)
         return
@@ -49,6 +53,10 @@ def run(player, ct: Controller) -> None:
             return
 
         target = targets[0]
+        if map_mod.is_confirmed_unreachable(target):
+            log(f"defend barrier target {target} is confirmed unreachable -> abandoning")
+            clear_state(player)
+            return
         nav.set_destination(target, "adjacent")
         log(f"DEFEND: navigating to {target}")
         if my_pos.distance_squared(target) <= 2:

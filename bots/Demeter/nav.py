@@ -60,6 +60,9 @@ def set_statics(w, h, mid):
 
 def set_destination(target: Position, dest_type: str):
     global destination, destination_type, original_destination
+    if map_mod.is_confirmed_unreachable(target):
+        clear_destination()
+        return
     destination = target
     destination_type = dest_type
     original_destination = target

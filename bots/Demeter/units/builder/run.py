@@ -20,6 +20,7 @@ from log import log, log_time
 from units.builder.decide_state import decide_state
 from units.builder.build import safe_destroy
 from units.builder.logic import (
+    clear_state,
     try_upgrade_foundry_placeholder,
     update_broken_chains,
     prune_no_output_found,
@@ -91,6 +92,13 @@ def run_builder(player, ct: Controller, my_pos: Position) -> None:
 
     # State machine
     player.state = decide_state(player, ct, my_pos)
+    if (
+        nav.original_destination is not None
+        and map_mod.is_confirmed_unreachable(nav.original_destination)
+        and player.state in (State.START_HARVEST_CHAIN, State.EXTEND_HARVEST_CHAIN, State.DEFEND, State.REROUTE_TITANIUM)
+    ):
+        log(f"destination {nav.original_destination} became confirmed unreachable -> clearing state")
+        clear_state(player)
     log(f"state={player.state}")
 
     log_time(ct, "After decide_state")

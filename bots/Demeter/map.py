@@ -11,6 +11,7 @@ from globals import (
     CARDINAL_DIRECTIONS, 
     CONVEYOR_TYPES, 
     TURRET_TYPES, 
+    OPTIMISTIC_REACHABILITY,
     INF, 
     DELTAS, 
     DELTA_TO_DIRECTION, 
@@ -109,6 +110,10 @@ _bm_ore_ti = 0
 _bm_ore_ax = 0
 _bm_unreachable_harvesters = 0
 _bm_unreachable_ores = 0
+_bm_reachable = 0
+_bm_might_reach = 0
+_bm_floodfill_open_prev = 0
+_bm_enemy_core = 0
 _enemy_launcher_adj: bytearray
 _output_idx: array
 _input_masks: list[int] = []
@@ -138,6 +143,7 @@ def init(w: int, h: int):
     global _tile_flags, _env_idx, _entity_id, _entity_type_idx, _entity_team_idx
     global _bm_et, _bm_team, _bm_env, _bm_occupied, _bm_walkable, _bm_seen, _bm_wall, _bm_blocked, _bm_visible
     global _bm_ore_ti, _bm_ore_ax, _bm_unreachable_harvesters, _bm_unreachable_ores
+    global _bm_reachable, _bm_might_reach, _bm_floodfill_open_prev, _bm_enemy_core
     global _enemy_launcher_adj, _output_idx, _input_masks
     global conveyor_resources, conveyor_resources_last_seen
     global _input_chain_valid, _input_resource_masks, current_round
@@ -176,6 +182,10 @@ def init(w: int, h: int):
     _bm_ore_ax = 0
     _bm_unreachable_harvesters = 0
     _bm_unreachable_ores = 0
+    _bm_reachable = 0
+    _bm_might_reach = 0
+    _bm_floodfill_open_prev = 0
+    _bm_enemy_core = 0
     _enemy_launcher_adj = bytearray(tile_count)
     _output_idx = array("i", [-1]) * tile_count
     _input_masks = [0] * tile_count
@@ -411,6 +421,89 @@ def get_not_left_col_mask() -> int:
 
 def get_not_right_col_mask() -> int:
     return _not_right_col
+
+def get_reachable_mask() -> int:
+    return _bm_reachable
+
+def get_might_reach_mask() -> int:
+    return _bm_might_reach
+
+def get_enemy_core_mask() -> int:
+    return _bm_enemy_core
+
+def is_reachable_idx(idx: int) -> bool:
+    return bool(_bm_reachable & (1 << idx))
+
+def is_reachable(pos: Position) -> bool:
+    idx = _idx_if_on_map(pos)
+    return idx is not None and bool(_bm_reachable & (1 << idx))
+
+def is_confirmed_unreachable_idx(idx: int) -> bool:
+    bit = 1 << idx
+    return bool(_bm_seen & bit) and not bool(_bm_might_reach & bit)
+
+def is_confirmed_unreachable(pos: Position) -> bool:
+    idx = _idx_if_on_map(pos)
+    return idx is not None and is_confirmed_unreachable_idx(idx)
+
+def _expand_reach_mask(mask: int) -> int:
+    horizontal = mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1)
+    return (horizontal | (horizontal << width) | (horizontal >> width)) & _board_mask
+
+def _mark_enemy_core_3x3(center_idx: int):
+    global _bm_enemy_core
+    cx = center_idx % width
+    cy = center_idx // width
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            ex = cx + dx
+            ey = cy + dy
+            if on_map_coords(ex, ey, width, height):
+                _bm_enemy_core |= 1 << (ey * width + ex)
+
+def _maybe_mark_enemy_core_from_symmetry(core_pos: Position | None):
+    if symmetry == Symmetry.UNKNOWN:
+        return
+    if core_pos is None:
+        return
+    enemy_center = get_symmetric_pos(core_pos, symmetry)
+    enemy_center_idx = _idx(enemy_center)
+    _mark_enemy_core_3x3(enemy_center_idx)
+
+def _update_reachability(my_pos_idx: int, my_team_idx: int):
+    global _bm_reachable, _bm_floodfill_open_prev
+    floodfill_open = _bm_seen & ~_bm_wall & ~_bm_enemy_core
+    newly_open = floodfill_open & ~_bm_floodfill_open_prev
+
+    my_bit = 1 << my_pos_idx
+    our_buildings = _bm_team[my_team_idx] & ~_bm_enemy_core
+    new_seeds = (my_bit | our_buildings) & ~_bm_reachable
+
+    if newly_open or new_seeds:
+        frontier = (new_seeds | (_expand_reach_mask(_bm_reachable) & newly_open)) & floodfill_open & ~_bm_reachable
+        _bm_reachable |= frontier
+        while frontier:
+            expanded = _expand_reach_mask(frontier) & floodfill_open & ~_bm_reachable
+            if not expanded:
+                break
+            _bm_reachable |= expanded
+            frontier = expanded
+
+    _bm_floodfill_open_prev = floodfill_open
+    _compute_might_reach()
+
+def _compute_might_reach():
+    global _bm_might_reach
+    may_open = _board_mask & ~_bm_wall & ~_bm_enemy_core
+    might = _bm_reachable
+    frontier = might
+    while frontier:
+        expanded = _expand_reach_mask(frontier) & may_open & ~might
+        if not expanded:
+            break
+        might |= expanded
+        frontier = expanded
+    _bm_might_reach = might
 
 def is_ally_barrier_idx(idx: int) -> bool:
     return _get_flag_idx(idx, FLAG_ALLY_BARRIER)
@@ -1084,9 +1177,9 @@ def _remove_conveyor_tracking(pos: Position):
     conveyor_resources.pop(idx, None)
     conveyor_resources_last_seen.pop(idx, None)
 
-def update_vision(ct: Controller):
+def update_vision(ct: Controller, core_pos: Position | None = None, enemy_core_pos: Position | None = None):
     import comms
-    global _bm_visible, movement_revision, current_round
+    global _bm_visible, movement_revision, current_round, _bm_enemy_core
     log_time(ct, "Start of update vision")
     current_round = ct.get_current_round()
     _feeds_turret_cache.clear()
@@ -1096,6 +1189,7 @@ def update_vision(ct: Controller):
     _chain_terminal_cache.clear()
     _chain_last_visible_cache.clear()
     my_team = ct.get_team()
+    my_pos = ct.get_position()
     nearby = ct.get_nearby_tiles()
     dirty_cache_positions: set[int] = set()
 
@@ -1179,6 +1273,8 @@ def update_vision(ct: Controller):
             if etype == EntityType.CORE:
                 if cached_bid != bid:
                     check_core_symmetry(pos)
+                if team_idx != my_team_idx:
+                    _bm_enemy_core |= 1 << idx
             assert etype is not None
             assert team is not None
             is_enemy_launcher = etype_idx == _IDX_LAUNCHER and team_idx != my_team_idx
@@ -1271,6 +1367,15 @@ def update_vision(ct: Controller):
         movement_revision += 1
 
     log_time(ct, "After recomputing conveyor cache")
+
+    if enemy_core_pos is not None:
+        _mark_enemy_core_3x3(_idx(enemy_core_pos))
+    else:
+        _maybe_mark_enemy_core_from_symmetry(core_pos)
+    _update_reachability(my_pos.y * w + my_pos.x, my_team_idx)
+    # indicate_reachability(ct)
+
+    log_time(ct, "After reachability update")
 
 def _would_create_loop_idx(build_idx: int, out_idx: int) -> bool:
     cur_idx = _output_idx[out_idx]
@@ -1593,6 +1698,8 @@ def get_nearest_unserviced_harvester(pos: Position, ct: Controller, core_pos: Po
     core_x = core_pos.x if core_pos is not None else 0
     core_y = core_pos.y if core_pos is not None else 0
     for idx in _iter_mask_indices(_bm_ore_ti):
+        if is_confirmed_unreachable_idx(idx):
+            continue
         if _bm_unreachable_harvesters & (1 << idx):
             continue
         if _entity_type_idx[idx] != _IDX_HARVESTER:
@@ -1616,6 +1723,8 @@ def get_nearest_unserviced_harvester(pos: Position, ct: Controller, core_pos: Po
         return _pos(best_ti_idx)
 
     for idx in _iter_mask_indices(_bm_ore_ax):
+        if is_confirmed_unreachable_idx(idx):
+            continue
         if _bm_unreachable_harvesters & (1 << idx):
             continue
         if _entity_type_idx[idx] != _IDX_HARVESTER:
@@ -1689,6 +1798,8 @@ def get_nearest_ore_without_harvester(pos: Position, ct: Controller, core_pos: P
 
     for idx in _iter_mask_indices(_bm_ore_ti):
         bit = 1 << idx
+        if is_confirmed_unreachable_idx(idx):
+            continue
         if (_bm_unreachable_ores | _bm_unreachable_harvesters) & bit:
             continue
         if _entity_type_idx[idx] == _IDX_HARVESTER:
@@ -1710,6 +1821,8 @@ def get_nearest_ore_without_harvester(pos: Position, ct: Controller, core_pos: P
 
     for idx in _iter_mask_indices(_bm_ore_ax):
         bit = 1 << idx
+        if is_confirmed_unreachable_idx(idx):
+            continue
         if (_bm_unreachable_ores | _bm_unreachable_harvesters) & bit:
             continue
         if _entity_type_idx[idx] == _IDX_HARVESTER:
@@ -1734,6 +1847,8 @@ def get_nearest_titanium_ore(pos: Position) -> Position | None:
     best = None
     best_dist = INF
     for ti_pos in iter_titanium_ores():
+        if is_confirmed_unreachable(ti_pos):
+            continue
         dist = pos.distance_squared(ti_pos)
         if dist < best_dist:
             best_dist = dist
@@ -1747,6 +1862,8 @@ def find_nearest_conveyor_with_resource(pos: Position, resource: ResourceType, m
     best = None
     best_dist = INF
     for conv_idx in tuple(conveyor_resources):
+        if is_confirmed_unreachable_idx(conv_idx):
+            continue
         conv_pos = _pos(conv_idx)
         if not has_recent_conveyor_resource(conv_pos, resource):
             continue
@@ -1764,6 +1881,8 @@ def find_nearest_conveyor_with_resource_idx(pos_idx: int, resource: ResourceType
     px = pos_idx % width
     py = pos_idx // width
     for conv_idx in tuple(conveyor_resources):
+        if is_confirmed_unreachable_idx(conv_idx):
+            continue
         if not has_recent_conveyor_resource_idx(conv_idx, resource):
             continue
         if my_team is not None and feeds_other_ally_foundry_idx(conv_idx, my_team, target_foundry_idx):
@@ -1998,7 +2117,8 @@ def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | Non
                                    end_position_idxs: set[int] | None = None,
                                    resource: ResourceType | None = None, check_splitter: bool = False,
                                    allow_far_terminals: bool = False, label: str = "output",
-                                   forbidden_output_mask: int = 0) -> tuple[Position | None, bool]:
+                                   forbidden_output_mask: int = 0,
+                                   strict_reachability: bool = False) -> tuple[Position | None, bool]:
     if core_pos is None:
         return (None, False)
 
@@ -2025,6 +2145,10 @@ def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | Non
         if not on_map_coords(x, y, w, h):
             continue
         adj_idx = y * w + x
+        if is_confirmed_unreachable_idx(adj_idx):
+            continue
+        if strict_reachability and not is_reachable_idx(adj_idx):
+            continue
         if forbidden_output_mask & (1 << adj_idx):
             continue
         dist = dist_to_terminal_xy(x, y)
@@ -2079,12 +2203,14 @@ def _get_best_output(build_pos: Position, core_pos: Position | None, ct: Control
                      end_position_idxs: set[int] | None = None,
                      resource: ResourceType | None = None, check_splitter: bool = False,
                      allow_far_terminals: bool = False, label: str = "output",
-                     forbidden_output_mask: int = 0) -> Position | None:
+                     forbidden_output_mask: int = 0,
+                     strict_reachability: bool = False) -> Position | None:
     result, _ = _get_best_output_with_fallback(
         build_pos, core_pos, ct, my_pos, offsets,
         my_team=my_team, end_positions=end_positions, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=check_splitter,
-        allow_far_terminals=allow_far_terminals, label=label, forbidden_output_mask=forbidden_output_mask,
+        allow_far_terminals=allow_far_terminals, label=label,
+        forbidden_output_mask=forbidden_output_mask, strict_reachability=strict_reachability,
     )
     return result
 
@@ -2110,13 +2236,15 @@ def get_best_bridge_output(bridge_pos: Position, core_pos: Position | None, ct: 
     return _get_best_output(bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
                              my_team=my_team, end_positions=end_positions,
                              resource=resource, check_splitter=False,
-                             allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask)
+                             allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask,
+                             strict_reachability=not OPTIMISTIC_REACHABILITY)
 
 def get_best_bridge_output_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> Position | None:
     return _get_best_output(bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
                              my_team=my_team, end_position_idxs=end_position_idxs,
                              resource=resource, check_splitter=False,
-                             allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask)
+                             allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask,
+                             strict_reachability=not OPTIMISTIC_REACHABILITY)
 
 def get_best_conveyor_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[tuple[Direction, Position] | None, bool]:
     result, is_fallback = _get_best_output_with_fallback(
@@ -2146,6 +2274,7 @@ def get_best_bridge_output_with_fallback(bridge_pos: Position, core_pos: Positio
         my_team=my_team, end_positions=end_positions,
         resource=resource, check_splitter=False,
         allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask,
+        strict_reachability=not OPTIMISTIC_REACHABILITY,
     )
 
 def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[Position | None, bool]:
@@ -2154,6 +2283,7 @@ def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Pos
         my_team=my_team, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=False,
         allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask,
+        strict_reachability=not OPTIMISTIC_REACHABILITY,
     )
 
 def indicate_entity_map(ct: Controller, my_team: Team):
@@ -2183,6 +2313,21 @@ def indicate_entity_map(ct: Controller, my_team: Team):
                 ct.draw_indicator_dot(pos, 0, 100, 255)    # blue
             else:
                 ct.draw_indicator_dot(pos, 180, 0, 255)    # purple
+
+def indicate_reachability(ct: Controller):
+    seen = _bm_seen
+    reachable = _bm_reachable
+    might = _bm_might_reach
+    for idx in range(tile_count):
+        bit = 1 << idx
+        if not (seen & bit):
+            continue
+        if reachable & bit:
+            ct.draw_indicator_dot(Position(idx % width, idx // width), 0, 255, 0)
+        elif might & bit:
+            ct.draw_indicator_dot(Position(idx % width, idx // width), 255, 165, 0)
+        elif not (might & bit):
+            ct.draw_indicator_dot(Position(idx % width, idx // width), 255, 0, 0)
 
 def indicate_seen(ct: Controller):
     for idx in range(tile_count):

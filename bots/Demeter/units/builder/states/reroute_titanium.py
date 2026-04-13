@@ -22,6 +22,10 @@ def run(player, ct: Controller) -> None:
         log("foundry reroute no longer needed -> done")
         clear_state(player)
         return
+    if map_mod.is_confirmed_unreachable(player.foundry_pos):
+        log(f"foundry reroute target {player.foundry_pos} is confirmed unreachable -> abandoning")
+        clear_state(player)
+        return
 
     ti_source = find_adjacent_foundry_reroute_source(player, ct, my_pos, player.foundry_pos)
     if ti_source is None:
@@ -36,6 +40,10 @@ def run(player, ct: Controller) -> None:
         ti_source = map_mod.idx_to_pos(ti_source_idx) if ti_source_idx is not None else None
     if ti_source is not None:
         ti_pos = ti_source
+        if map_mod.is_confirmed_unreachable(ti_pos):
+            log(f"titanium reroute source {ti_pos} is confirmed unreachable -> abandoning")
+            clear_state(player)
+            return
         if my_pos.distance_squared(ti_pos) <= 2:
             bbid_ti = ct.get_tile_builder_bot_id(ti_pos)
             conveyor_ti_cost, conveyor_ax_cost = get_selected_conveyor_cost(player, ct)
