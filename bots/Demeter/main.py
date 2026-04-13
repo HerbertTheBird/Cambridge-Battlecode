@@ -59,6 +59,8 @@ class Player:
 
         self.initial_spawn_plan = None
         self.broken_chains: dict[int, ResourceType] = {}
+        self.no_output_found_mask: int = 0
+        self.no_output_found_expiry_round: dict[int, int] = {}
         self.health = 0
         self.prev_health: int
         self.global_titanium = 0

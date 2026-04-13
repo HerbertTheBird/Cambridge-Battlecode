@@ -53,6 +53,7 @@ _INTERCEPT_MAX_TRAVEL_DIST_SQ = 13
 _INTERCEPT_THREAT_RADIUS_SQ = GameConstants.SENTINEL_VISION_RADIUS_SQ
 
 KNOWN_CORE_INTERCEPT_TRIGGER_DIST_SQ = 50
+NO_OUTPUT_FOUND_LIFESPAN_TURNS = 50
 
 def count_ally_turrets_covering(ct: Controller, target_pos: Position) -> int:
     """Count ally turrets whose raw attack pattern covers target_pos."""
@@ -899,6 +900,19 @@ def clear_state(player):
     player.build_type = None
     player.timeout_turns = 0
 
+def prune_no_output_found(player, current_round: int) -> None:
+    if not player.no_output_found_expiry_round:
+        return
+    for idx, expiry_round in list(player.no_output_found_expiry_round.items()):
+        if current_round >= expiry_round:
+            player.no_output_found_expiry_round.pop(idx, None)
+            player.no_output_found_mask &= ~(1 << idx)
+
+def mark_no_output_found(player, output_pos: Position, current_round: int) -> None:
+    idx = map_mod.pos_to_idx(output_pos)
+    player.no_output_found_expiry_round[idx] = current_round + NO_OUTPUT_FOUND_LIFESPAN_TURNS
+    player.no_output_found_mask |= 1 << idx
+
 def remember_non_passable_build(player, pos: Position, build_type: EntityType, build_direction: Direction | None = None) -> bool:
     """Remember a same-turn non-passable build that failed only because we were standing on the tile."""
     if player.my_pos != pos:
@@ -1379,7 +1393,10 @@ def find_heal_target(player, ct: Controller, my_pos: Position, sabotage_worthy_a
 def find_broken_chain_target(player, ct: Controller, my_pos: Position) -> tuple[Position, ResourceType] | None:
     best_chain_target: tuple[Position, ResourceType] | None = None
     best_chain_dist = INF
+    blocked_output_mask = player.no_output_found_mask
     for output_idx, resource in player.broken_chains.items():
+        if blocked_output_mask & (1 << output_idx):
+            continue
         output_pos = map_mod.idx_to_pos(output_idx)
         dist = my_pos.distance_squared(output_pos)
         if dist >= best_chain_dist:
