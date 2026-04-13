@@ -58,7 +58,7 @@ def handle_comms():
     for p in rc.get_nearby_tiles():
         idx = p.x + p.y * map_info._width
         for i in range(len(forget)):
-            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 1 < current_round:
+            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 3 < current_round:
                 del _forget_rounds[i][idx]
                 forget[i] &= ~(1 << idx)
 def draw_mask(mask, r, g, b):

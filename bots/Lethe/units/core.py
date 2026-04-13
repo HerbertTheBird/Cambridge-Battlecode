@@ -4,7 +4,7 @@ import map_info
 rc: Controller
 
 # --- Configurable ---
-SCALE_MULT = 2
+SCALE_MULT = 1
 
 
 def _spawn_toward_center():
@@ -30,7 +30,7 @@ def run():
     #     rc.resign()
     titanium = rc.get_global_resources()[0]
     scaling = rc.get_scale_percent()
-    if scaling * SCALE_MULT < titanium:
+    if scaling * SCALE_MULT + 200 < titanium:
         _spawn_toward_center()
 
 

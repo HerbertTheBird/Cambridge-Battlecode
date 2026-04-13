@@ -127,6 +127,7 @@ def get_best_direction(pos):
                         if map_info._bm_et[i] & sbit:
                             g_score += BUILDING_SCORE[i]
                             break
+            g_score *= 3
             if g_score > best_score:
                 best_score = g_score
                 best_dir = DIRECTIONS[di]

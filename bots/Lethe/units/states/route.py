@@ -143,7 +143,7 @@ def run():
         target_conveyor = [path[0], path[1]]
         if (map_info._bm_team[1-map_info._TM_INT[rc.get_team()]] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
             new_path = nav.calculate_conveyor_path(Position(best_n%width, best_n//width), update=True)
-            if new_path[1] != path[0]:
+            if new_path and len(new_path) > 1 and new_path[1] != path[0]:
                 path = new_path
                 if not path or len(path) < 2:
                     unpathable |= best_bit
