@@ -26,7 +26,6 @@ Step: TypeAlias = tuple[int, int, int, int]
 bridge_cost = 10
 barrier_cost = 10
 threat_cost = 20
-conveyor_cost = 10
 
 
 
@@ -425,7 +424,6 @@ class Pathing:
         # Barriers directly from bitmasks
         my_team_idx = map_info._TM_INT[self.rc.get_team()]
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
-        barriers &= ~start
 
         # Threat as soft cost — only active when not hard-avoided (bot is inside threat zone)
         threat = map_info._bm_enemy_launch_adj
@@ -450,45 +448,121 @@ class Pathing:
         else:
             t_core = target & ~convs
             t_conv = target & convs
-            can_visit = [t_core] + [0] * conveyor_cost
-            can_visit[conveyor_cost] |= t_conv
+            can_visit = [t_core] + [0] * bridge_cost
+            can_visit[bridge_cost] |= t_conv
 
-        stuck = 0
         i = 0
-        while True:
-            frontier = can_visit[i] & ~visited
-            # builder.draw_mask(frontier, 0, 0, min(255, i*10))
-            visited |= frontier
-            if frontier & start:
-                end_time = time.perf_counter_ns()
-                self.path = self.reconstruct_path(can_visit, start, target, barriers, threat, routing)
-                self.path_idx = 0
-                print("bfs time " + str((end_time-start_time)/1000) + "us")
+        stuck = 0
+        visited = 0
 
-                return self.path
-            if frontier == 0:
-                stuck += 1
+        ESTIMATED_MAX_DIST = 50
+
+        # Preallocate some space up front, but allow growth if search goes longer.
+        if len(can_visit) < ESTIMATED_MAX_DIST:
+            can_visit.extend([0] * (ESTIMATED_MAX_DIST - len(can_visit)))
+
+        not_barriers = ~barriers
+        not_threat = ~threat
+
+        if routing:
+            steps = CONV
+            max_extra_cost = bridge_cost
+        else:
+            steps = DIRS
+            max_extra_cost = barrier_cost + threat_cost
+
+        def ensure_capacity(idx_needed: int) -> None:
+            """Grow can_visit only when needed."""
+            if idx_needed >= len(can_visit):
+                # Grow by at least enough for the current need, but with slack so
+                # repeated growth is less frequent.
+                new_len = max(idx_needed + 1, len(can_visit) * 2, ESTIMATED_MAX_DIST)
+                can_visit.extend([0] * (new_len - len(can_visit)))
+
+        if routing:
+            while True:
+                frontier = can_visit[i] & ~visited
+                visited |= frontier
+
+                if frontier & start:
+                    end_time = time.perf_counter_ns()
+                    self.path = self.reconstruct_path(
+                        can_visit, start, target, barriers, threat, routing
+                    )
+                    self.path_idx = 0
+                    print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                    return self.path
+
+                if frontier == 0:
+                    stuck += 1
+                    i += 1
+                    if i >= len(can_visit):
+                        break
+                    continue
+
+                stuck = 0
+
+                # Ensure capacity for the worst destination layer this iteration.
+                ensure_capacity(i + max_extra_cost)
+
+                for dx, dy, step_cost, mask in steps:
+                    offset = dx + dy * width
+                    masked = frontier & mask
+
+                    if offset > 0:
+                        new = (masked << offset) & ~avoid
+                    else:
+                        new = (masked >> (-offset)) & ~avoid
+
+                    can_visit[i + step_cost] |= new
+
                 i += 1
-                if i >= len(can_visit):
-                    break
-                continue
-            stuck = 0
-            if routing:
-                can_visit.extend([0]*(i+bridge_cost+1-len(can_visit)))
-                for step in CONV:
-                    offset = step[0]+step[1]*width
-                    new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
-                    can_visit[(i+step[2])] |= new
-            else:
-                can_visit.extend([0]*(i+1+barrier_cost+threat_cost+1-len(can_visit)))
-                for step in DIRS:
-                    offset = step[0]+step[1]*width
-                    new = ((frontier&step[3])<<offset if offset > 0 else (frontier&step[3]) >> (-offset)) & ~avoid
-                    can_visit[i+step[2]] |= (new & ~barriers & ~threat)
-                    can_visit[i+step[2]+barrier_cost] |= (new & barriers & ~threat)
-                    can_visit[i+step[2]+threat_cost] |= (new & ~barriers & threat)
-                    can_visit[i+step[2]+barrier_cost+threat_cost] |= (new & barriers & threat)
-            i+=1
+
+        else:
+            while True:
+                frontier = can_visit[i] & ~visited
+                visited |= frontier
+
+                if frontier & start:
+                    end_time = time.perf_counter_ns()
+                    self.path = self.reconstruct_path(
+                        can_visit, start, target, barriers, threat, routing
+                    )
+                    self.path_idx = 0
+                    print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                    return self.path
+
+                if frontier == 0:
+                    stuck += 1
+                    i += 1
+                    if i >= len(can_visit):
+                        break
+                    continue
+
+                stuck = 0
+
+                # Worst case target index for non-routing branch.
+                ensure_capacity(i + max_extra_cost + 1)
+
+                for dx, dy, step_cost, mask in steps:
+                    offset = dx + dy * width
+                    masked = frontier & mask
+
+                    if offset > 0:
+                        new = (masked << offset) & ~avoid
+                    else:
+                        new = (masked >> (-offset)) & ~avoid
+
+                    new_not_threat = new & not_threat
+                    new_threat = new & threat
+
+                    can_visit[i + step_cost] |= (new_not_threat & not_barriers)
+                    can_visit[i + step_cost + barrier_cost] |= (new_not_threat & barriers)
+                    can_visit[i + step_cost + threat_cost] |= (new_threat & not_barriers)
+                    can_visit[i + step_cost + barrier_cost + threat_cost] |= (new_threat & barriers)
+
+                i += 1
+
         self.path = None
         return None
 
