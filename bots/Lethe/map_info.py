@@ -7,19 +7,39 @@ import time
 import pathing
 
 
-_HAS_DIRECTION    = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
+_HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
-    e for e in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR,
-                      EntityType.BRIDGE, EntityType.SPLITTER)
+    e for e in (
+        EntityType.CONVEYOR, 
+        EntityType.ARMOURED_CONVEYOR,
+        EntityType.BRIDGE, 
+        EntityType.SPLITTER
+    )
 )
+
 _ACCEPT_ORE = frozenset(
-    e for e in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR,
-                      EntityType.BRIDGE, EntityType.SPLITTER, EntityType.BREACH, EntityType.CORE, EntityType.FOUNDRY, EntityType.GUNNER, EntityType.SENTINEL)
+    e for e in (
+        EntityType.CONVEYOR, 
+        EntityType.ARMOURED_CONVEYOR,
+        EntityType.BRIDGE, 
+        EntityType.SPLITTER, 
+        EntityType.BREACH, 
+        EntityType.CORE, 
+        EntityType.FOUNDRY, 
+        EntityType.GUNNER, 
+        EntityType.SENTINEL
+    )
 )
+
 _TURRET_TYPES = frozenset(
-    e for e in (EntityType.LAUNCHER, EntityType.GUNNER,
-                      EntityType.SENTINEL, EntityType.BREACH)
+    e for e in (
+        EntityType.LAUNCHER, 
+        EntityType.GUNNER,
+        EntityType.SENTINEL, 
+        EntityType.BREACH
+    )
 )
+
 _ET_ROAD              = EntityType.ROAD
 _ET_MARKER            = EntityType.MARKER
 _ET_BARRIER           = EntityType.BARRIER
@@ -40,16 +60,16 @@ _RT_TITANIUM          = ResourceType.TITANIUM
 _ENV_EMPTY   = Environment.EMPTY
 _ENV_ORE_AX  = Environment.ORE_AXIONITE
 _ENV_ORE_TI  = Environment.ORE_TITANIUM
-_ET_INT = {t: i for i, t in enumerate(EntityType)}
-_INT_ET = {i: t for i, t in enumerate(EntityType)}
-_RT_INT = {t: i for i, t in enumerate(ResourceType)}
-_INT_RT = {i: t for i, t in enumerate(ResourceType)}
-_ENV_INT = {t: i for i, t in enumerate(Environment)}
-_INT_ENV = {i: t for i, t in enumerate(Environment)}
-_DIR_INT = {t: i for i, t in enumerate(Direction)}
-_INT_DIR = {i: t for i, t in enumerate(Direction)}
-_TM_INT = {t: i for i, t in enumerate(Team)}
-_INT_TM = {i: t for i, t in enumerate(Team)}
+_ET_INT =   {t: i for i, t in enumerate(EntityType)}
+_INT_ET =   {i: t for i, t in enumerate(EntityType)}
+_RT_INT =   {t: i for i, t in enumerate(ResourceType)}
+_INT_RT =   {i: t for i, t in enumerate(ResourceType)}
+_ENV_INT =  {t: i for i, t in enumerate(Environment)}
+_INT_ENV =  {i: t for i, t in enumerate(Environment)}
+_DIR_INT =  {t: i for i, t in enumerate(Direction)}
+_INT_DIR =  {i: t for i, t in enumerate(Direction)}
+_TM_INT =   {t: i for i, t in enumerate(Team)}
+_INT_TM =   {i: t for i, t in enumerate(Team)}
 
 # Pre-computed indices for fast list access
 _IDX_CONVEYOR          = _ET_INT[EntityType.CONVEYOR]
