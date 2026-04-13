@@ -9,6 +9,8 @@ nav: Pathing = None
 comm_flag = 4
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
 
+unpathable = 0
+
 def init(c: Controller):
     global rc, nav
     rc = c
@@ -30,7 +32,7 @@ def _dead_end_conveyors():
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
     my_team_idx = map_info._TM_INT[rc.get_team()]
-    my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_team_idx]
+    my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
     if not my_harvesters:
         return 0
 
@@ -39,27 +41,65 @@ def _orphan_harvesters():
         | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
         | map_info._bm_et[map_info._IDX_BRIDGE]
         | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_GUNNER]
-        | map_info._bm_et[map_info._IDX_SENTINEL]
-        | map_info._bm_et[map_info._IDX_BREACH]
         | map_info._bm_et[map_info._IDX_CORE]
     ) & map_info._bm_team[my_team_idx]
 
     served = map_info.expand_manhattan(my_connected)
     return my_harvesters & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
+def cant_claim():
+    w = map_info._width
+    my_team = rc.get_team()
+    my_id = rc.get_id()
+    my_pos = rc.get_position()
+
+    # My 5x5 (2 Chebyshev) zone — always claimable
+    my_bit = 1 << (my_pos.x + my_pos.y * w)
+    my_zone = my_bit
+    for _ in range(2):
+        my_zone = map_info.expand_chebyshev(my_zone)
+
+    # Other friendly bots' zones — can't claim there
+    my_small = map_info.expand_chebyshev(my_bit)
+    cant = 0
+    others_small = 0
+    friendly_others = map_info._bm_friendly_bots & ~my_bit
+    if friendly_others:
+        mask = friendly_others
+        while mask:
+            bit = mask & -mask
+            # 5x5 (2 Chebyshev)
+            zone = bit
+            for _ in range(2):
+                zone = map_info.expand_chebyshev(zone)
+            cant |= zone
+            # 3x3 (1 Chebyshev)
+            others_small |= map_info.expand_chebyshev(bit)
+            mask ^= bit
+
+    # 5x5 rule: blocked unless in my 5x5
+    cant_5x5 = cant & ~my_zone
+    # 3x3 rule: in someone else's 3x3 but not my 3x3 — blocked regardless
+    cant_3x3 = others_small & ~my_small
+
+    return cant_5x5 | cant_3x3
+def avoid_mask():
+    return _too_expensive() | cant_claim() | unpathable
 
 def score():
     # units.builder.draw_mask(_orphan_harvesters(), 0, 0, 255)
     # units.builder.draw_mask(_dead_end_conveyors() , 0, 255, 0)
-    expensive = _too_expensive()
-    return 4 if ((_dead_end_conveyors() & ~expensive) or (_orphan_harvesters() & ~expensive)) else 0
+    avoid = avoid_mask()
+    return 4 if ((_dead_end_conveyors() & ~avoid) or (_orphan_harvesters() & ~avoid)) else 0
 
 def run():
+    global unpathable
     print("ROUTE")
-    expensive = _too_expensive()
-    dead_ends = _dead_end_conveyors() & ~expensive
-    orphans = _orphan_harvesters() & ~expensive
+    avoid = avoid_mask()
+    dead_ends = _dead_end_conveyors() & ~avoid
+    orphans = _orphan_harvesters() & ~avoid
     candidates = dead_ends | orphans
+    units.builder.draw_mask(dead_ends, 0, 255, 0)
+    units.builder.draw_mask(orphans, 0, 0, 255)
 
     if not candidates:
         print("no candidates")
@@ -76,173 +116,111 @@ def run():
     best_bit = 1 << (best.x + best.y * width)
     is_harvester = bool(orphans & best_bit)
 
+    target_conveyor = [None]*2
+    path = []
     if is_harvester:
         path = nav.calculate_conveyor_path(best, update=False)
-        if not path:
-            comms.mark(best, comm_flag)
+        if not path or len(path) < 2:
+            unpathable |= best_bit
             return
-
-        # Move adjacent to target conveyor to place
-        to_move = path[0]
-
-        # If path[1] is near an enemy bot, override to secure it
-        override = None
-        if len(path) >= 2:
-            for uid in rc.get_nearby_units():
-                if rc.get_team(uid) != rc.get_team() and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
-                    ep = rc.get_position(uid)
-                    if max(abs(ep.x - path[1].x), abs(ep.y - path[1].y)) <= 2:
-                        override = path[1]
-                        break
-        if override:
-            nav.move_to({override})
-        else:
-            nav.move_adjacent(to_move, fallback=best)
-
+        target_conveyor = [path[0], path[1]]
         # Route from harvester: expand start to cardinal neighbors
     else:
         # Dead-end conveyor: route from its output tile
         best_n = best.x + best.y * width
         target_n = map_info._building_conv_target[best_n]
+        
+        can_heal_road = False
+        target_zone = 1 << target_n
+        for _ in range(3):
+            target_zone = map_info.expand_chebyshev(target_zone)
+        if target_zone & map_info._bm_enemy_bots:
+            can_heal_road = True
+        path = nav.calculate_conveyor_path(Position(target_n%width, target_n//width), update=True)
+        if not path or len(path) < 2:
+            unpathable |= best_bit
+            return
+        target_conveyor = [path[0], path[1]]
+        if (map_info._bm_team[1-map_info._TM_INT[rc.get_team()]] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
+            new_path = nav.calculate_conveyor_path(Position(best_n%width, best_n//width), update=True)
+            if new_path[1] != path[0]:
+                path = new_path
+                if not path or len(path) < 2:
+                    unpathable |= best_bit
+                    return
+                target_conveyor = [path[0], path[1]]
+    near_enemy = False
+    if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
+        tc1_zone = 1 << (target_conveyor[1].x + target_conveyor[1].y * width)
+        for _ in range(4):
+            tc1_zone = map_info.expand_chebyshev(tc1_zone)
+        if tc1_zone & map_info._bm_enemy_bots:
+            near_enemy = True
+    if map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) == EntityType.ROAD and map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) != rc.get_team():
+        target = target_conveyor[0]
+        nav.move_to(target)
+        if rc.can_fire(target):
+            rc.fire(target)
+        return
+    can_build = False
+    cost = nav.conveyor_cost(path)
+    best_n = best.x + best.y * width
+    _cost_map[best_n] = cost
+    if rc.get_global_resources()[0] < cost:
+        print("can't afford", cost)
+        return
+    if near_enemy:
+        nav.move_to(target_conveyor[1])
+        if rc.get_position() == target_conveyor[1]:
+            can_build = True
+    else:
+        nav.move_adjacent(target_conveyor[0])
+        can_build = True
+    if rc.get_action_cooldown() != 0:
+        can_build = False
+    built = False
+    if can_build:
+        destroy = target_conveyor[0]
+        next = target_conveyor[1]
+        if rc.can_destroy(destroy):
+            rc.destroy(destroy)
+            map_info.update_at(destroy)
+        bridge = destroy.distance_squared(next) > 1
+        if bridge and rc.can_build_bridge(destroy, next):
+            rc.build_bridge(destroy, next)
+            map_info.update_at(destroy)
+            built = True
+        elif not bridge and rc.can_build_conveyor(destroy, destroy.direction_to(next)):
+            rc.build_conveyor(destroy, destroy.direction_to(next))
+            map_info.update_at(destroy)
+            built = True
+    if built:
+        # Trace downstream from best, mark the furthest unloaded conveyor as loaded
+        conv_target = map_info._building_conv_target
         tiles = width * height
-        if not target_n or not (0 <= target_n < tiles):
-            comms.mark(best, comm_flag)
-            return
-        output_tile = Position(target_n % width, target_n // width)
+        cur_n = best.x + best.y * width
+        last_unloaded_bit = 0
+        visited = 0
+        while True:
+            print("at", cur_n%width, cur_n//width)
+            print("next", conv_target[cur_n]%width, conv_target[cur_n]//width)
+            cur_bit = 1 << cur_n
+            if visited & cur_bit:
+                print("cycle detected")
+                break
+            visited |= cur_bit
+            if (map_info._bm_routable & cur_bit) and not (map_info._bm_conv_loaded & cur_bit):
+                last_unloaded_bit = cur_bit
+            tn = conv_target[cur_n]
+            if not tn or tn < 0 or tn >= tiles:
+                print("invalid target", tn)
+                break
+            tbit = 1 << tn
+            if not (map_info._bm_conveyors & tbit):
+                break
+            cur_n = tn
+        if last_unloaded_bit:
+            map_info._bm_conv_loaded |= last_unloaded_bit
+            print("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
 
-        path = nav.calculate_conveyor_path(output_tile, update=True)
-
-        # If path[1] is near an enemy bot, override to secure it
-        override = None
-        if path and len(path) >= 2:
-            for uid in rc.get_nearby_units():
-                if rc.get_team(uid) != rc.get_team() and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
-                    ep = rc.get_position(uid)
-                    if max(abs(ep.x - path[1].x), abs(ep.y - path[1].y)) <= 2:
-                        override = path[1]
-                        break
-
-        if override:
-            nav.move_to({override})
-        else:
-            nav.move_adjacent(output_tile)
-
-    if override:
-        my_team_idx = map_info._TM_INT[rc.get_team()]
-        ov_n = override.x + override.y * width
-        ov_bit = 1 << ov_n
-        ov_id = map_info._building_id[ov_n]
-        # If enemy owns it, fire on it
-        if ov_id and not (map_info._bm_team[my_team_idx] & ov_bit):
-            if rc.can_fire(override):
-                rc.fire(override)
-            comms.mark(best, comm_flag)
-            return
-        # Need my road on the tile before building
-        my_road = map_info._bm_et[map_info._IDX_ROAD] & map_info._bm_team[my_team_idx] & ov_bit
-        if not my_road:
-            if rc.can_build_road(override):
-                rc.build_road(override)
-                map_info.update_at(override)
-            else:
-                comms.mark(best, comm_flag)
-                return
-
-    if path and len(path) >= 2:
-        cost = nav.conveyor_cost(path)
-        best_n = best.x + best.y * width
-        _cost_map[best_n] = cost
-        build_pos = path[0]
-        next_pos = path[1]
-
-        # Check what's on the build tile
-        bp_n = build_pos.x + build_pos.y * width
-        bp_id = map_info._building_id[bp_n]
-        if bp_id != 0:
-            bp_bit = 1 << bp_n
-            my_team_idx = map_info._TM_INT[rc.get_team()]
-            is_mine = bool(map_info._bm_team[my_team_idx] & bp_bit)
-
-            if is_mine:
-                # Friendly: destroy if road/barrier/marker, else abort
-                is_clearable = bool(
-                    (map_info._bm_et[map_info._IDX_ROAD]
-                     | map_info._bm_et[map_info._IDX_BARRIER]
-                     | map_info._bm_et[map_info._IDX_MARKER]) & bp_bit
-                )
-                if is_clearable:
-                    if rc.can_destroy(build_pos) and rc.get_action_cooldown() == 0:
-                        print("destroy", build_pos)
-                        rc.destroy(build_pos)
-                        map_info.update_at(build_pos)
-                else:
-                    comms.mark(best, comm_flag)
-                    return
-            else:
-                # Enemy: fire if road/conveyor/bridge/splitter/marker, else abort
-                is_enemy_clearable = bool(
-                    (map_info._bm_et[map_info._IDX_ROAD]
-                     | map_info._bm_et[map_info._IDX_CONVEYOR]
-                     | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-                     | map_info._bm_et[map_info._IDX_BRIDGE]
-                     | map_info._bm_et[map_info._IDX_SPLITTER]
-                     | map_info._bm_et[map_info._IDX_MARKER]) & bp_bit
-                )
-                if is_enemy_clearable:
-                    # Move onto tile and fire
-                    nav.move_to({build_pos})
-                    if rc.can_fire(build_pos):
-                        rc.fire(build_pos)
-                    comms.mark(best, comm_flag)
-                    return
-                else:
-                    comms.mark(best, comm_flag)
-                    return
-
-        dx = next_pos.x - build_pos.x
-        dy = next_pos.y - build_pos.y
-        dist_sq = dx * dx + dy * dy
-        done = False
-        if dist_sq <= 1:
-            direction = build_pos.direction_to(next_pos)
-            if rc.can_build_conveyor(build_pos, direction):
-                rc.build_conveyor(build_pos, direction)
-                map_info.update_at(build_pos)
-                if len(path) == 2:
-                    done = True
-        else:
-            if rc.can_build_bridge(build_pos, next_pos):
-                rc.build_bridge(build_pos, next_pos)
-                map_info.update_at(build_pos)
-                if len(path) == 2:
-                    done = True
-        if done:
-            # Trace downstream from best, mark the furthest unloaded conveyor as loaded
-            conv_target = map_info._building_conv_target
-            tiles = width * height
-            cur_n = best.x + best.y * width
-            last_unloaded_bit = 0
-            visited = 0
-            while True:
-                print("at", cur_n%width, cur_n//width)
-                print("next", conv_target[cur_n]%width, conv_target[cur_n]//width)
-                cur_bit = 1 << cur_n
-                if visited & cur_bit:
-                    print("cycle detected")
-                    break
-                visited |= cur_bit
-                if (map_info._bm_routable & cur_bit) and not (map_info._bm_conv_loaded & cur_bit):
-                    last_unloaded_bit = cur_bit
-                tn = conv_target[cur_n]
-                if not tn or tn < 0 or tn >= tiles:
-                    print("invalid target", tn)
-                    break
-                tbit = 1 << tn
-                if not (map_info._bm_conveyors & tbit):
-                    break
-                cur_n = tn
-            if last_unloaded_bit:
-                map_info._bm_conv_loaded |= last_unloaded_bit
-                print("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
-
-    comms.mark(best, comm_flag)
+    comms.mark(best.x + best.y * map_info._width, comm_flag)

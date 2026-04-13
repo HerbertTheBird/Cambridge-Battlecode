@@ -117,9 +117,13 @@ def run():
                 continue
             secured = False
             break
-        if secured and rc.can_build_harvester(p):
-            rc.build_harvester(p)
-            map_info.update_at(p)
+        if secured:
+            if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER):
+                rc.destroy(p)
+                map_info.update_at(p)
+            if rc.can_build_harvester(p):
+                rc.build_harvester(p)
+                map_info.update_at(p)
             return
 
     expensive = _too_expensive()
@@ -143,7 +147,7 @@ def run():
         return
     if rc.get_position().distance_squared(best_ore) > 2:
         nav.move_to(best_ore)
-        comms.mark(best_ore, comm_flag)
+        comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return
     # --- Secure each cardinal side ---
     all_secured = True
@@ -172,7 +176,7 @@ def run():
             nav.move_to(p)
             if rc.can_fire(p):
                 rc.fire(p)
-            comms.mark(best_ore, comm_flag)
+            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
 
         if pid and is_mine and is_road:
@@ -182,7 +186,7 @@ def run():
             if rc.can_destroy(p) and rc.get_action_cooldown() == 0:
                 rc.destroy(p)
                 map_info.update_at(p)
-            comms.mark(best_ore, comm_flag)
+            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
 
         if pid and not is_road and not is_marker:
@@ -198,11 +202,11 @@ def run():
         if rc.can_build_barrier(p):
             rc.build_barrier(p)
             map_info.update_at(p)
-        comms.mark(best_ore, comm_flag)
+        comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return
 
     if not all_secured:
-        comms.mark(best_ore, comm_flag)
+        comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return
 
     # --- All 4 sides covered — place harvester ---
@@ -210,7 +214,16 @@ def run():
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]
-    nav.move_adjacent(best_ore)
+    targets = set()
+    for d in Direction:
+        p = path[0].add(d)
+        if p == best_ore or not map_info.in_bounds(p):
+            continue
+        pbit = 1 << (p.x + p.y * w)
+        if rc.is_tile_passable(p) or rc.is_tile_empty(p):
+            targets.add(p)
+    if targets:
+        nav.move_to(targets)
 
     if ore_id:
         is_mine = bool(map_info._bm_team[my_team_idx] & ore_bit)
@@ -219,7 +232,7 @@ def run():
             nav.move_to(best_ore)
             if rc.can_fire(rc.get_position()):
                 rc.fire(rc.get_position())
-            comms.mark(best_ore, comm_flag)
+            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
         if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0:
             rc.destroy(best_ore)
@@ -229,4 +242,4 @@ def run():
     if rc.can_build_harvester(best_ore):
         rc.build_harvester(best_ore)
         map_info.update_at(best_ore)
-    comms.mark(best_ore, comm_flag)
+    comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)

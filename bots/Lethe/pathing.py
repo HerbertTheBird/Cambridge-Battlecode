@@ -46,7 +46,7 @@ def rebuild_broken_barriers(rc: Controller):
         if rc.get_global_resources()[0] < barrier_cost:
             continue
         id = rc.get_tile_building_id(p)
-        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p):
+        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p) and rc.get_action_cooldown() == 0:
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_barrier(p):
@@ -548,7 +548,7 @@ class Pathing:
                 has_building |= map_info._bm_et[i]
             avoid |= map_info._bm_seen & ~has_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = self.rc.get_position()
-        if target == self.target_p and self.rc.get_position() == self.prev_pos and self.rc.get_position() not in target:
+        if target == self.target_p and self.rc.get_position() == self.prev_pos and self.rc.get_position() not in target and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target):
             self.stuck_turns += 1
         else:
             self.prev_pos = self.rc.get_position()
@@ -574,8 +574,10 @@ class Pathing:
 
     def calculate_conveyor_path(self, start: Position, update: bool = False):
         print("conveyors from ", start)
-        target, avoid = self._get_conveyor_targets_and_avoid()
-        # builder.draw_mask(target, 0, 255, 0)
+        if update:
+            target, avoid = self._get_conveyor_targets_and_avoid(start.x+start.y*map_info._width)
+        else:
+            target, avoid = self._get_conveyor_targets_and_avoid()
         if not target:
             return None
         if not update:
@@ -610,10 +612,12 @@ class Pathing:
                 scaling += 0.01
         return cost
     def _get_conveyor_targets_and_avoid(
-        self,
+        self, conveyor = None
     ):
         target = map_info._bm_route_targets
         if not target:
             return 0, 0
         avoid = map_info.get_avoid(True, False, True)
+        if conveyor:
+            avoid &= ~(1<<map_info._building_conv_target[conveyor])
         return target, avoid

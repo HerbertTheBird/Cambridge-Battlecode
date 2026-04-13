@@ -35,20 +35,16 @@ def generate_explore_target():
 
     # Seed with all other builders' claimed tiles (all flags) + my position
     seeds = 0
-    for f in units.builder.forget:
+    for i, f in enumerate(units.builder.forget):
+        if i == 7:  # heal flag uses enemy IDs, not tile positions
+            continue
         seeds |= f
-    my_pos = rc.get_position()
-    seeds |= 1 << (my_pos.x + my_pos.y * w)
-    for i in rc.get_nearby_units():
-        if rc.get_entity_type(i) == EntityType.BUILDER_BOT and rc.get_team(i) == rc.get_team():
-            pos = rc.get_position(i)
-            seeds |= 1 << (pos.x + pos.y * w)
 
     visited = seeds
     frontier = seeds
     prev_frontier = frontier
     c = 0
-    while frontier and c < 10:
+    while frontier and c < 100:
         prev_frontier = frontier
         expanded = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1) | (frontier << w) | (frontier >> w)
         frontier = expanded & passable & ~visited
@@ -84,4 +80,4 @@ def run():
         else:
             break
         attempts += 1
-    comms.mark(explore_target, comm_flag)
+    comms.mark(explore_target.x + explore_target.y * map_info._width, comm_flag)

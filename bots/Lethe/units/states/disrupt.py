@@ -34,6 +34,8 @@ def _disruptable_ore():
             & ~map_info._bm_enemy_launch_adj)
 
 def score():
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
+        return 0
     return 2 if _disruptable_ore() else 0
 
 def run():
@@ -55,21 +57,21 @@ def run():
 
     if best_id and (map_info._bm_team[my_team_idx] & best_bit):
         # Friendly road/marker — move adjacent and destroy
-        nav.move_adjacent(best, avoid_empty=rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5)
+        nav.move_adjacent(best)
         if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
             rc.destroy(best)
             map_info.update_at(best)
     elif best_id and (map_info._bm_et[map_info._IDX_ROAD]&best_bit):
         # Enemy road/marker — move onto it and fire
-        nav.move_to({best}, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5)
+        nav.move_to({best})
         if rc.can_fire(best):
             rc.fire(best)
     else:
         # Empty tile — move adjacent and build barrier
-        nav.move_adjacent(best, avoid_empty=rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5)
+        nav.move_adjacent(best)
 
     if rc.can_build_barrier(best):
         rc.build_barrier(best)
         map_info.update_at(best)
 
-    comms.mark(best, comm_flag)
+    comms.mark(best.x + best.y * map_info._width, comm_flag)

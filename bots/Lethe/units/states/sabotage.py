@@ -36,13 +36,7 @@ def _sabotage_targets():
     targets &= ~units.builder.forget[comm_flag]
 
     # Avoid enemy builder bots within 6 manhattan
-    w = map_info._width
-    enemy_team_val = Team.B if rc.get_team() == Team.A else Team.A
-    enemy_bots = 0
-    for uid in rc.get_nearby_units():
-        if rc.get_team(uid) == enemy_team_val and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
-            ep = rc.get_position(uid)
-            enemy_bots |= 1 << (ep.x + ep.y * w)
+    enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
         danger_zone = enemy_bots
         for _ in range(6):
@@ -52,11 +46,13 @@ def _sabotage_targets():
     return targets
 
 def score():
-    return 5 if _sabotage_targets() else 0
+    return 0 if _sabotage_targets() else 0
 
 def run():
     print("SABOTAGE")
     targets = _sabotage_targets()
+    units.builder.draw_mask(targets, 255, 0, 255)
+
     if not targets:
         return
 
@@ -69,4 +65,4 @@ def run():
     if rc.can_fire(best):
         rc.fire(best)
 
-    comms.mark(best, comm_flag)
+    comms.mark(best.x + best.y * map_info._width, comm_flag)

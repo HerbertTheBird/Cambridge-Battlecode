@@ -40,16 +40,15 @@ def handle_comms():
     for v in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
-        pos = comms.decode_location(v)
-        idx = pos.x + pos.y * map_info._width
+        idx = comms.decode_location(v)
         flag = comms.decode_type(v)
         forget[flag] |= 1 << idx
         _forget_rounds[flag][idx] = current_round
-        # print("forget", pos, flag, comms.decode_id(v))
         # Harvest claims also reserve cardinal neighbors (for barriers)
         if flag == 3:
             w = map_info._width
-            px, py = pos.x, pos.y
+            px = idx % w
+            py = idx // w
             for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
                 nx, ny = px + dx, py + dy
                 if 0 <= nx < w and 0 <= ny < map_info._height:
@@ -59,24 +58,65 @@ def handle_comms():
     for p in rc.get_nearby_tiles():
         idx = p.x + p.y * map_info._width
         for i in range(len(forget)):
-            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 5 < current_round:
+            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 1 < current_round:
                 del _forget_rounds[i][idx]
                 forget[i] &= ~(1 << idx)
 def draw_mask(mask, r, g, b):
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
 
+_harvest_zone_final = False
+
+def _compute_voronoi_harvest_zone():
+    """Flood-fill Manhattan from both cores simultaneously.
+    Tiles reached by my core first are my harvest zone."""
+    w = map_info._width
+    h = map_info._height
+    board = (1 << (w * h)) - 1
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    passable = board & ~walls
+
+    my_core = map_info._my_core
+    enemy_core = map_info._predicted_enemy_core
+
+    my_front = 1 << (my_core.x + my_core.y * w)
+    enemy_front = 1 << (enemy_core.x + enemy_core.y * w)
+
+    my_claimed = my_front
+    enemy_claimed = enemy_front
+    claimed = my_claimed | enemy_claimed
+
+    while my_front or enemy_front:
+        if my_front:
+            my_expand = map_info.expand_manhattan(my_front) & passable & ~claimed
+            my_claimed |= my_expand
+            claimed |= my_expand
+            my_front = my_expand
+        if enemy_front:
+            enemy_expand = map_info.expand_manhattan(enemy_front) & passable & ~claimed
+            enemy_claimed |= enemy_expand
+            claimed |= enemy_expand
+            enemy_front = enemy_expand
+
+    return my_claimed
+
 def run():
-    global _harvest_zone
+    global _harvest_zone, _harvest_zone_final
     map_info.update()
     handle_comms()
     pathing.rebuild_broken_barriers(rc)
-    if map_info._my_core and not _harvest_zone:
-        w = map_info._width
-        zone = 1 << (map_info._my_core.x + map_info._my_core.y * w)
-        for _ in range(harvest_radius):
-            zone = map_info.expand_chebyshev(zone)
-        _harvest_zone = zone
+    if map_info._my_core and not _harvest_zone_final:
+        if map_info._solved_sym and map_info._predicted_enemy_core is not None:
+            # Symmetry solved — compute Voronoi partition once
+            _harvest_zone = _compute_voronoi_harvest_zone()
+            _harvest_zone_final = True
+        elif not _harvest_zone:
+            # Fallback: radius-based until symmetry is solved
+            w = map_info._width
+            zone = 1 << (map_info._my_core.x + map_info._my_core.y * w)
+            for _ in range(harvest_radius):
+                zone = map_info.expand_chebyshev(zone)
+            _harvest_zone = zone
     best_state = None
     best_score = 0
     for i in states:

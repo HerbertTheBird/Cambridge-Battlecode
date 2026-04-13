@@ -8,7 +8,7 @@ ID_BITS = 12 # mod 4096
 _ID_MASK = (1 << ID_BITS) - 1
 _TURN_MASK = (1 << TURN_BITS) - 1
 _SYM_MASK = (1 << SYM_BITS) - 1
-
+_POS_MASK = (1 << POS_BITS) - 1
 rc: Controller
 ENCRYPT = True
 key = 0
@@ -88,13 +88,13 @@ def get_new_messages():
             prev_messages.pop(old_val, None)
     for pos_n in to_remove:
         del _marker_at[pos_n]
-    messages[:] = [x for x in messages if ((x >> ID_BITS) not in remove)]
+    messages[:] = [x for x in messages if ((x >> ID_BITS) not in remove or x&_ID_MASK < rc.get_id()&_ID_MASK)]
     return messages
 def get_messages():
     get_new_messages()
     return list(prev_messages.keys())
 def decode_location(v):
-    return Position((v >> ID_BITS) & 63, (v >> (6 + ID_BITS)) & 63)
+    return (v >> ID_BITS)&_POS_MASK
 def decode_id(v):
     return v & _ID_MASK
 def decode_type(v):
@@ -104,9 +104,7 @@ def decode_turn(v):
 def decode_sym(v):
     return (v >> (ID_BITS + POS_BITS + TURN_BITS)) & _SYM_MASK
 def encode(target, type, sym=0):
-    return ((rc.get_id()&_ID_MASK) + (target.x << (ID_BITS)) + (target.y << (ID_BITS + 6)) + ((rc.get_current_round()&_TURN_MASK)<<(ID_BITS+POS_BITS)) + (sym << (ID_BITS + POS_BITS + TURN_BITS)) + (type << (ID_BITS + POS_BITS + TURN_BITS + SYM_BITS)))^key
-def decode(v):
-    return (decode_location(v), decode_id(v), decode_turn(v), decode_sym(v), decode_type(v))
+    return ((rc.get_id()&_ID_MASK) + ((target&_POS_MASK) << ID_BITS) + ((rc.get_current_round()&_TURN_MASK)<<(ID_BITS+POS_BITS)) + (sym << (ID_BITS + POS_BITS + TURN_BITS)) + (type << (ID_BITS + POS_BITS + TURN_BITS + SYM_BITS)))^key
 def _is_bad_marker_spot(pos):
     """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
     w = map_info._width
@@ -120,11 +118,13 @@ def _is_bad_marker_spot(pos):
             return True
     return False
 
-def mark(target, type):
-    rc.draw_indicator_line(rc.get_position(), target, 0, 255, 0)
-    print("mark", target, type)
+def mark(target_idx, type):
+    w = rc.get_map_width()
+    # target_pos = Position(target_idx % w, target_idx // w)
+    # rc.draw_indicator_line(rc.get_position(), target_pos, 0, 255, 0)
+    print("mark", target_idx, type)
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
-    val = encode(target, type, sym)
+    val = encode(target_idx, type, sym)
     # Pass 1: empty tiles, not bad spots
     for i in rc.get_nearby_tiles(2):
         if not rc.get_tile_building_id(i) and rc.can_place_marker(i) and not _is_bad_marker_spot(i):

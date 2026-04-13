@@ -132,7 +132,7 @@ def get_best_direction(pos):
                 best_dir = DIRECTIONS[di]
                 best_type = EntityType.GUNNER
 
-    return best_dir, best_type
+    return best_dir, best_type, best_score
 
 
 def _my_turret_coverage():
@@ -206,7 +206,6 @@ def _high_value_targets():
         | map_info._bm_et[map_info._IDX_BREACH]
         | map_info._bm_et[map_info._IDX_CORE]
     ) & enemy
-
     if not high_value:
         return 0
 
@@ -247,29 +246,22 @@ def _placement_candidates():
     candidates &= (empty | my_clearable | enemy_clearable)
 
     # Exclusions
-    candidates &= ~map_info._bm_enemy_turret_threat
     candidates &= ~map_info._bm_env[map_info._IDX_ENV_WALL]
     candidates &= ~units.builder.forget[comm_flag]
 
-    # Exclude tiles with any builder bots
-    w = map_info._width
-    for uid in rc.get_nearby_units():
-        if rc.get_entity_type(uid) == EntityType.BUILDER_BOT and uid != rc.get_id():
-            ep = rc.get_position(uid)
-            candidates &= ~(1 << (ep.x + ep.y * w))
+    # Exclude tiles with any builder bots (except me)
+    my_bit = 1 << (rc.get_position().x + rc.get_position().y * map_info._width)
+    all_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
+    candidates &= ~all_bots
 
-    # Avoid enemy builder bots within 6 manhattan
-    enemy_team_val = Team.B if rc.get_team() == Team.A else Team.A
-    enemy_bots = 0
-    for uid in rc.get_nearby_units():
-        if rc.get_team(uid) == enemy_team_val and rc.get_entity_type(uid) == EntityType.BUILDER_BOT:
-            ep = rc.get_position(uid)
-            enemy_bots |= 1 << (ep.x + ep.y * w)
+    # Avoid enemy builder bots within 6 manhattan — only for enemy road candidates
+    enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
         danger = enemy_bots
         for _ in range(6):
             danger = map_info.expand_manhattan(danger)
-        candidates &= ~danger
+        enemy_roads = map_info._bm_et[map_info._IDX_ROAD] & enemy_team
+        candidates &= ~(danger & enemy_roads)
 
     return candidates
 
@@ -343,34 +335,66 @@ def score():
 def run():
     print("ATTACK")
     non_roaded, roaded = _get_attack_candidates()
+    # units.builder.draw_mask(_placement_candidates(), 0, 255, 255)
+    # units.builder.draw_mask(non_roaded, 255, 0, 0)
+    # units.builder.draw_mask(roaded, 255, 255, 0)
+    
     if not non_roaded and not roaded:
         return
 
     width = map_info._width
     my_team_idx = map_info._TM_INT[rc.get_team()]
+    candidates = non_roaded | roaded
 
-    # Prefer non-roaded, fall back to roaded
-    if non_roaded:
-        # units.builder.draw_mask(non_roaded, 255, 0, 0)
-        best, _ = nav.closest(non_roaded)
-    else:
-        best = None
+    # Evaluate all adjacent candidate tiles and pick highest scoring
+    my_pos = rc.get_position()
+    best = None
+    best_score = -1
+    best_direction = Direction.NORTH
+    best_turret_type = EntityType.SENTINEL
+    best_is_enemy_road = False
 
-    if best is None and roaded:
-        # units.builder.draw_mask(roaded, 255, 128, 0)
-        best, _ = nav.closest(roaded)
+    enemy_roads = map_info._bm_et[map_info._IDX_ROAD] & map_info._bm_team[1 - my_team_idx]
+
+    mask = candidates
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        px, py = n % width, n // width
+        if max(abs(px - my_pos.x), abs(py - my_pos.y)) <= 1:
+            pos = Position(px, py)
+            direction, turret_type, dir_score = get_best_direction(pos)
+            # Prefer non-roaded tiles
+            is_er = bool(enemy_roads & lsb)
+            adj_score = (0 if is_er else 1, dir_score)
+            if adj_score > (0 if best_is_enemy_road else 1, best_score):
+                best = pos
+                best_score = dir_score
+                best_direction = direction
+                best_turret_type = turret_type
+                best_is_enemy_road = is_er
+        mask ^= lsb
+
     if best is None:
-        return
+        # No adjacent candidates, move toward closest
+        if non_roaded:
+            best, _ = nav.closest(non_roaded)
+        if best is None and roaded:
+            best, _ = nav.closest(roaded)
+        if best is None:
+            return
+        best_direction, best_turret_type, _ = get_best_direction(best)
+        best_n = best.x + best.y * width
+        best_is_enemy_road = bool(enemy_roads & (1 << best_n))
 
     best_n = best.x + best.y * width
     best_bit = 1 << best_n
     best_id = map_info._building_id[best_n]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
-    is_enemy_road = bool(
-        (map_info._bm_et[map_info._IDX_ROAD] & map_info._bm_team[1 - my_team_idx]) & best_bit
-    )
 
-    direction, turret_type = get_best_direction(best)
+    direction = best_direction
+    turret_type = best_turret_type
+    is_enemy_road = best_is_enemy_road
     print(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
 
     if is_enemy_road:
@@ -404,4 +428,4 @@ def run():
             rc.build_sentinel(best, direction)
             map_info.update_at(best)
 
-    comms.mark(best, comm_flag)
+    comms.mark(best.x + best.y * map_info._width, comm_flag)

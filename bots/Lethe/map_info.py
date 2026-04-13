@@ -130,6 +130,13 @@ _bm_visible: int = 0              # tiles visible this turn
 _bm_damaged: int = 0              # buildings not at full HP
 _bm_very_damaged: int = 0         # buildings with > 2 damage
 
+# Builder bot tracking
+_bm_friendly_bots: int = 0       # bitmask of known friendly builder bot positions
+_bm_enemy_bots: int = 0          # bitmask of known enemy builder bot positions
+_bot_pos: dict[int, int] = {}    # uid -> tile index (both teams)
+_bot_team: dict[int, int] = {}   # uid -> team_idx
+_bot_at: dict[int, int] = {}    # tile index -> uid
+
 # --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
 _DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
 
@@ -543,9 +550,15 @@ def init(c: Controller):
     _not_left_col = ~left_col
     _not_right_col = ~right_col
     _build_turret_shift_masks()
+    global _bm_friendly_bots, _bm_enemy_bots, _bot_pos, _bot_team, _bot_at
     _bm_my_core_area = 0
     _bm_their_core_area = 0
     _bm_enemy_launch_adj = 0
+    _bm_friendly_bots = 0
+    _bm_enemy_bots = 0
+    _bot_pos = {}
+    _bot_team = {}
+    _bot_at = {}
 
 def hor_flip(pos: Position):
     return Position(_width - 1 - pos.x, pos.y)
@@ -666,9 +679,6 @@ def _compute_route_targets() -> int:
     global _bm_dead_end
     result = _bm_my_core_area
     my_convs = _bm_routable
-    if not my_convs:
-        _bm_dead_end = 0
-        return result
 
     conv_target = _building_conv_target
     my_team_idx = _TM_INT[_rc.get_team()]
@@ -681,38 +691,48 @@ def _compute_route_targets() -> int:
     reverse = [0] * tiles
     in_degree = [0] * tiles
 
-    # Also compute dead-end and accept masks while iterating conveyors
-    my_accept = (
+    # Ore-accepting: my conveyors, turrets, core, foundry
+    ore_accepting = (
         _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
         | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
+        | _bm_et[_IDX_SENTINEL] | _bm_et[_IDX_GUNNER]
         | _bm_et[_IDX_BREACH] | _bm_et[_IDX_CORE]
-        | _bm_et[_IDX_FOUNDRY] | _bm_et[_IDX_GUNNER]
-        | _bm_et[_IDX_SENTINEL]
+        | _bm_et[_IDX_FOUNDRY]
     ) & bm_my
 
     enemy_idx = 1 - my_team_idx
-    enemy_replaceable = (
+    bm_enemy = _bm_team[enemy_idx]
+    # Enemy non-marker buildings
+    enemy_hard = bm_enemy & ~_bm_et[_IDX_MARKER]
+
+    # All conveyors (any team) for dead-end check
+    all_convs = (
         _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
         | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
-        | _bm_et[_IDX_ROAD] | _bm_et[_IDX_MARKER]
-    ) & _bm_team[enemy_idx]
+    )
 
-    building_id = _building_id
     dead_ends = 0
 
-    mask = my_convs
+    mask = all_convs
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
         tn = conv_target[n]
-        if tn and 0 <= tn < tiles:
+        is_my_conv = bool(bm_my & lsb)
+
+        # Build reverse map only for my conveyors (used by downstream validation)
+        if is_my_conv and tn and 0 <= tn < tiles:
             reverse[tn] |= lsb
             in_degree[tn] += 1
-            # Dead-end check: target not accepting ore AND target is clearable
+
+        # Dead-end: output not pointing into an ore-accepting building
+        if tn and 0 <= tn < tiles:
             tbit = 1 << tn
-            if not (my_accept & tbit):
-                if building_id[tn] == 0 or (bm_my & tbit) or (enemy_replaceable & tbit):
-                    dead_ends |= lsb
+            # Enemy conveyors: NOT dead-end if pointing into enemy non-marker building
+            if not is_my_conv and (enemy_hard & tbit):
+                pass
+            elif not (ore_accepting & tbit):
+                dead_ends |= lsb
         else:
             dead_ends |= lsb
         mask ^= lsb
@@ -797,6 +817,7 @@ def update() -> None:
     global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged
     global _bm_seen, _bm_visible, _prev_pos
+    global _bm_friendly_bots, _bm_enemy_bots
     rc = _rc
     building_id = _building_id
     building_hp = _building_hp
@@ -1050,6 +1071,50 @@ def update() -> None:
 
     _bm_conv_loaded = bm_conv_loaded
 
+    # --- Update builder bot tracking ---
+    _bm_friendly_bots = 0
+    _bm_enemy_bots = 0
+    seen_uids = set()
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != _ET_BUILDER_BOT:
+            continue
+        if uid == rc.get_id():
+            continue
+        ep = rc.get_position(uid)
+        n = ep.x + ep.y * width
+        team_idx = _TM_INT[rc.get_team(uid)]
+        # If tracked at a different position, clear old
+        old_n = _bot_pos.get(uid)
+        if old_n is not None and old_n != n:
+            if _bot_at.get(old_n) == uid:
+                del _bot_at[old_n]
+        _bot_pos[uid] = n
+        _bot_team[uid] = team_idx
+        _bot_at[n] = uid
+        seen_uids.add(uid)
+    # Invalidate tracked bots whose old position is now visible but they're gone
+    to_remove = []
+    for uid, n in _bot_pos.items():
+        if uid in seen_uids:
+            continue
+        bit = 1 << n
+        if bm_visible & bit:
+            to_remove.append(uid)
+    for uid in to_remove:
+        n = _bot_pos[uid]
+        if _bot_at.get(n) == uid:
+            del _bot_at[n]
+        del _bot_pos[uid]
+        del _bot_team[uid]
+
+    # Rebuild bitmasks from tracked positions
+    for uid, n in _bot_pos.items():
+        bit = 1 << n
+        if _bot_team[uid] == my_team_idx:
+            _bm_friendly_bots |= bit
+        else:
+            _bm_enemy_bots |= bit
+
     # --- Compute derived bitmasks ---
 
     # Conveyors (all conveyor-type buildings + my core area)
@@ -1142,10 +1207,7 @@ def get_avoid(
     # if avoid_core:
     #     mask |= _bm_my_core_area
     if avoid_builders:
-        for unit in _rc.get_nearby_units():
-            if _rc.get_entity_type(unit) is EntityType.BUILDER_BOT:
-                p = _rc.get_position(unit)
-                mask |= 1 << (p.x + p.y * _width)
+        mask |= _bm_friendly_bots | _bm_enemy_bots
     threat = _bm_enemy_launch_adj | _bm_enemy_turret_threat
     pos = _rc.get_position()
     my_bit = 1 << (pos.x + pos.y * _width)
