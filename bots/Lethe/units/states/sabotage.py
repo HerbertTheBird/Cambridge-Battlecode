@@ -52,6 +52,22 @@ def _sabotage_targets():
             frontier = expanded & passable & ~danger_zone
             danger_zone |= frontier
         targets &= ~danger_zone
+    
+    # expensive calculations - nonbitmasked, leave at end
+    # THIS IS IN PROGRESS
+    pruned_targets = []
+    for p in map_info.iter_mask(targets):
+        target_type = map_info.type_at(p)
+        if map_info.is_conveyor(target_type): # redundancy check
+            if target_type == map_info._ET_CONVEYOR:
+                continue
+            if target_type == map_info._ET_SPLITTER:
+                continue
+            if target_type == map_info._ET_BRIDGE:
+                continue
+            
+        
+    
 
     return targets
 

@@ -94,6 +94,7 @@ def get_best_direction(pos):
 
     for di in range(8):
         # Sentinel score
+        core_counted = False
         if di not in sentinel_blocked:
             s_score = 0
             for dx, dy in map_info._SENTINEL_OFFSETS[di]:
@@ -102,8 +103,10 @@ def get_best_direction(pos):
                     sbit = 1 << (sx + sy * w)
                     if enemy_buildings & sbit:
                         for i in range(map_info._NUM_ET):
-                            if map_info._bm_et[i] & sbit:
+                            if map_info._bm_et[i] & sbit and (not core_counted or i != map_info._IDX_CORE):
                                 s_score += BUILDING_SCORE[i]
+                                if i == map_info._IDX_CORE:
+                                    core_counted = True
                                 break
             if s_score > best_score:
                 best_score = s_score
@@ -121,13 +124,14 @@ def get_best_direction(pos):
                 if walls & sbit:
                     break
                 if my_buildings & sbit:
-                    break
+                    if not map_info._bm_et[map_info._IDX_ROAD] & sbit:
+                        break
                 if enemy_buildings & sbit:
                     for i in range(map_info._NUM_ET):
                         if map_info._bm_et[i] & sbit:
                             g_score += BUILDING_SCORE[i]
                             break
-            g_score *= 3
+            g_score *= 5
             if g_score > best_score:
                 best_score = g_score
                 best_dir = DIRECTIONS[di]
