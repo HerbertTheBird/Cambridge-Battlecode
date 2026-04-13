@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Set, Tuple
-from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError
+from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError, GameConstants
 from dataclasses import dataclass, field
 from collections import deque
 import time
@@ -70,19 +70,19 @@ _IDX_LAUNCHER          = _ET_INT[EntityType.LAUNCHER]
 _IDX_BUILDER_BOT       = _ET_INT[EntityType.BUILDER_BOT]
 
 _MAX_HP_BY_IDX = [0] * len(EntityType)
-_MAX_HP_BY_IDX[_IDX_CONVEYOR] = 20
-_MAX_HP_BY_IDX[_IDX_ARMOURED_CONVEYOR] = 50
-_MAX_HP_BY_IDX[_IDX_BRIDGE] = 20
-_MAX_HP_BY_IDX[_IDX_SPLITTER] = 20
-_MAX_HP_BY_IDX[_IDX_HARVESTER] = 30
-_MAX_HP_BY_IDX[_IDX_FOUNDRY] = 50
-_MAX_HP_BY_IDX[_IDX_ROAD] = 5
-_MAX_HP_BY_IDX[_IDX_BARRIER] = 30
-_MAX_HP_BY_IDX[_IDX_GUNNER] = 40
-_MAX_HP_BY_IDX[_IDX_SENTINEL] = 30
-_MAX_HP_BY_IDX[_IDX_BREACH] = 60
-_MAX_HP_BY_IDX[_IDX_LAUNCHER] = 30
-_MAX_HP_BY_IDX[_IDX_CORE] = 500
+_MAX_HP_BY_IDX[_IDX_CONVEYOR] = GameConstants.CONVEYOR_MAX_HP
+_MAX_HP_BY_IDX[_IDX_ARMOURED_CONVEYOR] = GameConstants.ARMOURED_CONVEYOR_MAX_HP
+_MAX_HP_BY_IDX[_IDX_BRIDGE] = GameConstants.BRIDGE_MAX_HP
+_MAX_HP_BY_IDX[_IDX_SPLITTER] = GameConstants.SPLITTER_MAX_HP
+_MAX_HP_BY_IDX[_IDX_HARVESTER] = GameConstants.HARVESTER_MAX_HP
+_MAX_HP_BY_IDX[_IDX_FOUNDRY] = GameConstants.FOUNDRY_MAX_HP
+_MAX_HP_BY_IDX[_IDX_ROAD] = GameConstants.ROAD_MAX_HP
+_MAX_HP_BY_IDX[_IDX_BARRIER] = GameConstants.BARRIER_MAX_HP
+_MAX_HP_BY_IDX[_IDX_GUNNER] = GameConstants.GUNNER_MAX_HP
+_MAX_HP_BY_IDX[_IDX_SENTINEL] = GameConstants.SENTINEL_MAX_HP
+_MAX_HP_BY_IDX[_IDX_BREACH] = GameConstants.BREACH_MAX_HP
+_MAX_HP_BY_IDX[_IDX_LAUNCHER] = GameConstants.LAUNCHER_MAX_HP
+_MAX_HP_BY_IDX[_IDX_CORE] = GameConstants.CORE_MAX_HP
 
 _IDX_ENV_EMPTY  = _ENV_INT[Environment.EMPTY]
 _IDX_ENV_WALL   = _ENV_INT[Environment.WALL]
@@ -139,9 +139,8 @@ _bot_at: dict[int, int] = {}    # tile index -> uid
 
 # --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
 _DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
-
 def _precompute_breach_offsets():
-    """Breach: r²≤13, 180° semicircle centered on facing direction."""
+    """Breach: r²≤BREACH_ATTACK_RADIUS_SQ, 180° semicircle centered on facing direction."""
     result = [[] for _ in range(8)]
     for di in range(8):
         ddx, ddy = _DIR_VECS[di]
@@ -149,7 +148,7 @@ def _precompute_breach_offsets():
             for dx in range(-4, 5):
                 if dx == 0 and dy == 0:
                     continue
-                if dx*dx + dy*dy > 13:
+                if dx*dx + dy*dy > GameConstants.BREACH_ATTACK_RADIUS_SQ:
                     continue
                 dot = dx * ddx + dy * ddy
                 if dot >= 0:
@@ -176,7 +175,7 @@ def _precompute_sentinel_offsets():
     return result
 
 def _precompute_gunner_rays():
-    """Gunner: straight line rays in all 8 directions, ordered by distance, r²≤13.
+    """Gunner: straight line rays in all 8 directions, ordered by distance.
     Returns dict keyed by facing dir_idx -> list of (ray_dir_idx, [(dx,dy)...])."""
     rays = []
     for di in range(8):
@@ -184,7 +183,7 @@ def _precompute_gunner_rays():
         ray = []
         for step in range(1, 8):
             px, py = ddx * step, ddy * step
-            if px*px + py*py > 13:
+            if px*px + py*py > GameConstants.GUNNER_VISION_RADIUS_SQ:
                 break
             ray.append((px, py))
         rays.append(ray)
@@ -1019,7 +1018,7 @@ def update() -> None:
                 bm_et[_IDX_CORE] |= pbit
                 enemy_team_idx = 1 - my_team_idx
                 bm_team[enemy_team_idx] |= pbit
-                building_hp[pos] = 500
+                building_hp[pos] = GameConstants.CORE_MAX_HP
             build_core_areas()
         for x in range(width):
             for y in range(height):
