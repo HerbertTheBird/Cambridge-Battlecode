@@ -29,12 +29,13 @@ from units.builder.build import (
     safe_build_bridge,
 )
 from units.builder.logic import (
-    clear_state, 
-    get_best_bridge_build_pos, 
-    is_core_tile, 
-    is_foundry_position, 
-    remember_non_passable_build, 
-    is_enemy_armoured_conveyor, 
+    clear_state,
+    mark_no_output_found,
+    get_best_bridge_build_pos,
+    is_core_tile,
+    is_foundry_position,
+    remember_non_passable_build,
+    is_enemy_armoured_conveyor,
     try_build_support_launcher
 )
 
@@ -235,12 +236,15 @@ def run(player, ct: Controller) -> None:
         ):
             chain_resource = player.harvest_ore_type
             allow_launcher_replacement = existing_etype == EntityType.LAUNCHER and existing_team == player.my_team and len(vc.enemy_units) == 0
+            forbidden_output_mask = player.no_output_found_mask
             conveyor_info, conveyor_is_fallback = map_mod.get_best_conveyor_output_with_fallback_idx(
-                build_pos, player.core_pos, ct, my_pos, player.my_team, end_position_idxs=end_position_idxs, resource=chain_resource
+                build_pos, player.core_pos, ct, my_pos, player.my_team, end_position_idxs=end_position_idxs,
+                resource=chain_resource, forbidden_output_mask=forbidden_output_mask
             )
             if conveyor_info is None or conveyor_is_fallback:
                 bridge_output_pos, bridge_is_fallback = map_mod.get_best_bridge_output_with_fallback_idx(
-                    build_pos, player.core_pos, ct, my_pos, player.my_team, end_position_idxs=end_position_idxs, resource=chain_resource
+                    build_pos, player.core_pos, ct, my_pos, player.my_team, end_position_idxs=end_position_idxs,
+                    resource=chain_resource, forbidden_output_mask=forbidden_output_mask
                 )
                 if conveyor_info is not None and not bridge_is_fallback:
                     conveyor_info = None
@@ -330,6 +334,14 @@ def run(player, ct: Controller) -> None:
 
             if built and player.harvest_ore_type is not None:
                 map_mod.tag_conveyor_resource(build_pos, player.harvest_ore_type)
+
+            if not built and conveyor_info is None and bridge_output_pos is None:
+                build_pos_idx = map_mod.pos_to_idx(build_pos)
+                mark_no_output_found(player, build_pos, ct.get_current_round())
+                player.broken_chains.pop(build_pos_idx, None)
+                log(f"no valid chain output from {build_pos}; blacklisting for 50 turns and exiting state")
+                clear_state(player)
+                return
 
             if not built and my_pos.distance_squared(build_pos) <= 2 and ct.is_tile_empty(build_pos):
                 move_dir = my_pos.direction_to(build_pos)

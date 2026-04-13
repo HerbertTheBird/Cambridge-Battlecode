@@ -22,6 +22,7 @@ from units.builder.build import safe_destroy
 from units.builder.logic import (
     try_upgrade_foundry_placeholder,
     update_broken_chains,
+    prune_no_output_found,
     is_enemy_armoured_conveyor,
     try_issue_launcher_order,
     try_build_remembered,
@@ -80,6 +81,8 @@ def run_builder(player, ct: Controller, my_pos: Position) -> None:
     # Upgrade foundry placeholders if possible
     try_upgrade_foundry_placeholder(player, ct, my_pos)
     log_time(ct, "After checking foundry upgrades")
+
+    prune_no_output_found(player, ct.get_current_round())
 
     # Check for incomplete chains
     update_broken_chains(player, ct, my_pos)

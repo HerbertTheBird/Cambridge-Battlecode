@@ -1997,7 +1997,8 @@ def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | Non
                                    offsets, my_team: Team | None = None, end_positions: set | None = None,
                                    end_position_idxs: set[int] | None = None,
                                    resource: ResourceType | None = None, check_splitter: bool = False,
-                                   allow_far_terminals: bool = False, label: str = "output") -> tuple[Position | None, bool]:
+                                   allow_far_terminals: bool = False, label: str = "output",
+                                   forbidden_output_mask: int = 0) -> tuple[Position | None, bool]:
     if core_pos is None:
         return (None, False)
 
@@ -2024,6 +2025,8 @@ def _get_best_output_with_fallback(build_pos: Position, core_pos: Position | Non
         if not on_map_coords(x, y, w, h):
             continue
         adj_idx = y * w + x
+        if forbidden_output_mask & (1 << adj_idx):
+            continue
         dist = dist_to_terminal_xy(x, y)
         if not allow_far_terminals and dist >= build_dist:
             continue
@@ -2075,81 +2078,82 @@ def _get_best_output(build_pos: Position, core_pos: Position | None, ct: Control
                      offsets, my_team: Team | None = None, end_positions: set | None = None,
                      end_position_idxs: set[int] | None = None,
                      resource: ResourceType | None = None, check_splitter: bool = False,
-                     allow_far_terminals: bool = False, label: str = "output") -> Position | None:
+                     allow_far_terminals: bool = False, label: str = "output",
+                     forbidden_output_mask: int = 0) -> Position | None:
     result, _ = _get_best_output_with_fallback(
         build_pos, core_pos, ct, my_pos, offsets,
         my_team=my_team, end_positions=end_positions, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=check_splitter,
-        allow_far_terminals=allow_far_terminals, label=label,
+        allow_far_terminals=allow_far_terminals, label=label, forbidden_output_mask=forbidden_output_mask,
     )
     return result
 
-def get_best_conveyor_output(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
+def get_best_conveyor_output(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[Direction, Position] | None:
     result = _get_best_output(build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
                                my_team=my_team, end_positions=end_positions,
                                resource=resource, check_splitter=True,
-                               allow_far_terminals=False, label="conv_output")
+                               allow_far_terminals=False, label="conv_output", forbidden_output_mask=forbidden_output_mask)
     if result is None:
         return None
     return (build_pos.direction_to(result), result)
 
-def get_best_conveyor_output_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[Direction, Position] | None:
+def get_best_conveyor_output_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[Direction, Position] | None:
     result = _get_best_output(build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
                                my_team=my_team, end_position_idxs=end_position_idxs,
                                resource=resource, check_splitter=True,
-                               allow_far_terminals=False, label="conv_output")
+                               allow_far_terminals=False, label="conv_output", forbidden_output_mask=forbidden_output_mask)
     if result is None:
         return None
     return (build_pos.direction_to(result), result)
 
-def get_best_bridge_output(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> Position | None:
+def get_best_bridge_output(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> Position | None:
     return _get_best_output(bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
                              my_team=my_team, end_positions=end_positions,
                              resource=resource, check_splitter=False,
-                             allow_far_terminals=True, label="bridge_output")
+                             allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask)
 
-def get_best_bridge_output_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> Position | None:
+def get_best_bridge_output_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> Position | None:
     return _get_best_output(bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
                              my_team=my_team, end_position_idxs=end_position_idxs,
                              resource=resource, check_splitter=False,
-                             allow_far_terminals=True, label="bridge_output")
+                             allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask)
 
-def get_best_conveyor_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
+def get_best_conveyor_output_with_fallback(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[tuple[Direction, Position] | None, bool]:
     result, is_fallback = _get_best_output_with_fallback(
         build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
         my_team=my_team, end_positions=end_positions,
         resource=resource, check_splitter=True,
-        allow_far_terminals=False, label="conv_output",
+        allow_far_terminals=False, label="conv_output", forbidden_output_mask=forbidden_output_mask,
     )
     if result is None:
         return (None, False)
     return ((build_pos.direction_to(result), result), is_fallback)
 
-def get_best_conveyor_output_with_fallback_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[tuple[Direction, Position] | None, bool]:
+def get_best_conveyor_output_with_fallback_idx(build_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[tuple[Direction, Position] | None, bool]:
     result, is_fallback = _get_best_output_with_fallback(
         build_pos, core_pos, ct, my_pos, _CARDINAL_OFFSETS,
         my_team=my_team, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=True,
-        allow_far_terminals=False, label="conv_output",
+        allow_far_terminals=False, label="conv_output", forbidden_output_mask=forbidden_output_mask,
     )
     if result is None:
         return (None, False)
     return ((build_pos.direction_to(result), result), is_fallback)
 
-def get_best_bridge_output_with_fallback(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
+def get_best_bridge_output_with_fallback(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_positions: set | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[Position | None, bool]:
     return _get_best_output_with_fallback(
         bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
         my_team=my_team, end_positions=end_positions,
         resource=resource, check_splitter=False,
-        allow_far_terminals=True, label="bridge_output",
+        allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask,
     )
 
-def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None) -> tuple[Position | None, bool]:
+def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team | None = None, end_position_idxs: set[int] | None = None, resource: ResourceType | None = None, forbidden_output_mask: int = 0) -> tuple[Position | None, bool]:
     return _get_best_output_with_fallback(
         bridge_pos, core_pos, ct, my_pos, _BRIDGE_OFFSETS,
         my_team=my_team, end_position_idxs=end_position_idxs,
         resource=resource, check_splitter=False,
-        allow_far_terminals=True, label="bridge_output",
+        allow_far_terminals=True, label="bridge_output", forbidden_output_mask=forbidden_output_mask,
     )
 
 def indicate_entity_map(ct: Controller, my_team: Team):
