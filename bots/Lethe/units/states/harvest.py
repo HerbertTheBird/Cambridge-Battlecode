@@ -119,12 +119,13 @@ def run():
             secured = False
             break
         if secured:
-            if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER):
+            if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not ((map_info._bm_friendly_bots | map_info._bm_enemy_bots) & pbit):
                 rc.destroy(p)
                 map_info.update_at(p)
             if rc.can_build_harvester(p):
                 rc.build_harvester(p)
                 map_info.update_at(p)
+            comms.mark(pn, comm_flag)
             return
 
     expensive = _too_expensive()
@@ -220,10 +221,14 @@ def run():
         p = path[0].add(d)
         if p == best_ore or not map_info.in_bounds(p):
             continue
+        if p.distance_squared(best_ore) > 2:
+            continue
         pbit = 1 << (p.x + p.y * w)
-        if rc.is_tile_passable(p) or rc.is_tile_empty(p):
+        if map_info.is_passable(p):
             targets.add(p)
+    print("all secured")
     if targets:
+        print("attempt move?", targets)
         nav.move_to(targets)
 
     if ore_id:
@@ -235,7 +240,7 @@ def run():
                 rc.fire(rc.get_position())
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0:
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and rc.get_position() != best_ore:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
 

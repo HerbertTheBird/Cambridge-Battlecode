@@ -1227,7 +1227,7 @@ def get_avoid(
     #     mask |= _bm_my_core_area
     if avoid_builders:
         mask |= _bm_friendly_bots | _bm_enemy_bots
-    threat = _bm_enemy_launch_adj | _bm_enemy_turret_threat
+    threat = _bm_enemy_turret_threat
     pos = _rc.get_position()
     my_bit = 1 << (pos.x + pos.y * _width)
     if not (threat & my_bit):

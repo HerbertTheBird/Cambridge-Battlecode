@@ -235,7 +235,8 @@ class Pathing:
         id = rc.get_tile_building_id(new_pos)
         if rc.get_tile_builder_bot_id(new_pos) != None:
             return False
-        if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos):
+        need_road = not rc.is_tile_passable(new_pos)
+        if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and not (need_road and rc.get_action_cooldown() != 0):
             rc.destroy(new_pos)
             map_info.update_at(new_pos)
             destroyed_barriers[new_pos] = rc.get_current_round()
