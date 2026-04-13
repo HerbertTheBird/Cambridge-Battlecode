@@ -35,18 +35,28 @@ def _sabotage_targets():
     targets &= ~danger
     targets &= ~units.builder.forget[comm_flag]
 
-    # Avoid enemy builder bots within 6 manhattan
+    # Avoid enemy builder bots within 6 pathing distance
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
+        w = map_info._width
+        board = (1 << (w * map_info._height)) - 1
+        avoid = map_info.get_avoid(False, False, False)
+        passable = ~avoid & board
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
         danger_zone = enemy_bots
+        frontier = enemy_bots
         for _ in range(6):
-            danger_zone = map_info.expand_manhattan(danger_zone)
+            h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+            expanded = h | (h << w) | (h >> w)
+            frontier = expanded & passable & ~danger_zone
+            danger_zone |= frontier
         targets &= ~danger_zone
 
     return targets
 
 def score():
-    return 0 if _sabotage_targets() else 0
+    return 5 if _sabotage_targets() else 0
 
 def run():
     print("SABOTAGE")

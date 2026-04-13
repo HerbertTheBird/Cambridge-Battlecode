@@ -26,7 +26,7 @@ def generate_explore_target():
     nrc = map_info._not_right_col
     board = (1 << (w * map_info._height)) - 1
     avoid = map_info.get_avoid(False, False, False)
-    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
         has_building = 0
         for i in range(map_info._NUM_ET):
             has_building |= map_info._bm_et[i]
@@ -39,6 +39,8 @@ def generate_explore_target():
         if i == 7:  # heal flag uses enemy IDs, not tile positions
             continue
         seeds |= f
+    my_pos = rc.get_position()
+    seeds |= 1 << (my_pos.x + my_pos.y * w)
 
     visited = seeds
     frontier = seeds
@@ -74,8 +76,8 @@ def run():
         generate_explore_target()
 
     attempts = 0
-    while attempts < 2:
-        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5):
+    while attempts < 1:
+        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2):
             generate_explore_target()
         else:
             break
