@@ -111,8 +111,6 @@ def score():
         return 7
     if _find_chase_target() is not None:
         return 7
-    if _heal_targets():
-        return 5.5
     return 0
 
 
