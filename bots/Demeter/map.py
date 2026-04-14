@@ -328,7 +328,8 @@ def _has_adjacent_ally_conveyor_idx(idx: int, my_team: Team) -> bool:
             continue
         nidx = ny * width + nx
         if _entity_type_idx[nidx] in _CONVEYOR_TYPE_IDXS and _entity_team_idx[nidx] == my_team_idx:
-            return True
+            if _output_idx[nidx] != idx:
+                return True
     return False
 
 def has_entity(pos: Position) -> bool:
@@ -1509,6 +1510,9 @@ def has_valid_input_chain(pos: Position) -> bool:
 
 def has_valid_input_chain_idx(idx: int) -> bool:
     return _get_cached_chain_valid_idx(idx)
+
+def get_chain_terminal_idx(idx: int) -> int:
+    return _follow_chain_terminal_idx(idx)
 
 def feeds_ally_building(pos: Position, my_team: Team) -> bool:
     return _feeds_ally_chain_idx(

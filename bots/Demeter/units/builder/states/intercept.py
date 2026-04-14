@@ -6,22 +6,27 @@ import nav
 from log import log
 from globals import TURRET_TYPES
 from units.builder.logic import (
-    get_nearest_enemy_threat_pos, 
-    get_known_core_intercept_threat, 
-    get_best_turret_type, 
-    get_turret_direction, 
-    is_enemy_armoured_conveyor, 
-    attack_cost_to_destroy, 
-    safe_destroy, 
-    remember_non_passable_build, 
-    clear_state, 
-    build_turret
+    get_nearest_enemy_threat_pos,
+    get_known_core_intercept_threat,
+    get_best_intercept_turret_choice,
+    is_enemy_armoured_conveyor,
+    attack_cost_to_destroy,
+    safe_destroy,
+    remember_non_passable_build,
+    clear_state,
+    build_turret,
+    find_conveyor_dir_to_ally_turret,
+    debug_draw_intercept_masks,
+)
+from units.builder.build import (
+    can_build_selected_conveyor_here,
+    safe_build_selected_conveyor,
 )
 
 def run(player, ct: Controller) -> None:
     my_pos = player.my_pos
     intercept_pos = nav.original_destination
-    predicted_enemy_core = player.predicted_enemy_core_pos
+    enemy_core_pos = player.enemy_core_pos
     log(f"intercepting at {intercept_pos}")
     if intercept_pos is None or my_pos.distance_squared(intercept_pos) > 2:
         return
@@ -34,22 +39,28 @@ def run(player, ct: Controller) -> None:
 
     log(f"threat at {enemy_result[0]} -> trying to intercept")
     enemy_pos = enemy_result[0]
-    is_core_threat = enemy_result[1]
-    turret_type = get_best_turret_type(intercept_pos, predicted_enemy_core, ct, my_pos, player.my_team, enemy_pos)
-
-    direction = get_turret_direction(
+    turret_type, direction, _score = get_best_intercept_turret_choice(
         intercept_pos,
-        enemy_pos,
         ct,
-        turret_type,
-        is_core_threat=is_core_threat,
+        enemy_core_pos=enemy_core_pos,
     )
 
     if direction is None:
         return
 
+    # debug_draw_intercept_masks(ct, intercept_pos, turret_type, direction, enemy_core_pos=enemy_core_pos)
+
     bid = map_mod.get_tile_entity_id(intercept_pos)
     if bid is None:
+        conv_dir = find_conveyor_dir_to_ally_turret(intercept_pos, player.my_team, enemy_core_pos)
+        if (
+            conv_dir is not None
+            and can_build_selected_conveyor_here(player, intercept_pos, conv_dir, ct, my_pos, player.my_team)
+            and safe_build_selected_conveyor(player, ct, intercept_pos, conv_dir)
+        ):
+            log(f"intercept: built feeding conveyor at {intercept_pos} facing {conv_dir} instead of turret")
+            clear_state(player)
+            return
         if build_turret(player, ct, intercept_pos, direction, turret_type):
             clear_state(player)
         elif my_pos == intercept_pos:

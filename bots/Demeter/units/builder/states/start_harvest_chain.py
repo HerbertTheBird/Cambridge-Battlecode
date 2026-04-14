@@ -17,6 +17,7 @@ from units.builder.build import (
     safe_build_road,
     safe_build_harvester,
     safe_destroy,
+    safe_build_conveyor
 )
 from units.builder.logic import (
     clear_state,
@@ -146,8 +147,11 @@ def run(player, ct: Controller) -> None:
         ]
         if current_barrier_targets:
             target = current_barrier_targets[0]
-            if safe_build_road(player, ct, target):
-                log(f"START_CHAIN: road at {target} (protecting {ore_pos})")
+            dir = target.direction_to(ore_pos)
+            if player.global_titanium >= ct.get_conveyor_cost()[0]:
+                safe_destroy(player, ct, target)
+            if safe_build_conveyor(player, ct, target, dir):
+                log(f"START_CHAIN: inward conveyor at {target} (protecting {ore_pos})")
         return
 
     if my_pos == ore_pos and not barrier_targets:

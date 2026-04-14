@@ -109,20 +109,20 @@ def should_spawn(player, ct: Controller) -> bool:
         rounds_since_spawn >= SPAWN_WEALTHY_INTERVAL and
         player.global_titanium >= bridge_cost * SPAWN_WEALTHY_BRIDGE_MULT and
         player.global_titanium >= builder_cost * SPAWN_WEALTHY_BUILDER_MULT and
-        (player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD and player.num_spawned < SPAWN_WEALTHY_RESOURCE_THRESHOLD_NUM_BOTS or player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD_EXTRA)
+        player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD and 
+        (player.num_spawned < SPAWN_WEALTHY_RESOURCE_THRESHOLD_NUM_BOTS or player.global_titanium >= SPAWN_WEALTHY_RESOURCE_THRESHOLD_EXTRA)
     )
     
     # Spawn if enemy spotted and no ally builder bots nearby
     threatened = (
         sees_enemy and
         (player.global_titanium >= builder_cost * SPAWN_THREATENED_BUILDER_MULT or player.health - player.prev_health < 0) and
-        len(vc.ally_builder_bots) == 0
+        len(vc.ally_builder_bots) < 2
     )
     
     # Spawn if we haven't seen a builder bot in a while
     builder_drought = (
-        current_round - player.last_seen_builder_bot_round > 30 and
-        player.global_titanium - builder_cost > 200
+        current_round - player.last_spawn_round > 40
     )
     
     # if (current_round > 500):

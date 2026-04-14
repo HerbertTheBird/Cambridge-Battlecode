@@ -21,6 +21,7 @@ from units.builder.build import (
     can_build_foundry_here,
     safe_build_foundry,
     safe_destroy,
+    can_replace_with_walkable_under_builder,
     can_build_selected_conveyor_here,
     safe_build_selected_conveyor,
     can_build_splitter_here,
@@ -111,8 +112,7 @@ def run(player, ct: Controller) -> None:
             and core_dir is not None
             and can_build_selected_conveyor_here(player, dest, core_dir, ct, my_pos, player.my_team)
         ):
-            bbid_conv = ct.get_tile_builder_bot_id(dest)
-            if existing_bid is not None and (bbid_conv is None or bbid_conv == ct.get_id()) and safe_destroy(player, ct, dest):
+            if existing_bid is not None and can_replace_with_walkable_under_builder(dest, ct) and safe_destroy(player, ct, dest):
                 log("destroyed to build conveyor")
             if safe_build_selected_conveyor(player, ct, dest, core_dir):
                 if player.harvest_ore_type is not None:
@@ -313,8 +313,7 @@ def run(player, ct: Controller) -> None:
                     player, build_pos, conv_dir, ct, my_pos, player.my_team, allow_launchers=allow_launcher_replacement
                 )
                 if can_build:
-                    bbid_bp = ct.get_tile_builder_bot_id(build_pos)
-                    if ct.get_tile_building_id(build_pos) is not None and (bbid_bp is None or bbid_bp == ct.get_id()):
+                    if ct.get_tile_building_id(build_pos) is not None and can_replace_with_walkable_under_builder(build_pos, ct):
                         safe_destroy(player, ct, build_pos)
                     if use_splitter:
                         if safe_build_splitter(player, ct, build_pos, splitter_dir):
@@ -328,8 +327,7 @@ def run(player, ct: Controller) -> None:
             elif bridge_output_pos and can_build_bridge_here(
                 build_pos, bridge_output_pos, ct, my_pos, player.my_team, allow_launchers=allow_launcher_replacement
             ):
-                bbid_br = ct.get_tile_builder_bot_id(build_pos)
-                if ct.get_tile_building_id(build_pos) is not None and (bbid_br is None or bbid_br == ct.get_id()):
+                if ct.get_tile_building_id(build_pos) is not None and can_replace_with_walkable_under_builder(build_pos, ct):
                     safe_destroy(player, ct, build_pos)
                 if safe_build_bridge(player, ct, build_pos, bridge_output_pos):
                     log(f"BUILT bridge at {build_pos} -> {bridge_output_pos}")
