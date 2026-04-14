@@ -127,6 +127,7 @@ _building_id: list[int] = []
 _building_hp: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
+_conv_reverse: list[int] = []   # reverse[tn] = bitmask of my conveyors whose output target is tile tn
 
 # Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
 _bm_et: list[int] = []      # one bitmask per EntityType
@@ -144,6 +145,8 @@ _bm_enemy_launch_adj: int = 0   # tiles adjacent to enemy launchers
 _bm_routable: int = 0           # my team's conveyor-type buildings
 _bm_route_targets: int = 0      # tiles route state can path toward
 _bm_conv_loaded: int = 0        # conveyor-type buildings with a stored resource
+_bm_conv_raw_ax: int = 0        # conveyors observed containing raw axionite
+_bm_conv_ti_or_refined: int = 0 # conveyors observed containing titanium or refined axionite
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
 _bm_visible: int = 0              # tiles visible this turn
@@ -423,7 +426,7 @@ def _compute_enemy_turret_threat() -> int:
 
 def update_at(pos: Position) -> None:
     """Re-scan a single tile from the controller and update all bitmasks. Call after any build/destroy."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_dead_end, _bm_damaged, _bm_very_damaged
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti_or_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged
     if not in_bounds(pos):
         return
 
@@ -441,6 +444,9 @@ def update_at(pos: Position) -> None:
                     tn = _building_conv_target[n]
                     if tn:
                         _bm_conveyor_targets &= ~(1 << tn)
+                    my_team_idx = _TM_INT[_rc.get_team()]
+                    if (_bm_team[my_team_idx] & bit) and tn:
+                        _conv_reverse[tn] &= ~bit
                 break
         for i in range(_NUM_TEAM):
             if _bm_team[i] & bit:
@@ -449,6 +455,8 @@ def update_at(pos: Position) -> None:
         _bm_blocked &= ~bit
         _bm_conveyors &= ~bit
         _bm_conv_loaded &= ~bit
+        _bm_conv_raw_ax &= ~bit
+        _bm_conv_ti_or_refined &= ~bit
         _bm_dead_end &= ~bit
         _bm_damaged &= ~bit
         _bm_very_damaged &= ~bit
@@ -484,12 +492,23 @@ def update_at(pos: Position) -> None:
 
     if et in _CONVEYOR_TYPES:
         _bm_conveyors |= bit
-        if rc.get_stored_resource(entity_id) is not None:
-            _bm_conv_loaded |= bit
-        else:
+        res = rc.get_stored_resource(entity_id)
+        if res is None:
             _bm_conv_loaded &= ~bit
+            _bm_conv_raw_ax &= ~bit
+            _bm_conv_ti_or_refined &= ~bit
+        else:
+            _bm_conv_loaded |= bit
+            if res == ResourceType.RAW_AXIONITE:
+                _bm_conv_raw_ax |= bit
+                _bm_conv_ti_or_refined &= ~bit
+            else:
+                _bm_conv_ti_or_refined |= bit
+                _bm_conv_raw_ax &= ~bit
         if _building_conv_target[n]:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
+            if team_idx == _TM_INT[_rc.get_team()]:
+                _conv_reverse[_building_conv_target[n]] |= bit
 
     if et in (EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.GUNNER,
               EntityType.SENTINEL, EntityType.BREACH, EntityType.LAUNCHER):
@@ -536,7 +555,7 @@ def update_move() -> None:
 
 def init(c: Controller):
     global _rc, _width, _height
-    global _building_id, _building_hp, _building_dir, _building_conv_target
+    global _building_id, _building_hp, _building_dir, _building_conv_target, _conv_reverse
     global _bm_et, _bm_team, _bm_env, _bm_seen
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
     global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
@@ -551,6 +570,7 @@ def init(c: Controller):
     _building_hp          = [0] * tiles
     _building_dir         = [0] * tiles
     _building_conv_target = [0] * tiles
+    _conv_reverse         = [0] * tiles
 
     _bm_et   = [0] * _NUM_ET
     _bm_team = [0] * _NUM_TEAM
@@ -706,9 +726,7 @@ def _compute_route_targets() -> int:
     valid_end = _bm_my_core_area
     bm_my = _bm_team[my_team_idx]
 
-    # Build reverse map and in_degree using arrays (faster than dicts)
-    reverse = [0] * tiles
-    in_degree = [0] * tiles
+    reverse = _conv_reverse
 
     # Ore-accepting: my conveyors, turrets, core, foundry
     ore_accepting = (
@@ -738,11 +756,6 @@ def _compute_route_targets() -> int:
         n = lsb.bit_length() - 1
         tn = conv_target[n]
         is_my_conv = bool(bm_my & lsb)
-
-        # Build reverse map only for my conveyors (used by downstream validation)
-        if is_my_conv and tn and 0 <= tn < tiles:
-            reverse[tn] |= lsb
-            in_degree[tn] += 1
 
         # Dead-end: output not pointing into an ore-accepting building
         if tn and 0 <= tn < tiles:
@@ -834,7 +847,7 @@ def update() -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti_or_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse
     global _bm_seen, _bm_visible, _prev_pos
     global _bm_friendly_bots, _bm_enemy_bots
     rc = _rc
@@ -848,6 +861,10 @@ def update() -> None:
     bm_env = _bm_env
     bm_seen = _bm_seen
     bm_conv_loaded = _bm_conv_loaded
+    bm_conv_raw_ax = _bm_conv_raw_ax
+    bm_conv_ti_or_refined = _bm_conv_ti_or_refined
+    conv_reverse = _conv_reverse
+    my_team_idx_local = _TM_INT[rc.get_team()]
 
     num_et = _NUM_ET
     num_team = _NUM_TEAM
@@ -923,6 +940,10 @@ def update() -> None:
         entity_id = rc_get_tile_building_id(tile)
         if entity_id is None:
             if building_id[n] != 0:
+                old_tn = building_conv_target[n]
+                if old_tn and (conv_reverse[old_tn] & bit):
+                    conv_reverse[old_tn] &= ~bit
+                building_conv_target[n] = 0
                 for i in range(num_et):
                     if bm_et[i] & bit:
                         bm_et[i] &= ~bit
@@ -938,6 +959,10 @@ def update() -> None:
         et = rc_get_entity_type(entity_id)
         if et == EntityType.MARKER:
             if building_id[n] != 0:
+                old_tn = building_conv_target[n]
+                if old_tn and (conv_reverse[old_tn] & bit):
+                    conv_reverse[old_tn] &= ~bit
+                building_conv_target[n] = 0
                 for i in range(num_et):
                     if bm_et[i] & bit:
                         bm_et[i] &= ~bit
@@ -964,13 +989,25 @@ def update() -> None:
             else:
                 _bm_very_damaged &= ~bit
             if et in _CONVEYOR_TYPES:
-                if rc_get_stored_resource(entity_id) is not None:
-                    bm_conv_loaded |= bit
-                else:
+                res = rc_get_stored_resource(entity_id)
+                if res is None:
                     bm_conv_loaded &= ~bit
+                    bm_conv_raw_ax &= ~bit
+                    bm_conv_ti_or_refined &= ~bit
+                else:
+                    bm_conv_loaded |= bit
+                    if res == ResourceType.RAW_AXIONITE:
+                        bm_conv_raw_ax |= bit
+                        bm_conv_ti_or_refined &= ~bit
+                    else:
+                        bm_conv_ti_or_refined |= bit
+                        bm_conv_raw_ax &= ~bit
         else:
             # Clear old bits if replacing a different building
             if building_id[n] != 0:
+                old_tn = building_conv_target[n]
+                if old_tn and (conv_reverse[old_tn] & bit):
+                    conv_reverse[old_tn] &= ~bit
                 for i in range(num_et):
                     if bm_et[i] & bit:
                         bm_et[i] &= ~bit
@@ -992,7 +1029,10 @@ def update() -> None:
             hp = rc_get_hp(entity_id)
             building_hp[n] = hp
             building_dir[n] = _DIR_INT[direction] if direction else 0
-            building_conv_target[n] = (target.x+target.y*width) if target else 0
+            new_tn = (target.x+target.y*width) if target else 0
+            building_conv_target[n] = new_tn
+            if new_tn and et in _CONVEYOR_TYPES and team_idx == my_team_idx_local:
+                conv_reverse[new_tn] |= bit
 
             # Set new bitmask bits
             et_idx = _ET_INT[et]
@@ -1009,10 +1049,19 @@ def update() -> None:
                 _bm_very_damaged &= ~bit
 
             if et in _CONVEYOR_TYPES:
-                if rc_get_stored_resource(entity_id) is not None:
-                    bm_conv_loaded |= bit
-                else:
+                res = rc_get_stored_resource(entity_id)
+                if res is None:
                     bm_conv_loaded &= ~bit
+                    bm_conv_raw_ax &= ~bit
+                    bm_conv_ti_or_refined &= ~bit
+                else:
+                    bm_conv_loaded |= bit
+                    if res == ResourceType.RAW_AXIONITE:
+                        bm_conv_raw_ax |= bit
+                        bm_conv_ti_or_refined &= ~bit
+                    else:
+                        bm_conv_ti_or_refined |= bit
+                        bm_conv_raw_ax &= ~bit
 
             if et is EntityType.CORE:
                 if _my_core is None and team_val == my_team:
@@ -1089,6 +1138,8 @@ def update() -> None:
                     _predicted_enemy_core = hsym_core
 
     _bm_conv_loaded = bm_conv_loaded
+    _bm_conv_raw_ax = bm_conv_raw_ax
+    _bm_conv_ti_or_refined = bm_conv_ti_or_refined
 
     # --- Update builder bot tracking ---
     _bm_friendly_bots = 0
