@@ -55,16 +55,34 @@ def _sabotage_targets():
     
     # expensive calculations - nonbitmasked, leave at end
     # THIS IS IN PROGRESS
-    pruned_targets = []
-    for p in map_info.iter_mask(targets):
-        target_type = map_info.type_at(p.x, p.y)
-        if map_info.is_conveyor(target_type): # redundancy check
-            continue
-            
+    pruned_targets = 0
+    invalid_sabotage_locations = set()
+    my_pos = rc.get_position()
+    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._TM_INT[rc.get_team()]]):
+        front_positions = []
         
+        if p.distance_squared(my_pos) <= 100:
+            for conv in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
+                if conv not in invalid_sabotage_locations:
+                    front_positions.append(conv)
+                    invalid_sabotage_locations.add(conv)
+                    # rc.draw_indicator_dot(conv, 0, 0, 255)
+                        
+            for _ in range(4):
+                new_front = []
+                for front_p in front_positions:
+                    for conv in map_info.iter_mask(map_info._conv_reverse[front_p.x + front_p.y * map_info._width]):
+                        if conv not in invalid_sabotage_locations:
+                            new_front.append(conv)
+                            invalid_sabotage_locations.add(conv)
+                            # rc.draw_indicator_dot(conv, 0, 0, 255)
+                front_positions = new_front
     
+    for target in map_info.iter_mask(targets):
+        if target not in invalid_sabotage_locations:
+            pruned_targets |= (1 << (target.x + target.y * map_info._width))
 
-    return targets
+    return pruned_targets
 
 def score():
     return 5 if _sabotage_targets() else 0
