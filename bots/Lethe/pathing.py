@@ -239,7 +239,10 @@ class Pathing:
             self.last_dir = dir.delta()
             return True
         return False
-    def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True):
+    def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True, end_cost_mask: int = 0):
+        if start_mask & target_mask:
+            s_idx = (start_mask & target_mask).bit_length() - 1
+            return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
         width = self.width
         height = self.height
         if avoid is None:
@@ -258,15 +261,19 @@ class Pathing:
         start_time = time.perf_counter_ns()
 
         if routing:
-            convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
-            t_core = target_mask & ~convs
-            t_conv = target_mask & convs
+            if end_cost_mask:
+                t_end = target_mask & end_cost_mask
+                t_core = target_mask & ~t_end
+            else:
+                convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
+                t_end = target_mask & convs
+                t_core = target_mask & ~convs
             max_c = bridge_cost
             max_seed = conveyor_end_cost
             cycle_len = max(max_c, max_seed) + 1
             frontier = [0] * cycle_len
             frontier[0] = t_core
-            frontier[conveyor_end_cost % cycle_len] |= t_conv
+            frontier[conveyor_end_cost % cycle_len] |= t_end
             steps = self.CONV
             not_barriers = 0
             not_threat = 0
@@ -484,13 +491,13 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, start: Position, update: bool = False):
+    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
         print("conveyors from ", start)
         w = self.width
         if update:
-            target, avoid = self._get_conveyor_targets_and_avoid(start.x + start.y * map_info._width)
+            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
         else:
-            target, avoid = self._get_conveyor_targets_and_avoid()
+            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
             return None
         if not update:
@@ -503,7 +510,8 @@ class Pathing:
                 return None
         else:
             start_mask = 1 << (start.x + start.y * w)
-        result = self.bfs(start_mask, target, avoid, True)
+        end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
+        result = self.bfs(start_mask, target, avoid, True, end_cost_mask=end_cost_mask)
         if result is None:
             return None
         s_pos, p_pos, dist = result
@@ -521,13 +529,49 @@ class Pathing:
             cost += 3 * scaling
             scaling += 0.01
         return cost
+    def raw_ax_foundry_sites(self):
+        w = map_info._width
+        my_idx = map_info._TM_INT[self.rc.get_team()]
+        enemy_idx = 1 - my_idx
+        harv_on_ore = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_idx] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+        adj = ((harv_on_ore & map_info._not_right_col) << 1) | ((harv_on_ore & map_info._not_left_col) >> 1) | (harv_on_ore << w) | (harv_on_ore >> w)
+        enemy_block = (
+            map_info._bm_team[enemy_idx]
+            & ~map_info._bm_et[map_info._IDX_ROAD]
+            & ~map_info._bm_et[map_info._IDX_MARKER]
+        )
+        friendly_block = (
+            (map_info._bm_et[map_info._IDX_HARVESTER]
+             | map_info._bm_et[map_info._IDX_FOUNDRY]
+             | map_info._bm_et[map_info._IDX_CORE])
+            & map_info._bm_team[my_idx]
+        )
+        blocked = enemy_block | friendly_block | map_info._bm_env[map_info._IDX_ENV_WALL]
+        open_mask = ~blocked
+        n1 = (open_mask & map_info._not_right_col) << 1
+        n2 = (open_mask & map_info._not_left_col) >> 1
+        n3 = open_mask << w
+        n4 = open_mask >> w
+        at_least_two = ((n1 & n2) | (n1 & n3) | (n1 & n4)
+                        | (n2 & n3) | (n2 & n4) | (n3 & n4))
+        return adj & ~blocked & at_least_two
+
     def _get_conveyor_targets_and_avoid(
-        self, conveyor = None
+        self, raw_axionite: bool, conveyor = None
     ):
-        target = map_info._bm_route_targets
-        if not target:
-            return 0, 0
         avoid = map_info.get_avoid(True, False, True)
-        if conveyor:
-            avoid &= ~(1<<map_info._building_conv_target[conveyor])
-        return target, avoid
+        if raw_axionite:
+            target = self.raw_ax_foundry_sites()
+            target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
+            w = map_info._width
+            ti_ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+            ti_adj = ((ti_ore & map_info._not_right_col) << 1) | ((ti_ore & map_info._not_left_col) >> 1) | (ti_ore << w) | (ti_ore >> w)
+            avoid |= ti_adj & ~target
+            return target, avoid
+        else:
+            target = (map_info._bm_route_targets & map_info._bm_conv_ti_or_refined) | map_info._bm_my_core_area
+            if not target:
+                return 0, 0
+            if conveyor:
+                avoid &= ~(1<<map_info._building_conv_target[conveyor])
+            return target, avoid

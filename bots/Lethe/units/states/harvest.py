@@ -17,7 +17,11 @@ def init(c: Controller):
 
 cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
-
+def possible_ore():
+    ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+    if map_info._bm_team[map_info._TM_INT[rc.get_team()]] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]:
+        ore |= map_info._bm_env[map_info._IDX_ENV_ORE_AX]
+    return ore
 def harvestable_ore():
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
     my_team_idx = map_info._TM_INT[rc.get_team()]
@@ -41,8 +45,8 @@ def harvestable_ore():
         & ~map_info._bm_et[map_info._IDX_BARRIER]
         & ~map_info._bm_et[map_info._IDX_MARKER]
     )
-    ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     w = map_info._width
+    ore = possible_ore()
     # Ore tiles surrounded on all 4 cardinal sides by ore — unreachable by conveyor
     landlocked = ore & (ore >> 1 & map_info._not_right_col) & (ore << 1 & map_info._not_left_col) & (ore >> w) & (ore << w)
 
@@ -87,7 +91,7 @@ def run():
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
     my_team_idx = map_info._TM_INT[rc.get_team()]
-    ore_mask = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+    ore_mask = possible_ore()
     wall_mask = map_info._bm_env[map_info._IDX_ENV_WALL]
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
     marker_mask = map_info._bm_et[map_info._IDX_MARKER]
@@ -140,9 +144,10 @@ def run():
 
     w = map_info._width
     my_team_idx = map_info._TM_INT[rc.get_team()]
-    path = nav.calculate_conveyor_path(best_ore)
+    best_n = best_ore.x + best_ore.y * w
+    is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
+    path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
     if path is not None:
-        best_n = best_ore.x + best_ore.y * w
         _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)

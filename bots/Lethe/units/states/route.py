@@ -11,6 +11,29 @@ _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
 
 unpathable = 0
 
+def _trace_raw_ax(start_n: int) -> bool:
+    """Follow _conv_reverse back from start_n until we see a loaded conveyor; return True if that load is raw axionite."""
+    seen = 0
+    cur = start_n
+    raw = map_info._bm_conv_raw_ax
+    ti = map_info._bm_conv_ti_or_refined
+    reverse = map_info._conv_reverse
+    while cur is not None:
+        bit = 1 << cur
+        if seen & bit:
+            break
+        seen |= bit
+        if raw & bit:
+            return True
+        if ti & bit:
+            return False
+        feeders = reverse[cur] & ~seen
+        if not feeders:
+            break
+        lsb = feeders & -feeders
+        cur = lsb.bit_length() - 1
+    return False
+
 def init(c: Controller):
     global rc, nav
     rc = c
@@ -46,6 +69,33 @@ def _orphan_harvesters():
 
     served = map_info.expand_manhattan(my_connected)
     return my_harvesters & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
+def _orphan_foundries():
+    """Bitmask of my foundries with no adjacent conveyor/turret/core."""
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY]
+    if not my_foundries:
+        return 0
+
+    pointing_into = 0
+    m = my_foundries
+    while m:
+        lsb = m & -m
+        fn = lsb.bit_length() - 1
+        pointing_into |= map_info._conv_reverse[fn]
+        m ^= lsb
+
+    directional = (
+        map_info._bm_et[map_info._IDX_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_SPLITTER]
+    ) & map_info._bm_team[my_team_idx]
+    my_connected = (directional & ~pointing_into) | (
+        (map_info._bm_et[map_info._IDX_BRIDGE] | map_info._bm_et[map_info._IDX_CORE])
+        & map_info._bm_team[my_team_idx]
+    )
+
+    served = map_info.expand_manhattan(my_connected)
+    return my_foundries & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
 def cant_claim():
     w = map_info._width
     my_team = rc.get_team()
@@ -89,17 +139,21 @@ def score():
     # units.builder.draw_mask(_orphan_harvesters(), 0, 0, 255)
     # units.builder.draw_mask(_dead_end_conveyors() , 0, 255, 0)
     avoid = avoid_mask()
-    return 4 if ((_dead_end_conveyors() & ~avoid) or (_orphan_harvesters() & ~avoid)) else 0
+    return 4 if ((_dead_end_conveyors() & ~avoid) or (_orphan_harvesters() & ~avoid) or (_orphan_foundries() & ~avoid)) else 0
 
 def run():
+
     global unpathable
     print("ROUTE")
     avoid = avoid_mask()
     dead_ends = _dead_end_conveyors() & ~avoid
     orphans = _orphan_harvesters() & ~avoid
-    candidates = dead_ends | orphans
-    units.builder.draw_mask(dead_ends, 0, 255, 0)
-    units.builder.draw_mask(orphans, 0, 0, 255)
+    foundries = _orphan_foundries() & ~avoid
+    units.builder.draw_mask(foundries, 255, 0, 0)
+
+    candidates = dead_ends | orphans | foundries
+    # units.builder.draw_mask(dead_ends, 0, 255, 0)
+    # units.builder.draw_mask(orphans, 0, 0, 255)
 
     if not candidates:
         print("no candidates")
@@ -118,8 +172,18 @@ def run():
 
     target_conveyor = [None]*2
     path = []
-    if is_harvester:
-        path = nav.calculate_conveyor_path(best, update=False)
+    best_n = best.x + best.y * width
+    is_foundry = bool(foundries & best_bit)
+    is_raw_ax = _trace_raw_ax(best_n)
+    if is_foundry:
+        is_raw_ax = False
+    if is_harvester or is_foundry:
+        best_bit_env = 1 << best_n
+        if map_info._bm_env[map_info._IDX_ENV_ORE_AX] & best_bit_env:
+            is_raw_ax = True
+        elif map_info._bm_env[map_info._IDX_ENV_ORE_TI] & best_bit_env:
+            is_raw_ax = False
+        path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
         if path is None:
             unpathable |= best_bit
             return
@@ -127,7 +191,6 @@ def run():
         # Route from harvester: expand start to cardinal neighbors
     else:
         # Dead-end conveyor: route from its output tile
-        best_n = best.x + best.y * width
         target_n = map_info._building_conv_target[best_n]
 
         can_heal_road = False
@@ -136,13 +199,13 @@ def run():
             target_zone = map_info.expand_chebyshev(target_zone)
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
-        path = nav.calculate_conveyor_path(Position(target_n%width, target_n//width), update=True)
+        path = nav.calculate_conveyor_path(Position(target_n%width, target_n//width), is_raw_ax, update=True)
         if path is None:
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
         if (map_info._bm_team[1-map_info._TM_INT[rc.get_team()]] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
-            new_path = nav.calculate_conveyor_path(Position(best_n%width, best_n//width), update=True)
+            new_path = nav.calculate_conveyor_path(Position(best_n%width, best_n//width), is_raw_ax, update=True)
             if new_path is not None and new_path[1] != path[0]:
                 path = new_path
                 target_conveyor = [path[0], path[1]]
@@ -158,6 +221,25 @@ def run():
         nav.move_to(target)
         if rc.can_fire(target):
             rc.fire(target)
+        comms.mark(best.x + best.y * map_info._width, comm_flag)
+        return
+    foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
+    # units.builder.draw_mask(foundry_sites, 255, 0, 0)
+    tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
+    if is_raw_ax and (foundry_sites & tc0_bit):
+        foundry_cost = rc.get_foundry_cost()[0]
+        _cost_map[best_n] = foundry_cost + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.5)
+        if rc.get_global_resources()[0] < foundry_cost + nav.conveyor_cost(path[2]):
+            comms.mark(best.x + best.y * map_info._width, comm_flag)
+            return
+        nav.move_adjacent(target_conveyor[0])
+        if rc.get_action_cooldown() == 0:
+            if rc.can_destroy(target_conveyor[0]):
+                rc.destroy(target_conveyor[0])
+                map_info.update_at(target_conveyor[0])
+            if rc.can_build_foundry(target_conveyor[0]):
+                rc.build_foundry(target_conveyor[0])
+                map_info.update_at(target_conveyor[0])
         comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     can_build = False
