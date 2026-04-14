@@ -765,6 +765,8 @@ def _compute_route_targets() -> int:
                 pass
             elif not (ore_accepting & tbit):
                 dead_ends |= lsb
+            elif (_bm_conv_raw_ax & lsb) and (_bm_conv_ti_or_refined & tbit):
+                dead_ends |= lsb
         else:
             dead_ends |= lsb
         mask ^= lsb
