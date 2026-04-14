@@ -16,6 +16,7 @@ from globals import (
     UPGRADE_ARMOURED_CONVEYORS, 
     START_UPGRADING_ARMOURED_CONVEYORS_THRESHOLD,
     CLOSER_ALLY_THRESHOLD_DIST,
+    DONT_SABOTAGE_NEAR_ENEMY,
 )
 from helpers import (
     get_nearest_core_tile,
@@ -551,6 +552,29 @@ _TURRET_ENTITY_TYPES = (EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREAC
 _MARKER_TYPE_CODE = _ET_INT[EntityType.MARKER]
 _ROAD_TYPE_CODE = _ET_INT[EntityType.ROAD]
 
+def _build_enemy_builder_masks() -> tuple[int, int]:
+    """Return (exact_builder_mask, builder_guard_mask).
+    builder_guard_mask marks the 3x3 neighborhood around each enemy builder,
+    matching the sabotage rule of blocking tiles within distance-squared 2."""
+    width = map_mod.width
+    height = map_mod.height
+    builder_mask = 0
+    builder_guard_mask = 0
+    for (_eid, etype, epos) in vc.enemy_units:
+        if etype != EntityType.BUILDER_BOT:
+            continue
+        bit = 1 << (epos.y * width + epos.x)
+        builder_mask |= bit
+        for dy in range(-1, 2):
+            y = epos.y + dy
+            if not (0 <= y < height):
+                continue
+            for dx in range(-1, 2):
+                x = epos.x + dx
+                if 0 <= x < width:
+                    builder_guard_mask |= 1 << (y * width + x)
+    return builder_mask, builder_guard_mask
+
 def _build_enemy_intercept_masks(enemy_core_pos: Position | None) -> tuple[int, int, int, int, int]:
     """Return (builder_mask, turret_mask, launcher_mask, core_mask, ally_builder_mask).
     core_mask is the enemy core's actual 3x3 footprint. The core still counts
@@ -560,16 +584,14 @@ def _build_enemy_intercept_masks(enemy_core_pos: Position | None) -> tuple[int, 
     not reliable enough to weight."""
     width = map_mod.width
     height = map_mod.height
-    builder_mask = 0
+    builder_mask, _builder_guard_mask = _build_enemy_builder_masks()
     turret_mask = 0
     launcher_mask = 0
     core_mask = 0
     ally_builder_mask = 0
     for (_eid, etype, epos) in vc.enemy_units:
-        bit = 1 << (epos.y * width + epos.x)
-        if etype == EntityType.BUILDER_BOT:
-            builder_mask |= bit
-        elif etype in _TURRET_ENTITY_TYPES:
+        if etype in _TURRET_ENTITY_TYPES:
+            bit = 1 << (epos.y * width + epos.x)
             turret_mask |= bit
     for (_eid, _etype, epos) in vc.enemy_launchers:
         launcher_mask |= 1 << (epos.y * width + epos.x)
@@ -1305,6 +1327,16 @@ def get_sabotage_target_priority(player, ct: Controller, pos: Position, my_pos: 
     downstream_priority = map_mod.get_sabotage_downstream_priority(pos, player.my_team)
     return 1 if downstream_priority == 0 else downstream_priority + 1
 
+def _is_sabotage_tile_allowed(ct: Controller, bid: int, pos: Position, enemy_builder_guard_mask: int) -> bool:
+    """Reject occupied tiles; otherwise allow guarded sabotage only for very low HP."""
+    if ct.get_tile_builder_bot_id(pos) is not None:
+        return False
+    if not DONT_SABOTAGE_NEAR_ENEMY:
+        return True
+    if ct.get_hp(bid) <= 2:
+        return True
+    return (enemy_builder_guard_mask & (1 << (pos.y * map_mod.width + pos.x))) == 0
+
 def find_sabotage_target(player, ct: Controller, my_pos: Position, global_titanium: int, sabotage_worthy_ally_mask: int = 0) -> tuple[Position, int, int] | None:
     """Find the best visible enemy conveyor/bridge to sabotage.
     Prioritizes core-feeding targets, then nearest.
@@ -1316,7 +1348,7 @@ def find_sabotage_target(player, ct: Controller, my_pos: Position, global_titani
     best_dist = INF
     best_type = 0
     ally_bot_positions = {p for (_, p) in vc.ally_builder_bots}
-    enemy_bot_positions = {p for (_, _, p) in vc.enemy_units}
+    _enemy_builder_mask, enemy_builder_guard_mask = _build_enemy_builder_masks()
     if len(vc.enemy_units) > 0:
         consider = chain(vc.ally_conveyors, vc.enemy_conveyors)
     else:
@@ -1338,7 +1370,7 @@ def find_sabotage_target(player, ct: Controller, my_pos: Position, global_titani
             continue
         if pos in ally_bot_positions and pos != my_pos:
             continue
-        if pos in enemy_bot_positions:
+        if not _is_sabotage_tile_allowed(ct, bid, pos, enemy_builder_guard_mask):
             continue
         downstream_priority = map_mod.get_sabotage_downstream_priority(pos, player.my_team) + 1
         if is_ally and downstream_priority >= 2:
