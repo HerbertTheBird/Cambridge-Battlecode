@@ -69,8 +69,6 @@ class Pathing:
     last_dir = None
     last_last_dir = None
 
-    path = None
-    path_idx = 0
 
 
 
@@ -217,14 +215,6 @@ class Pathing:
         self.DIRS = make_steps(raw_dirs)
         self.CONV = make_steps(raw_conv)
 
-        # Precompute offsets for bridge zone (5 < dist² <= 18)
-        self._bridge_offsets = [
-            (dx, dy)
-            for dy in range(-4, 5)
-            for dx in range(-4, 5)
-            if 5 < dx * dx + dy * dy <= 18
-        ]
-
     def move(self, dir: Direction):
         rc = self.rc
         px, py = rc.get_position().x, rc.get_position().y
@@ -235,8 +225,7 @@ class Pathing:
         id = rc.get_tile_building_id(new_pos)
         if rc.get_tile_builder_bot_id(new_pos) != None:
             return False
-        need_road = not rc.is_tile_passable(new_pos)
-        if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and not (need_road and rc.get_action_cooldown() != 0):
+        if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0]:
             rc.destroy(new_pos)
             map_info.update_at(new_pos)
             destroyed_barriers[new_pos] = rc.get_current_round()
@@ -250,340 +239,106 @@ class Pathing:
             self.last_dir = dir.delta()
             return True
         return False
-
-
-
-    def reconstruct_path(
-        self,
-        can_visit: list[int],
-        start: int,
-        target: int,
-        barriers: int,
-        threat: int = 0,
-        routing: bool = False,
-    ) -> list[Position] | None:
+    def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True):
         width = self.width
-        height = self.height
+        if avoid is None:
+            avoid = map_info.get_avoid(False, True, False)
+        avoid &= ~start_mask
 
-        steps = tuple(
-            (dx, dy, step_cost)
-            for dx, dy, step_cost, _ in (self.CONV if routing else self.DIRS)
-        )
-
-        best = -1
-        for layer, bits in enumerate(can_visit):
-            if bits & start:
-                best = layer
-                break
-        if best == -1:
-            return None
-
-        current = can_visit[best] & start
-        current &= -current  # isolate lowest set bit
-
-        path_bits = [current]
-        dist = best
-        can_visit_len = len(can_visit)
-
-        last_dir = self.last_dir
-        last_last_dir = self.last_last_dir
-
-        w_minus_1 = width - 1
-        h_minus_1 = height - 1
-
-        _barrier_cost = barrier_cost
-        _threat_cost = threat_cost
-
-        while not (current & target):
-            cur_idx = current.bit_length() - 1
-            cx = cur_idx % width
-            cy = cur_idx // width
-
-            if routing:
-                # For routing, just pick the first valid candidate
-                chosen = None
-                for dx, dy, step_cost in steps:
-                    px = cx - dx
-                    py = cy - dy
-                    if not (0 <= px < width and 0 <= py < height):
-                        continue
-                    prev_dist = dist - step_cost
-                    if prev_dist < 0 or prev_dist >= can_visit_len:
-                        continue
-                    prev_bit = 1 << (py * width + px)
-                    if can_visit[prev_dist] & prev_bit:
-                        chosen = (prev_bit, prev_dist, dx, dy)
-                        break
-            else:
-                # Hoist enter_cost: current doesn't change in inner loop
-                extra_cost = 0
-                if current & barriers:
-                    extra_cost += _barrier_cost
-                if current & threat:
-                    extra_cost += _threat_cost
-
-                # Compute preferred_family once per outer iteration
-                preferred_family = 0  # 0 = no preference
-                if last_dir is not None and last_dir[0] != 0 and last_dir[1] != 0:
-                    last_family = 1 if last_dir[0] * last_dir[1] > 0 else -1
-                    preferred_family = -last_family if last_last_dir == last_dir else last_family
-
-                cur_edge_dist = min(cx, cy, w_minus_1 - cx, h_minus_1 - cy)
-                in_edge_band = cur_edge_dist < 4
-
-                best_key = (2, 2, 2, 3)  # worse than any real key
-                chosen = None
-
-                for dx, dy, step_cost in steps:
-                    px = cx - dx
-                    py = cy - dy
-                    if not (0 <= px < width and 0 <= py < height):
-                        continue
-
-                    prev_dist = dist - step_cost - extra_cost
-                    if prev_dist < 0 or prev_dist >= can_visit_len:
-                        continue
-
-                    prev_bit = 1 << (py * width + px)
-                    if not (can_visit[prev_dist] & prev_bit):
-                        continue
-
-                    # Inline sort_key: compute key tuple and track best
-                    diag = dx != 0 and dy != 0
-                    k0 = 0 if diag else 1
-
-                    # px/py == nx/ny (the predecessor tile)
-                    next_edge_dist = min(px, py, w_minus_1 - px, h_minus_1 - py)
-
-                    k1 = 0
-                    if in_edge_band and next_edge_dist <= cur_edge_dist:
-                        k1 = 1
-
-                    k2 = 0 if next_edge_dist >= 4 else 1
-
-                    k3 = 0
-                    if preferred_family:
-                        if diag:
-                            fam = 1 if dx * dy > 0 else -1
-                            if fam != preferred_family:
-                                k3 = 1
-                        else:
-                            k3 = 2
-
-                    key = (k0, k1, k2, k3)
-                    if key < best_key:
-                        best_key = key
-                        chosen = (prev_bit, prev_dist, dx, dy)
-
-            if chosen is None:
-                return None
-
-            prev_bit, prev_dist, chosen_dx, chosen_dy = chosen
-
-            last_last_dir = last_dir
-            last_dir = (-chosen_dx, -chosen_dy)
-
-            current = prev_bit
-            dist = prev_dist
-            path_bits.append(current)
-
-        return [Position((b.bit_length() - 1) % width, (b.bit_length() - 1) // width) for b in path_bits]
-
-    def bfs(self, start_p: Position | set[Position], target_p: Position | set[Position], avoid_p: int | None = None, routing = False, avoid_turret = True) -> list[Position] | None:
-        width = self.width
-        if avoid_p is None:
-            avoid_p = map_info.get_avoid(False, True, False)
-
-        if isinstance(start_p, int):
-            start = start_p
-        elif isinstance(start_p, Position):
-            start = 1 << (start_p.x + start_p.y * width)
-        else:
-            start = 0
-            for p in start_p:
-                start |= 1 << (p.x + p.y * width)
-
-        if isinstance(target_p, int):
-            target = target_p
-        elif isinstance(target_p, Position):
-            target = 1 << (target_p.x + target_p.y * width)
-        else:
-            target = 0
-            for p in target_p:
-                target |= 1 << (p.x + p.y * width)
-
-        # avoid_p is already a bitmask; just clear start/target from it
-        avoid = avoid_p & ~start
-
-        CONV = self.CONV
-        DIRS = self.DIRS
-        can_visit = [target]
-        visited = 0
-
-        start_time = time.perf_counter_ns()
-
-        # Barriers directly from bitmasks
         my_team_idx = map_info._TM_INT[self.rc.get_team()]
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
 
-        # Threat as soft cost — only active when not hard-avoided (bot is inside threat zone)
         threat = map_info._bm_enemy_launch_adj
         if avoid_turret:
             threat |= map_info._bm_enemy_turret_threat
-        if threat & start:
-            threat &= ~start
-        convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
-        if not routing:
-            max_start = barrier_cost + threat_cost
-            can_visit = [0] * (max_start + 1)
-            m = target
-            while m:
-                lsb = m & -m
-                cost = 0
-                if barriers & lsb:
-                    cost += barrier_cost
-                if threat & lsb:
-                    cost += threat_cost
-                can_visit[cost] |= lsb
-                m ^= lsb
-        else:
-            t_core = target & ~convs
-            t_conv = target & convs
-            can_visit = [t_core] + [0] * conveyor_end_cost
-            can_visit[conveyor_end_cost] |= t_conv
+        threat &= ~start_mask
 
+        start_time = time.perf_counter_ns()
+
+        if routing:
+            convs = map_info._bm_conveyors
+            t_core = target_mask & ~convs
+            t_conv = target_mask & convs
+            cycle_len = max(bridge_cost, conveyor_end_cost) + 2
+            frontier = [0] * cycle_len
+            frontier[0] = t_core
+            frontier[conveyor_end_cost % cycle_len] |= t_conv
+            steps = self.CONV
+            max_seed = conveyor_end_cost
+            not_barriers = 0
+            not_threat = 0
+        else:
+            cycle_len = barrier_cost + threat_cost + 2
+            frontier = [0] * cycle_len
+            frontier[0] = target_mask & ~barriers & ~threat
+            frontier[barrier_cost] = target_mask & barriers & ~threat
+            frontier[threat_cost] = target_mask & ~barriers & threat
+            frontier[barrier_cost + threat_cost] = target_mask & barriers & threat
+            steps = self.DIRS
+            max_seed = barrier_cost + threat_cost
+            not_barriers = ~barriers
+            not_threat = ~threat
+
+        visited = 0
         i = 0
         stuck = 0
-        visited = 0
+        while True:
+            slot = i % cycle_len
+            cur_frontier = frontier[slot] & ~visited
+            frontier[slot] = 0
 
-        ESTIMATED_MAX_DIST = 50
+            hit = cur_frontier & start_mask
+            if hit:
+                end_time = time.perf_counter_ns()
+                print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                start_bit = hit & -hit
+                for dx, dy, step_cost, mask in steps:
+                    if not (start_bit & mask):
+                        continue
+                    offset = dx + dy * width
+                    if offset > 0:
+                        prev_bit = start_bit >> offset
+                    else:
+                        prev_bit = start_bit << (-offset)
+                    if prev_bit & visited:
+                        return (start_bit, prev_bit, i)
+                return (start_bit, start_bit, i)
+            visited |= cur_frontier
 
-        # Preallocate some space up front, but allow growth if search goes longer.
-        if len(can_visit) < ESTIMATED_MAX_DIST:
-            can_visit.extend([0] * (ESTIMATED_MAX_DIST - len(can_visit)))
-
-        not_barriers = ~barriers
-        not_threat = ~threat
-
-        if routing:
-            steps = CONV
-            max_extra_cost = bridge_cost
-        else:
-            steps = DIRS
-            max_extra_cost = barrier_cost + threat_cost
-
-        def ensure_capacity(idx_needed: int) -> None:
-            """Grow can_visit only when needed."""
-            if idx_needed >= len(can_visit):
-                # Grow by at least enough for the current need, but with slack so
-                # repeated growth is less frequent.
-                new_len = max(idx_needed + 1, len(can_visit) * 2, ESTIMATED_MAX_DIST)
-                can_visit.extend([0] * (new_len - len(can_visit)))
-
-        if routing:
-            while True:
-                frontier = can_visit[i] & ~visited
-                visited |= frontier
-                if frontier & start:
-                    end_time = time.perf_counter_ns()
-                    self.path = self.reconstruct_path(
-                        can_visit, start, target, barriers, threat, routing
-                    )
-                    self.path_idx = 0
-                    print("bfs time " + str((end_time - start_time) / 1000) + "us")
-                    return self.path
-
-                if frontier == 0:
+            if cur_frontier == 0:
+                if i >= max_seed:
                     stuck += 1
-                    i += 1
-                    if i >= len(can_visit):
-                        break
-                    continue
+                    if stuck >= cycle_len:
+                        return None
+                i += 1
+                continue
+            stuck = 0
 
-                stuck = 0
-
-                # Ensure capacity for the worst destination layer this iteration.
-                ensure_capacity(i + max_extra_cost)
-
+            if routing:
                 for dx, dy, step_cost, mask in steps:
                     offset = dx + dy * width
-                    masked = frontier & mask
-
+                    masked = cur_frontier & mask
                     if offset > 0:
                         new = (masked << offset) & ~avoid
                     else:
                         new = (masked >> (-offset)) & ~avoid
-
-                    can_visit[i + step_cost] |= new
-
-                i += 1
-
-        else:
-            while True:
-                frontier = can_visit[i] & ~visited
-                visited |= frontier
-
-                if frontier & start:
-                    end_time = time.perf_counter_ns()
-                    self.path = self.reconstruct_path(
-                        can_visit, start, target, barriers, threat, routing
-                    )
-                    self.path_idx = 0
-                    print("bfs time " + str((end_time - start_time) / 1000) + "us")
-                    return self.path
-
-                if frontier == 0:
-                    stuck += 1
-                    i += 1
-                    if i >= len(can_visit):
-                        break
-                    continue
-
-                stuck = 0
-
-                # Worst case target index for non-routing branch.
-                ensure_capacity(i + max_extra_cost + 1)
-
+                    frontier[(i + step_cost) % cycle_len] |= new
+            else:
                 for dx, dy, step_cost, mask in steps:
                     offset = dx + dy * width
-                    masked = frontier & mask
-
+                    masked = cur_frontier & mask
                     if offset > 0:
                         new = (masked << offset) & ~avoid
                     else:
                         new = (masked >> (-offset)) & ~avoid
-
-                    new_not_threat = new & not_threat
-                    new_threat = new & threat
-
-                    can_visit[i + step_cost] |= (new_not_threat & not_barriers)
-                    can_visit[i + step_cost + barrier_cost] |= (new_not_threat & barriers)
-                    can_visit[i + step_cost + threat_cost] |= (new_threat & not_barriers)
-                    can_visit[i + step_cost + barrier_cost + threat_cost] |= (new_threat & barriers)
-
-                i += 1
-
-        self.path = None
-        return None
-
-
-    def execute_path(self, sample_path=None, path_idx_in=None):
-        if sample_path is None:
-            sample_path = self.path
-            idx = self.path_idx
-        else:
-            idx = path_idx_in or 0
-
-        if idx > len(sample_path) - 2:
-            return False
-
-        dir = sample_path[idx].direction_to(sample_path[idx + 1])
-        if self.move(dir):
-            if sample_path is self.path:
-                self.path_idx += 1
-            return True
-        return False
-
+                    new_nt = new & not_threat
+                    new_t = new & threat
+                    frontier[(i + step_cost) % cycle_len] |= new_nt & not_barriers
+                    frontier[(i + step_cost + barrier_cost) % cycle_len] |= new_nt & barriers
+                    frontier[(i + step_cost + threat_cost) % cycle_len] |= new_t & not_barriers
+                    frontier[(i + step_cost + barrier_cost + threat_cost) % cycle_len] |= new_t & barriers
+            i += 1
+    
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
         """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
         rc = self.rc
@@ -612,8 +367,10 @@ class Pathing:
     def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
         print("move to", target)
         if isinstance(target, Position):
-            target = {target}
-        if target != self.target_p:
+            target_set = {target}
+        else:
+            target_set = target
+        if target_set != self.target_p:
             self.forget_launcher.clear()
         avoid = map_info.get_avoid(False, True, False)
         if avoid_empty:
@@ -622,68 +379,79 @@ class Pathing:
                 has_building |= map_info._bm_et[i]
             avoid |= map_info._bm_seen & ~has_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = self.rc.get_position()
-        if target == self.target_p and self.rc.get_position() == self.prev_pos and self.rc.get_position() not in target and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target):
+        if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
         else:
-            self.prev_pos = self.rc.get_position()
+            self.prev_pos = my_pos
             self.stuck_turns = 0
-            self.target_p = target
-        if self.stuck_turns > 2 + self.rc.get_id()%8:
-            for i in ALL_DIRS:
-                if self.rc.can_move(i):
-                    self.rc.move(i)
+            self.target_p = target_set
+        if self.stuck_turns > 2 + self.rc.get_id() % 8:
+            for d in ALL_DIRS:
+                if self.rc.can_move(d):
+                    self.rc.move(d)
                     map_info.update_move()
                     return True
 
-        path = self.bfs(my_pos, target, avoid, False, avoid_turret=avoid_turret)
-        if path:
-            for i in range(len(path)-1):
-                self.rc.draw_indicator_line(path[i], path[i+1], 0, 255, 255)
-        if not path:
+        w = self.width
+        start_mask = 1 << (my_pos.x + my_pos.y * w)
+        target_mask = 0
+        for t in target_set:
+            target_mask |= 1 << (t.x + t.y * w)
+        result = self.bfs(start_mask, target_mask, avoid, False, avoid_turret=avoid_turret)
+        if result is None:
             return False
-        self.execute_path(path)
-        return True
+        start_bit, prev_bit, _ = result
+        s_n = start_bit.bit_length() - 1
+        p_n = prev_bit.bit_length() - 1
+        s_pos = Position(s_n % w, s_n // w)
+        p_pos = Position(p_n % w, p_n // w)
+        if s_pos == p_pos:
+            return False
+        self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
+        return self.move(s_pos.direction_to(p_pos))
 
 
 
     def calculate_conveyor_path(self, start: Position, update: bool = False):
         print("conveyors from ", start)
+        w = self.width
         if update:
-            target, avoid = self._get_conveyor_targets_and_avoid(start.x+start.y*map_info._width)
+            target, avoid = self._get_conveyor_targets_and_avoid(start.x + start.y * map_info._width)
         else:
             target, avoid = self._get_conveyor_targets_and_avoid()
         if not target:
             return None
         if not update:
-            new_start = set()
-            for dir in CARD_DIR:
-                if map_info.in_bounds(start.add(dir)) and (avoid >> ((start.x + dir.delta()[0]) + (start.y + dir.delta()[1]) * self.width) & 1) == 0:
-                    new_start.add(start.add(dir))
-            start = new_start
-        path = self.bfs(start, target, avoid, True)
-        if not path:
+            start_mask = 0
+            for d in CARD_DIR:
+                sp = start.add(d)
+                if map_info.in_bounds(sp) and ((avoid >> (sp.x + sp.y * w)) & 1) == 0:
+                    start_mask |= 1 << (sp.x + sp.y * w)
+            if start_mask == 0:
+                return None
+        else:
+            start_mask = 1 << (start.x + start.y * w)
+        result = self.bfs(start_mask, target, avoid, True)
+        if result is None:
             return None
-        for i in range(len(path)-1):
-            self.rc.draw_indicator_line(path[i], path[i+1], 255, 0, 255)
-            self.rc.draw_indicator_dot(path[i], 255, 0, 255)
-        return path
+        start_bit, prev_bit, dist = result
+        s_n = start_bit.bit_length() - 1
+        p_n = prev_bit.bit_length() - 1
+        s_pos = Position(s_n % w, s_n // w)
+        p_pos = Position(p_n % w, p_n // w)
+        self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
+        self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
+        return (s_pos, p_pos, dist)
 
-    def conveyor_cost(self, path, scaling = None):
+    def conveyor_cost(self, dist, scaling=None):
         if scaling is None:
-            scaling = self.rc.get_scale_percent()/100
-        if not path:
+            scaling = self.rc.get_scale_percent() / 100
+        if dist is None or dist < 0:
             return None
         cost = 0
-        rc = self.rc
-        scaling = rc.get_scale_percent()/100
-        for i in range(len(path) - 1):
-            is_bridge = path[i].distance_squared(path[i + 1]) > 1
-            if is_bridge:
-                cost += 20*scaling
-                scaling += 0.1
-            else:
-                cost += 3*scaling
-                scaling += 0.01
+        for _ in range(dist):
+            cost += 3 * scaling
+            scaling += 0.01
         return cost
     def _get_conveyor_targets_and_avoid(
         self, conveyor = None
