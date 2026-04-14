@@ -338,7 +338,7 @@ class Pathing:
                     frontier[(i + step_cost + threat_cost) % cycle_len] |= new_t & not_barriers
                     frontier[(i + step_cost + barrier_cost + threat_cost) % cycle_len] |= new_t & barriers
             i += 1
-    
+        return None
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
         """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
         rc = self.rc
