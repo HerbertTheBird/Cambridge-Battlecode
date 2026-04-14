@@ -402,11 +402,18 @@ def run():
     is_enemy_road = best_is_enemy_road
     print(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
 
+    count = 0
+    for uid in rc.get_nearby_units(4):
+        if rc.get_entity_type(uid) != map_info._ET_BUILDER_BOT or rc.get_team(uid) == rc.get_team():
+            continue
+        count += 1
+
     if is_enemy_road:
         # Move onto enemy road, fire it, step off
         nav.move_to(best)
         if rc.can_fire(best):
-            rc.fire(best)
+            if count == 0 or rc.get_hp(best_id) <= 2: # bait them to move away
+                rc.fire(best)
         for d in Direction:
             if d == Direction.CENTRE:
                 continue
