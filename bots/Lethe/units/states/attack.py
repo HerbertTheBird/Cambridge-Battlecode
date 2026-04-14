@@ -211,6 +211,7 @@ def _high_value_targets():
         | map_info._bm_et[map_info._IDX_BREACH]
         | map_info._bm_et[map_info._IDX_CORE]
         | map_info._bm_et[map_info._IDX_LAUNCHER]
+        | map_info._bm_et[map_info._IDX_HARVESTER]
     ) & enemy
     if not high_value:
         return 0

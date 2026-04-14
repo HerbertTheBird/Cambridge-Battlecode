@@ -26,7 +26,7 @@ def generate_explore_target():
     nrc = map_info._not_right_col
     board = (1 << (w * map_info._height)) - 1
     avoid = map_info.get_avoid(False, False, False)
-    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
         has_building = 0
         for i in range(map_info._NUM_ET):
             has_building |= map_info._bm_et[i]
@@ -96,7 +96,7 @@ def run():
 
     attempts = 0
     while attempts < 1:
-        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5):
+        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2):
             generate_explore_target()
         else:
             break

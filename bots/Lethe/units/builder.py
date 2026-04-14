@@ -153,5 +153,5 @@ def run():
         rc.heal(best_heal)
     elif rc.can_heal(rc.get_position()):
         rc.heal(rc.get_position())
-    if rc.get_tile_building_id(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team() and rc.can_fire(rc.get_position()):
-        rc.fire(rc.get_position())
+    # if rc.get_tile_building_id(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team() and rc.can_fire(rc.get_position()):
+    #     rc.fire(rc.get_position())

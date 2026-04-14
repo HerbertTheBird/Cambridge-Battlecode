@@ -241,78 +241,154 @@ class Pathing:
         return False
     def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True):
         width = self.width
+        height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
         avoid &= ~start_mask
-
         my_team_idx = map_info._TM_INT[self.rc.get_team()]
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
+        barriers &= ~start_mask
 
         threat = map_info._bm_enemy_launch_adj
         if avoid_turret:
             threat |= map_info._bm_enemy_turret_threat
-        threat &= ~start_mask
+        if threat & start_mask:
+            threat &= ~start_mask
 
         start_time = time.perf_counter_ns()
 
         if routing:
-            convs = map_info._bm_conveyors
+            convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
             t_core = target_mask & ~convs
             t_conv = target_mask & convs
-            cycle_len = max(bridge_cost, conveyor_end_cost) + 2
+            max_c = bridge_cost
+            max_seed = conveyor_end_cost
+            cycle_len = max(max_c, max_seed) + 1
             frontier = [0] * cycle_len
             frontier[0] = t_core
             frontier[conveyor_end_cost % cycle_len] |= t_conv
             steps = self.CONV
-            max_seed = conveyor_end_cost
             not_barriers = 0
             not_threat = 0
         else:
-            cycle_len = barrier_cost + threat_cost + 2
+            max_c = 1 + barrier_cost + threat_cost
+            max_seed = barrier_cost + threat_cost
+            cycle_len = max(max_c, max_seed) + 1
             frontier = [0] * cycle_len
             frontier[0] = target_mask & ~barriers & ~threat
             frontier[barrier_cost] = target_mask & barriers & ~threat
             frontier[threat_cost] = target_mask & ~barriers & threat
             frontier[barrier_cost + threat_cost] = target_mask & barriers & threat
             steps = self.DIRS
-            max_seed = barrier_cost + threat_cost
             not_barriers = ~barriers
             not_threat = ~threat
 
+        effective_len = max_seed + 1
         visited = 0
+        visited_layers: list[int] = []
         i = 0
-        stuck = 0
         while True:
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
+            visited_layers.append(cur_frontier)
+            visited |= cur_frontier
 
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
                 print("bfs time " + str((end_time - start_time) / 1000) + "us")
                 start_bit = hit & -hit
-                for dx, dy, step_cost, mask in steps:
-                    if not (start_bit & mask):
+                s_idx = start_bit.bit_length() - 1
+                cx = s_idx % width
+                cy = s_idx // width
+                start_pos = Position(cx, cy)
+                vl_len = len(visited_layers)
+
+                if routing:
+                    chosen_prev = None
+                    for dx, dy, step_cost, _m in steps:
+                        px = cx - dx
+                        py = cy - dy
+                        if not (0 <= px < width and 0 <= py < height):
+                            continue
+                        prev_layer = i - step_cost
+                        if prev_layer < 0 or prev_layer >= vl_len:
+                            continue
+                        prev_bit = 1 << (py * width + px)
+                        if visited_layers[prev_layer] & prev_bit:
+                            chosen_prev = Position(px, py)
+                            break
+                    if chosen_prev is None:
+                        return None
+                    return (start_pos, chosen_prev, i)
+
+                extra_cost = 0
+                if start_bit & barriers:
+                    extra_cost += barrier_cost
+                if start_bit & threat:
+                    extra_cost += threat_cost
+
+                preferred_family = 0
+                last_dir = self.last_dir
+                last_last_dir = self.last_last_dir
+                if last_dir is not None and last_dir[0] != 0 and last_dir[1] != 0:
+                    last_family = 1 if last_dir[0] * last_dir[1] > 0 else -1
+                    preferred_family = -last_family if last_last_dir == last_dir else last_family
+
+                w_minus_1 = width - 1
+                h_minus_1 = height - 1
+                cur_edge_dist = min(cx, cy, w_minus_1 - cx, h_minus_1 - cy)
+                in_edge_band = cur_edge_dist < 4
+
+                best_key = (2, 2, 2, 3)
+                chosen_prev = None
+                for dx, dy, step_cost, _m in steps:
+                    px = cx - dx
+                    py = cy - dy
+                    if not (0 <= px < width and 0 <= py < height):
                         continue
-                    offset = dx + dy * width
-                    if offset > 0:
-                        prev_bit = start_bit >> offset
-                    else:
-                        prev_bit = start_bit << (-offset)
-                    if prev_bit & visited:
-                        return (start_bit, prev_bit, i)
-                return (start_bit, start_bit, i)
-            visited |= cur_frontier
+                    prev_layer = i - step_cost - extra_cost
+                    if prev_layer < 0 or prev_layer >= vl_len:
+                        continue
+                    prev_bit = 1 << (py * width + px)
+                    if not (visited_layers[prev_layer] & prev_bit):
+                        continue
+
+                    diag = dx != 0 and dy != 0
+                    k0 = 0 if diag else 1
+
+                    next_edge_dist = min(px, py, w_minus_1 - px, h_minus_1 - py)
+
+                    k1 = 1 if (in_edge_band and next_edge_dist <= cur_edge_dist) else 0
+                    k2 = 0 if next_edge_dist >= 4 else 1
+
+                    k3 = 0
+                    if preferred_family:
+                        if diag:
+                            fam = 1 if dx * dy > 0 else -1
+                            if fam != preferred_family:
+                                k3 = 1
+                        else:
+                            k3 = 2
+
+                    key = (k0, k1, k2, k3)
+                    if key < best_key:
+                        best_key = key
+                        chosen_prev = Position(px, py)
+
+                if chosen_prev is None:
+                    return None
+                return (start_pos, chosen_prev, i)
 
             if cur_frontier == 0:
-                if i >= max_seed:
-                    stuck += 1
-                    if stuck >= cycle_len:
-                        return None
                 i += 1
+                if i >= effective_len:
+                    return None
                 continue
-            stuck = 0
+
+            if i + max_c + 1 > effective_len:
+                effective_len = i + max_c + 1
 
             if routing:
                 for dx, dy, step_cost, mask in steps:
@@ -338,7 +414,7 @@ class Pathing:
                     frontier[(i + step_cost + threat_cost) % cycle_len] |= new_t & not_barriers
                     frontier[(i + step_cost + barrier_cost + threat_cost) % cycle_len] |= new_t & barriers
             i += 1
-    
+        return None
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
         """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
         rc = self.rc
@@ -400,11 +476,7 @@ class Pathing:
         result = self.bfs(start_mask, target_mask, avoid, False, avoid_turret=avoid_turret)
         if result is None:
             return False
-        start_bit, prev_bit, _ = result
-        s_n = start_bit.bit_length() - 1
-        p_n = prev_bit.bit_length() - 1
-        s_pos = Position(s_n % w, s_n // w)
-        p_pos = Position(p_n % w, p_n // w)
+        s_pos, p_pos, _ = result
         if s_pos == p_pos:
             return False
         self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
@@ -434,11 +506,7 @@ class Pathing:
         result = self.bfs(start_mask, target, avoid, True)
         if result is None:
             return None
-        start_bit, prev_bit, dist = result
-        s_n = start_bit.bit_length() - 1
-        p_n = prev_bit.bit_length() - 1
-        s_pos = Position(s_n % w, s_n // w)
-        p_pos = Position(p_n % w, p_n // w)
+        s_pos, p_pos, dist = result
         self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
         self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
