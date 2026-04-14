@@ -4,7 +4,7 @@ from globals import CONVEYOR_TYPES, TURRET_TYPES
 
 class VisionCache:
     __slots__ = (
-        'enemy_units', 'enemy_conveyors', 'enemy_launchers', 'enemy_other',
+        'enemy_units', 'enemy_conveyors', 'enemy_launchers', 'enemy_foundries', 'enemy_other',
         'ally_builder_bots', 'ally_turrets', 'ally_conveyors', 'ally_launchers', 'ally_other',
         'harvesters',
     )
@@ -13,6 +13,7 @@ class VisionCache:
         self.enemy_units = []
         self.enemy_conveyors = []
         self.enemy_launchers = []
+        self.enemy_foundries = []
         self.enemy_other = []
 
         self.ally_builder_bots = []
@@ -31,6 +32,7 @@ class VisionCache:
         ec = self.enemy_conveyors; ec.clear()
         el = self.enemy_launchers; el.clear()
         eo = self.enemy_other; eo.clear()
+        ef = self.enemy_foundries; ef.clear()
         hv = self.harvesters; hv.clear()
         ab = self.ally_builder_bots; ab.clear()
         at_ = self.ally_turrets; at_.clear()
@@ -42,6 +44,7 @@ class VisionCache:
         ec_a = ec.append
         el_a = el.append
         eo_a = eo.append
+        ef_a = ef.append
         hv_a = hv.append
         ab_a = ab.append
         at_a = at_.append
@@ -66,6 +69,7 @@ class VisionCache:
         _HARV = EntityType.HARVESTER
         _ROAD = EntityType.ROAD
         _MARKER = EntityType.MARKER
+        _FOUNDRY = EntityType.FOUNDRY
 
         # Iterate over entities and add to appropriate list
         for eid in ct.get_nearby_entities():
@@ -108,6 +112,8 @@ class VisionCache:
                     eu_a((eid, etype, pos))
                 elif etype is _LAU:
                     el_a((eid, etype, pos))
+                elif etype is _FOUNDRY:
+                    ef_a((eid, etype, pos))
                 elif etype is _CON or etype is _AC or etype is _BRI or etype is _SPL:
                     ec_a((eid, etype, pos))
                 else:
@@ -151,6 +157,9 @@ class VisionCache:
             elif entity_type is EntityType.LAUNCHER:
                 item = (entity_id, entity_type, pos)
                 self.enemy_launchers.remove(item)
+            elif entity_type is EntityType.FOUNDRY:
+                item = (entity_id, entity_type, pos)
+                self.enemy_foundries.remove(item)
             elif entity_type in CONVEYOR_TYPES:
                 item = (entity_id, entity_type, pos)
                 self.enemy_conveyors.remove(item)
@@ -215,6 +224,9 @@ class VisionCache:
         elif entity_type is EntityType.LAUNCHER:
             if item not in self.enemy_launchers:
                 self.enemy_launchers.append(item)
+        elif entity_type is EntityType.FOUNDRY:
+            if item not in self.enemy_foundries:
+                self.enemy_foundries.append(item)
         elif entity_type in CONVEYOR_TYPES:
             if item not in self.enemy_conveyors:
                 self.enemy_conveyors.append(item)

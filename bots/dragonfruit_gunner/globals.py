@@ -1,0 +1,81 @@
+from enum import Enum
+
+from cambc import Direction, EntityType
+
+USE_ARMOURED_CONVEYORS = True
+UPGRADE_ARMOURED_CONVEYORS = True
+USE_LAUNCHERS = False
+USE_BREACHES = False
+
+START_USING_ARMOURED_CONVEYORS_THRESHOLD = 700
+START_UPGRADING_ARMOURED_CONVEYORS_THRESHOLD = 1500
+
+INF = float('inf')
+
+DIRECTIONS = tuple(d for d in Direction if d is not Direction.CENTRE)
+ALL_DIRECTIONS = (Direction.CENTRE, *DIRECTIONS) # We want centre first to prioritize current tile when healing, etc
+CARDINAL_DIRECTIONS = (Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)
+
+DELTAS: dict[Direction, tuple[int, int]] = {d: d.delta() for d in Direction}
+
+CONVEYOR_TYPES = frozenset((EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER))
+TURRET_TYPES = frozenset((EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH))
+
+class State(Enum):
+    EXPLORE = 0
+    START_HARVEST_CHAIN = 1
+    EXTEND_HARVEST_CHAIN = 2
+    INTERCEPT = 3
+    SABOTAGE = 4
+    REROUTE_TITANIUM = 5
+    DEFEND = 6
+    HEAL = 7
+
+class Symmetry(Enum):
+    UNKNOWN = 0
+    FLIP_X = 1
+    FLIP_Y = 2
+    ROTATE = 3
+    
+TIMEOUT_TURNS = 3
+
+# Core spawn thresholds
+SPAWN_INITIAL_COUNT = 3
+NUM_RUSHING = 0
+SPAWN_LATER_COUNT = 5
+SPAWN_WEALTHY_RESOURCE_THRESHOLD = 2000
+SPAWN_WEALTHY_RESOURCE_THRESHOLD_EXTRA = 2800
+SPAWN_WEALTHY_RESOURCE_THRESHOLD_NUM_BOTS = 12
+SPAWN_WEALTHY_BRIDGE_MULT = 10
+SPAWN_WEALTHY_BUILDER_MULT = 5
+SPAWN_THREATENED_RESOURCE_MIN = 500
+SPAWN_THREATENED_BUILDER_MULT = 2
+SPAWN_WEALTHY_INTERVAL = 2
+
+TURRET_PRIORITY = {
+    EntityType.CORE: 0,
+    EntityType.BUILDER_BOT: 1,
+    EntityType.BREACH: 2,
+    EntityType.GUNNER: 3,
+    EntityType.SENTINEL: 3,
+}
+
+TURRET_PASSIVE_PRIORITY = {
+    EntityType.LAUNCHER: 0,
+    EntityType.BRIDGE: 1,
+    EntityType.CONVEYOR: 2,
+    EntityType.SPLITTER: 3,
+    EntityType.BARRIER: 4,
+    EntityType.ARMOURED_CONVEYOR: 5,
+    EntityType.ROAD: 6,
+}
+
+TURN_CPU_BUDGET_US = 2000
+CPU_SAFETY_MARGIN_US = 25
+BUGNAV_RESERVE_US = 275
+END_TURN_RESERVE_US = 75
+ASTAR_MIN_COMPUTE_BUDGET_US = 120
+ASTAR_CPU_CHECK_INTERVAL = 16
+
+def get_remaining_turn_budget_us(elapsed_us: int, reserve_us: int = 0) -> int:
+    return max(0, TURN_CPU_BUDGET_US - elapsed_us - reserve_us - CPU_SAFETY_MARGIN_US)

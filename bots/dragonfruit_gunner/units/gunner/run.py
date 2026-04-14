@@ -23,7 +23,7 @@ def run_gunner(player, ct: Controller, my_pos: Position, vc) -> None:
         
     # Otherwise try to rotate toward enemy
     elif (target is None or ct.get_ammo_amount() > 0) and player.global_titanium >= GameConstants.GUNNER_ROTATE_COST[0] + 50:
-        rotate_dir = choose_rotate_dir(ct, my_pos, vc.enemy_units, player.map, player.my_team)
+        rotate_dir = choose_rotate_dir(ct, my_pos, vc.enemy_units + vc.enemy_launchers + vc.enemy_other, player.map, player.my_team)
 
         if rotate_dir is not None and ct.can_rotate(rotate_dir):
             ct.rotate(rotate_dir)
@@ -40,4 +40,12 @@ def run_gunner(player, ct: Controller, my_pos: Position, vc) -> None:
             player.last_fired_round = ct.get_current_round()
             player.skipped_firing_turns -= 1
         if (ct.get_scale_percent() > 500 or player.skipped_firing_turns >= 16) and len(vc.ally_builder_bots) > 0:
-            ct.self_destruct()
+            adjacent_to_harvester = any(
+                my_pos.distance_squared(hpos) == 1
+                for (_bid, hpos, _team) in vc.harvesters
+            )
+
+            if not adjacent_to_harvester:
+                ct.self_destruct()
+            else:
+                log(f"skip self-destruct: adjacent to harvester at {my_pos}")
