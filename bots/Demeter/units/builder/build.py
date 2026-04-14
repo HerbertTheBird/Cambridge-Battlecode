@@ -91,6 +91,14 @@ def can_build_foundry_here(pos: Position, ct: Controller, my_pos: Position, my_t
         return True
     return can_build_over_existing(pos, my_pos, my_team)
 
+def can_replace_with_walkable_under_builder(pos: Position, ct: Controller) -> bool:
+    """True if we may destroy-and-rebuild a walkable building at pos.
+    Enemy builders may remain on the tile, but allied builders other than self may not."""
+    bbid = ct.get_tile_builder_bot_id(pos)
+    if bbid is None or bbid == ct.get_id():
+        return True
+    return ct.get_team(bbid) != ct.get_team()
+
 def safe_destroy(player, ct: Controller, pos: Position) -> bool:
     """Destroy a non-marker building at pos. Returns True if destroyed."""
     bid = map_mod.get_tile_entity_id(pos)

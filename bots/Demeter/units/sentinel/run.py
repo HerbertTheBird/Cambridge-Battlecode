@@ -4,7 +4,8 @@ from log import log
 import vision as vc
 from units.sentinel.combat import (
     choose_target, 
-    choose_passive_target
+    choose_passive_target,
+    should_wait_to_sync_shot,
 )
 
 def run_sentinel(player, ct: Controller, my_pos: Position) -> None:
@@ -23,11 +24,13 @@ def run_sentinel(player, ct: Controller, my_pos: Position) -> None:
 
     # Fire if we have a target
     if target is not None:
-        if ct.can_fire(target):
+        if ct.can_fire(target) and not should_wait_to_sync_shot(ct, target):
             ct.fire(target)
             log(f"turret fired at {target}")
             player.last_fired_round = ct.get_current_round()
             player.skipped_firing_turns = 0
+        elif ct.can_fire(target):
+            log(f"turret holding fire to sync on {target}")
 
     # Otherwise increment skipped firing turns
     if ct.get_action_cooldown() == 0:

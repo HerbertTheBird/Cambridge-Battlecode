@@ -43,10 +43,11 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
                 my_pos,
                 player.my_team,
                 threat_pos,
-                enemy_only=False,
+                enemy_only=True,
                 global_titanium=player.global_titanium,
-                enemy_core_pos=player.predicted_enemy_core_pos,
+                enemy_core_pos=player.enemy_core_pos,
                 is_core_threat=threat_is_core,
+                actual_enemy_core_pos=player.enemy_core_pos,
             )
             log(intercept, prio)
             log_time(ct, "After find intercept pos")
@@ -58,11 +59,26 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
             
     # Pre-compute sabotage info so we know which ally tiles feed the enemy
     sabotage_worthy_ally_mask = 0
-    sd_result = find_sabotage_target(player, ct, my_pos) if player.global_titanium >= 20 else None
+    sd_result = find_sabotage_target(player, ct, my_pos, player.global_titanium)
     if sd_result is not None:
         _sd_target, _sd_prio, sabotage_worthy_ally_mask = sd_result
     log_time(ct, "After pre-computing sabotage info")
-        
+
+    sd_target = None
+    sd_prio = 0
+    sd_target_is_ally = False
+    if sd_result is not None:
+        sd_target, sd_prio, _ = sd_result
+        sd_target_is_ally = map_mod.get_tile_entity_team(sd_target) == player.my_team
+
+    # SABOTAGE first if the target is an ally conveyor (instant destroy, no HP cost)
+    if sd_target is not None and sd_target_is_ally and sd_prio > 0:
+        log(f"sabotaging ally target at {sd_target} with priority {sd_prio}")
+        nav.set_destination(sd_target, "exact")
+        player.attack_target = sd_target
+        player.attack_reason = "sabotage"
+        return State.SABOTAGE
+
     # HEAL if an enemy is standing on a damaged ally conveyor
     # Skip ally tiles that feed the enemy (i.e. tiles we would want to sabotage anyways)
     heal_pos = find_heal_target(player, ct, my_pos, sabotage_worthy_ally_mask)
@@ -82,20 +98,17 @@ def decide_state(player, ct: Controller, my_pos: Position) -> State:
             log(f"heal core at {player.core_pos}")
             nav.set_destination(player.core_pos, "adjacent")
             return State.HEAL
-        
+
     log_time(ct, "After checking heal targets")
-            
-    # SABOTAGE if we see a good sabotage target and have enough titanium
+
+    # SABOTAGE enemy targets (requires shooting, so deprioritized below heal)
     log(f"sabotage target: {sd_result}")
-    if sd_result is not None:
-        sd_target, prio, _sabotage_worthy_ally_mask = sd_result
-        log(f"sabotage target: {sd_target} with priority {prio}")
-        if prio > 0:
-            log(f"sabotaging target")
-            nav.set_destination(sd_target, "exact")
-            player.attack_target = sd_target
-            player.attack_reason = "sabotage"
-            return State.SABOTAGE
+    if sd_target is not None and not sd_target_is_ally and sd_prio > 0:
+        log(f"sabotaging enemy target at {sd_target} with priority {sd_prio}")
+        nav.set_destination(sd_target, "exact")
+        player.attack_target = sd_target
+        player.attack_reason = "sabotage"
+        return State.SABOTAGE
         
     log_time(ct, "After checking sabotage targets")
             

@@ -14,7 +14,8 @@ from globals import (
     DELTAS, 
     USE_ARMOURED_CONVEYORS, 
     UPGRADE_ARMOURED_CONVEYORS, 
-    START_UPGRADING_ARMOURED_CONVEYORS_THRESHOLD
+    START_UPGRADING_ARMOURED_CONVEYORS_THRESHOLD,
+    CLOSER_ALLY_THRESHOLD_DIST,
 )
 from helpers import (
     get_nearest_core_tile,
@@ -30,10 +31,12 @@ import map as map_mod
 import nav
 import vision as vc
 from map import (
-    on_map, 
-    on_map_coords, 
-    _INT_ET, 
-    _INT_TM
+    on_map,
+    on_map_coords,
+    _INT_ET,
+    _INT_TM,
+    _TM_INT,
+    _ET_INT,
 )
 from units.builder.build import (
     can_build_launcher_here,
@@ -47,6 +50,7 @@ from units.builder.build import (
 )
 
 _INTERCEPT_RESOURCES = (ResourceType.TITANIUM, ResourceType.REFINED_AXIONITE)
+_CONVEYOR_TYPE_CODES = frozenset(_ET_INT[t] for t in CONVEYOR_TYPES)
 
 _INTERCEPT_MAX_TRAVEL_DIST_SQ = 13
 
@@ -178,7 +182,7 @@ def get_barrier_targets(ore_pos: Position, core_pos: Position | None, ct: Contro
             continue
         etype = map_mod.get_tile_entity_type(adj)
         if etype is not None:
-            if etype != EntityType.MARKER:
+            if etype != EntityType.MARKER and etype != EntityType.ROAD:
                 continue
         targets.append(adj)
     if core_pos is not None:
@@ -194,7 +198,7 @@ def attack_cost_to_destroy(ct: Controller, bid) -> int:
 def is_enemy_armoured_conveyor(etype: EntityType | None, team: Team | None, my_team: Team) -> bool:
     return team != my_team and etype == EntityType.ARMOURED_CONVEYOR
 
-def _get_intercept_output_state(output: Position, ct: Controller, my_pos: Position, my_team: Team, global_titanium: int, gunner_cost: int, sentinel_cost: int, enemy_core_pos: Position | None = None) -> tuple[int, int | None, EntityType | None, Team | None]:
+def _get_intercept_output_state(output: Position, ct: Controller, my_pos: Position, my_team: Team, global_titanium: int, turret_cost: int) -> tuple[int, int | None, EntityType | None, Team | None]:
     """Check if the output pos is buildable for intercept.
     Returns 0 = invalid, 1 = enemy building we can afford to kill (lower priority), 2 = fully valid.
     Rejects positions where an ally conveyor feeds an ally turret downstream."""
@@ -202,11 +206,6 @@ def _get_intercept_output_state(output: Position, ct: Controller, my_pos: Positi
         return 0, None, None, None
     if map_mod.is_wall(output):
         return 0, None, None, None
-    turret_cost = (
-        gunner_cost
-        if get_best_turret_type(output, enemy_core_pos, ct, my_pos, my_team) == EntityType.GUNNER
-        else sentinel_cost
-    )
     if global_titanium < turret_cost:
         return 0, None, None, None
     bid = map_mod.get_tile_entity_id(output)
@@ -244,17 +243,17 @@ def _get_intercept_output_state(output: Position, ct: Controller, my_pos: Positi
 
     return 0, bid, etype, team
 
-def _has_matching_ally_intercept_turret(bid: int | None, etype: EntityType | None, team: Team | None, ct: Controller, pos: Position, my_pos: Position, my_team: Team, enemy_core_pos: Position | None) -> bool:
+def _has_matching_ally_intercept_turret(bid: int | None, etype: EntityType | None, team: Team | None, my_team: Team, turret_type: EntityType) -> bool:
     """True if the cached tile data already matches the intercept turret we would build."""
     if bid is not None:
         return (
             team == my_team
             and etype in TURRET_TYPES
-            and etype == get_best_turret_type(pos, enemy_core_pos, ct, my_pos, my_team, None)
+            and etype == turret_type
         )
     return False
 
-def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_pos: Position, enemy_only: bool = False, global_titanium: int = 0, enemy_core_pos: Position | None = None, is_core_threat: bool = False) -> tuple[Position | None, int]:
+def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_pos: Position, enemy_only: bool = False, global_titanium: int = 0, enemy_core_pos: Position | None = None, is_core_threat: bool = False, actual_enemy_core_pos: Position | None = None) -> tuple[Position | None, int]:
     """Find the nearest position that is the output of a conveyor-type entity."""
     best_pos = None
     best_dist = INF
@@ -266,9 +265,19 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_p
     tx = threat_pos.x
     ty = threat_pos.y
 
+    masks = _build_enemy_intercept_masks(actual_enemy_core_pos)
+
     def _consider(output_idx: int):
         nonlocal best_pos, best_dist, best_prio
         output = map_mod.idx_to_pos(output_idx)
+        turret_type, direction, score = get_best_intercept_turret_choice(
+            output,
+            ct,
+            enemy_core_pos=enemy_core_pos,
+            masks=masks,
+        )
+        if direction is None or score < _MIN_INTERCEPT_SCORE:
+            return
 
         ox = output_idx % width
         oy = output_idx // width
@@ -276,10 +285,9 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_p
         if dist >= best_dist:
             return
 
+        turret_cost = gunner_cost if turret_type == EntityType.GUNNER else sentinel_cost
         validity, bid, etype, team = _get_intercept_output_state(
-            output, ct, my_pos, my_team, global_titanium,
-            gunner_cost, sentinel_cost,
-            enemy_core_pos=enemy_core_pos
+            output, ct, my_pos, my_team, global_titanium, turret_cost
         )
         log(f"{output}: validity={validity}")
         if validity == 0:
@@ -287,8 +295,8 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_p
 
         if validity < best_prio and best_dist != INF:
             return
-        
-        if _has_matching_ally_intercept_turret(bid, etype, team, ct, output, my_pos, my_team, enemy_core_pos):
+
+        if _has_matching_ally_intercept_turret(bid, etype, team, my_team, turret_type):
             return
 
         if etype == EntityType.HARVESTER or etype == EntityType.CORE:
@@ -307,8 +315,10 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_p
     height = map_mod.height
 
     candidate_output_idxs: set[int] = set()
+    fallback_candidate_output_idxs: set[int] = set()
 
     # Harvesters on titanium ore
+    my_team_code = _TM_INT[my_team] if enemy_only else -1
     for (bid, pos, _team) in vc.harvesters:
         if not map_mod.is_titanium_ore(pos):
             continue
@@ -322,7 +332,18 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_p
                     (mx - ax) * (mx - ax) + (my - ay) * (my - ay) <= _INTERCEPT_MAX_TRAVEL_DIST_SQ
                     and (tx - ax) * (tx - ax) + (ty - ay) * (ty - ay) <= _INTERCEPT_THREAT_RADIUS_SQ
                 ):
-                    candidate_output_idxs.add(adj_idx)
+                    if enemy_only:
+                        adj_etype_code = map_mod.get_tile_entity_type_code(adj)
+                        if adj_etype_code in _CONVEYOR_TYPE_CODES and map_mod.get_tile_entity_team_code(adj) == my_team_code:
+                            continue
+                        candidate_output_idxs.add(adj_idx)
+                    elif (
+                        map_mod.get_tile_entity_type_code(adj) in _CONVEYOR_TYPE_CODES
+                        and map_mod.get_tile_entity_team_code(adj) == _TM_INT[my_team]
+                    ):
+                        fallback_candidate_output_idxs.add(adj_idx)
+                    else:
+                        candidate_output_idxs.add(adj_idx)
 
     # Conveyors
     if enemy_only:
@@ -356,13 +377,22 @@ def find_intercept_pos(ct: Controller, my_pos: Position, my_team: Team, threat_p
             (mx - ox) * (mx - ox) + (my - oy) * (my - oy) <= _INTERCEPT_MAX_TRAVEL_DIST_SQ
             and (tx - ox) * (tx - ox) + (ty - oy) * (ty - oy) <= _INTERCEPT_THREAT_RADIUS_SQ
         ):
-            candidate_output_idxs.add(output_idx)
+            if not enemy_only and is_ally:
+                fallback_candidate_output_idxs.add(output_idx)
+            else:
+                candidate_output_idxs.add(output_idx)
 
     candidates = list(candidate_output_idxs)
     candidates.sort(key=lambda idx: ((tx - (idx % width)) * (tx - (idx % width)) + (ty - (idx // width)) * (ty - (idx // width))))  # prioritize outputs closer to the threat
 
     for output_idx in candidates:
         _consider(output_idx)
+
+    if not enemy_only and best_pos is None:
+        fallback_candidates = list(fallback_candidate_output_idxs)
+        fallback_candidates.sort(key=lambda idx: ((tx - (idx % width)) * (tx - (idx % width)) + (ty - (idx // width)) * (ty - (idx // width))))
+        for output_idx in fallback_candidates:
+            _consider(output_idx)
 
     return best_pos, best_prio
 
@@ -408,8 +438,8 @@ def get_nearest_enemy_threat_pos(my_pos: Position) -> tuple[Position, bool] | No
         return None
     return (best_pos, best_prio == 0)
 
-def get_blocked_sentinel_directions(intercept_pos: Position, ct: Controller) -> set:
-    """Return the set of cardinal directions a sentinel at intercept_pos cannot face.
+def get_blocked_turret_directions(intercept_pos: Position, ct: Controller) -> set:
+    """Return the set of cardinal directions a turret at intercept_pos cannot face.
     A direction is only blocked if the feeder on that side is the ONLY valid feeder.
     With 2+ valid feeders, no directions are blocked.
     Any valid bridge feeder clears all directional blocking, since the turret can
@@ -478,113 +508,318 @@ def _is_in_turret_attack_shape(ct: Controller, origin: Position, direction: Dire
         return _is_in_sentinel_attack_shape(origin, direction, target)
     return target in ct.get_attackable_tiles_from(origin, direction, entity_type)
 
-def get_turret_direction(intercept_pos: Position, enemy_pos: Position, ct: Controller, entity_type: EntityType, is_core_threat: bool = False) -> Direction | None:
-    """Pick the best direction for a turret at intercept_pos facing enemy_pos,
-    avoiding directions blocked by feeding conveyors/harvesters.
-    Only considers directions where the target is actually in the attackable tiles.
-    If is_core_threat is True, checks all 9 core tiles instead of just enemy_pos."""
-    blocked = get_blocked_sentinel_directions(intercept_pos, ct)
-    if is_core_threat:
-        target_tiles = [
-            Position(enemy_pos.x + dx, enemy_pos.y + dy)
-            for dx in range(-1, 2) for dy in range(-1, 2)
-        ]
-    else:
-        target_tiles = [enemy_pos]
+# Precomputed (dx, dy) offsets for each (turret_type, direction).
+_ATTACK_OFFSETS: dict[tuple[EntityType, Direction], tuple[tuple[int, int], ...]] = {}
 
-    desired = intercept_pos.direction_to(enemy_pos)
-    candidates = [desired, desired.rotate_left(), desired.rotate_right()]
-    for d in candidates:
-        if d in blocked:
-            continue
-        if any(_is_in_turret_attack_shape(ct, intercept_pos, d, t, entity_type) for t in target_tiles):
-            return d
-    return None
-
-def is_gunner_position(
-    core_pos: Position | None,
-    pos: Position,
-    ct: Controller,
-    my_pos: Position,
-    primary_threat: Position | None,
-    my_team: Team,
-) -> bool:
-    """
-    True if pos is a good gunner location.
-
-    Satisfies one of:
-    1. Original heuristic: near enemy core
-    2. Has line-of-sight to primary_threat
-    """
-    if core_pos is not None:
-        dist = core_pos.distance_squared(pos)
-        if 2 < dist <= 18:
-            return True
-
-    if primary_threat is None or not is_in_vision(my_pos, primary_threat):
-        return False
-
-    if ct.get_tile_builder_bot_id(primary_threat) is not None:
-        building_id = map_mod.get_tile_entity_id(primary_threat)
-        if not building_id:
-            return False
-        if map_mod.get_tile_entity_type(primary_threat) not in CONVEYOR_TYPES or ct.get_hp(building_id) == ct.get_max_hp(building_id):
-            return False
+def _ensure_attack_offsets(ct: Controller) -> None:
+    if _ATTACK_OFFSETS:
+        return
 
     width = map_mod.width
     height = map_mod.height
-    bm_wall = map_mod.get_env_mask(Environment.WALL)
-    entity_ids = map_mod._entity_id
+    if width <= 0 or height <= 0:
+        return
+
+    # Build geometry once from the game API using an origin far enough from
+    # edges that the raw pattern is not clipped.
+    origin = Position(min(max(6, width // 2), width - 1), min(max(6, height // 2), height - 1))
+    for et in (EntityType.GUNNER, EntityType.SENTINEL):
+        for d in DIRECTIONS:
+            offsets = []
+            for target in ct.get_attackable_tiles_from(origin, d, et):
+                offsets.append((target.x - origin.x, target.y - origin.y))
+            _ATTACK_OFFSETS[(et, d)] = tuple(offsets)
+
+def _attack_mask_at(ct: Controller, intercept_idx: int, turret_type: EntityType, direction: Direction, width: int, height: int) -> int:
+    _ensure_attack_offsets(ct)
+    ix = intercept_idx % width
+    iy = intercept_idx // width
+    mask = 0
+    for dx, dy in _ATTACK_OFFSETS[(turret_type, direction)]:
+        x = ix + dx
+        y = iy + dy
+        if 0 <= x < width and 0 <= y < height:
+            mask |= 1 << (y * width + x)
+    return mask
+
+_INTERCEPT_BUILDER_WEIGHT = 1
+_INTERCEPT_TURRET_WEIGHT = 2
+_INTERCEPT_LAUNCHER_WEIGHT = 2
+_INTERCEPT_CORE_WEIGHT = 3
+_MIN_INTERCEPT_SCORE = _INTERCEPT_TURRET_WEIGHT
+_TURRET_ENTITY_TYPES = (EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH)
+_MARKER_TYPE_CODE = _ET_INT[EntityType.MARKER]
+_ROAD_TYPE_CODE = _ET_INT[EntityType.ROAD]
+
+def _build_enemy_intercept_masks(enemy_core_pos: Position | None) -> tuple[int, int, int, int, int]:
+    """Return (builder_mask, turret_mask, launcher_mask, core_mask, ally_builder_mask).
+    core_mask is the enemy core's actual 3x3 footprint. The core still counts
+    once during scoring via a single mask intersection test rather than once
+    per occupied tile. enemy_core_pos must be the confirmed core position
+    (player.enemy_core_pos), or None if we don't have one — predictions are
+    not reliable enough to weight."""
+    width = map_mod.width
+    height = map_mod.height
+    builder_mask = 0
+    turret_mask = 0
+    launcher_mask = 0
+    core_mask = 0
+    ally_builder_mask = 0
+    for (_eid, etype, epos) in vc.enemy_units:
+        bit = 1 << (epos.y * width + epos.x)
+        if etype == EntityType.BUILDER_BOT:
+            builder_mask |= bit
+        elif etype in _TURRET_ENTITY_TYPES:
+            turret_mask |= bit
+    for (_eid, _etype, epos) in vc.enemy_launchers:
+        launcher_mask |= 1 << (epos.y * width + epos.x)
+    for (_eid, epos) in vc.ally_builder_bots:
+        ally_builder_mask |= 1 << (epos.y * width + epos.x)
+    if enemy_core_pos is not None:
+        for cdy in range(-1, 2):
+            ey = enemy_core_pos.y + cdy
+            if not (0 <= ey < height):
+                continue
+            for cdx in range(-1, 2):
+                ex = enemy_core_pos.x + cdx
+                if 0 <= ex < width:
+                    core_mask |= 1 << (ey * width + ex)
+    return builder_mask, turret_mask, launcher_mask, core_mask, ally_builder_mask
+
+def compute_best_turret_direction(
+    intercept_pos: Position,
+    turret_type: EntityType,
+    ct: Controller,
+    enemy_core_pos: Position | None = None,
+    masks: tuple[int, int, int, int, int] | None = None,
+) -> Direction | None:
+    """Pick the direction at intercept_pos that maximizes a weighted enemy
+    score: builder=1, turret=2, launcher=2, core=3 (counted once via the 3x3
+    core influence mask). Returns None if no direction scores anything or all
+    directions are blocked. enemy_core_pos must be the confirmed core position
+    (player.enemy_core_pos)."""
+    best_dir, _ = compute_best_turret_direction_and_score(
+        intercept_pos,
+        turret_type,
+        ct,
+        enemy_core_pos=enemy_core_pos,
+        masks=masks,
+    )
+    return best_dir
+
+def compute_best_turret_direction_and_score(
+    intercept_pos: Position,
+    turret_type: EntityType,
+    ct: Controller,
+    enemy_core_pos: Position | None = None,
+    masks: tuple[int, int, int, int, int] | None = None,
+) -> tuple[Direction | None, int]:
+    """Return the best facing direction and weighted score for a hypothetical
+    intercept turret at intercept_pos."""
+    if masks is None:
+        masks = _build_enemy_intercept_masks(enemy_core_pos)
+    builder_mask, turret_mask, launcher_mask, core_mask, ally_builder_mask = masks
+    if not (builder_mask | turret_mask | launcher_mask | core_mask):
+        return None, 0
+    blocked = get_blocked_turret_directions(intercept_pos, ct)
+    width = map_mod.width
+    height = map_mod.height
+    intercept_idx = intercept_pos.y * width + intercept_pos.x
+    best_dir = None
+    best_score = 0
+    wall_mask = map_mod.get_env_mask(Environment.WALL)
     entity_type_idxs = map_mod._entity_type_idx
     entity_team_idxs = map_mod._entity_team_idx
-
+    my_team_idx = _TM_INT[ct.get_team()]
     for d in DIRECTIONS:
-        dx, dy = DELTAS[d]
-        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
-
-        x, y = pos.x, pos.y
-        for _ in range(max_range):
-            x += dx
-            y += dy
-
-            if not on_map_coords(x, y, width, height):
-                break
-
-            idx = y * width + x
-
-            if (bm_wall >> idx) & 1:
-                break
-
-            if x == primary_threat.x and y == primary_threat.y:
-                return True
-
-            cur = Position(x, y)
-
-            bbid = ct.get_tile_builder_bot_id(cur)
-            if bbid is not None:
-                if ct.get_team(bbid) == my_team:
+        if d in blocked:
+            continue
+        if turret_type == EntityType.GUNNER:
+            dx, dy = DELTAS[d]
+            max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+            x = intercept_pos.x
+            y = intercept_pos.y
+            score = 0
+            counted_core = False
+            for _ in range(max_range):
+                x += dx
+                y += dy
+                if not on_map_coords(x, y, width, height):
                     break
-                continue
 
-            bid = entity_ids[idx]
-            if bid != 0:
-                etype = _INT_ET[entity_type_idxs[idx]]
-                team = _INT_TM[entity_team_idxs[idx]]
+                idx = y * width + x
+                bit = 1 << idx
 
-                if etype == EntityType.MARKER or etype == EntityType.ROAD:
-                    continue
-
-                if team == my_team:
+                if wall_mask & bit:
                     break
+
+                if ally_builder_mask & bit:
+                    break
+
+                if builder_mask & bit:
+                    score += _INTERCEPT_BUILDER_WEIGHT
+
+                etype_idx = entity_type_idxs[idx]
+                if etype_idx >= 0:
+                    team_idx = entity_team_idxs[idx]
+                    if team_idx == my_team_idx and etype_idx not in (_MARKER_TYPE_CODE, _ROAD_TYPE_CODE):
+                        break
+                    if team_idx != my_team_idx:
+                        if turret_mask & bit:
+                            score += _INTERCEPT_TURRET_WEIGHT
+                        if launcher_mask & bit:
+                            score += _INTERCEPT_LAUNCHER_WEIGHT
+                        if not counted_core and (core_mask & bit):
+                            score += _INTERCEPT_CORE_WEIGHT
+                            counted_core = True
+                elif not counted_core and (core_mask & bit):
+                    score += _INTERCEPT_CORE_WEIGHT
+                    counted_core = True
+        else:
+            attack = _attack_mask_at(ct, intercept_idx, turret_type, d, width, height)
+            score = (
+                (attack & builder_mask).bit_count() * _INTERCEPT_BUILDER_WEIGHT
+                + (attack & turret_mask).bit_count() * _INTERCEPT_TURRET_WEIGHT
+                + (attack & launcher_mask).bit_count() * _INTERCEPT_LAUNCHER_WEIGHT
+            )
+            if attack & core_mask:
+                score += _INTERCEPT_CORE_WEIGHT
+        if score > best_score:
+            best_score = score
+            best_dir = d
+    return best_dir, best_score
+
+def get_best_turret_type(
+    pos: Position,
+    ct: Controller,
+    enemy_core_pos: Position | None = None,
+    masks: tuple[int, int, int, int, int] | None = None,
+) -> EntityType:
+    """Prefer gunners when they can generate meaningful value, otherwise use a sentinel."""
+    turret_type, _direction, _score = get_best_intercept_turret_choice(
+        pos,
+        ct,
+        enemy_core_pos=enemy_core_pos,
+        masks=masks,
+    )
+    return turret_type
+
+def get_best_intercept_turret_choice(
+    pos: Position,
+    ct: Controller,
+    enemy_core_pos: Position | None = None,
+    masks: tuple[int, int, int, int, int] | None = None,
+) -> tuple[EntityType, Direction | None, int]:
+    """Return the preferred intercept turret type, its best direction, and score.
+    We strongly prefer gunners, so any gunner scoring at least 2 wins; otherwise
+    we fall back to the best sentinel. If only one turret type can score at all,
+    use that type."""
+    gunner_dir, gunner_score = compute_best_turret_direction_and_score(
+        pos,
+        EntityType.GUNNER,
+        ct,
+        enemy_core_pos=enemy_core_pos,
+        masks=masks,
+    )
+    sentinel_dir, sentinel_score = compute_best_turret_direction_and_score(
+        pos,
+        EntityType.SENTINEL,
+        ct,
+        enemy_core_pos=enemy_core_pos,
+        masks=masks,
+    )
+
+    if gunner_dir is not None and gunner_score >= _INTERCEPT_TURRET_WEIGHT:
+        return EntityType.GUNNER, gunner_dir, gunner_score
+    if sentinel_dir is not None:
+        return EntityType.SENTINEL, sentinel_dir, sentinel_score
+    if gunner_dir is not None:
+        return EntityType.GUNNER, gunner_dir, gunner_score
+    return EntityType.SENTINEL, None, 0
+
+def debug_draw_intercept_masks(
+    ct: Controller,
+    intercept_pos: Position,
+    turret_type: EntityType,
+    direction: Direction,
+    masks: tuple[int, int, int, int, int] | None = None,
+    enemy_core_pos: Position | None = None,
+) -> None:
+    """Draw dots at every tile in the enemy intercept masks. Bright = within the
+    chosen direction's attack pattern, dim = outside. Red=core, orange=turret/launcher,
+    yellow=builder."""
+    if masks is None:
+        masks = _build_enemy_intercept_masks(enemy_core_pos)
+    builder_mask, turret_mask, launcher_mask, core_mask, _ally_builder_mask = masks
+    width = map_mod.width
+    height = map_mod.height
+    intercept_idx = intercept_pos.y * width + intercept_pos.x
+    attack = _attack_mask_at(ct, intercept_idx, turret_type, direction, width, height)
+
+    # Draw attack pattern itself in dim cyan so the ray/cone is visible
+    # even when no enemies sit on it. intercept_pos gets a bright magenta dot.
+    a = attack
+    while a:
+        low = a & -a
+        bit_idx = low.bit_length() - 1
+        x = bit_idx % width
+        y = bit_idx // width
+        ct.draw_indicator_dot(Position(x, y), 0, 60, 80)
+        a ^= low
+    ct.draw_indicator_dot(intercept_pos, 255, 0, 255)
+
+    bright = {
+        "core": (255, 0, 0),
+        "ot": (255, 128, 0),
+        "builder": (255, 255, 0),
+    }
+    dim = {
+        "core": (80, 0, 0),
+        "ot": (80, 40, 0),
+        "builder": (80, 80, 0),
+    }
+
+    def _draw(mask: int, key: str):
+        m = mask
+        while m:
+            low = m & -m
+            bit_idx = low.bit_length() - 1
+            x = bit_idx % width
+            y = bit_idx // width
+            r, g, b = bright[key] if (attack >> bit_idx) & 1 else dim[key]
+            ct.draw_indicator_dot(Position(x, y), r, g, b)
+            m ^= low
+
+    _draw(core_mask, "core")
+    _draw(turret_mask | launcher_mask, "ot")
+    _draw(builder_mask, "builder")
+
+def find_conveyor_dir_to_ally_turret(pos: Position, my_team: Team, enemy_core_pos: Position | None = None) -> Direction | None:
+    """Return a cardinal direction such that a conveyor at pos facing it would
+    output to (or chain into) an existing ally turret, or None if no such
+    direction exists. Skips directions where the output tile is the enemy core
+    or is an ally turret that already has a conveyor feeding it."""
+    width = map_mod.width
+    height = map_mod.height
+    for d in CARDINAL_DIRECTIONS:
+        target = pos.add(d)
+        if not on_map(target, width, height):
+            continue
+        if enemy_core_pos is not None and is_core_tile(enemy_core_pos, target):
+            continue
+        target_team = map_mod.get_tile_entity_team(target)
+        target_etype = map_mod.get_tile_entity_type(target)
+        if target_team == my_team and target_etype in TURRET_TYPES:
+            if map_mod.has_conveyor_inputs(target):
                 continue
-
-    return False
-
-def get_best_turret_type(pos: Position, enemy_core_pos: Position | None, ct: Controller, my_pos: Position, my_team: Team, primary_threat: Position | None = None) -> EntityType:
-    """Return the preferred turret type for an intercept build at pos."""
-    if is_gunner_position(enemy_core_pos, pos, ct, my_pos, primary_threat, my_team):
-        return EntityType.GUNNER
-    return EntityType.SENTINEL
+            return d
+        target_idx = map_mod.pos_to_idx(target)
+        if map_mod.feeds_ally_turret_idx(target_idx, my_team):
+            terminal_idx = map_mod.get_chain_terminal_idx(target_idx)
+            if map_mod.has_valid_input_chain_idx(terminal_idx):
+                continue
+            return d
+    return None
 
 def build_turret(player, ct: Controller, pos: Position, direction: Direction, turret_type: EntityType) -> bool:
     """Try to build the specified turret type at pos facing direction.
@@ -603,10 +838,9 @@ def build_turret(player, ct: Controller, pos: Position, direction: Direction, tu
         return True
     return False
 
-def build_best_turret(player, ct: Controller, pos: Position, my_pos: Position, direction: Direction, enemy_core_pos: Position | None, primary_threat: Position | None = None) -> bool:
-    """Try to build a gunner (if valid position near enemy core) or sentinel at pos.
-    Returns True if a turret was built."""
-    turret_type = get_best_turret_type(pos, enemy_core_pos, ct, my_pos, player.my_team, primary_threat)
+def build_best_turret(player, ct: Controller, pos: Position, direction: Direction, enemy_core_pos: Position | None) -> bool:
+    """Build the preferred turret type for this intercept position."""
+    turret_type = get_best_turret_type(pos, ct, enemy_core_pos=enemy_core_pos)
     return build_turret(player, ct, pos, direction, turret_type)
 
 def find_nearest_titanium_conveyor(ct: Controller, my_pos: Position, my_team: Team, target_foundry: Position | None = None) -> Position | None:
@@ -1071,7 +1305,7 @@ def get_sabotage_target_priority(player, ct: Controller, pos: Position, my_pos: 
     downstream_priority = map_mod.get_sabotage_downstream_priority(pos, player.my_team)
     return 1 if downstream_priority == 0 else downstream_priority + 1
 
-def find_sabotage_target(player, ct: Controller, my_pos: Position, sabotage_worthy_ally_mask: int = 0) -> tuple[Position, int, int] | None:
+def find_sabotage_target(player, ct: Controller, my_pos: Position, global_titanium: int, sabotage_worthy_ally_mask: int = 0) -> tuple[Position, int, int] | None:
     """Find the best visible enemy conveyor/bridge to sabotage.
     Prioritizes core-feeding targets, then nearest.
     Returns (position, priority, sabotage_worthy_ally_mask) or None.
@@ -1089,6 +1323,8 @@ def find_sabotage_target(player, ct: Controller, my_pos: Position, sabotage_wort
         consider = vc.enemy_conveyors
     for (bid, etype, pos) in consider:
         is_ally = ct.get_team(bid) == player.my_team
+        if not is_ally and global_titanium < 20:
+            continue
         if etype == EntityType.BRIDGE:
             pass
         elif etype == EntityType.CONVEYOR:
@@ -1180,7 +1416,8 @@ def count_closer_allies(player, target: Position, my_pos: Position) -> int:
     my_dist = my_pos.distance_squared(target)
     closer = 0
     for (_eid, apos) in vc.ally_builder_bots:
-        if apos.distance_squared(target) < my_dist:
+        ally_dist = apos.distance_squared(target)
+        if ally_dist <= CLOSER_ALLY_THRESHOLD_DIST and ally_dist < my_dist:
             closer += 1
     return closer
 
