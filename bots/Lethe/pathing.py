@@ -534,6 +534,9 @@ class Pathing:
         my_idx = map_info._TM_INT[self.rc.get_team()]
         enemy_idx = 1 - my_idx
         harv_on_ore = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_idx] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]
+        my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY] & map_info._bm_team[my_idx]
+        foundry_adj = ((my_foundries & map_info._not_right_col) << 1) | ((my_foundries & map_info._not_left_col) >> 1) | (my_foundries << w) | (my_foundries >> w)
+        harv_on_ore &= ~foundry_adj
         adj = ((harv_on_ore & map_info._not_right_col) << 1) | ((harv_on_ore & map_info._not_left_col) >> 1) | (harv_on_ore << w) | (harv_on_ore >> w)
         enemy_block = (
             map_info._bm_team[enemy_idx]

@@ -253,11 +253,12 @@ def run():
     can_build = False
     cost = nav.conveyor_cost(path[2])
     best_n = best.x + best.y * width
-    _cost_map[best_n] = cost
-    if rc.get_global_resources()[0] < cost:
-        print("can't afford", cost)
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
-        return
+    if not is_refined:
+        _cost_map[best_n] = cost
+        if rc.get_global_resources()[0] < cost:
+            print("can't afford", cost)
+            comms.mark(best.x + best.y * map_info._width, comm_flag)
+            return
     if near_enemy:
         nav.move_to(target_conveyor[1])
         if rc.get_position() == target_conveyor[1]:
