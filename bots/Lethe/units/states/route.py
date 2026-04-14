@@ -120,7 +120,7 @@ def run():
     path = []
     if is_harvester:
         path = nav.calculate_conveyor_path(best, update=False)
-        if not path or len(path) < 2:
+        if path is None:
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
@@ -129,7 +129,7 @@ def run():
         # Dead-end conveyor: route from its output tile
         best_n = best.x + best.y * width
         target_n = map_info._building_conv_target[best_n]
-        
+
         can_heal_road = False
         target_zone = 1 << target_n
         for _ in range(3):
@@ -137,17 +137,14 @@ def run():
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
         path = nav.calculate_conveyor_path(Position(target_n%width, target_n//width), update=True)
-        if not path or len(path) < 2:
+        if path is None:
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
         if (map_info._bm_team[1-map_info._TM_INT[rc.get_team()]] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
             new_path = nav.calculate_conveyor_path(Position(best_n%width, best_n//width), update=True)
-            if new_path and len(new_path) > 1 and new_path[1] != path[0]:
+            if new_path is not None and new_path[1] != path[0]:
                 path = new_path
-                if not path or len(path) < 2:
-                    unpathable |= best_bit
-                    return
                 target_conveyor = [path[0], path[1]]
     near_enemy = False
     if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
@@ -164,7 +161,7 @@ def run():
         comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     can_build = False
-    cost = nav.conveyor_cost(path)
+    cost = nav.conveyor_cost(path[2])
     best_n = best.x + best.y * width
     _cost_map[best_n] = cost
     if rc.get_global_resources()[0] < cost:
