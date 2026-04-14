@@ -144,6 +144,51 @@ def get_barrier_targets(ore_pos: Position, core_pos: Position | None, ct: Contro
         targets.sort(key=lambda p: p.distance_squared(core_pos), reverse=True)
     return targets
 
+def get_unsafe_targets(ore_pos: Position, core_pos: Position | None, ct: Controller, map_obj, conveyer_tile = None) -> list[Position]:
+    """Return cardinal positions around ore_pos that aren't defended by impassable buildings"""
+    if map_obj.get_tile_env(ore_pos) != Environment.ORE_TITANIUM:
+        return []
+    targets = []
+    width = map_obj.width
+    height = map_obj.height
+    for d in CARDINAL_DIRECTIONS:
+        adj = ore_pos.add(d)
+        if not on_map(adj, width, height) or not ct.is_in_vision(adj):
+            continue
+        if map_obj.get_tile_env(adj) == Environment.WALL:
+            continue
+        if adj == conveyer_tile:
+            targets.append(adj)
+            continue
+        adj_bid = ct.get_tile_building_id(adj)
+        if adj_bid is None:
+            continue
+        
+        etype = ct.get_entity_type(adj_bid)
+        if etype != EntityType.MARKER and etype != EntityType.ROAD and etype != EntityType.CONVEYOR and etype != EntityType.BRIDGE:
+            continue
+        targets.append(adj)
+    if core_pos is not None:
+        targets.sort(key=lambda p: p.distance_squared(core_pos), reverse=True)
+    return targets
+
+def has_gunner_covering(player, ct, pos):
+    for d in ALL_DIRECTIONS:  # or just diagonals if runtime becomes an issue
+        check = pos.add(d)
+        width = player.map.width
+        height = player.map.height
+        if not on_map(check, width, height) or not ct.is_in_vision(check):
+            continue
+        bid = ct.get_tile_building_id(check)
+        if bid is None:
+            continue
+        if ct.get_team(bid) != player.my_team:
+            continue
+        if ct.get_entity_type(bid) == EntityType.GUNNER:
+            if check.distance_squared(pos) <= 2:
+                return True
+    return False
+
 def attack_cost_to_destroy(ct: Controller, bid) -> int:
     """Titanium cost to destroy a building by attacking it with a builder bot."""
     hp = ct.get_hp(bid)

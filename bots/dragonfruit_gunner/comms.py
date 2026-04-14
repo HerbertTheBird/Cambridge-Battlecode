@@ -19,7 +19,6 @@ class Comms:
 
     # We shouldn't store launcher orders indefinitely
     # Found a game where builder bot kept trying to walk past an allied launcher and got launched back
-    # TODO: Make launcher destroy markers after fulfilling launch
     def reset_turn(self, current_round: int | None = None):
         if current_round is not None:
             self.prune_launch_orders(current_round)
