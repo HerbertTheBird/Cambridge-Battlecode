@@ -141,9 +141,9 @@ def run():
     w = map_info._width
     my_team_idx = map_info._TM_INT[rc.get_team()]
     path = nav.calculate_conveyor_path(best_ore)
-    if path is not None:
+    if path and len(path) >= 2:
         best_n = best_ore.x + best_ore.y * w
-        _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
+        _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path, rc.get_scale_percent()/100+0.05)
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
         return
