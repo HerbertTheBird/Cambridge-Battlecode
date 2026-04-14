@@ -104,13 +104,13 @@ def run():
     if not candidates:
         print("no candidates")
         return
-
     width = map_info._width
     height = map_info._height
 
     best, _ = nav.closest(candidates)
     if best is None:
         print("no closest???")
+        unpathable |= candidates
         return
     
     best_bit = 1 << (best.x + best.y * width)
@@ -161,6 +161,7 @@ def run():
         nav.move_to(target)
         if rc.can_fire(target):
             rc.fire(target)
+        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     can_build = False
     cost = nav.conveyor_cost(path)
@@ -168,6 +169,7 @@ def run():
     _cost_map[best_n] = cost
     if rc.get_global_resources()[0] < cost:
         print("can't afford", cost)
+        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     if near_enemy:
         nav.move_to(target_conveyor[1])

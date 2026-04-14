@@ -23,6 +23,7 @@ def _conv_zone():
     """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
     my_team_idx = map_info._TM_INT[rc.get_team()]
     my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    my_convs |= map_info._bm_my_core_area
     if not my_convs:
         return 0
     w = map_info._width
@@ -103,11 +104,12 @@ def _very_damaged_targets():
 
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
-    return _healable_mask() & map_info._bm_damaged
+    return _healable_mask() & map_info._bm_damaged & ~map_info._bm_enemy_bots
 
 
 def score():
     if _very_damaged_targets():
+        units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 7
     if _find_chase_target() is not None:
         return 7
@@ -120,7 +122,16 @@ def _try_barrier_dead_ends():
     dead_ends = map_info._bm_dead_end
     if not dead_ends:
         return
-    # Get target tiles of dead-end conveyors
+    # Only dead-end conveyors whose output is empty / marker / enemy building
+    my_team_idx = map_info._TM_INT[rc.get_team()]
+    enemy_idx = 1 - my_team_idx
+    enemy_any = map_info._bm_team[enemy_idx]
+    marker = map_info._bm_et[map_info._IDX_MARKER]
+    any_building = 0
+    for i in range(map_info._NUM_ET):
+        any_building |= map_info._bm_et[i]
+    empty_mask = ~any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+
     targets = 0
     mask = dead_ends
     conv_target = map_info._building_conv_target
@@ -130,7 +141,9 @@ def _try_barrier_dead_ends():
         n = lsb.bit_length() - 1
         tn = conv_target[n]
         if tn and 0 <= tn < tiles:
-            targets |= 1 << tn
+            tbit = 1 << tn
+            if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
+                targets |= lsb
         mask ^= lsb
     if not targets:
         return
@@ -141,6 +154,9 @@ def _try_barrier_dead_ends():
         pbit = 1 << (p.x + p.y * w)
         if not (targets & pbit):
             continue
+        if rc.get_action_cooldown() == 0:
+            if rc.can_destroy(p):
+                rc.destroy(p)
         if rc.can_build_barrier(p):
             rc.build_barrier(p)
             map_info.update_at(p)
@@ -181,9 +197,9 @@ def run():
     target = _find_chase_target()
     if target is not None:
         uid, ep = target
-        nav.move_to(ep, avoid_empty=True)
-        comms.mark(uid & ID_MASK, comm_flag)
         _try_barrier_dead_ends()
+        nav.move_to(ep)
+        comms.mark(uid & ID_MASK, comm_flag)
         _do_best_heal()
         return
 
@@ -193,7 +209,7 @@ def run():
     if targets:
         best, dist = nav.closest(targets)
         if best is not None:
-            nav.move_adjacent(best, avoid_turret=False, avoid_empty=True)
+            nav.move_adjacent(best, avoid_turret=False)
     
     _try_barrier_dead_ends()
     _do_best_heal()

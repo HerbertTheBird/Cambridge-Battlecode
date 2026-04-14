@@ -26,21 +26,40 @@ def generate_explore_target():
     nrc = map_info._not_right_col
     board = (1 << (w * map_info._height)) - 1
     avoid = map_info.get_avoid(False, False, False)
-    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
+    if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
         has_building = 0
         for i in range(map_info._NUM_ET):
             has_building |= map_info._bm_et[i]
         avoid |= map_info._bm_seen & ~has_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
     passable = ~avoid & board
 
-    # Seed with all other builders' claimed tiles (all flags) + my position
+    # Seed with all other builders' claimed tiles + incremental steps from
+    # the nearest friendly bot toward each claim, plus my own position.
     seeds = 0
+    claims = 0
     for i, f in enumerate(units.builder.forget):
         if i == 7:  # heal flag uses enemy IDs, not tile positions
             continue
-        seeds |= f
+        claims |= f
+    seeds |= claims
+
     my_pos = rc.get_position()
-    seeds |= 1 << (my_pos.x + my_pos.y * w)
+    my_n = my_pos.x + my_pos.y * w
+    seeds |= 1 << my_n
+
+    # Seed tiles every 5 Chebyshev steps from my position toward each claim.
+    bx, by = my_pos.x, my_pos.y
+    mask = claims
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        tx, ty = n % w, n // w
+        steps = max(abs(bx - tx), abs(by - ty))
+        for s in range(5, steps, 5):
+            ix = bx + (tx - bx) * s // steps
+            iy = by + (ty - by) * s // steps
+            seeds |= 1 << (ix + iy * w)
+        mask ^= lsb
 
     visited = seeds
     frontier = seeds
@@ -77,7 +96,7 @@ def run():
 
     attempts = 0
     while attempts < 1:
-        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2):
+        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5):
             generate_explore_target()
         else:
             break

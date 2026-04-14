@@ -67,12 +67,13 @@ def get_new_messages():
             old_val = _marker_at.get(pos_n)
             if old_val is not None and old_val != val:
                 prev_messages.pop(old_val, None)
+            new = old_val is None or old_val != val
             _marker_at[pos_n] = val
 
             if (rc.get_id()&_ID_MASK) == decode_id(val):
                 remove.add(val >> ID_BITS)
                 remove.add((val^(1<<(ID_BITS+POS_BITS))) >> ID_BITS)
-            if val in prev_messages:
+            if not new:
                 continue
             prev_messages[val] = rc.get_current_round()
             append(val)
