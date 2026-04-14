@@ -72,7 +72,7 @@ def score():
 def run():
     print("SABOTAGE")
     targets = _sabotage_targets()
-    units.builder.draw_mask(targets, 255, 0, 255)
+    # units.builder.draw_mask(targets, 255, 0, 255)
 
     if not targets:
         return

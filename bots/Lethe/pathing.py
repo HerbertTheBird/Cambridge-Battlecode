@@ -492,7 +492,7 @@ class Pathing:
 
 
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
-        print("conveyors from ", start)
+        print("conveyors from ", start, raw_axionite)
         w = self.width
         if update:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
@@ -563,13 +563,11 @@ class Pathing:
         if raw_axionite:
             target = self.raw_ax_foundry_sites()
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
-            w = map_info._width
-            ti_ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
-            ti_adj = ((ti_ore & map_info._not_right_col) << 1) | ((ti_ore & map_info._not_left_col) >> 1) | (ti_ore << w) | (ti_ore >> w)
-            avoid |= ti_adj & ~target
+            if conveyor:
+                avoid &= ~(1<<map_info._building_conv_target[conveyor])
             return target, avoid
         else:
-            target = (map_info._bm_route_targets & map_info._bm_conv_ti_or_refined) | map_info._bm_my_core_area
+            target = (map_info._bm_route_targets & (map_info._bm_conv_ti | map_info._bm_conv_refined)) | map_info._bm_my_core_area
             if not target:
                 return 0, 0
             if conveyor:

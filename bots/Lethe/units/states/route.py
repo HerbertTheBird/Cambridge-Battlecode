@@ -11,12 +11,14 @@ _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
 
 unpathable = 0
 
-def _trace_raw_ax(start_n: int) -> bool:
-    """Follow _conv_reverse back from start_n until we see a loaded conveyor; return True if that load is raw axionite."""
+def _trace_resource(start_n: int) -> str:
+    """Follow _conv_reverse back from start_n until we see a loaded conveyor.
+    Returns 'raw', 'ti', or 'refined'. Defaults to 'ti' if nothing found."""
     seen = 0
     cur = start_n
     raw = map_info._bm_conv_raw_ax
-    ti = map_info._bm_conv_ti_or_refined
+    ti = map_info._bm_conv_ti
+    refined = map_info._bm_conv_refined
     reverse = map_info._conv_reverse
     while cur is not None:
         bit = 1 << cur
@@ -24,15 +26,17 @@ def _trace_raw_ax(start_n: int) -> bool:
             break
         seen |= bit
         if raw & bit:
-            return True
+            return 'raw'
+        if refined & bit:
+            return 'refined'
         if ti & bit:
-            return False
+            return 'ti'
         feeders = reverse[cur] & ~seen
         if not feeders:
             break
         lsb = feeders & -feeders
         cur = lsb.bit_length() - 1
-    return False
+    return 'ti'
 
 def init(c: Controller):
     global rc, nav
@@ -149,7 +153,8 @@ def run():
     dead_ends = _dead_end_conveyors() & ~avoid
     orphans = _orphan_harvesters() & ~avoid
     foundries = _orphan_foundries() & ~avoid
-    units.builder.draw_mask(foundries, 255, 0, 0)
+    # units.builder.draw_mask(foundries, 255, 0, 0)
+    # units.builder.draw_mask(nav._get_conveyor_targets_and_avoid(True)[0], 0, 255, 0)
 
     candidates = dead_ends | orphans | foundries
     # units.builder.draw_mask(dead_ends, 0, 255, 0)
@@ -174,9 +179,12 @@ def run():
     path = []
     best_n = best.x + best.y * width
     is_foundry = bool(foundries & best_bit)
-    is_raw_ax = _trace_raw_ax(best_n)
+    resource = _trace_resource(best_n)
+    is_raw_ax = (resource == 'raw')
+    is_refined = (resource == 'refined')
     if is_foundry:
         is_raw_ax = False
+        is_refined = True
     if is_harvester or is_foundry:
         best_bit_env = 1 << best_n
         if map_info._bm_env[map_info._IDX_ENV_ORE_AX] & best_bit_env:

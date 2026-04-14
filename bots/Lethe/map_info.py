@@ -146,7 +146,8 @@ _bm_routable: int = 0           # my team's conveyor-type buildings
 _bm_route_targets: int = 0      # tiles route state can path toward
 _bm_conv_loaded: int = 0        # conveyor-type buildings with a stored resource
 _bm_conv_raw_ax: int = 0        # conveyors observed containing raw axionite
-_bm_conv_ti_or_refined: int = 0 # conveyors observed containing titanium or refined axionite
+_bm_conv_ti: int = 0            # conveyors observed containing titanium
+_bm_conv_refined: int = 0       # conveyors observed containing refined axionite
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
 _bm_visible: int = 0              # tiles visible this turn
@@ -426,7 +427,7 @@ def _compute_enemy_turret_threat() -> int:
 
 def update_at(pos: Position) -> None:
     """Re-scan a single tile from the controller and update all bitmasks. Call after any build/destroy."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti_or_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged
     if not in_bounds(pos):
         return
 
@@ -456,7 +457,8 @@ def update_at(pos: Position) -> None:
         _bm_conveyors &= ~bit
         _bm_conv_loaded &= ~bit
         _bm_conv_raw_ax &= ~bit
-        _bm_conv_ti_or_refined &= ~bit
+        _bm_conv_ti &= ~bit
+        _bm_conv_refined &= ~bit
         _bm_dead_end &= ~bit
         _bm_damaged &= ~bit
         _bm_very_damaged &= ~bit
@@ -496,15 +498,22 @@ def update_at(pos: Position) -> None:
         if res is None:
             _bm_conv_loaded &= ~bit
             _bm_conv_raw_ax &= ~bit
-            _bm_conv_ti_or_refined &= ~bit
+            _bm_conv_ti &= ~bit
+            _bm_conv_refined &= ~bit
         else:
             _bm_conv_loaded |= bit
             if res == ResourceType.RAW_AXIONITE:
                 _bm_conv_raw_ax |= bit
-                _bm_conv_ti_or_refined &= ~bit
-            else:
-                _bm_conv_ti_or_refined |= bit
+                _bm_conv_ti &= ~bit
+                _bm_conv_refined &= ~bit
+            elif res == ResourceType.TITANIUM:
+                _bm_conv_ti |= bit
                 _bm_conv_raw_ax &= ~bit
+                _bm_conv_refined &= ~bit
+            else:
+                _bm_conv_refined |= bit
+                _bm_conv_raw_ax &= ~bit
+                _bm_conv_ti &= ~bit
         if _building_conv_target[n]:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
             if team_idx == _TM_INT[_rc.get_team()]:
@@ -765,7 +774,7 @@ def _compute_route_targets() -> int:
                 pass
             elif not (ore_accepting & tbit):
                 dead_ends |= lsb
-            elif (_bm_conv_raw_ax & lsb) and (_bm_conv_ti_or_refined & tbit):
+            elif (_bm_conv_raw_ax & lsb) and ((_bm_conv_ti | _bm_conv_refined) & tbit):
                 dead_ends |= lsb
         else:
             dead_ends |= lsb
@@ -806,7 +815,7 @@ def _compute_route_targets() -> int:
 
             if my_convs & tbit:
                 downstream += 1
-                if downstream >= 4:
+                if downstream >= 8:
                     break
                 cur = tbit
                 cur_n = tn
@@ -849,7 +858,7 @@ def update() -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti_or_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse
     global _bm_seen, _bm_visible, _prev_pos
     global _bm_friendly_bots, _bm_enemy_bots
     rc = _rc
@@ -864,7 +873,8 @@ def update() -> None:
     bm_seen = _bm_seen
     bm_conv_loaded = _bm_conv_loaded
     bm_conv_raw_ax = _bm_conv_raw_ax
-    bm_conv_ti_or_refined = _bm_conv_ti_or_refined
+    bm_conv_ti = _bm_conv_ti
+    bm_conv_refined = _bm_conv_refined
     conv_reverse = _conv_reverse
     my_team_idx_local = _TM_INT[rc.get_team()]
 
@@ -995,15 +1005,22 @@ def update() -> None:
                 if res is None:
                     bm_conv_loaded &= ~bit
                     bm_conv_raw_ax &= ~bit
-                    bm_conv_ti_or_refined &= ~bit
+                    bm_conv_ti &= ~bit
+                    bm_conv_refined &= ~bit
                 else:
                     bm_conv_loaded |= bit
                     if res == ResourceType.RAW_AXIONITE:
                         bm_conv_raw_ax |= bit
-                        bm_conv_ti_or_refined &= ~bit
-                    else:
-                        bm_conv_ti_or_refined |= bit
+                        bm_conv_ti &= ~bit
+                        bm_conv_refined &= ~bit
+                    elif res == ResourceType.TITANIUM:
+                        bm_conv_ti |= bit
                         bm_conv_raw_ax &= ~bit
+                        bm_conv_refined &= ~bit
+                    else:
+                        bm_conv_refined |= bit
+                        bm_conv_raw_ax &= ~bit
+                        bm_conv_ti &= ~bit
         else:
             # Clear old bits if replacing a different building
             if building_id[n] != 0:
@@ -1055,15 +1072,22 @@ def update() -> None:
                 if res is None:
                     bm_conv_loaded &= ~bit
                     bm_conv_raw_ax &= ~bit
-                    bm_conv_ti_or_refined &= ~bit
+                    bm_conv_ti &= ~bit
+                    bm_conv_refined &= ~bit
                 else:
                     bm_conv_loaded |= bit
                     if res == ResourceType.RAW_AXIONITE:
                         bm_conv_raw_ax |= bit
-                        bm_conv_ti_or_refined &= ~bit
-                    else:
-                        bm_conv_ti_or_refined |= bit
+                        bm_conv_ti &= ~bit
+                        bm_conv_refined &= ~bit
+                    elif res == ResourceType.TITANIUM:
+                        bm_conv_ti |= bit
                         bm_conv_raw_ax &= ~bit
+                        bm_conv_refined &= ~bit
+                    else:
+                        bm_conv_refined |= bit
+                        bm_conv_raw_ax &= ~bit
+                        bm_conv_ti &= ~bit
 
             if et is EntityType.CORE:
                 if _my_core is None and team_val == my_team:
@@ -1141,7 +1165,8 @@ def update() -> None:
 
     _bm_conv_loaded = bm_conv_loaded
     _bm_conv_raw_ax = bm_conv_raw_ax
-    _bm_conv_ti_or_refined = bm_conv_ti_or_refined
+    _bm_conv_ti = bm_conv_ti
+    _bm_conv_refined = bm_conv_refined
 
     # --- Update builder bot tracking ---
     _bm_friendly_bots = 0

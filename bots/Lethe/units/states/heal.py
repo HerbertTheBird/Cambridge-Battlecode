@@ -109,7 +109,7 @@ def _heal_targets():
 
 def score():
     if _very_damaged_targets():
-        units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
+        # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 7
     if _find_chase_target() is not None:
         return 7
