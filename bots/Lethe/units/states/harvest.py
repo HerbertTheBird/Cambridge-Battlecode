@@ -70,7 +70,7 @@ def _too_expensive():
     ti = rc.get_global_resources()[0]
     result = 0
     for n, cost in _cost_map.items():
-        print(n%map_info._width, n//map_info._width, cost)
+        # print(n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     return result

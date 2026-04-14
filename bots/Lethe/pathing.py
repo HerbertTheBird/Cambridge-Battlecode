@@ -26,7 +26,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 bridge_cost = 10
 barrier_cost = 10
 threat_cost = 20
-
+conveyor_end_cost = 10
 
 
 
@@ -413,7 +413,7 @@ class Pathing:
                 target |= 1 << (p.x + p.y * width)
 
         # avoid_p is already a bitmask; just clear start/target from it
-        avoid = avoid_p & ~start & ~target
+        avoid = avoid_p & ~start
 
         CONV = self.CONV
         DIRS = self.DIRS
@@ -449,8 +449,8 @@ class Pathing:
         else:
             t_core = target & ~convs
             t_conv = target & convs
-            can_visit = [t_core] + [0] * bridge_cost
-            can_visit[bridge_cost] |= t_conv
+            can_visit = [t_core] + [0] * conveyor_end_cost
+            can_visit[conveyor_end_cost] |= t_conv
 
         i = 0
         stuck = 0
@@ -484,7 +484,6 @@ class Pathing:
             while True:
                 frontier = can_visit[i] & ~visited
                 visited |= frontier
-
                 if frontier & start:
                     end_time = time.perf_counter_ns()
                     self.path = self.reconstruct_path(
