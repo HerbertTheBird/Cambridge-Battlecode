@@ -122,15 +122,16 @@ def mark(target_idx, type):
     print("mark", target_idx, type)
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
     val = encode(target_idx, type, sym)
+    adjacent_tiles = rc.get_nearby_tiles(2)
     # Pass 1: empty tiles, not bad spots
-    for i in rc.get_nearby_tiles(2):
+    for i in adjacent_tiles:
         if not rc.get_tile_building_id(i) and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
             rc.place_marker(i, val)
             return
     # Pass 2: overwrite my marker, not bad spots.
     # Destroy first so the replacement has a fresh entity id, which is how
     # receivers detect that the marker is new.
-    for i in rc.get_nearby_tiles(2):
+    for i in adjacent_tiles:
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
             if rc.can_destroy(i):
@@ -138,7 +139,7 @@ def mark(target_idx, type):
             rc.place_marker(i, val)
             return
     # Pass 3: destroy my road, not bad spots
-    for i in rc.get_nearby_tiles(2):
+    for i in adjacent_tiles:
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and not _is_bad_marker_spot(i) and not rc.get_tile_builder_bot_id(i):
             if rc.can_destroy(i):
