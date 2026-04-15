@@ -38,16 +38,20 @@ def rebuild_broken_barriers(rc: Controller):
         return
 
     my_pos = rc.get_position()
+    my_team = rc.get_team()
+    current_round = rc.get_current_round()
+    
     rebuilt_pos = None
+    
     for p in destroyed_barriers:
         if p == my_pos:
             continue
         if my_pos.distance_squared(p) > 2:
             continue
-        if destroyed_barriers[p]+1 > rc.get_current_round():
+        if destroyed_barriers[p]+1 > current_round:
             continue
         id = rc.get_tile_building_id(p)
-        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p) and rc.get_action_cooldown() == 0:
+        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == my_team and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p):
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_barrier(p):
