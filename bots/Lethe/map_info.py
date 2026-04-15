@@ -559,7 +559,8 @@ def update_move() -> None:
         pos = Position(n % width, n // width)
         update_at(pos)
         mask ^= lsb
-        pathing.rebuild_broken_barriers(rc)
+    
+    pathing.rebuild_broken_barriers(rc)
 
 
 def init(c: Controller):
