@@ -603,7 +603,7 @@ class Pathing:
             if start_mask == 0:
                 return None
         else:
-            start_mask = 1 << (start.x + start.y * w)
+            start_mask = 1 << (map_info._building_conv_target[start.x + start.y * w])
         end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
         result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
         if result is None:
