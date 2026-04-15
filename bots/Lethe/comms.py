@@ -15,7 +15,6 @@ _TYPE_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
 rc: Controller
 ENCRYPT = True
 key = 0
-prev_messages = dict()
 _marker_at = {}  # physical tile index -> (marker entity id, decrypted val)
 _my_markers = set()  # entity ids of markers this bot placed
 def random_hash() -> int:
@@ -53,10 +52,8 @@ def get_new_messages():
     my_team = map_info._my_team
     marker_type = EntityType.MARKER
     width = rc.get_map_width()
-    current_round = rc.get_current_round()
     marker_at = _marker_at
     my_markers = _my_markers
-    messages_seen = prev_messages
 
     messages = []
     append = messages.append
@@ -71,9 +68,7 @@ def get_new_messages():
 
             # Skip markers this bot placed itself.
             if id in my_markers:
-                old_entry = marker_at.pop(pos_n, None)
-                if old_entry is not None:
-                    messages_seen.pop(old_entry[1], None)
+                marker_at.pop(pos_n, None)
                 continue
 
             # Freshness is tracked by marker entity id: a new marker id at
@@ -84,11 +79,7 @@ def get_new_messages():
 
             val = get_marker_value(id) ^ key
 
-            if old_entry is not None:
-                messages_seen.pop(old_entry[1], None)
             marker_at[pos_n] = (id, val)
-
-            messages_seen[val] = current_round
             # Off for now while testing feature
             # comms_positional.record_marker_read()
             # comms_positional.apply_message(pos, decode_sym(val), decode_sample_bits(val))
@@ -97,19 +88,18 @@ def get_new_messages():
     # Cleanup: tracked markers that are now gone from visible tiles
     to_remove = []
     bm_visible = map_info._bm_visible
-    for pos_n, (_mid, old_val) in marker_at.items():
+    for pos_n in marker_at:
         if pos_n in seen_positions:
             continue
         if bm_visible & (1 << pos_n):
             to_remove.append(pos_n)
-            messages_seen.pop(old_val, None)
     for pos_n in to_remove:
         del marker_at[pos_n]
     return messages
 
 def get_messages():
     get_new_messages()
-    return list(prev_messages.keys())
+    return [val for _mid, val in _marker_at.values()]
 
 def decode_location(v):
     return v & _POS_MASK
