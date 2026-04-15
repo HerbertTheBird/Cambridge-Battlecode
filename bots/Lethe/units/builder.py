@@ -126,31 +126,8 @@ def run():
             best_state = i
     best_state.run()
     # Heal the most damaged adjacent building, fall back to self
-    best_heal = None
-    best_heal_damage = -1
-    w = map_info._width
-    my_team_idx = map_info._my_team_idx
-    healable = map_info._bm_team[my_team_idx] & map_info._bm_damaged
-    for d in Direction:
-        p = rc.get_position().add(d)
-        if not map_info.in_bounds(p):
-            continue
-        pbit = 1 << (p.x + p.y * w)
-        if not (healable & pbit):
-            continue
-        if not rc.can_heal(p):
-            continue
-        n = p.x + p.y * w
-        hp = map_info._building_hp[n]
-        et_idx = map_info._building_et_idx[n]
-        if et_idx >= 0:
-            damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
-            if damage > best_heal_damage:
-                best_heal_damage = damage
-                best_heal = p
-    if best_heal is not None:
-        rc.heal(best_heal)
-    elif rc.can_heal(rc.get_position()):
+    heal._do_best_heal()
+    if rc.can_heal(rc.get_position()):
         rc.heal(rc.get_position())
     # if rc.get_tile_building_id(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team() and rc.can_fire(rc.get_position()):
     #     rc.fire(rc.get_position())
