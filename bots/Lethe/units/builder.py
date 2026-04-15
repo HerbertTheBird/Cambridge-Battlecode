@@ -7,6 +7,8 @@ import sys
 import map_info
 import pathing
 import comms
+import comms_positional
+import comms_stats
 
 import units.states.explore  as explore
 import units.states.disrupt  as disrupt
@@ -29,6 +31,8 @@ def init(c: Controller):
     harvest_radius = (c.get_map_width() + c.get_map_height()) // 3
     map_info.init(c)
     comms.init(c)
+    if comms_stats.is_enabled():
+        comms_stats.init(c)
     for s in states:
         s.init(c)
 
@@ -37,6 +41,7 @@ _forget_rounds = [dict() for _ in range(len(states) + 1)]  # idx -> round for ex
 
 def handle_comms():
     current_round = rc.get_current_round()
+    comms_positional.start_round_stats()
     for v in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
@@ -61,6 +66,7 @@ def handle_comms():
             if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 3 < current_round:
                 del _forget_rounds[i][idx]
                 forget[i] &= ~(1 << idx)
+    comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
@@ -102,8 +108,9 @@ def _compute_voronoi_harvest_zone():
 
 def run():
     global _harvest_zone, _harvest_zone_final
-    map_info.update()
+    map_info.update(recompute=False)
     handle_comms()
+    map_info.recompute_derived()
     pathing.rebuild_broken_barriers(rc)
     if map_info._my_core and not _harvest_zone_final:
         if map_info._solved_sym and map_info._predicted_enemy_core is not None:

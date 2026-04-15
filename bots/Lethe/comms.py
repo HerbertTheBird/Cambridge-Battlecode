@@ -1,10 +1,17 @@
 from cambc import Controller, Position, EntityType, GameError
 import map_info
+import comms_positional
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 SYM_BITS = 3
 POS_BITS = 12
+SAMPLE_BITS = 9
+TYPE_BITS = 32 - POS_BITS - SYM_BITS - SAMPLE_BITS
 _SYM_MASK = (1 << SYM_BITS) - 1
 _POS_MASK = (1 << POS_BITS) - 1
+_SAMPLE_MASK = (1 << SAMPLE_BITS) - 1
+_TYPE_MASK = (1 << TYPE_BITS) - 1
+_SAMPLE_SHIFT = POS_BITS + SYM_BITS
+_TYPE_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
 rc: Controller
 ENCRYPT = True
 key = 0
@@ -78,6 +85,9 @@ def get_new_messages():
             if not new:
                 continue
             prev_messages[val] = rc.get_current_round()
+            # Off for now while testing feature
+            # comms_positional.record_marker_read()
+            # comms_positional.apply_message(pos, decode_sym(val), decode_sample_bits(val))
             append(val)
 
     # Cleanup: tracked markers that are now gone from visible tiles
@@ -92,17 +102,31 @@ def get_new_messages():
     for pos_n in to_remove:
         del _marker_at[pos_n]
     return messages
+
 def get_messages():
     get_new_messages()
     return list(prev_messages.keys())
+
 def decode_location(v):
     return v & _POS_MASK
+
 def decode_sym(v):
     return (v >> POS_BITS) & _SYM_MASK
+
+def decode_sample_bits(v):
+    return (v >> _SAMPLE_SHIFT) & _SAMPLE_MASK
+
 def decode_type(v):
-    return v >> (POS_BITS + SYM_BITS)
-def encode(target, type, sym=0):
-    return ((target & _POS_MASK) + (sym << POS_BITS) + (type << (POS_BITS + SYM_BITS))) ^ key
+    return (v >> _TYPE_SHIFT) & _TYPE_MASK
+
+def encode(target, type, sym=0, sample_bits=0):
+    return (
+        (target & _POS_MASK)
+        | ((sym & _SYM_MASK) << POS_BITS)
+        | ((sample_bits & _SAMPLE_MASK) << _SAMPLE_SHIFT)
+        | ((type & _TYPE_MASK) << _TYPE_SHIFT)
+    ) ^ key
+
 def _is_bad_marker_spot(pos):
     """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
     w = map_info._width
@@ -116,11 +140,11 @@ def _is_bad_marker_spot(pos):
             return True
     return False
 
+def get_sym_bits() -> int:
+    return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
+
 def mark(target_idx, type):
     print("mark", target_idx, type)
-
-    sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
-    val = encode(target_idx, type, sym)
 
     adjacent_tiles = rc.get_nearby_tiles(2)
 
@@ -160,6 +184,10 @@ def mark(target_idx, type):
     # Execute best fallback
     if best:
         priority, pos, tile_id = best
+        sym = get_sym_bits()
+        sample_bits = 0
+        # sample_bits = comms_positional.encode_sample_bits(pos, sym)
+        val = encode(target_idx, type, sym, sample_bits)
 
         _my_markers.discard(tile_id)
         if tile_id is not None and rc.can_destroy(pos):
