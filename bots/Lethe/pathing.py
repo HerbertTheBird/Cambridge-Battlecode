@@ -32,18 +32,17 @@ conveyor_end_cost = 10
 
 destroyed_barriers = dict()
 def rebuild_broken_barriers(rc: Controller):
-    barrier_cost = rc.get_barrier_cost()[0]
+    if  rc.get_global_resources()[0] < rc.get_barrier_cost()[0]:
+        return
+
     my_pos = rc.get_position()
     rebuilt_pos = None
-    global_titanium = rc.get_global_resources()[0]
     for p in destroyed_barriers:
-        if not rc.is_in_vision(p):
-            continue
-        if destroyed_barriers[p]+1 > rc.get_current_round():
-            continue
         if p == my_pos:
             continue
-        if global_titanium < barrier_cost:
+        if my_pos.distance_squared(p) > 2:
+            continue
+        if destroyed_barriers[p]+1 > rc.get_current_round():
             continue
         id = rc.get_tile_building_id(p)
         if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p) and rc.get_action_cooldown() == 0:
