@@ -129,7 +129,7 @@ def run():
     best_heal = None
     best_heal_damage = -1
     w = map_info._width
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     healable = map_info._bm_team[my_team_idx] & map_info._bm_damaged
     for d in Direction:
         p = rc.get_position().add(d)

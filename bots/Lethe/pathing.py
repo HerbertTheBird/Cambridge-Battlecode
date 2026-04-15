@@ -38,7 +38,7 @@ def rebuild_broken_barriers(rc: Controller):
         return
 
     my_pos = rc.get_position()
-    my_team = rc.get_team()
+    my_team = map_info._my_team
     current_round = rc.get_current_round()
     
     rebuilt_pos = None
@@ -255,7 +255,7 @@ class Pathing:
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
         avoid &= ~start_mask
-        my_team_idx = map_info._TM_INT[self.rc.get_team()]
+        my_team_idx = map_info._my_team_idx
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
         barriers &= ~start_mask
 
@@ -535,7 +535,7 @@ class Pathing:
         return cost
     def raw_ax_foundry_sites(self):
         w = map_info._width
-        my_idx = map_info._TM_INT[self.rc.get_team()]
+        my_idx = map_info._my_team_idx
         enemy_idx = 1 - my_idx
         harv_on_ore = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_idx] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]
         my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY] & map_info._bm_team[my_idx]

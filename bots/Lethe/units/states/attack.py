@@ -78,7 +78,7 @@ def get_best_direction(pos):
     h = map_info._height
     px, py = pos.x, pos.y
 
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_buildings = map_info._bm_team[1 - my_team_idx]
     my_buildings = map_info._bm_team[my_team_idx]
     walls = map_info._bm_env[map_info._IDX_ENV_WALL]
@@ -174,7 +174,7 @@ def get_best_direction(pos):
 
 def _my_turret_coverage():
     """Bitmask of all tiles my turrets can attack (regardless of ammo)."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     my_team_bm = map_info._bm_team[my_team_idx]
     w = map_info._width
     h = map_info._height
@@ -232,7 +232,7 @@ def _my_turret_coverage():
 
 def _high_value_targets():
     """Bitmask of enemy high-value buildings not already covered by my turrets."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     enemy = map_info._bm_team[enemy_idx]
 
@@ -254,7 +254,7 @@ def _high_value_targets():
 
 def _placement_candidates():
     """Bitmask of tiles where a turret could be placed."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     my_team = map_info._bm_team[my_team_idx]
     enemy_team = map_info._bm_team[enemy_idx]
@@ -351,7 +351,7 @@ def _get_attack_candidates():
         return 0, 0
 
     # Split into non-enemy-roaded vs enemy-roaded
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     enemy_roads = map_info._bm_et[map_info._IDX_ROAD] & map_info._bm_team[enemy_idx]
 
@@ -379,7 +379,7 @@ def run():
         return
 
     width = map_info._width
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     candidates = non_roaded | roaded
 
     # Evaluate all adjacent candidate tiles and pick highest scoring
@@ -433,9 +433,11 @@ def run():
     is_enemy_road = best_is_enemy_road
     print(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
 
+    my_team = map_info._my_team
+
     count = 0
     for uid in rc.get_nearby_units(4):
-        if rc.get_entity_type(uid) != map_info._ET_BUILDER_BOT or rc.get_team(uid) == rc.get_team():
+        if rc.get_entity_type(uid) != map_info._ET_BUILDER_BOT or rc.get_team(uid) == my_team:
             continue
         count += 1
 
