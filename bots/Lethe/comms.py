@@ -1,19 +1,17 @@
 from cambc import Controller, Position, EntityType, GameError
 import map_info
 #type = 0:launch, 1:explore, 2:harvest, 3:route
-TURN_BITS = 1
 SYM_BITS = 3
 POS_BITS = 12
 ID_BITS = 12 # mod 4096
 _ID_MASK = (1 << ID_BITS) - 1
-_TURN_MASK = (1 << TURN_BITS) - 1
 _SYM_MASK = (1 << SYM_BITS) - 1
 _POS_MASK = (1 << POS_BITS) - 1
 rc: Controller
 ENCRYPT = True
 key = 0
 prev_messages = dict()
-_marker_at = {}  # physical tile index -> decrypted val
+_marker_at = {}  # physical tile index -> (marker entity id, decrypted val)
 def random_hash() -> int:
     # Force inputs into 32-bit unsigned space
     a = rc.get_map_width()
@@ -63,16 +61,16 @@ def get_new_messages():
             pos_n = pos.x + pos.y * width
             seen_positions.add(pos_n)
 
-            # If this position had a different marker before, clean it up
-            old_val = _marker_at.get(pos_n)
-            if old_val is not None and old_val != val:
-                prev_messages.pop(old_val, None)
-            new = old_val is None or old_val != val
-            _marker_at[pos_n] = val
+            # Freshness is tracked by marker entity id: a new marker id at
+            # this position means the content was replaced since last turn.
+            old_entry = _marker_at.get(pos_n)
+            new = old_entry is None or old_entry[0] != id
+            if old_entry is not None and old_entry[0] != id:
+                prev_messages.pop(old_entry[1], None)
+            _marker_at[pos_n] = (id, val)
 
             if (rc.get_id()&_ID_MASK) == decode_id(val):
                 remove.add(val >> ID_BITS)
-                remove.add((val^(1<<(ID_BITS+POS_BITS))) >> ID_BITS)
             if not new:
                 continue
             prev_messages[val] = rc.get_current_round()
@@ -80,7 +78,7 @@ def get_new_messages():
 
     # Cleanup: tracked markers that are now gone from visible tiles
     to_remove = []
-    for pos_n, old_val in _marker_at.items():
+    for pos_n, (_mid, old_val) in _marker_at.items():
         if pos_n in seen_positions:
             continue
         p = Position(pos_n % width, pos_n // width)
@@ -99,13 +97,11 @@ def decode_location(v):
 def decode_id(v):
     return v & _ID_MASK
 def decode_type(v):
-    return (v >> (ID_BITS + POS_BITS + TURN_BITS + SYM_BITS))
-def decode_turn(v):
-    return (v >> (ID_BITS + POS_BITS)) & _TURN_MASK
+    return (v >> (ID_BITS + POS_BITS + SYM_BITS))
 def decode_sym(v):
-    return (v >> (ID_BITS + POS_BITS + TURN_BITS)) & _SYM_MASK
+    return (v >> (ID_BITS + POS_BITS)) & _SYM_MASK
 def encode(target, type, sym=0):
-    return ((rc.get_id()&_ID_MASK) + ((target&_POS_MASK) << ID_BITS) + ((rc.get_current_round()&_TURN_MASK)<<(ID_BITS+POS_BITS)) + (sym << (ID_BITS + POS_BITS + TURN_BITS)) + (type << (ID_BITS + POS_BITS + TURN_BITS + SYM_BITS)))^key
+    return ((rc.get_id()&_ID_MASK) + ((target&_POS_MASK) << ID_BITS) + (sym << (ID_BITS + POS_BITS)) + (type << (ID_BITS + POS_BITS + SYM_BITS)))^key
 def _is_bad_marker_spot(pos):
     """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
     w = map_info._width
@@ -131,10 +127,14 @@ def mark(target_idx, type):
         if not rc.get_tile_building_id(i) and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
             rc.place_marker(i, val)
             return
-    # Pass 2: overwrite my marker, not bad spots
+    # Pass 2: overwrite my marker, not bad spots.
+    # Destroy first so the replacement has a fresh entity id, which is how
+    # receivers detect that the marker is new.
     for i in rc.get_nearby_tiles(2):
         id = rc.get_tile_building_id(i)
         if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
+            if rc.can_destroy(i):
+                rc.destroy(i)
             rc.place_marker(i, val)
             return
     # Pass 3: destroy my road, not bad spots
