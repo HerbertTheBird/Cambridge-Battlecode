@@ -86,10 +86,11 @@ def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
     result = 0
 
     for i, (dx, dy) in enumerate(OFFSETS):
-        check = Position(corresponding.x + dx, corresponding.y + dy)
-        if not map_info.in_bounds(check):
+        x = corresponding.x + dx
+        y = corresponding.y + dy
+        if not map_info.in_bounds_coords(x, y):
             continue
-        bit = 1 << (check.x + check.y * width)
+        bit = 1 << (x + y * width)
         if (seen & bit) and (env_mask & bit):
             result |= 1 << i
     return result
@@ -99,8 +100,10 @@ def decode_sample_positions(marker_pos: Position, sample_bits: int, sym_bits: in
     for i, (dx, dy) in enumerate(OFFSETS):
         if not ((sample_bits >> i) & 1):
             continue
-        pos = Position(corresponding.x + dx, corresponding.y + dy)
-        if map_info.in_bounds(pos):
+        x = corresponding.x + dx
+        y = corresponding.y + dy
+        if map_info.in_bounds_coords(x, y):
+            pos = Position(x, y)
             yield pos
 
 def _new_stats():

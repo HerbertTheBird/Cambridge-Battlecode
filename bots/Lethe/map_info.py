@@ -270,6 +270,8 @@ def is_turret(type):
     return type in _TURRET_TYPES
 def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < _width and 0 <= pos.y < _height
+def in_bounds_coords(x, y) -> bool:
+    return 0 <= x < _width and 0 <= y < _height
 
 
 def positions_to_mask(positions) -> int:
