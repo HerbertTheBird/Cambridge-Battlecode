@@ -92,14 +92,15 @@ def score():
     return 4 if ((_dead_end_conveyors() & ~avoid) or (_orphan_harvesters() & ~avoid)) else 0
 
 def run():
+
     global unpathable
     print("ROUTE")
     avoid = avoid_mask()
     dead_ends = _dead_end_conveyors() & ~avoid
     orphans = _orphan_harvesters() & ~avoid
     candidates = dead_ends | orphans
-    units.builder.draw_mask(dead_ends, 0, 255, 0)
-    units.builder.draw_mask(orphans, 0, 0, 255)
+    # units.builder.draw_mask(dead_ends, 0, 255, 0)
+    # units.builder.draw_mask(orphans, 0, 0, 255)
 
     if not candidates:
         print("no candidates")
