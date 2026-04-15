@@ -858,7 +858,72 @@ def _compute_route_targets() -> int:
     result |= valid_convs
     return result
 
-def update() -> None:
+def recompute_derived() -> None:
+    """Rebuild derived bitmasks from the current tracked map state."""
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
+    global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
+    global _bm_enemy_turret_threat
+
+    width = _width
+    height = _height
+    my_team_idx = _my_team_idx
+    bm_et = _bm_et
+    bm_team = _bm_team
+    bm_env = _bm_env
+    building_conv_target = _building_conv_target
+
+    # Conveyors (all conveyor-type buildings + my core area)
+    _bm_conveyors = (
+        bm_et[_IDX_CONVEYOR]
+        | bm_et[_IDX_ARMOURED_CONVEYOR]
+        | bm_et[_IDX_BRIDGE]
+        | bm_et[_IDX_SPLITTER]
+    )
+
+    # Routable = my team's conveyor-type buildings
+    _bm_routable = _bm_conveyors & bm_team[my_team_idx]
+
+    _bm_route_targets = _compute_route_targets()
+
+    # Blocked = walls + non-passable buildings + enemy core area
+    _bm_blocked = bm_env[_IDX_ENV_WALL]
+    _bm_blocked |= bm_et[_IDX_HARVESTER] | bm_et[_IDX_FOUNDRY]
+    _bm_blocked |= bm_et[_IDX_GUNNER] | bm_et[_IDX_SENTINEL]
+    _bm_blocked |= bm_et[_IDX_BREACH] | bm_et[_IDX_LAUNCHER]
+    _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
+    _bm_blocked |= _bm_their_core_area
+
+    # Conveyor targets
+    _bm_conveyor_targets = 0
+    mask = _bm_conveyors
+    while mask:
+        lsb = mask & -mask
+        cn = lsb.bit_length() - 1
+        tn = building_conv_target[cn]
+        if tn:
+            _bm_conveyor_targets |= 1 << tn
+        mask ^= lsb
+
+    # Enemy launcher adjacency
+    enemy_launchers = bm_et[_IDX_LAUNCHER] & ~bm_team[my_team_idx]
+    _bm_enemy_launch_adj = 0
+    mask = enemy_launchers
+    while mask:
+        lsb = mask & -mask
+        ln = lsb.bit_length() - 1
+        lx = ln % width
+        ly = ln // width
+        for dx, dy in _DIRECTION_DELTAS.values():
+            nx = lx + dx
+            ny = ly + dy
+            if 0 <= nx < width and 0 <= ny < height:
+                _bm_enemy_launch_adj |= 1 << (nx + ny * width)
+        mask ^= lsb
+
+    # Enemy turret threat
+    _bm_enemy_turret_threat = _compute_enemy_turret_threat()
+
+def update(recompute: bool = True) -> None:
     print("updating")
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
@@ -908,8 +973,6 @@ def update() -> None:
     rc_get_direction          = rc.get_direction
     rc_get_bridge_target      = rc.get_bridge_target
     rc_get_tile_env           = rc.get_tile_env
-
-    idx_wall = _IDX_ENV_WALL
 
     for tile in visible_tiles:
         x = tile.x
@@ -1221,57 +1284,8 @@ def update() -> None:
         else:
             _bm_enemy_bots |= bit
 
-    # --- Compute derived bitmasks ---
-
-    # Conveyors (all conveyor-type buildings + my core area)
-    _bm_conveyors = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
-                     | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER])
-
-    # Routable = my team's conveyor-type buildings
-    _bm_routable = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
-                    | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER]) & bm_team[my_team_idx]
-
-    _bm_route_targets = _compute_route_targets()
-
-    # Blocked = walls + non-passable buildings + enemy core area
-    _bm_blocked = bm_env[idx_wall]
-    _bm_blocked |= bm_et[_IDX_HARVESTER] | bm_et[_IDX_FOUNDRY]
-    _bm_blocked |= bm_et[_IDX_GUNNER] | bm_et[_IDX_SENTINEL]
-    _bm_blocked |= bm_et[_IDX_BREACH] | bm_et[_IDX_LAUNCHER]
-    _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
-    _bm_blocked |= _bm_their_core_area
-
-    # Conveyor targets
-    _bm_conveyor_targets = 0
-    conv_mask = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
-                 | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER])
-    mask = conv_mask
-    while mask:
-        lsb = mask & -mask
-        cn = lsb.bit_length() - 1
-        tn = building_conv_target[cn]
-        if tn:
-            _bm_conveyor_targets |= 1 << tn
-        mask ^= lsb
-
-    # Enemy launcher adjacency
-    enemy_launchers = bm_et[_IDX_LAUNCHER] & ~bm_team[my_team_idx]
-    _bm_enemy_launch_adj = 0
-    mask = enemy_launchers
-    while mask:
-        lsb = mask & -mask
-        ln = lsb.bit_length() - 1
-        lx = ln % width
-        ly = ln // width
-        for dx, dy in _DIRECTION_DELTAS.values():
-            nx = lx + dx
-            ny = ly + dy
-            if 0 <= nx < width and 0 <= ny < height:
-                _bm_enemy_launch_adj |= 1 << (nx + ny * width)
-        mask ^= lsb
-
-    # Enemy turret threat
-    _bm_enemy_turret_threat = _compute_enemy_turret_threat()
+    if recompute:
+        recompute_derived()
 
 
 def is_tile_empty(pos: Position):
