@@ -10,10 +10,10 @@ nav: Pathing = None
 
 comm_flag = 6
 
-DIRECTIONS = [
+DIRECTIONS = (
     Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
     Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
-]
+)
 
 
 def init(c: Controller):
