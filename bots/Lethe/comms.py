@@ -118,38 +118,58 @@ def _is_bad_marker_spot(pos):
 
 def mark(target_idx, type):
     w = rc.get_map_width()
-    # target_pos = Position(target_idx % w, target_idx // w)
-    # rc.draw_indicator_line(rc.get_position(), target_pos, 0, 255, 0)
     print("mark", target_idx, type)
+
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
     val = encode(target_idx, type, sym)
+
     adjacent_tiles = rc.get_nearby_tiles(2)
-    # Pass 1: empty tiles, not bad spots
-    for i in adjacent_tiles:
-        if not rc.get_tile_building_id(i) and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
-            rc.place_marker(i, val)
-            _my_markers.add(rc.get_tile_building_id(i))
-            return
-    # Pass 2: overwrite my marker, not bad spots.
-    # Destroy first so the replacement has a fresh entity id, which is how
-    # receivers detect that the marker is new.
-    for i in adjacent_tiles:
-        id = rc.get_tile_building_id(i)
-        if id and rc.get_entity_type(id) == EntityType.MARKER and rc.get_team(id) == rc.get_team() and rc.can_place_marker(i) and not _is_bad_marker_spot(i):
-            _my_markers.discard(id)
-            if rc.can_destroy(i):
-                rc.destroy(i)
-            rc.place_marker(i, val)
-            _my_markers.add(rc.get_tile_building_id(i))
-            return
-    # Pass 3: destroy my road, not bad spots
-    for i in adjacent_tiles:
-        id = rc.get_tile_building_id(i)
-        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == rc.get_team() and not _is_bad_marker_spot(i) and not rc.get_tile_builder_bot_id(i):
-            if rc.can_destroy(i):
-                rc.destroy(i)
-                map_info.update_at(i)
-            if rc.can_place_marker(i):
-                rc.place_marker(i, val)
-                _my_markers.add(rc.get_tile_building_id(i))
-                return
+
+    best = None # (priority, pos, tile_id)
+
+    for pos in adjacent_tiles:
+        if _is_bad_marker_spot(pos):
+            continue
+
+        tile_id = rc.get_tile_building_id(pos)
+        can_place = rc.can_place_marker(pos)
+
+        # Priority 0: empty tile
+        if not tile_id:
+            if can_place:
+                best = (0, pos, None)
+                break
+            else:
+                continue
+
+        entity_type = rc.get_entity_type(tile_id)
+        same_team = rc.get_team(tile_id) == rc.get_team()
+
+        if not same_team:
+            continue
+
+        # Priority 1: overwrite own marker
+        if (entity_type == EntityType.MARKER and can_place):
+            if best is None or best[0] > 1:
+                best = (1, pos, tile_id)
+
+        # Priority 2: replace own road
+        elif (entity_type == EntityType.ROAD and not rc.get_tile_builder_bot_id(pos)):
+            if best is None or best[0] > 2:
+                best = (2, pos, tile_id)
+
+    # Execute best fallback
+    if best:
+        priority, pos, tile_id = best
+
+        _my_markers.discard(tile_id)
+        if tile_id is not None and rc.can_destroy(pos):
+            rc.destroy(pos)
+            
+            # Don't bother updating map if we replaced marker with marker
+            if priority == 2:
+                map_info.update_at(pos)
+
+        if rc.can_place_marker(pos):
+            rc.place_marker(pos, val)
+            _my_markers.add(rc.get_tile_building_id(pos))
