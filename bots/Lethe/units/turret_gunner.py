@@ -20,17 +20,17 @@ def init(c: Controller):
     global rc, my_pos, my_team, last_fired_round, skipped_firing_turns
     rc = c
     my_pos = rc.get_position()
-    my_team = rc.get_team()
     last_fired_round = rc.get_current_round()
     skipped_firing_turns = 0
     map_info.init(c)
+    my_team = map_info._my_team
 
 # --- Ported and adapted from dragonfruit/units/gunner/combat.py ---
 
 def _get_invalid_sabotage_locations() -> set[Position]:
     invalid_sabotage_locations = set()
     my_pos_local = rc.get_position()
-    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._TM_INT[rc.get_team()]]):
+    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
         front_positions = []
 
         if p.distance_squared(my_pos_local) <= 100:
@@ -168,8 +168,6 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
 def get_enemy_units():
     global my_team
     enemy_units = []
-    width = map_info._width
-    height = map_info._height
 
     for p in rc.get_nearby_tiles():
         # --- builder bots ---

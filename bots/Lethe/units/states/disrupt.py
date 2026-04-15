@@ -50,7 +50,7 @@ def run():
     best_n = best.x + best.y * width
     best_id = map_info._building_id[best_n]
     best_bit = 1 << best_n
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
 
     if best_id and (map_info._bm_team[my_team_idx] & best_bit):
         # Friendly road/marker — move adjacent and destroy

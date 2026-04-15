@@ -121,6 +121,8 @@ _rc: Controller
 _width = _height = 0
 _MAP_CENTER = None
 _prev_pos: Position = None
+_my_team: Team = None
+_my_team_idx: int = 0
 
 # Per-tile arrays (scalar values that can't be bitmasks)
 _building_id: list[int] = []
@@ -369,8 +371,7 @@ def _compute_enemy_turret_threat() -> int:
     Uses per-turret ray for gunner (wall blocking)."""
     w = _width
     h = _height
-    my_team_idx = _TM_INT[_rc.get_team()]
-    enemy_idx = 1 - my_team_idx
+    enemy_idx = 1 - _my_team_idx
     threat = 0
     building_dir = _building_dir
     bm_team_enemy = _bm_team[enemy_idx]
@@ -447,8 +448,7 @@ def update_at(pos: Position) -> None:
             tn = _building_conv_target[n]
             if tn:
                 _bm_conveyor_targets &= ~(1 << tn)
-            my_team_idx = _TM_INT[_rc.get_team()]
-            if (_bm_team[my_team_idx] & bit) and tn:
+            if (_bm_team[_my_team_idx] & bit) and tn:
                 _conv_reverse[tn] &= ~bit
         for i in range(_NUM_TEAM):
             if _bm_team[i] & bit:
@@ -521,7 +521,7 @@ def update_at(pos: Position) -> None:
                 _bm_conv_ti &= ~bit
         if _building_conv_target[n]:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
-            if team_idx == _TM_INT[_rc.get_team()]:
+            if team_idx == _my_team_idx:
                 _conv_reverse[_building_conv_target[n]] |= bit
 
     if et in (EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.GUNNER,
@@ -569,6 +569,7 @@ def update_move() -> None:
 
 def init(c: Controller):
     global _rc, _width, _height
+    global _my_team, _my_team_idx
     global _building_id, _building_et_idx, _building_hp, _building_dir, _building_conv_target, _conv_reverse
     global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
@@ -576,6 +577,8 @@ def init(c: Controller):
     global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2
     global _MAP_CENTER
     _rc = c
+    _my_team = _rc.get_team()
+    _my_team_idx = _TM_INT[_my_team]
     _width = _rc.get_map_width()
     _height = _rc.get_map_height()
     _MAP_CENTER = Position(_width // 2, _height // 2)
@@ -677,7 +680,7 @@ def build_core_areas() -> None:
     num_team = _NUM_TEAM
     if _my_core is not None:
         n = _my_core.x+_my_core.y*_width
-        my_team_idx = _TM_INT[_rc.get_team()]
+        my_team_idx = _my_team_idx
         for x in range(_my_core.x - 1, _my_core.x + 2):
             for y in range(_my_core.y - 1, _my_core.y + 2):
                 m = x+y*_width
@@ -696,7 +699,7 @@ def build_core_areas() -> None:
                 bm_team[my_team_idx] |= bit
     if _their_core is not None:
         n = _their_core.x+_their_core.y*_width
-        enemy_team_idx = 1 - _TM_INT[_rc.get_team()]
+        enemy_team_idx = 1 - _my_team_idx
         for x in range(_their_core.x - 1, _their_core.x + 2):
             for y in range(_their_core.y - 1, _their_core.y + 2):
                     m = x+y*_width
@@ -725,7 +728,7 @@ def _compute_route_targets() -> int:
     my_convs = _bm_routable
 
     conv_target = _building_conv_target
-    my_team_idx = _TM_INT[_rc.get_team()]
+    my_team_idx = _my_team_idx
     tiles = _width * _height
 
     valid_end = _bm_my_core_area
@@ -873,7 +876,7 @@ def update() -> None:
     bm_conv_ti = _bm_conv_ti
     bm_conv_refined = _bm_conv_refined
     conv_reverse = _conv_reverse
-    my_team_idx_local = _TM_INT[rc.get_team()]
+    my_team_idx_local = _my_team_idx
 
     num_et = _NUM_ET
     num_team = _NUM_TEAM
@@ -887,8 +890,8 @@ def update() -> None:
         bm_visible |= 1 << (tile.x + tile.y * _width)
     _bm_visible = bm_visible
 
-    my_team       = rc.get_team()
-    my_team_idx   = _TM_INT[my_team]
+    my_team       = _my_team
+    my_team_idx   = _my_team_idx
     my_pos        = rc.get_position()
     _prev_pos     = my_pos
     rc_get_tile_building_id   = rc.get_tile_building_id
@@ -1289,7 +1292,7 @@ def is_passable(pos: Position):
     bit = 1 << n
     if _bm_env[_IDX_ENV_WALL] & bit: return False
     if _building_id[n] == 0: return True
-    my_team_idx = _TM_INT[_rc.get_team()]
+    my_team_idx = _my_team_idx
     return bool(
         (_bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
          | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]

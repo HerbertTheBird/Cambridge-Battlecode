@@ -21,7 +21,7 @@ def init(c: Controller):
 
 def _conv_zone():
     """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
     my_convs |= map_info._bm_my_core_area
     if not my_convs:
@@ -55,7 +55,7 @@ def _claimed_enemy_ids():
 
 def _find_chase_target():
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
-    my_team = rc.get_team()
+    my_team = map_info._my_team
     zone = _conv_zone()
     if not zone:
         return None
@@ -93,7 +93,7 @@ def _find_chase_target():
 
 def _healable_mask():
     """Bitmask of friendly buildings."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     return map_info._bm_team[my_team_idx]
 
 
@@ -123,7 +123,7 @@ def _try_barrier_dead_ends():
     if not dead_ends:
         return
     # Only dead-end conveyors whose output is empty / marker / enemy building
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     enemy_any = map_info._bm_team[enemy_idx]
     marker = map_info._bm_et[map_info._IDX_MARKER]

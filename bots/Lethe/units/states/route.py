@@ -58,7 +58,7 @@ def _dead_end_conveyors():
 
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
     if not my_harvesters:
         return 0
@@ -75,7 +75,7 @@ def _orphan_harvesters():
     return my_harvesters & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
 def _orphan_foundries():
     """Bitmask of my foundries with no adjacent conveyor/turret/core."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY]
     if not my_foundries:
         return 0
@@ -102,8 +102,6 @@ def _orphan_foundries():
     return my_foundries & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
 def cant_claim():
     w = map_info._width
-    my_team = rc.get_team()
-    my_id = rc.get_id()
     my_pos = rc.get_position()
 
     # My 5x5 (2 Chebyshev) zone — always claimable
@@ -212,7 +210,7 @@ def run():
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
-        if (map_info._bm_team[1-map_info._TM_INT[rc.get_team()]] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
+        if (map_info._bm_team[1-map_info._my_team_idx] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
             new_path = nav.calculate_conveyor_path(Position(best_n%width, best_n//width), is_raw_ax, update=True)
             if new_path is not None and new_path[1] != path[0]:
                 path = new_path
@@ -224,7 +222,7 @@ def run():
             tc1_zone = map_info.expand_chebyshev(tc1_zone)
         if tc1_zone & map_info._bm_enemy_bots:
             near_enemy = True
-    if map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) == EntityType.ROAD and map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) != rc.get_team():
+    if map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) == EntityType.ROAD and map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) != map_info._my_team:
         target = target_conveyor[0]
         nav.move_to(target)
         if rc.can_fire(target):

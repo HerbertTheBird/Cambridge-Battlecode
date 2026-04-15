@@ -17,7 +17,7 @@ def init(c: Controller):
 def _sabotage_targets():
     """Bitmask of enemy conveyors/splitters/bridges (not armoured) that are
     not adjacent to a launcher and not in turret line of fire."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     enemy = map_info._bm_team[enemy_idx]
 
@@ -57,7 +57,7 @@ def _sabotage_targets():
     pruned_targets = 0
     invalid_sabotage_locations = set()
     my_pos = rc.get_position()
-    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._TM_INT[rc.get_team()]]):
+    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
         front_positions = []
         
         if p.distance_squared(my_pos) <= 100:

@@ -19,12 +19,12 @@ cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
 def possible_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
-    if (map_info._bm_team[map_info._TM_INT[rc.get_team()]] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1250:
+    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1250:
         ore |= map_info._bm_env[map_info._IDX_ENV_ORE_AX]
     return ore
 def harvestable_ore():
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
 
     # Enemy buildings that block harvesting (not road/conveyor/bridge/splitter/marker)
@@ -90,7 +90,7 @@ def run():
     print("HARVEST")
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     ore_mask = possible_ore()
     wall_mask = map_info._bm_env[map_info._IDX_ENV_WALL]
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
@@ -141,7 +141,7 @@ def run():
         return
 
     w = map_info._width
-    my_team_idx = map_info._TM_INT[rc.get_team()]
+    my_team_idx = map_info._my_team_idx
     best_n = best_ore.x + best_ore.y * w
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
     path = nav.calculate_conveyor_path(best_ore, is_raw_ax)

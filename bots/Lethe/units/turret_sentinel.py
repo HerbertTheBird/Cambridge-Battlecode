@@ -33,7 +33,7 @@ def init(c: Controller):
 
 def _should_stay():
     my_pos = rc.get_position()
-    my_team = rc.get_team()
+    my_team = map_info._my_team
     for dx, dy in CARDINAL_OFFSETS:
         p = Position(my_pos.x + dx, my_pos.y + dy)
         if map_info.in_bounds(p):
@@ -69,7 +69,7 @@ def _get_feeder_positions():
 
 
 def _tile_score(tile, feeders):
-    my_team = rc.get_team()
+    my_team = map_info._my_team
     if tile in feeders:
         return 0
     # Turrets hit builder bot first if present
@@ -90,7 +90,7 @@ def _prune_conveyor_targets(target_positions):
     pruned_targets = 0
     invalid_sabotage_locations = set()
     my_pos = rc.get_position()
-    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._TM_INT[rc.get_team()]]):
+    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
         front_positions = []
 
         if p.distance_squared(my_pos) <= 100:

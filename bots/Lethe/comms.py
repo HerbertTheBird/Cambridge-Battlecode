@@ -43,7 +43,7 @@ def get_new_messages():
     get_entity_type = rc.get_entity_type
     get_marker_value = rc.get_marker_value
     rc_get_position = rc.get_position
-    my_team = get_team()
+    my_team = map_info._my_team
     marker_type = EntityType.MARKER
     width = rc.get_map_width()
 
@@ -142,7 +142,7 @@ def mark(target_idx, type):
                 continue
 
         entity_type = rc.get_entity_type(tile_id)
-        same_team = rc.get_team(tile_id) == rc.get_team()
+        same_team = rc.get_team(tile_id) == map_info._my_team
 
         if not same_team:
             continue
