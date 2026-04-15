@@ -34,6 +34,8 @@ destroyed_barriers = dict()
 def rebuild_broken_barriers(rc: Controller):
     if  rc.get_global_resources()[0] < rc.get_barrier_cost()[0]:
         return
+    if rc.get_action_cooldown() > 0:
+        return
 
     my_pos = rc.get_position()
     rebuilt_pos = None
