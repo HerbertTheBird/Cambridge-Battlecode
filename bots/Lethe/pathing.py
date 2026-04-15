@@ -460,10 +460,7 @@ class Pathing:
             self.forget_launcher.clear()
         avoid = map_info.get_avoid(False, True, False)
         if avoid_empty:
-            has_building = 0
-            for i in range(map_info._NUM_ET):
-                has_building |= map_info._bm_et[i]
-            avoid |= map_info._bm_seen & ~has_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+            avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = self.rc.get_position()
         if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1

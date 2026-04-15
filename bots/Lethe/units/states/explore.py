@@ -27,10 +27,7 @@ def generate_explore_target():
     board = (1 << (w * map_info._height)) - 1
     avoid = map_info.get_avoid(False, False, False)
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
-        has_building = 0
-        for i in range(map_info._NUM_ET):
-            has_building |= map_info._bm_et[i]
-        avoid |= map_info._bm_seen & ~has_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+        avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
     passable = ~avoid & board
 
     # Seed with all other builders' claimed tiles + incremental steps from

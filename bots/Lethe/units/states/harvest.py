@@ -96,9 +96,7 @@ def run():
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
     marker_mask = map_info._bm_et[map_info._IDX_MARKER]
     harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
-    has_building = 0
-    for i in range(map_info._NUM_ET):
-        has_building |= map_info._bm_et[i]
+    has_building = map_info._bm_any_building
 
     for d in (Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST, Direction.NORTHWEST):
         p = rc.get_position().add(d)

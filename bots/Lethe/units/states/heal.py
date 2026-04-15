@@ -127,10 +127,7 @@ def _try_barrier_dead_ends():
     enemy_idx = 1 - my_team_idx
     enemy_any = map_info._bm_team[enemy_idx]
     marker = map_info._bm_et[map_info._IDX_MARKER]
-    any_building = 0
-    for i in range(map_info._NUM_ET):
-        any_building |= map_info._bm_et[i]
-    empty_mask = ~any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+    empty_mask = ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
 
     targets = 0
     mask = dead_ends
@@ -179,13 +176,12 @@ def _do_best_heal():
             continue
         n = p.x + p.y * w
         hp = map_info._building_hp[n]
-        for i in range(map_info._NUM_ET):
-            if map_info._bm_et[i] & pbit:
-                damage = map_info._MAX_HP_BY_IDX[i] - hp
-                if damage > best_heal_damage:
-                    best_heal_damage = damage
-                    best_heal = p
-                break
+        et_idx = map_info._building_et_idx[n]
+        if et_idx >= 0:
+            damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
+            if damage > best_heal_damage:
+                best_heal_damage = damage
+                best_heal = p
     if best_heal is not None:
         rc.heal(best_heal)
 

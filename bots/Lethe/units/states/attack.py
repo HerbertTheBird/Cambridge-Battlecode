@@ -111,12 +111,11 @@ def get_best_direction(pos):
                 if 0 <= sx < w and 0 <= sy < h:
                     sbit = 1 << (sx + sy * w)
                     if enemy_buildings & sbit:
-                        for i in range(map_info._NUM_ET):
-                            if map_info._bm_et[i] & sbit and (not core_counted or i != map_info._IDX_CORE):
-                                b_score += BUILDING_SCORE[i]
-                                if i == map_info._IDX_CORE:
-                                    core_counted = True
-                                break
+                        et_idx = map_info._building_et_idx[sx + sy * w]
+                        if et_idx >= 0 and (not core_counted or et_idx != map_info._IDX_CORE):
+                            b_score += BUILDING_SCORE[et_idx]
+                            if et_idx == map_info._IDX_CORE:
+                                core_counted = True
             if b_score > best_b_score:
                 best_b_score = b_score
                 best_b_dir = DIRECTIONS[di]
@@ -130,12 +129,11 @@ def get_best_direction(pos):
                 if 0 <= sx < w and 0 <= sy < h:
                     sbit = 1 << (sx + sy * w)
                     if enemy_buildings & sbit:
-                        for i in range(map_info._NUM_ET):
-                            if map_info._bm_et[i] & sbit and (not core_counted or i != map_info._IDX_CORE):
-                                s_score += BUILDING_SCORE[i]
-                                if i == map_info._IDX_CORE:
-                                    core_counted = True
-                                break
+                        et_idx = map_info._building_et_idx[sx + sy * w]
+                        if et_idx >= 0 and (not core_counted or et_idx != map_info._IDX_CORE):
+                            s_score += BUILDING_SCORE[et_idx]
+                            if et_idx == map_info._IDX_CORE:
+                                core_counted = True
             if s_score > best_s_score:
                 best_s_score = s_score
                 best_s_dir = DIRECTIONS[di]
@@ -154,10 +152,9 @@ def get_best_direction(pos):
                     if not map_info._bm_et[map_info._IDX_ROAD] & sbit:
                         break
                 if enemy_buildings & sbit:
-                    for i in range(map_info._NUM_ET):
-                        if map_info._bm_et[i] & sbit:
-                            g_score += BUILDING_SCORE[i]
-                            break
+                    et_idx = map_info._building_et_idx[sx + sy * w]
+                    if et_idx >= 0:
+                        g_score += BUILDING_SCORE[et_idx]
             g_score *= 5
             if g_score > best_g_score:
                 best_g_score = g_score
@@ -269,10 +266,7 @@ def _placement_candidates():
         candidates |= map_info.expand_manhattan(harvesters)
 
     # Tile content filter: empty, or clearable
-    has_building = 0
-    for i in range(map_info._NUM_ET):
-        has_building |= map_info._bm_et[i]
-    empty = ~has_building
+    empty = ~map_info._bm_any_building
 
     my_clearable = (
         map_info._bm_et[map_info._IDX_BARRIER]

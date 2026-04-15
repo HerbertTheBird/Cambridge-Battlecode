@@ -142,13 +142,12 @@ def run():
             continue
         n = p.x + p.y * w
         hp = map_info._building_hp[n]
-        for i in range(map_info._NUM_ET):
-            if map_info._bm_et[i] & pbit:
-                damage = map_info._MAX_HP_BY_IDX[i] - hp
-                if damage > best_heal_damage:
-                    best_heal_damage = damage
-                    best_heal = p
-                break
+        et_idx = map_info._building_et_idx[n]
+        if et_idx >= 0:
+            damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
+            if damage > best_heal_damage:
+                best_heal_damage = damage
+                best_heal = p
     if best_heal is not None:
         rc.heal(best_heal)
     elif rc.can_heal(rc.get_position()):

@@ -23,11 +23,8 @@ def _disruptable_ore():
                | map_info._bm_env[map_info._IDX_ENV_ORE_AX])
     clearable = (map_info._bm_et[map_info._IDX_ROAD]
                  | map_info._bm_et[map_info._IDX_MARKER])
-    has_building = 0
-    for i in range(map_info._NUM_ET):
-        has_building |= map_info._bm_et[i]
     return (all_ore
-            & (~has_building | clearable)
+            & (~map_info._bm_any_building | clearable)
             & ~units.builder._harvest_zone
             & ~units.builder.forget[comm_flag]
             & ~map_info._bm_enemy_turret_threat
