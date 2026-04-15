@@ -29,9 +29,12 @@ def run():
     # if rc.get_current_round() == 200:
     #     rc.resign()
     titanium = rc.get_global_resources()[0]
+    axionite = rc.get_global_resources()[1]
     scaling = rc.get_scale_percent()
     if scaling * SCALE_MULT + 200 < titanium:
         _spawn_toward_center()
+    if rc.get_current_round() < 1500 and titanium < 4 * rc.get_harvester_cost()[0]:
+        rc.convert(min(max(axionite - 1, 0), max((3 * rc.get_harvester_cost()[0] - titanium) // 4, 0)))
 
 
 def init(c: Controller):
