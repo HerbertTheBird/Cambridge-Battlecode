@@ -14,7 +14,7 @@ import units.turret_breach as breach
 import units.turret_launcher as launcher
 
 
-ENABLE_PROFILER = False
+ENABLE_PROFILER = True
 
 if ENABLE_PROFILER:
     import cProfile

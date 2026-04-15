@@ -242,7 +242,22 @@ class Pathing:
             self.last_dir = dir.delta()
             return True
         return False
-    def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True, end_cost_mask: int = 0):
+    # Move reconstruction offsets: (dx, dy, step_cost) for all 8 dirs
+    _MOVE_OFFSETS = [
+        (0, -1, 1), (0, 1, 1), (-1, 0, 1), (1, 0, 1),
+        (-1, -1, 1), (1, -1, 1), (-1, 1, 1), (1, 1, 1),
+    ]
+    # Route reconstruction offsets: 4 cardinals (cost 1) + 24 bridge offsets
+    # (all (dx,dy) with max(|dx|,|dy|) <= 2 and not (0,0)) at bridge_cost
+    _ROUTE_OFFSETS = (
+        [(0, -1, 1), (0, 1, 1), (-1, 0, 1), (1, 0, 1)]
+        + [(dx, dy, bridge_cost)
+           for dy in (-2, -1, 0, 1, 2)
+           for dx in (-2, -1, 0, 1, 2)
+           if (dx, dy) != (0, 0) and (abs(dx) == 2 or abs(dy) == 2)]
+    )
+
+    def bfs_move(self, start_mask: int, target_mask: int, avoid: int | None = None, avoid_turret: bool = True):
         if start_mask & target_mask:
             s_idx = (start_mask & target_mask).bit_length() - 1
             return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
@@ -263,41 +278,33 @@ class Pathing:
 
         start_time = time.perf_counter_ns()
 
-        if routing:
-            if end_cost_mask:
-                t_end = target_mask & end_cost_mask
-                t_core = target_mask & ~t_end
-            else:
-                convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
-                t_end = target_mask & convs
-                t_core = target_mask & ~convs
-            max_c = bridge_cost
-            max_seed = conveyor_end_cost
-            cycle_len = max(max_c, max_seed) + 1
-            frontier = [0] * cycle_len
-            frontier[0] = t_core
-            frontier[conveyor_end_cost % cycle_len] |= t_end
-            steps = self.CONV
-            not_barriers = 0
-            not_threat = 0
-        else:
-            max_c = 1 + barrier_cost + threat_cost
-            max_seed = barrier_cost + threat_cost
-            cycle_len = max(max_c, max_seed) + 1
-            frontier = [0] * cycle_len
-            frontier[0] = target_mask & ~barriers & ~threat
-            frontier[barrier_cost] = target_mask & barriers & ~threat
-            frontier[threat_cost] = target_mask & ~barriers & threat
-            frontier[barrier_cost + threat_cost] = target_mask & barriers & threat
-            steps = self.DIRS
-            not_barriers = ~barriers
-            not_threat = ~threat
+        # Precomputed barrier/threat combo masks
+        nb_nt = ~barriers & ~threat
+        b_nt = barriers & ~threat
+        nb_t = ~barriers & threat
+        b_t = barriers & threat
+
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        w = width
+        board = (1 << (w * height)) - 1
+        not_avoid = board & ~avoid
+
+        max_c = 1 + barrier_cost + threat_cost
+        max_seed = barrier_cost + threat_cost
+        cycle_len = max(max_c, max_seed) + 1
+        frontier = [0] * cycle_len
+        frontier[0] = target_mask & nb_nt
+        frontier[barrier_cost % cycle_len] |= target_mask & b_nt
+        frontier[threat_cost % cycle_len] |= target_mask & nb_t
+        frontier[(barrier_cost + threat_cost) % cycle_len] |= target_mask & b_t
 
         effective_len = max_seed + 1
         visited = 0
         visited_layers: list[int] = []
         i = 0
         while True:
+            # print("move",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
@@ -314,24 +321,6 @@ class Pathing:
                 cy = s_idx // width
                 start_pos = Position(cx, cy)
                 vl_len = len(visited_layers)
-
-                if routing:
-                    chosen_prev = None
-                    for dx, dy, step_cost, _m in steps:
-                        px = cx - dx
-                        py = cy - dy
-                        if not (0 <= px < width and 0 <= py < height):
-                            continue
-                        prev_layer = i - step_cost
-                        if prev_layer < 0 or prev_layer >= vl_len:
-                            continue
-                        prev_bit = 1 << (py * width + px)
-                        if visited_layers[prev_layer] & prev_bit:
-                            chosen_prev = Position(px, py)
-                            break
-                    if chosen_prev is None:
-                        return None
-                    return (start_pos, chosen_prev, i)
 
                 extra_cost = 0
                 if start_bit & barriers:
@@ -353,7 +342,7 @@ class Pathing:
 
                 best_key = (2, 2, 2, 3)
                 chosen_prev = None
-                for dx, dy, step_cost, _m in steps:
+                for dx, dy, step_cost in self._MOVE_OFFSETS:
                     px = cx - dx
                     py = cy - dy
                     if not (0 <= px < width and 0 <= py < height):
@@ -369,7 +358,6 @@ class Pathing:
                     k0 = 0 if diag else 1
 
                     next_edge_dist = min(px, py, w_minus_1 - px, h_minus_1 - py)
-
                     k1 = 1 if (in_edge_band and next_edge_dist <= cur_edge_dist) else 0
                     k2 = 0 if next_edge_dist >= 4 else 1
 
@@ -400,29 +388,120 @@ class Pathing:
             if i + max_c + 1 > effective_len:
                 effective_len = i + max_c + 1
 
-            if routing:
-                for dx, dy, step_cost, mask in steps:
-                    offset = dx + dy * width
-                    masked = cur_frontier & mask
-                    if offset > 0:
-                        new = (masked << offset) & ~avoid
-                    else:
-                        new = (masked >> (-offset)) & ~avoid
-                    frontier[(i + step_cost) % cycle_len] |= new
-            else:
-                for dx, dy, step_cost, mask in steps:
-                    offset = dx + dy * width
-                    masked = cur_frontier & mask
-                    if offset > 0:
-                        new = (masked << offset) & ~avoid
-                    else:
-                        new = (masked >> (-offset)) & ~avoid
-                    new_nt = new & not_threat
-                    new_t = new & threat
-                    frontier[(i + step_cost) % cycle_len] |= new_nt & not_barriers
-                    frontier[(i + step_cost + barrier_cost) % cycle_len] |= new_nt & barriers
-                    frontier[(i + step_cost + threat_cost) % cycle_len] |= new_t & not_barriers
-                    frontier[(i + step_cost + barrier_cost + threat_cost) % cycle_len] |= new_t & barriers
+            # 3x3 Chebyshev expansion via 4 shifts (avoid filter applied at the end)
+            f = cur_frontier
+            h = f | ((f & nrc) << 1) | ((f & nlc) >> 1)
+            expanded = h | (h << w) | (h >> w)
+            new = expanded & not_avoid & ~visited
+
+            frontier[(i + 1) % cycle_len] |= new & nb_nt
+            frontier[(i + 1 + barrier_cost) % cycle_len] |= new & b_nt
+            frontier[(i + 1 + threat_cost) % cycle_len] |= new & nb_t
+            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len] |= new & b_t
+            i += 1
+
+    def bfs_route(self, start_mask: int, target_mask: int, avoid: int | None = None, end_cost_mask: int = 0):
+        if start_mask & target_mask:
+            s_idx = (start_mask & target_mask).bit_length() - 1
+            return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
+        width = self.width
+        height = self.height
+        if avoid is None:
+            avoid = map_info.get_avoid(False, True, False)
+        avoid &= ~start_mask
+
+        start_time = time.perf_counter_ns()
+
+        if end_cost_mask:
+            t_end = target_mask & end_cost_mask
+            t_core = target_mask & ~t_end
+        else:
+            convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
+            t_end = target_mask & convs
+            t_core = target_mask & ~convs
+
+        max_c = bridge_cost
+        max_seed = conveyor_end_cost
+        cycle_len = max(max_c, max_seed) + 1
+        frontier = [0] * cycle_len
+        frontier[0] = t_core
+        frontier[conveyor_end_cost % cycle_len] |= t_end
+
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        nlc2 = map_info._not_left_col_2
+        w = width
+        board = (1 << (w * height)) - 1
+        not_avoid = board & ~avoid
+
+        effective_len = max_seed + 1
+        visited = 0
+        visited_layers: list[int] = []
+        i = 0
+        while True:
+            # print("route",i,file=sys.stderr)
+            slot = i % cycle_len
+            cur_frontier = frontier[slot] & ~visited
+            frontier[slot] = 0
+            visited_layers.append(cur_frontier)
+            visited |= cur_frontier
+
+            hit = cur_frontier & start_mask
+            if hit:
+                end_time = time.perf_counter_ns()
+                print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                start_bit = hit & -hit
+                s_idx = start_bit.bit_length() - 1
+                cx = s_idx % width
+                cy = s_idx // width
+                start_pos = Position(cx, cy)
+                vl_len = len(visited_layers)
+
+                chosen_prev = None
+                for dx, dy, step_cost in self._ROUTE_OFFSETS:
+                    px = cx - dx
+                    py = cy - dy
+                    if not (0 <= px < width and 0 <= py < height):
+                        continue
+                    prev_layer = i - step_cost
+                    if prev_layer < 0 or prev_layer >= vl_len:
+                        continue
+                    prev_bit = 1 << (py * width + px)
+                    if visited_layers[prev_layer] & prev_bit:
+                        chosen_prev = Position(px, py)
+                        break
+                if chosen_prev is None:
+                    return None
+                return (start_pos, chosen_prev, i)
+
+            if cur_frontier == 0:
+                i += 1
+                if i >= effective_len:
+                    return None
+                continue
+
+            if i + max_c + 1 > effective_len:
+                effective_len = i + max_c + 1
+
+            f = cur_frontier
+            # Cardinals (cost 1) — unrolled, avoid filter at end
+            new_card = (
+                ((f & nrc) << 1)
+                | ((f & nlc) >> 1)
+                | (f << w)
+                | (f >> w)
+            ) & not_avoid
+            frontier[(i + 1) % cycle_len] |= new_card
+
+            # Bridges — full 5x5 Chebyshev-2 zone via 6 OR-shifts (no mid-cell filtering)
+            a = f | ((f & nrc) << 1)
+            b = a | ((a & nrc) << 1)
+            row = b | ((b & nlc2) >> 2)
+            va = row | (row << w)
+            vb = va | (va << w)
+            zone = vb | (vb >> (2 * w))
+            new_bridge = (zone & ~f) & not_avoid
+            frontier[(i + bridge_cost) % cycle_len] |= new_bridge
             i += 1
         return None
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
@@ -480,7 +559,7 @@ class Pathing:
         target_mask = 0
         for t in target_set:
             target_mask |= 1 << (t.x + t.y * w)
-        result = self.bfs(start_mask, target_mask, avoid, False, avoid_turret=avoid_turret)
+        result = self.bfs_move(start_mask, target_mask, avoid, avoid_turret=avoid_turret)
         if result is None:
             return False
         s_pos, p_pos, _ = result
@@ -511,7 +590,7 @@ class Pathing:
         else:
             start_mask = 1 << (start.x + start.y * w)
         end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
-        result = self.bfs(start_mask, target, avoid, True, end_cost_mask=end_cost_mask)
+        result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
         if result is None:
             return None
         s_pos, p_pos, dist = result

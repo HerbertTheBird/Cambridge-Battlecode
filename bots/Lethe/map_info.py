@@ -221,6 +221,8 @@ _GUNNER_RAYS = _precompute_gunner_rays()
 
 _not_left_col: int = 0   # mask with all bits EXCEPT x=0 column
 _not_right_col: int = 0  # mask with all bits EXCEPT x=width-1 column
+_not_left_col_2: int = 0   # mask with all bits EXCEPT x in {0, 1}
+_not_right_col_2: int = 0  # mask with all bits EXCEPT x in {w-2, w-1}
 
 _my_core: Position | None = None
 _their_core: Position | None = None
@@ -571,7 +573,7 @@ def init(c: Controller):
     global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
     global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
-    global _not_left_col, _not_right_col
+    global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2
     global _MAP_CENTER
     _rc = c
     _width = _rc.get_map_width()
@@ -602,6 +604,10 @@ def init(c: Controller):
         right_col |= 1 << ((_width - 1) + y * _width)
     _not_left_col = ~left_col
     _not_right_col = ~right_col
+    left_col_2 = left_col | (left_col << 1)
+    right_col_2 = right_col | (right_col >> 1)
+    _not_left_col_2 = ~left_col_2
+    _not_right_col_2 = ~right_col_2
     _build_turret_shift_masks()
     global _bm_friendly_bots, _bm_enemy_bots, _bot_pos, _bot_team, _bot_at
     _bm_my_core_area = 0
