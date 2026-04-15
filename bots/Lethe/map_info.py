@@ -450,9 +450,9 @@ def update_at(pos: Position) -> None:
         old_et = _INT_ET[old_et_idx]
         if old_et in _CONVEYOR_TYPES:
             tn = _building_conv_target[n]
-            if tn:
+            if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
-            if (_bm_team[_my_team_idx] & bit) and tn:
+            if (_bm_team[_my_team_idx] & bit) and tn >= 0:
                 _conv_reverse[tn] &= ~bit
         for i in range(_NUM_TEAM):
             if _bm_team[i] & bit:
@@ -495,7 +495,7 @@ def update_at(pos: Position) -> None:
     _building_et_idx[n] = et_idx
     _building_hp[n] = rc.get_hp(entity_id)
     _building_dir[n] = _DIR_INT[direction] if direction else 0
-    _building_conv_target[n] = (target.x + target.y * _width) if target else 0
+    _building_conv_target[n] = (target.x + target.y * _width) if target else -1
 
     _bm_et[et_idx] |= bit
     _bm_team[team_idx] |= bit
@@ -774,7 +774,7 @@ def _compute_route_targets() -> int:
         is_my_conv = bool(bm_my & lsb)
 
         # Dead-end: output not pointing into an ore-accepting building
-        if tn and 0 <= tn < tiles:
+        if 0 <= tn < tiles:
             tbit = 1 << tn
             # Enemy conveyors: NOT dead-end if pointing into enemy non-marker building
             if not is_my_conv and (enemy_hard & tbit):
@@ -815,7 +815,7 @@ def _compute_route_targets() -> int:
             chain |= cur
 
             tn = conv_target[cur_n]
-            if not tn or tn < 0 or tn >= tiles:
+            if tn < 0 or tn >= tiles:
                 break
 
             tbit = 1 << tn
@@ -902,7 +902,7 @@ def recompute_derived() -> None:
         lsb = mask & -mask
         cn = lsb.bit_length() - 1
         tn = building_conv_target[cn]
-        if tn:
+        if tn >= 0:
             _bm_conveyor_targets |= 1 << tn
         mask ^= lsb
 
@@ -1025,7 +1025,7 @@ def update(recompute: bool = True) -> None:
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
                 old_tn = building_conv_target[n]
-                if old_tn and (conv_reverse[old_tn] & bit):
+                if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                     conv_reverse[old_tn] &= ~bit
                 building_conv_target[n] = 0
                 bm_et[old_et_idx] &= ~bit
@@ -1044,7 +1044,7 @@ def update(recompute: bool = True) -> None:
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
                 old_tn = building_conv_target[n]
-                if old_tn and (conv_reverse[old_tn] & bit):
+                if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                     conv_reverse[old_tn] &= ~bit
                 building_conv_target[n] = 0
                 bm_et[old_et_idx] &= ~bit
@@ -1097,7 +1097,7 @@ def update(recompute: bool = True) -> None:
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
                 old_tn = building_conv_target[n]
-                if old_tn and (conv_reverse[old_tn] & bit):
+                if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                     conv_reverse[old_tn] &= ~bit
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
@@ -1120,9 +1120,9 @@ def update(recompute: bool = True) -> None:
             hp = rc_get_hp(entity_id)
             building_hp[n] = hp
             building_dir[n] = _DIR_INT[direction] if direction else 0
-            new_tn = (target.x+target.y*width) if target else 0
+            new_tn = (target.x + target.y * width) if target else -1
             building_conv_target[n] = new_tn
-            if new_tn and et in _CONVEYOR_TYPES and team_idx == my_team_idx_local:
+            if new_tn >= 0 and et in _CONVEYOR_TYPES and team_idx == my_team_idx_local:
                 conv_reverse[new_tn] |= bit
 
             # Set new bitmask bits

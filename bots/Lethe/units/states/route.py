@@ -300,7 +300,7 @@ def run():
             if (map_info._bm_routable & cur_bit) and not (map_info._bm_conv_loaded & cur_bit):
                 last_unloaded_bit = cur_bit
             tn = conv_target[cur_n]
-            if not tn or tn < 0 or tn >= tiles:
+            if tn < 0 or tn >= tiles:
                 print("invalid target", tn)
                 break
             tbit = 1 << tn
