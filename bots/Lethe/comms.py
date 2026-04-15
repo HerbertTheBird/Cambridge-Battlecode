@@ -53,6 +53,10 @@ def get_new_messages():
     my_team = map_info._my_team
     marker_type = EntityType.MARKER
     width = rc.get_map_width()
+    current_round = rc.get_current_round()
+    marker_at = _marker_at
+    my_markers = _my_markers
+    messages_seen = prev_messages
 
     messages = []
     append = messages.append
@@ -66,25 +70,25 @@ def get_new_messages():
             seen_positions.add(pos_n)
 
             # Skip markers this bot placed itself.
-            if id in _my_markers:
-                old_entry = _marker_at.pop(pos_n, None)
+            if id in my_markers:
+                old_entry = marker_at.pop(pos_n, None)
                 if old_entry is not None:
-                    prev_messages.pop(old_entry[1], None)
+                    messages_seen.pop(old_entry[1], None)
+                continue
+
+            # Freshness is tracked by marker entity id: a new marker id at
+            # this position means the content was replaced since last turn.
+            old_entry = marker_at.get(pos_n)
+            if old_entry is not None and old_entry[0] == id:
                 continue
 
             val = get_marker_value(id) ^ key
 
-            # Freshness is tracked by marker entity id: a new marker id at
-            # this position means the content was replaced since last turn.
-            old_entry = _marker_at.get(pos_n)
-            new = old_entry is None or old_entry[0] != id
-            if old_entry is not None and old_entry[0] != id:
-                prev_messages.pop(old_entry[1], None)
-            _marker_at[pos_n] = (id, val)
+            if old_entry is not None:
+                messages_seen.pop(old_entry[1], None)
+            marker_at[pos_n] = (id, val)
 
-            if not new:
-                continue
-            prev_messages[val] = rc.get_current_round()
+            messages_seen[val] = current_round
             # Off for now while testing feature
             # comms_positional.record_marker_read()
             # comms_positional.apply_message(pos, decode_sym(val), decode_sample_bits(val))
@@ -92,15 +96,15 @@ def get_new_messages():
 
     # Cleanup: tracked markers that are now gone from visible tiles
     to_remove = []
-    for pos_n, (_mid, old_val) in _marker_at.items():
+    bm_visible = map_info._bm_visible
+    for pos_n, (_mid, old_val) in marker_at.items():
         if pos_n in seen_positions:
             continue
-        p = Position(pos_n % width, pos_n // width)
-        if rc.is_in_vision(p):
+        if bm_visible & (1 << pos_n):
             to_remove.append(pos_n)
-            prev_messages.pop(old_val, None)
+            messages_seen.pop(old_val, None)
     for pos_n in to_remove:
-        del _marker_at[pos_n]
+        del marker_at[pos_n]
     return messages
 
 def get_messages():
