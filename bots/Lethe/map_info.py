@@ -225,6 +225,8 @@ _not_left_col: int = 0   # mask with all bits EXCEPT x=0 column
 _not_right_col: int = 0  # mask with all bits EXCEPT x=width-1 column
 _not_left_col_2: int = 0   # mask with all bits EXCEPT x in {0, 1}
 _not_right_col_2: int = 0  # mask with all bits EXCEPT x in {w-2, w-1}
+_not_left_col_3: int = 0   # mask with all bits EXCEPT x in {0, 1, 2}
+_not_right_col_3: int = 0  # mask with all bits EXCEPT x in {w-3, w-2, w-1}
 
 _my_core: Position | None = None
 _their_core: Position | None = None
@@ -574,7 +576,7 @@ def init(c: Controller):
     global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
     global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
-    global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2
+    global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2, _not_left_col_3, _not_right_col_3
     global _MAP_CENTER
     _rc = c
     _my_team = _rc.get_team()
@@ -611,6 +613,10 @@ def init(c: Controller):
     right_col_2 = right_col | (right_col >> 1)
     _not_left_col_2 = ~left_col_2
     _not_right_col_2 = ~right_col_2
+    left_col_3 = left_col_2 | (left_col << 2)
+    right_col_3 = right_col_2 | (right_col >> 2)
+    _not_left_col_3 = ~left_col_3
+    _not_right_col_3 = ~right_col_3
     _build_turret_shift_masks()
     global _bm_friendly_bots, _bm_enemy_bots, _bot_pos, _bot_team, _bot_at
     _bm_my_core_area = 0

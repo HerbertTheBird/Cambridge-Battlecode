@@ -259,6 +259,8 @@ class Pathing:
            for dy in (-2, -1, 0, 1, 2)
            for dx in (-2, -1, 0, 1, 2)
            if (dx, dy) != (0, 0) and (abs(dx) == 2 or abs(dy) == 2)]
+        + [(3, 0, bridge_cost), (-3, 0, bridge_cost),
+           (0, 3, bridge_cost), (0, -3, bridge_cost)]
     )
 
     def bfs_move(self, start_mask: int, target_mask: int, avoid: int | None = None, avoid_turret: bool = True):
@@ -434,6 +436,8 @@ class Pathing:
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
         nlc2 = map_info._not_left_col_2
+        nlc3 = map_info._not_left_col_3
+        nrc3 = map_info._not_right_col_3
         w = width
         board = (1 << (w * height)) - 1
         not_avoid = board & ~avoid
@@ -505,6 +509,13 @@ class Pathing:
             vb = va | (va << w)
             zone = vb | (vb >> (2 * w))
             new_bridge = (zone & ~f) & not_avoid
+            # 3-step cardinals (bridge jumps of distance 3)
+            new_bridge |= (
+                ((f & nrc3) << 3)
+                | ((f & nlc3) >> 3)
+                | (f << (3 * w))
+                | (f >> (3 * w))
+            ) & not_avoid
             frontier[(i + bridge_cost) % cycle_len] |= new_bridge
             i += 1
         return None
