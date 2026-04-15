@@ -53,8 +53,7 @@ def _sabotage_targets():
             danger_zone |= frontier
         targets &= ~danger_zone
     
-    # expensive calculations - nonbitmasked, leave at end
-    # THIS IS IN PROGRESS
+    # expensive calculations - nonbitmasked, leave at end. calculates conveyors that go into a turret.
     pruned_targets = 0
     invalid_sabotage_locations = set()
     my_pos = rc.get_position()

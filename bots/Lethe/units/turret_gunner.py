@@ -27,29 +27,62 @@ def init(c: Controller):
 
 # --- Ported and adapted from dragonfruit/units/gunner/combat.py ---
 
+def _get_invalid_sabotage_locations() -> set[Position]:
+    invalid_sabotage_locations = set()
+    my_pos_local = rc.get_position()
+    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._TM_INT[rc.get_team()]]):
+        front_positions = []
+
+        if p.distance_squared(my_pos_local) <= 100:
+            for conv_pos in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
+                if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
+                    continue
+                if conv_pos not in invalid_sabotage_locations:
+                    front_positions.append(conv_pos)
+                    invalid_sabotage_locations.add(conv_pos)
+
+            for _ in range(4):
+                new_front = []
+                for front_p in front_positions:
+                    for conv_pos in map_info.iter_mask(map_info._conv_reverse[front_p.x + front_p.y * map_info._width]):
+                        if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
+                            continue
+                        if conv_pos not in invalid_sabotage_locations:
+                            new_front.append(conv_pos)
+                            invalid_sabotage_locations.add(conv_pos)
+                front_positions = new_front
+    return invalid_sabotage_locations
+
 def choose_gunner_target() -> Position | None:
     """Pick the gunner's shot by scanning its short forward ray."""
     direction = rc.get_direction()
-    attackable_tiles = set(rc.get_attackable_tiles())
+    attackable_tiles = set(rc.get_attackable_tiles()) # Re-added this line
     ray_tiles = []
     tile = my_pos.add(direction)
 
+    invalid_sabotage_locations = _get_invalid_sabotage_locations()
+
     for _ in range(3):
-        if tile not in attackable_tiles:
+        if not map_info.in_bounds(tile):
+            break
+        if tile not in attackable_tiles: # Re-added this check
             break
         ray_tiles.append(tile)
         tile = tile.add(direction)
 
     first_enemy_idx = None
-    for i, tile in enumerate(ray_tiles):
-        bot_id = rc.get_tile_builder_bot_id(tile)
+    for i, current_ray_tile in enumerate(ray_tiles):
+        if current_ray_tile in invalid_sabotage_locations:
+            continue
+
+        bot_id = rc.get_tile_builder_bot_id(current_ray_tile)
         if bot_id is not None:
             if rc.get_team(bot_id) != my_team:
                 first_enemy_idx = i
                 break
             return None
 
-        building_id = rc.get_tile_building_id(tile)
+        building_id = rc.get_tile_building_id(current_ray_tile)
         if building_id is not None:
             etype = rc.get_entity_type(building_id)
             if etype == EntityType.MARKER:
@@ -61,19 +94,22 @@ def choose_gunner_target() -> Position | None:
                 continue
             return None
 
-        if not rc.is_tile_empty(tile):
+        if not rc.is_tile_empty(current_ray_tile):
             return None
 
     if first_enemy_idx is None:
         return None
 
     for i in range(first_enemy_idx):
-        tile = ray_tiles[i]
-        bot_id = rc.get_tile_builder_bot_id(tile)
+        tile_to_check = ray_tiles[i]
+        if tile_to_check in invalid_sabotage_locations:
+            continue
+
+        bot_id = rc.get_tile_builder_bot_id(tile_to_check)
         if bot_id is not None:
             return None
 
-        building_id = rc.get_tile_building_id(tile)
+        building_id = rc.get_tile_building_id(tile_to_check)
         if building_id is None:
             continue
 
@@ -81,7 +117,7 @@ def choose_gunner_target() -> Position | None:
         if etype == EntityType.MARKER:
             continue
         if rc.get_team(building_id) != my_team or etype == EntityType.ROAD:
-            return tile
+            return tile_to_check
         return None
 
     return ray_tiles[first_enemy_idx]

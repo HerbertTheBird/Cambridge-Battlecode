@@ -82,6 +82,51 @@ def _tile_score(tile, feeders):
     return 0
 
 
+def _prune_conveyor_targets(target_positions):
+    # Convert list of Position objects to a bitmask
+    targets = map_info.positions_to_mask(target_positions)
+
+    # expensive calculations - nonbitmasked, leave at end. calculates conveyors that go into a turret.
+    pruned_targets = 0
+    invalid_sabotage_locations = set()
+    my_pos = rc.get_position()
+    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._TM_INT[rc.get_team()]]):
+        front_positions = []
+
+        if p.distance_squared(my_pos) <= 100:
+            # Iterating over conveyors that feed into p
+            for conv_pos in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
+                # Allow skipping blacklisting if it's in vision and has a builder bot
+                if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
+                    continue
+                if conv_pos not in invalid_sabotage_locations:
+                    front_positions.append(conv_pos)
+                    invalid_sabotage_locations.add(conv_pos)
+                    # rc.draw_indicator_dot(conv, 0, 0, 255)
+
+            # Propagate up conveyor chain
+            for _ in range(4):
+                new_front = []
+                for front_p in front_positions:
+                    for conv_pos in map_info.iter_mask(map_info._conv_reverse[front_p.x + front_p.y * map_info._width]):
+                        # Allow skipping blacklisting if it's in vision and has a builder bot
+                        if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
+                            continue
+                        if conv_pos not in invalid_sabotage_locations:
+                            new_front.append(conv_pos)
+                            invalid_sabotage_locations.add(conv_pos)
+                            # rc.draw_indicator_dot(conv, 0, 0, 255)
+                front_positions = new_front
+
+    # Prune targets that are in invalid_sabotage_locations
+    for target in map_info.iter_mask(targets):
+        if target not in invalid_sabotage_locations:
+            pruned_targets |= (1 << (target.x + target.y * map_info._width))
+
+    # Convert pruned_targets bitmask back to a list of Position objects
+    return list(map_info.iter_mask(pruned_targets))
+
+
 def run():
     global _no_ammo_turns
 
@@ -102,7 +147,11 @@ def run():
     best_target = None
     best_score = 0
 
-    for tile in rc.get_attackable_tiles():
+    # Get attackable tiles and then prune them
+    attackable_tiles = rc.get_attackable_tiles()
+    pruned_attackable_tiles = _prune_conveyor_targets(attackable_tiles)
+
+    for tile in pruned_attackable_tiles:
         if not rc.can_fire(tile):
             continue
         s = _tile_score(tile, feeders)
