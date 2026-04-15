@@ -117,7 +117,6 @@ def _is_bad_marker_spot(pos):
     return False
 
 def mark(target_idx, type):
-    w = rc.get_map_width()
     print("mark", target_idx, type)
 
     sym = int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
