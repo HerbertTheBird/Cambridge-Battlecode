@@ -86,16 +86,44 @@ def get_best_direction(pos):
     loaders = _get_loaders(pos)
     loader_dirs = set(loaders)
     sentinel_blocked = loader_dirs
+    breach_blocked = loader_dirs
     gunner_blocked = set() if len(loaders) >= 2 else loader_dirs
 
-    best_dir = Direction.NORTH
-    best_score = -1
-    best_type = EntityType.SENTINEL
+    my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY] & my_buildings
+    adj_foundry = False
+    for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+        nx, ny = px + dx, py + dy
+        if 0 <= nx < w and 0 <= ny < h and (my_foundries & (1 << (nx + ny * w))):
+            adj_foundry = True
+            break
+
+    best_b_dir, best_b_score = Direction.NORTH, -1
+    best_s_dir, best_s_score = Direction.NORTH, -1
+    best_g_dir, best_g_score = Direction.NORTH, -1
 
     for di in range(8):
+        # Breach score
+        if di not in breach_blocked:
+            core_counted = False
+            b_score = 0
+            for dx, dy in map_info._BREACH_OFFSETS[di]:
+                sx, sy = px + dx, py + dy
+                if 0 <= sx < w and 0 <= sy < h:
+                    sbit = 1 << (sx + sy * w)
+                    if enemy_buildings & sbit:
+                        for i in range(map_info._NUM_ET):
+                            if map_info._bm_et[i] & sbit and (not core_counted or i != map_info._IDX_CORE):
+                                b_score += BUILDING_SCORE[i]
+                                if i == map_info._IDX_CORE:
+                                    core_counted = True
+                                break
+            if b_score > best_b_score:
+                best_b_score = b_score
+                best_b_dir = DIRECTIONS[di]
+
         # Sentinel score
-        core_counted = False
         if di not in sentinel_blocked:
+            core_counted = False
             s_score = 0
             for dx, dy in map_info._SENTINEL_OFFSETS[di]:
                 sx, sy = px + dx, py + dy
@@ -108,10 +136,9 @@ def get_best_direction(pos):
                                 if i == map_info._IDX_CORE:
                                     core_counted = True
                                 break
-            if s_score > best_score:
-                best_score = s_score
-                best_dir = DIRECTIONS[di]
-                best_type = EntityType.SENTINEL
+            if s_score > best_s_score:
+                best_s_score = s_score
+                best_s_dir = DIRECTIONS[di]
 
         # Gunner score — single ray, wall/friendly-blocked
         if di not in gunner_blocked:
@@ -132,12 +159,20 @@ def get_best_direction(pos):
                             g_score += BUILDING_SCORE[i]
                             break
             g_score *= 5
-            if g_score > best_score:
-                best_score = g_score
-                best_dir = DIRECTIONS[di]
-                best_type = EntityType.GUNNER
+            if g_score > best_g_score:
+                best_g_score = g_score
+                best_g_dir = DIRECTIONS[di]
 
-    return best_dir, best_type, best_score
+    if adj_foundry:
+        if best_b_score > 0:
+            return best_b_dir, EntityType.BREACH, best_b_score
+        if best_s_score > 0:
+            return best_s_dir, EntityType.SENTINEL, best_s_score
+        return best_g_dir, EntityType.GUNNER, best_g_score
+
+    if best_s_score >= best_g_score:
+        return best_s_dir, EntityType.SENTINEL, best_s_score
+    return best_g_dir, EntityType.GUNNER, best_g_score
 
 
 def _my_turret_coverage():
@@ -229,7 +264,7 @@ def _placement_candidates():
 
     # Location filter: conveyor outputs + cardinal adj to harvesters
     candidates = map_info._bm_conveyor_targets
-    harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
+    harvesters = (map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) | map_info._bm_et[map_info._IDX_FOUNDRY]  # double for safety margin
     if harvesters:
         candidates |= map_info.expand_manhattan(harvesters)
 
@@ -436,6 +471,10 @@ def run():
     if turret_type == EntityType.GUNNER:
         if rc.can_build_gunner(best, direction):
             rc.build_gunner(best, direction)
+            map_info.update_at(best)
+    elif turret_type == EntityType.BREACH:
+        if rc.can_build_breach(best, direction):
+            rc.build_breach(best, direction)
             map_info.update_at(best)
     else:
         if rc.can_build_sentinel(best, direction):
