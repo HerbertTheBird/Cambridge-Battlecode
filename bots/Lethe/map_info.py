@@ -614,25 +614,6 @@ def ver_flip(pos: Position):
     return Position(pos.x, _height - 1 - pos.y)
 def rot_flip(pos: Position):
     return Position(_width - 1 - pos.x, _height - 1 - pos.y)
-def update_symmetry(tile: Position):
-    global _hor_sym, _ver_sym, _rot_sym
-    tx = tile.x
-    ty = tile.y
-    env_idx = _env_at_idx(tx + ty * _width)
-    rx = _width-1 - tx
-    ry = _height-1 - ty
-    if _hor_sym:
-        fn = rx+ty*_width
-        if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
-            _hor_sym = False
-    if _ver_sym:
-        fn = tx+ry*_width
-        if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
-            _ver_sym = False
-    if _rot_sym:
-        fn = rx+ry*_width
-        if (_bm_seen & (1 << fn)) and _env_at_idx(fn) != env_idx:
-            _rot_sym = False
 
 def update_symmetry_from_comms(sym_bits):
     """Update symmetry from comms. Each bit represents a possible symmetry."""
@@ -1266,10 +1247,23 @@ def update() -> None:
 
 
 def is_tile_empty(pos: Position):
-    return in_bounds(pos) and (_rc.is_tile_empty(pos) or (_rc.get_tile_building_id(pos) != None and _rc.get_entity_type(_rc.get_tile_building_id(pos)) is EntityType.MARKER))
+    if not in_bounds(pos): 
+        return False
+    if _rc.is_tile_empty(pos): 
+        return True
+    bid = _rc.get_tile_building_id(pos)
+    return bid is not None and _rc.get_entity_type(bid) is EntityType.MARKER
 
 def can_place_at_restrictive(pos: Position):
-    return is_tile_empty(pos) or in_bounds(pos) and _rc.can_destroy(pos) and (_rc.get_tile_building_id(pos) != None and _rc.get_entity_type(_rc.get_tile_building_id(pos)) is EntityType.ROAD)
+    if not in_bounds(pos): 
+        return False
+    if is_tile_empty(pos): 
+        return True
+    if not _rc.can_destroy(pos): 
+        return False
+    bid = _rc.get_tile_building_id(pos)
+    return bid is not None and _rc.get_entity_type(bid) is EntityType.ROAD
+
 def is_passable(pos: Position):
     if not in_bounds(pos): return False
     n = pos.x + pos.y * _width
