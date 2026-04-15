@@ -239,7 +239,10 @@ class Pathing:
             self.last_dir = dir.delta()
             return True
         return False
-    def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True):
+    def bfs(self, start_mask: int, target_mask: int, avoid: int | None = None, routing = False, avoid_turret = True, end_cost_mask: int = 0):
+        if start_mask & target_mask:
+            s_idx = (start_mask & target_mask).bit_length() - 1
+            return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
         width = self.width
         height = self.height
         if avoid is None:
@@ -258,15 +261,19 @@ class Pathing:
         start_time = time.perf_counter_ns()
 
         if routing:
-            convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
-            t_core = target_mask & ~convs
-            t_conv = target_mask & convs
+            if end_cost_mask:
+                t_end = target_mask & end_cost_mask
+                t_core = target_mask & ~t_end
+            else:
+                convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
+                t_end = target_mask & convs
+                t_core = target_mask & ~convs
             max_c = bridge_cost
             max_seed = conveyor_end_cost
             cycle_len = max(max_c, max_seed) + 1
             frontier = [0] * cycle_len
             frontier[0] = t_core
-            frontier[conveyor_end_cost % cycle_len] |= t_conv
+            frontier[conveyor_end_cost % cycle_len] |= t_end
             steps = self.CONV
             not_barriers = 0
             not_threat = 0
