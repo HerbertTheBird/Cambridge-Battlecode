@@ -8,7 +8,7 @@ import time
 import units.builder as builder
 import sys
 from functools import lru_cache
-from log import log
+from log import DRAW_DEBUG, log
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -637,7 +637,8 @@ class Pathing:
         s_pos, p_pos, _ = result
         if s_pos == p_pos:
             return False
-        self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
         return self.move(s_pos.direction_to(p_pos))
 
 
@@ -667,8 +668,9 @@ class Pathing:
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-        self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
+            self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):

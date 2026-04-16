@@ -18,7 +18,7 @@ import units.states.heal     as heal
 import units.states.sabotage as sabotage
 import units.states.attack   as attack
 
-from log import log
+from log import DRAW_DEBUG, log
 
 
 rc: Controller
@@ -65,6 +65,8 @@ def handle_comms():
                 claimed_senders[i] &= ~(1 << idx)
     comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
+    if not DRAW_DEBUG:
+        return
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
 

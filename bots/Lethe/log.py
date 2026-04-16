@@ -1,4 +1,5 @@
 DEBUG_LOGGING = True
+DRAW_DEBUG = True
 
 if DEBUG_LOGGING:
     def log(*args, **kwargs):

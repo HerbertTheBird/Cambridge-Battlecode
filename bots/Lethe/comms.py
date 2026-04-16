@@ -1,6 +1,6 @@
 from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
-from log import log
+from log import DRAW_DEBUG, log
 import comms_positional
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
@@ -127,7 +127,7 @@ def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
 def mark(target_idx, type):
-    if type != 7:
+    if DRAW_DEBUG and type != 7:
         rc.draw_indicator_line(rc.get_position(), Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
     log("mark", target_idx, type)
 
