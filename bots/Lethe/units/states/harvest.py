@@ -106,6 +106,7 @@ def run():
     has_building = map_info._bm_any_building
 
     my_pos = map_info._my_pos
+    harvestable = harvestable_ore() & ~_too_expensive()
     for d in (Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST, Direction.NORTHWEST):
         dx, dy = map_info._DIRECTION_DELTAS[d]
         p = Position(my_pos.x + dx, my_pos.y + dy)
@@ -113,7 +114,7 @@ def run():
             continue
         pn = p.x + p.y * w
         pbit = 1 << pn
-        if not (ore_mask & pbit) or (harvester_mask & pbit):
+        if not (harvestable & pbit):
             continue
         # Check all 4 cardinal sides are secured
         secured = True
@@ -129,15 +130,26 @@ def run():
                 continue
             secured = False
             break
-        if secured:
-            if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not ((map_info._bm_friendly_bots | map_info._bm_enemy_bots) & pbit):
-                rc.destroy(p)
-                map_info.update_at(p)
-            if rc.can_build_harvester(p):
-                rc.build_harvester(p)
-                map_info.update_at(p)
-            comms.mark(pn, comm_flag)
-            return
+        if not secured:
+            continue
+        is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & pbit)
+        path = nav.calculate_conveyor_path(p, is_raw_ax)
+        if path is None:
+            cant_harvest |= pbit
+            continue
+        cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
+        print("diagonal ore at", p, "cost", cost)
+        _cost_map[pn] = cost
+        if cost > rc.get_global_resources()[0]:
+            continue
+        if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not ((map_info._bm_friendly_bots | map_info._bm_enemy_bots) & pbit):
+            rc.destroy(p)
+            map_info.update_at(p)
+        if rc.can_build_harvester(p):
+            rc.build_harvester(p)
+            map_info.update_at(p)
+        comms.mark(pn, comm_flag)
+        return
 
     available = _my_claims()
     if not available:
@@ -157,6 +169,8 @@ def run():
         _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
+        return
+    if _cost_map[best_n] > rc.get_global_resources()[0]:
         return
     if map_info._my_pos.distance_squared(best_ore) > 2:
         nav.move_to(best_ore)
