@@ -114,11 +114,15 @@ def _heal_targets():
     return _healable_mask() & map_info._bm_damaged & ~map_info._bm_enemy_bots
 
 
+_cached_chase_target = None  # set by score(), reused by run()
+
 def score():
+    global _cached_chase_target
     if _very_damaged_targets():
-        # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
+        _cached_chase_target = None
         return 7
-    target = _find_chase_target()
+    _cached_chase_target = _find_chase_target()
+    target = _cached_chase_target
     if target is not None:
         if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
             log("high priority heal", target[0])
@@ -208,7 +212,7 @@ def run():
     log("HEAL")
 
     # Priority 1: chase an enemy near my conveyors
-    target = _find_chase_target()
+    target = _cached_chase_target
     if target is not None:
         log("target is",target)
         uid, ep = target

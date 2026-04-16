@@ -146,14 +146,18 @@ def _my_claims():
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
 
+_cached_claims = 0  # set by score(), reused by run()
+
 def score():
-    return 4 if _my_claims() else 0
+    global _cached_claims
+    _cached_claims = _my_claims()
+    return 4 if _cached_claims else 0
 
 def run():
 
     global unpathable
     log("ROUTE")
-    candidates = _my_claims()
+    candidates = _cached_claims
 
     if not candidates:
         log("no candidates")

@@ -365,16 +365,21 @@ def _my_claims():
     claimed = pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], combined)
     return claimed & non_roaded, claimed & roaded
 
+_cached_claims = (0, 0)  # set by score(), reused by run()
+
 def score():
+    global _cached_claims
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:
+        _cached_claims = (0, 0)
         return 0
-    non_roaded, roaded = _my_claims()
+    _cached_claims = _my_claims()
+    non_roaded, roaded = _cached_claims
     return 6 if (non_roaded or roaded) else 0
 
 
 def run():
     log("ATTACK")
-    non_roaded, roaded = _my_claims()
+    non_roaded, roaded = _cached_claims
 
     if not non_roaded and not roaded:
         return
