@@ -986,28 +986,8 @@ def update(recompute: bool = True) -> None:
             env_idx = _ENV_INT[env]
             bm_env[env_idx] |= bit
             bm_seen |= bit
-            rx = width-1-x
-            ry = height-1-y
-            if _hor_sym:
-                fn = rx+y*width
-                fbit = 1 << fn
-                if (bm_seen & fbit):
-                    # check if env matches
-                    if not (bm_env[env_idx] & fbit):
-                        _hor_sym = False
-            if _ver_sym:
-                fn = x+ry*width
-                fbit = 1 << fn
-                if (bm_seen & fbit):
-                    if not (bm_env[env_idx] & fbit):
-                        _ver_sym = False
-            if _rot_sym:
-                fn = rx+ry*width
-                fbit = 1 << fn
-                if (bm_seen & fbit):
-                    if not (bm_env[env_idx] & fbit):
-                        _rot_sym = False
             if _solved_sym:
+                # Symmetry committed — skip verification and propagate env to the flipped tile.
                 if _hor_sym:
                     fx, fy = width-1 - x, y
                 elif _ver_sym:
@@ -1018,6 +998,24 @@ def update(recompute: bool = True) -> None:
                 fbit = 1 << fn
                 bm_env[env_idx] |= fbit
                 bm_seen |= fbit
+            else:
+                rx = width-1-x
+                ry = height-1-y
+                if _hor_sym:
+                    fn = rx+y*width
+                    fbit = 1 << fn
+                    if (bm_seen & fbit) and not (bm_env[env_idx] & fbit):
+                        _hor_sym = False
+                if _ver_sym:
+                    fn = x+ry*width
+                    fbit = 1 << fn
+                    if (bm_seen & fbit) and not (bm_env[env_idx] & fbit):
+                        _ver_sym = False
+                if _rot_sym:
+                    fn = rx+ry*width
+                    fbit = 1 << fn
+                    if (bm_seen & fbit) and not (bm_env[env_idx] & fbit):
+                        _rot_sym = False
 
 
         entity_id = rc_get_tile_building_id(tile)
