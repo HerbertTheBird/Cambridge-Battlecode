@@ -244,7 +244,7 @@ def run():
         last_fired_round = rc.get_current_round()
         skipped_firing_turns = 0
 
-    elif rc.get_global_resources()[0] <= 60:
+    elif rc.get_global_resources()[0] >= 60:
         rotate_dir = choose_rotate_dir(enemies)
 
         if rotate_dir is not None and rc.can_rotate(rotate_dir):
