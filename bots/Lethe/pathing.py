@@ -259,7 +259,7 @@ class Pathing:
     def move(self, dir: Direction):
         rc = self.rc
         px, py = rc.get_position().x, rc.get_position().y
-        dx, dy = dir.delta()
+        dx, dy = map_info._DIRECTION_DELTAS[dir]
         new_pos = Position(px + dx, py + dy)
         if not map_info.in_bounds(new_pos):
             return False
@@ -277,7 +277,7 @@ class Pathing:
             rc.move(dir)
             map_info.update_move()
             self.last_last_dir = self.last_dir
-            self.last_dir = dir.delta()
+            self.last_dir = map_info._DIRECTION_DELTAS[dir]
             return True
         return False
     # Move reconstruction offsets: (dx, dy, step_cost) for all 8 dirs
@@ -583,7 +583,7 @@ class Pathing:
         for d in ALL_DIRS:
             if d == Direction.CENTRE:
                 continue
-            p = pos.add(d)
+            p = map_info.pos_add(pos, d)
             if not map_info.in_bounds(p):
                 continue
             if p == rc.get_position():
@@ -655,7 +655,7 @@ class Pathing:
         if not update:
             start_mask = 0
             for d in CARD_DIR:
-                sp = start.add(d)
+                sp = map_info.pos_add(start, d)
                 if map_info.in_bounds(sp) and ((avoid >> (sp.x + sp.y * w)) & 1) == 0:
                     start_mask |= 1 << (sp.x + sp.y * w)
             if start_mask == 0:

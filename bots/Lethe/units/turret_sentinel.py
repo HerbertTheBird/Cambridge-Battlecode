@@ -62,7 +62,7 @@ def _get_feeder_positions():
             feeders.add(p)
         elif etype in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
             d = rc.get_direction(bid)
-            ddx, ddy = d.delta()
+            ddx, ddy = map_info._DIRECTION_DELTAS[d]
             if p.x + ddx == my_pos.x and p.y + ddy == my_pos.y:
                 feeders.add(p)
     return feeders

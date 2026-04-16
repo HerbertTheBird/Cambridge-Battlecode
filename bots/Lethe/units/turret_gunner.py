@@ -58,7 +58,7 @@ def choose_gunner_target() -> Position | None:
     direction = rc.get_direction()
     attackable_tiles = set(rc.get_attackable_tiles()) # Re-added this line
     ray_tiles = []
-    tile = my_pos.add(direction)
+    tile = map_info.pos_add(my_pos, direction)
 
     invalid_sabotage_locations = _get_invalid_sabotage_locations()
 
@@ -68,7 +68,7 @@ def choose_gunner_target() -> Position | None:
         if tile not in attackable_tiles: # Re-added this check
             break
         ray_tiles.append(tile)
-        tile = tile.add(direction)
+        tile = map_info.pos_add(tile, direction)
 
     first_enemy_idx = None
     for i, current_ray_tile in enumerate(ray_tiles):
@@ -128,7 +128,7 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
     height = map_info._height
 
     for d in DIRECTIONS:
-        dx, dy = d.delta()
+        dx, dy = map_info._DIRECTION_DELTAS[d]
         max_range = 3 if d in CARDINAL_DIRECTIONS else 2
 
         x, y = tpos.x, tpos.y

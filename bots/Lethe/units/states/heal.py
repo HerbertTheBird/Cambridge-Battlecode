@@ -157,8 +157,10 @@ def _try_barrier_dead_ends():
         mask ^= lsb
     if not targets:
         return
-    for d in Direction:
-        p = rc.get_position().add(d)
+    my_pos = rc.get_position()
+    for d in map_info._ALL_DIRECTIONS:
+        dx, dy = map_info._DIRECTION_DELTAS[d]
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if not map_info.in_bounds(p):
             continue
         pbit = 1 << (p.x + p.y * w)
@@ -179,8 +181,10 @@ def _do_best_heal():
     healable = _healable_mask() & map_info._bm_damaged
     best_heal = None
     best_heal_damage = -1
-    for d in Direction:
-        p = rc.get_position().add(d)
+    my_pos = rc.get_position()
+    for d in map_info._ALL_DIRECTIONS:
+        dx, dy = map_info._DIRECTION_DELTAS[d]
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if not map_info.in_bounds(p):
             continue
         pbit = 1 << (p.x + p.y * w)

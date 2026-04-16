@@ -105,8 +105,10 @@ def run():
     harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
     has_building = map_info._bm_any_building
 
+    my_pos = rc.get_position()
     for d in (Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST, Direction.NORTHWEST):
-        p = rc.get_position().add(d)
+        dx, dy = map_info._DIRECTION_DELTAS[d]
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if not map_info.in_bounds(p):
             continue
         pn = p.x + p.y * w
@@ -116,7 +118,7 @@ def run():
         # Check all 4 cardinal sides are secured
         secured = True
         for cd in CARD:
-            cp = p.add(cd)
+            cp = map_info.pos_add(p, cd)
             if not map_info.in_bounds(cp):
                 continue
             cn = cp.x + cp.y * w
@@ -163,7 +165,7 @@ def run():
     # --- Secure each cardinal side ---
     all_secured = True
     for d in CARD:
-        p = best_ore.add(d)
+        p = map_info.pos_add(best_ore, d)
         if not map_info.in_bounds(p):
             continue
         if p == rc.get_position() and p in pathing.destroyed_barriers:
@@ -217,7 +219,7 @@ def run():
     ore_id = map_info._building_id[ore_n]
     targets = set()
     for d in Direction:
-        p = path[0].add(d)
+        p = map_info.pos_add(path[0], d)
         if p == best_ore or not map_info.in_bounds(p):
             continue
         if p.distance_squared(best_ore) > 2:

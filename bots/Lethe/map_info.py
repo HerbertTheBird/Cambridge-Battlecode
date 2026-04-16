@@ -116,6 +116,12 @@ _DIR_CENTRE = Direction.CENTRE
 _ALL_DIRECTIONS = tuple(Direction)
 _CARDINAL = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
+
+def pos_add(pos: Position, d: Direction) -> Position:
+    """Fast Position.add() replacement using cached deltas."""
+    dx, dy = _DIRECTION_DELTAS[d]
+    return Position(pos.x + dx, pos.y + dy)
+
 _rc: Controller
 _width = _height = 0
 _MAP_CENTER = None
@@ -491,7 +497,8 @@ def update_at(pos: Position) -> None:
     if et == EntityType.BRIDGE:
         target = rc.get_bridge_target(entity_id)
     elif et in _CONVEYOR_TYPES and direction is not None:
-        target = pos.add(direction)
+        dx, dy = _DIRECTION_DELTAS[direction]
+        target = Position(pos.x + dx, pos.y + dy)
 
     et_idx = _ET_INT[et]
     _building_id[n] = entity_id
@@ -1144,7 +1151,8 @@ def update(recompute: bool = True) -> None:
             if et == EntityType.BRIDGE:
                 target = rc_get_bridge_target(entity_id)
             elif et in _CONVEYOR_TYPES and direction is not None:
-                target = tile.add(direction)
+                _ddx, _ddy = _DIRECTION_DELTAS[direction]
+                target = Position(tile.x + _ddx, tile.y + _ddy)
             building_id[n] = entity_id
             et_idx = _ET_INT[et]
             building_et_idx[n] = et_idx

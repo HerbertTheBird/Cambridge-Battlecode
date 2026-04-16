@@ -78,7 +78,7 @@ def decode_visible_marker(id: int, pos: Position):
     val = rc.get_marker_value(id) ^ key
     sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
     sender_dir = _DIRS_8[sender_dir_idx]
-    dx, dy = sender_dir.delta()
+    dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
     sender_pos = Position(pos.x + dx, pos.y + dy)
     return (val, sender_pos)
 
