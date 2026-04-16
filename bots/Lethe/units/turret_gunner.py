@@ -22,7 +22,6 @@ def init(c: Controller):
     my_pos = rc.get_position()
     last_fired_round = rc.get_current_round()
     skipped_firing_turns = 0
-    map_info.init(c)
     my_team = map_info._my_team
 
 # --- Ported and adapted from dragonfruit/units/gunner/combat.py ---

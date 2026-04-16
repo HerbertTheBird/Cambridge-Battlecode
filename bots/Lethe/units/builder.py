@@ -29,8 +29,6 @@ def init(c: Controller):
     global rc, harvest_radius
     rc = c
     harvest_radius = (c.get_map_width() + c.get_map_height()) // 3
-    map_info.init(c)
-    comms.init(c)
     if comms_stats.is_enabled():
         comms_stats.init(c)
     for s in states:

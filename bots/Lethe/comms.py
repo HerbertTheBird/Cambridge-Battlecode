@@ -58,42 +58,32 @@ def init(c: Controller):
     _marker_id_at = [0] * (c.get_map_width() * c.get_map_height())
 
 
-def get_new_messages():
-    get_team = rc.get_team
-    get_entity_type = rc.get_entity_type
-    get_marker_value = rc.get_marker_value
-    rc_get_position = rc.get_position
-    my_team = map_info._my_team
-    marker_type = EntityType.MARKER
+def decode_visible_marker(id: int, pos: Position):
     width = map_info._width
     marker_id_at = _marker_id_at
     my_markers = _my_markers
+    if id in my_markers:
+        return None
 
-    messages = []
-    append = messages.append
+    if not map_info.in_bounds(pos):
+        return None
+    pos_n = pos.x + pos.y * width
+    if pos_n < 0 or pos_n >= len(marker_id_at):
+        return None
+    if marker_id_at[pos_n] == id:
+        return None
+    marker_id_at[pos_n] = id
 
-    for id in rc.get_nearby_buildings():
-        if id in my_markers:
-            continue
-        if get_entity_type(id) != marker_type:
-            continue
-        if get_team(id) != my_team:
-            continue
+    val = rc.get_marker_value(id) ^ key
+    sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
+    sender_dir = _DIRS_8[sender_dir_idx]
+    dx, dy = sender_dir.delta()
+    sender_pos = Position(pos.x + dx, pos.y + dy)
+    return (val, sender_pos)
 
-        pos = rc_get_position(id)
-        pos_n = pos.x + pos.y * width
 
-        if marker_id_at[pos_n] == id:
-            continue
-        marker_id_at[pos_n] = id
-
-        val = get_marker_value(id) ^ key
-        sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
-        sender_dir = _DIRS_8[sender_dir_idx]
-        sender_pos = pos.add(sender_dir)
-        append((val, sender_pos))
-
-    return messages
+def get_new_messages():
+    return map_info._new_marker_messages
 
 def decode_location(v):
     return v & _POS_MASK

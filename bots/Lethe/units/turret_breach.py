@@ -10,7 +10,6 @@ def init(c: Controller):
     global rc, my_pos, my_team
     rc = c
     my_pos = rc.get_position()
-    map_info.init(c)
     my_team = map_info._my_team
 
 def run():

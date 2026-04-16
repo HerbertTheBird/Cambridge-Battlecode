@@ -12,6 +12,8 @@ import units.turret_gunner as gunner
 import units.turret_sentinel as sentinel
 import units.turret_breach as breach
 import units.turret_launcher as launcher
+import map_info
+import comms
 import comms_stats
 
 
@@ -133,6 +135,8 @@ class Player:
                 elif etype == EntityType.LAUNCHER:
                     self.me = launcher
 
+                map_info.init(c)
+                comms.init(c)
                 self.me.init(c)
                 self.initialized = True
 

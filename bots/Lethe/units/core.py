@@ -40,4 +40,3 @@ def run():
 def init(c: Controller):
     global rc
     rc = c
-    map_info.init(c)

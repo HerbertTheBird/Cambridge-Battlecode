@@ -1,11 +1,9 @@
 from __future__ import annotations
 from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError, GameConstants
-from dataclasses import dataclass, field
 from collections import deque
-import time
 import pathing
-
+import comms
 
 _HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
@@ -166,6 +164,8 @@ _bm_enemy_bots: int = 0          # bitmask of known enemy builder bot positions
 _bot_pos: dict[int, int] = {}    # uid -> tile index (both teams)
 _bot_team: dict[int, int] = {}   # uid -> team_idx
 _bot_at: dict[int, int] = {}    # tile index -> uid
+
+_new_marker_messages: list[tuple[int, Position]] = []
 
 # --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
 _DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
@@ -960,13 +960,13 @@ def recompute_derived() -> None:
     _bm_enemy_turret_threat = _compute_enemy_turret_threat()
 
 def update(recompute: bool = True) -> None:
-    print("updating")
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
     global _bm_seen, _bm_visible, _prev_pos
     global _bm_friendly_bots, _bm_enemy_bots
+    global _new_marker_messages
     rc = _rc
     building_id = _building_id
     building_et_idx = _building_et_idx
@@ -984,8 +984,6 @@ def update(recompute: bool = True) -> None:
     bm_conv_refined = _bm_conv_refined
     conv_reverse = _conv_reverse
     my_team_idx_local = _my_team_idx
-
-    num_et = _NUM_ET
     num_team = _NUM_TEAM
 
     width = _width
@@ -1010,6 +1008,7 @@ def update(recompute: bool = True) -> None:
     rc_get_bridge_target      = rc.get_bridge_target
     rc_get_tile_env           = rc.get_tile_env
     freshly_loaded = 0
+    _new_marker_messages = []
 
     for tile in visible_tiles:
         x = tile.x
@@ -1051,8 +1050,6 @@ def update(recompute: bool = True) -> None:
                     fbit = 1 << fn
                     if (bm_seen & fbit) and not (bm_env[env_idx] & fbit):
                         _rot_sym = False
-
-
         entity_id = rc_get_tile_building_id(tile)
         if entity_id is None:
             old_et_idx = building_et_idx[n]
@@ -1074,6 +1071,10 @@ def update(recompute: bool = True) -> None:
             continue
         et = rc_get_entity_type(entity_id)
         if et == EntityType.MARKER:
+            if rc_get_team(entity_id) == my_team:
+                message = comms.decode_visible_marker(entity_id, tile)
+                if message is not None:
+                    _new_marker_messages.append(message)
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
                 old_tn = building_conv_target[n]
