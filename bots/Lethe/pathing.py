@@ -68,30 +68,36 @@ def voronoi_claim(my_mask, others_mask, claims):
         return 0
     if not others_mask:
         return claims
-    w = map_info._width
-    board = (1 << (w * map_info._height)) - 1
-    avoid = map_info.get_avoid(False, False, False)
-    passable = (~avoid & board) | claims
+
+    mi = map_info
+    w = mi._width
+    board = (1 << (w * mi._height)) - 1
+    nlc = mi._not_left_col
+    nrc = mi._not_right_col
+    passable = (~mi.get_avoid(False, False, False) & board) | claims
 
     my_front = my_mask & passable
     other_front = others_mask & passable
-    my_claimed = my_front
-    other_claimed = other_front
-    all_claimed = my_claimed | other_claimed
 
-    while (claims & ~all_claimed) and (my_front or other_front):
+    my_claimed = my_front
+    all_claimed = my_front | other_front
+    remaining = claims & ~all_claimed
+
+    while remaining and (my_front or other_front):
         if my_front:
-            my_expand = map_info.expand_chebyshev(my_front) & passable & ~all_claimed
-            my_claimed |= my_expand
-            all_claimed |= my_expand
-            my_front = my_expand
-        if not (claims & ~all_claimed):
-            break
+            h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
+            my_front = (h | (h << w) | (h >> w)) & passable & ~all_claimed
+            my_claimed |= my_front
+            all_claimed |= my_front
+            remaining = claims & ~all_claimed
+            if not remaining:
+                break
+
         if other_front:
-            other_expand = map_info.expand_chebyshev(other_front) & passable & ~all_claimed
-            other_claimed |= other_expand
-            all_claimed |= other_expand
-            other_front = other_expand
+            h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
+            other_front = (h | (h << w) | (h >> w)) & passable & ~all_claimed
+            all_claimed |= other_front
+            remaining = claims & ~all_claimed
 
     return my_claimed & claims
 
