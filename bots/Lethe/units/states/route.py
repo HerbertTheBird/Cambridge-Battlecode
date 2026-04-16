@@ -108,32 +108,13 @@ def cant_claim():
 
     # My 5x5 (2 Chebyshev) zone — always claimable
     my_bit = 1 << (my_pos.x + my_pos.y * w)
-    my_zone = my_bit
-    for _ in range(2):
-        my_zone = map_info.expand_chebyshev(my_zone)
-
-    # Other friendly bots' zones — can't claim there
     my_small = map_info.expand_chebyshev(my_bit)
-    cant = 0
-    others_small = 0
-    friendly_others = map_info._bm_friendly_bots & ~my_bit
-    if friendly_others:
-        mask = friendly_others
-        while mask:
-            bit = mask & -mask
-            # 5x5 (2 Chebyshev)
-            zone = bit
-            for _ in range(2):
-                zone = map_info.expand_chebyshev(zone)
-            cant |= zone
-            # 3x3 (1 Chebyshev)
-            others_small |= map_info.expand_chebyshev(bit)
-            mask ^= bit
+    my_zone = map_info.expand_chebyshev(my_small)
 
     # 5x5 rule: blocked unless in my 5x5
-    cant_5x5 = cant & ~my_zone
+    cant_5x5 = map_info._bm_others_5x5 & ~my_zone
     # 3x3 rule: in someone else's 3x3 but not my 3x3 — blocked regardless
-    cant_3x3 = others_small & ~my_small
+    cant_3x3 = map_info._bm_others_3x3 & ~my_small
 
     return cant_5x5 | cant_3x3
 def avoid_mask():

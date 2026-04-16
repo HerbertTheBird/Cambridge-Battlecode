@@ -125,16 +125,8 @@ def encode(target, type, sym=0, sample_bits=0, sender_loc=0):
 
 def _is_bad_marker_spot(pos):
     """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
-    w = map_info._width
-    bit = 1 << (pos.x + pos.y * w)
-    if map_info._bm_conveyor_targets & bit:
-        return True
-    harv = map_info._bm_et[map_info._IDX_HARVESTER]
-    if harv:
-        harv_adj = map_info.expand_manhattan(harv)
-        if harv_adj & bit:
-            return True
-    return False
+    bit = 1 << (pos.x + pos.y * map_info._width)
+    return bool((map_info._bm_conveyor_targets | map_info._bm_harv_adj) & bit)
 
 def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)

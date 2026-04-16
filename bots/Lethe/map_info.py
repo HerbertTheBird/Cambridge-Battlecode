@@ -207,6 +207,11 @@ _max_id_by_round: list[int] = []  # max_id_by_round[round] = max entity id seen 
 _max_id_seen: int = 0
 _new_marker_messages: list[tuple[int, Position, int]] = []
 
+# Per-turn cached derived masks (rebuilt in update())
+_bm_others_5x5: int = 0          # union of other friendly bots' 2-Chebyshev zones
+_bm_others_3x3: int = 0          # union of other friendly bots' 1-Chebyshev zones
+_bm_harv_adj: int = 0            # Manhattan adjacency of all harvesters
+
 # --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
 _DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
 def _precompute_breach_offsets():
@@ -476,13 +481,15 @@ def _compute_enemy_turret_threat() -> int:
 
 def update_at(pos: Position) -> None:
     """Re-scan a single tile from the controller and update all bitmasks. Call after any build/destroy."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building, _bm_harv_adj
     if not in_bounds(pos):
         return
 
     rc = _rc
     n = pos.x + pos.y * _width
     bit = 1 << n
+
+    had_harvester = _building_et_idx[n] == _IDX_HARVESTER
 
     # Clear old bitmasks
     old_et_idx = _building_et_idx[n]
@@ -603,6 +610,12 @@ def update_at(pos: Position) -> None:
                 _bm_conv_raw_ax &= ~tbit
                 _bm_conv_ti &= ~tbit
             tn = _building_conv_target[tn]
+
+    # Refresh harvester adjacency if a harvester was added or removed
+    has_harvester = _building_et_idx[n] == _IDX_HARVESTER
+    if had_harvester != has_harvester:
+        harv = _bm_et[_IDX_HARVESTER]
+        _bm_harv_adj = expand_manhattan(harv) if harv else 0
 
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
@@ -938,7 +951,7 @@ def recompute_derived() -> None:
     """Rebuild derived bitmasks from the current tracked map state."""
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_ti_fed, _bm_ax_fed
     global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
-    global _bm_enemy_turret_threat
+    global _bm_enemy_turret_threat, _bm_harv_adj
 
     width = _width
     height = _height
@@ -1008,6 +1021,10 @@ def recompute_derived() -> None:
     # Enemy turret threat
     _bm_enemy_turret_threat = _compute_enemy_turret_threat()
 
+    # Harvester adjacency (for _is_bad_marker_spot)
+    harv = bm_et[_IDX_HARVESTER]
+    _bm_harv_adj = expand_manhattan(harv) if harv else 0
+
 def update(recompute: bool = True) -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
@@ -1015,6 +1032,7 @@ def update(recompute: bool = True) -> None:
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
     global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
+    global _bm_others_5x5, _bm_others_3x3
     global _max_id_seen
     global _new_marker_messages
     rc = _rc
@@ -1410,6 +1428,22 @@ def update(recompute: bool = True) -> None:
             _bm_friendly_bots |= bit
         else:
             _bm_enemy_bots |= bit
+
+    # Precompute other-bots zone masks for cant_claim()
+    my_bit = 1 << (my_pos.x + my_pos.y * width)
+    friendly_others = _bm_friendly_bots & ~my_bit
+    others_5x5 = 0
+    others_3x3 = 0
+    if friendly_others:
+        mask = friendly_others
+        while mask:
+            bit = mask & -mask
+            small = expand_chebyshev(bit)
+            others_3x3 |= small
+            others_5x5 |= expand_chebyshev(small)
+            mask ^= bit
+    _bm_others_5x5 = others_5x5
+    _bm_others_3x3 = others_3x3
 
     current_round = rc.get_current_round()
     while len(_max_id_by_round) <= current_round:
