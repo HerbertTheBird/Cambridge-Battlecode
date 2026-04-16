@@ -184,21 +184,11 @@ def run():
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
 
-        if pid and is_mine and is_road:
-            # My road — destroy it so we can barrier
-            all_secured = False
-            nav.move_to(best_ore)
-            if rc.can_destroy(p) and rc.get_action_cooldown() == 0:
-                rc.destroy(p)
-                map_info.update_at(p)
-            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
-            return
-
         if pid and not is_road and not is_marker:
             # Has a real building (mine or enemy, not road/marker) — side is done
             continue
 
-        # Empty, marker, or enemy marker — needs barrier
+        # Empty, marker, enemy marker, or my road — needs barrier
         all_secured = False
         nav.move_to(best_ore)
         if pid and is_mine and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
