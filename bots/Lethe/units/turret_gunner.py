@@ -165,7 +165,7 @@ def get_enemy_units():
     global my_team
     enemy_units = []
 
-    for p in rc.get_nearby_tiles():
+    for p in map_info._nearby_tiles:
         # --- builder bots ---
         bbid = rc.get_tile_builder_bot_id(p)
         if bbid is not None:

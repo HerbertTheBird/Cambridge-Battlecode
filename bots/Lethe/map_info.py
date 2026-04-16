@@ -189,6 +189,8 @@ _bm_ax_fed: int = 0             # targets of conveyors believed to carry refined
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
 _bm_visible: int = 0              # tiles visible this turn
+_nearby_tiles: list = []           # cached rc.get_nearby_tiles() for this round
+_nearby_tiles_pos = None           # position at which _nearby_tiles was computed
 _bm_damaged: int = 0              # buildings not at full HP
 _bm_very_damaged: int = 0         # buildings with > 2 damage
 
@@ -597,7 +599,7 @@ def update_at(pos: Position) -> None:
 
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
-    global _bm_visible, _prev_pos
+    global _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos
     rc = _rc
     new_pos = rc.get_position()
     if new_pos == _prev_pos:
@@ -605,8 +607,14 @@ def update_move() -> None:
     _prev_pos = new_pos
 
     width = _width
+    if _nearby_tiles_pos == new_pos:
+        nearby = _nearby_tiles
+    else:
+        nearby = rc.get_nearby_tiles()
+        _nearby_tiles = nearby
+        _nearby_tiles_pos = new_pos
     new_visible = 0
-    for tile in rc.get_nearby_tiles():
+    for tile in nearby:
         new_visible |= 1 << (tile.x + tile.y * width)
 
     newly_visible = new_visible & ~_bm_visible
@@ -997,7 +1005,7 @@ def update(recompute: bool = True) -> None:
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
-    global _bm_seen, _bm_visible, _prev_pos
+    global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos
     global _bm_friendly_bots, _bm_enemy_bots
     global _new_marker_messages
     rc = _rc
@@ -1025,15 +1033,21 @@ def update(recompute: bool = True) -> None:
     width = _width
     height = _height
 
-    visible_tiles = rc.get_nearby_tiles()
-    bm_visible = 0
-    for tile in visible_tiles:
-        bm_visible |= 1 << (tile.x + tile.y * _width)
-    _bm_visible = bm_visible
-
     my_team       = _my_team
     my_team_idx   = _my_team_idx
     my_pos        = rc.get_position()
+
+    if _nearby_tiles_pos == my_pos:
+        visible_tiles = _nearby_tiles
+        bm_visible = _bm_visible
+    else:
+        visible_tiles = rc.get_nearby_tiles()
+        _nearby_tiles = visible_tiles
+        _nearby_tiles_pos = my_pos
+        bm_visible = 0
+        for tile in visible_tiles:
+            bm_visible |= 1 << (tile.x + tile.y * width)
+        _bm_visible = bm_visible
     _prev_pos     = my_pos
     rc_get_tile_building_id   = rc.get_tile_building_id
     rc_get_entity_type        = rc.get_entity_type

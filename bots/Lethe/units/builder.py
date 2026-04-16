@@ -54,7 +54,7 @@ def handle_comms():
             sn = sender_pos.x + sender_pos.y * w
             claimed_senders[flag] |= 1 << sn
             _sender_rounds[flag][sn] = current_round
-    for p in rc.get_nearby_tiles():
+    for p in map_info._nearby_tiles:
         idx = p.x + p.y * w
         for i in range(len(claimed_targets)):
             if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
