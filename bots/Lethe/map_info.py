@@ -548,9 +548,8 @@ def update_at(pos: Position) -> None:
             if not (_bm_conveyors & tbit):
                 break
             if res_ax:
-                _bm_conv_raw_ax |= tbit
-                _bm_conv_ti &= ~tbit
-                _bm_conv_refined &= ~tbit
+                if not ((_bm_conv_ti | _bm_conv_refined) & tbit):
+                    _bm_conv_raw_ax |= tbit
             elif res_ti:
                 _bm_conv_ti |= tbit
                 _bm_conv_raw_ax &= ~tbit
@@ -785,6 +784,9 @@ def _compute_route_targets() -> int:
         | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
     )
 
+    ti_harvesters = _bm_et[_IDX_HARVESTER] & bm_my & _bm_env[_IDX_ENV_ORE_TI]
+    ti_harv_adj = expand_manhattan(ti_harvesters) if ti_harvesters else 0
+
     dead_ends = 0
 
     mask = all_convs
@@ -802,7 +804,7 @@ def _compute_route_targets() -> int:
                 pass
             elif not (ore_accepting & tbit):
                 dead_ends |= lsb
-            elif (_bm_conv_raw_ax & lsb) and ((_bm_conv_ti | _bm_conv_refined) & tbit):
+            elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti | _bm_conv_refined) & tbit) or (ti_harv_adj & tbit)):
                 dead_ends |= lsb
         else:
             dead_ends |= lsb
@@ -1263,9 +1265,8 @@ def update(recompute: bool = True) -> None:
             if not (_bm_conveyors & tbit):
                 break
             if res_ax:
-                bm_conv_raw_ax |= tbit
-                bm_conv_ti &= ~tbit
-                bm_conv_refined &= ~tbit
+                if not ((bm_conv_ti | bm_conv_refined) & tbit):
+                    bm_conv_raw_ax |= tbit
             elif res_ti:
                 bm_conv_ti |= tbit
                 bm_conv_raw_ax &= ~tbit

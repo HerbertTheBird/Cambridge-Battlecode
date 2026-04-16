@@ -26,7 +26,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 bridge_cost = 6
 barrier_cost = 10
 threat_cost = 20
-conveyor_end_cost = 6
+conveyor_end_cost = 10
 
 
 
@@ -658,15 +658,22 @@ class Pathing:
     ):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
+            ti_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
+            avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
             if conveyor:
                 avoid &= ~(1<<map_info._building_conv_target[conveyor])
+                target &= ~(1<<conveyor)
             return target, avoid
         else:
+            ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
             target = (map_info._bm_route_targets & (map_info._bm_conv_ti | map_info._bm_conv_refined)) | map_info._bm_my_core_area
+            target &= ~ax_harvesters
+            avoid |= ax_harvesters
             if not target:
                 return 0, 0
             if conveyor:
                 avoid &= ~(1<<map_info._building_conv_target[conveyor])
+                target &= ~(1<<conveyor)
             return target, avoid
