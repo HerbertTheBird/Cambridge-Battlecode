@@ -27,6 +27,7 @@ bridge_cost = 6
 barrier_cost = 10
 threat_cost = 20
 conveyor_end_cost = 10
+non_walkable_cost = 1
 
 
 
@@ -282,13 +283,13 @@ class Pathing:
         if threat & start_mask:
             threat &= ~start_mask
 
-        start_time = time.perf_counter_ns()
+        walkable = (map_info._bm_et[map_info._IDX_ROAD]
+                    | map_info._bm_conveyors
+                    | map_info._bm_my_core_area
+                    | map_info._bm_their_core_area)
+        nw_cost = 1
 
-        # Precomputed barrier/threat combo masks
-        nb_nt = ~barriers & ~threat
-        b_nt = barriers & ~threat
-        nb_t = ~barriers & threat
-        b_t = barriers & threat
+        start_time = time.perf_counter_ns()
 
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
@@ -296,14 +297,31 @@ class Pathing:
         board = (1 << (w * height)) - 1
         not_avoid = board & ~avoid
 
-        max_c = 1 + barrier_cost + threat_cost
-        max_seed = barrier_cost + threat_cost
+        wk = walkable & board
+        nw = ~walkable & board
+
+        # 8 combo masks: walkable/non-walkable × barrier/no-barrier × threat/no-threat
+        wk_nb_nt = wk & ~barriers & ~threat
+        wk_b_nt  = wk & barriers & ~threat
+        wk_nb_t  = wk & ~barriers & threat
+        wk_b_t   = wk & barriers & threat
+        nw_nb_nt = nw & ~barriers & ~threat
+        nw_b_nt  = nw & barriers & ~threat
+        nw_nb_t  = nw & ~barriers & threat
+        nw_b_t   = nw & barriers & threat
+
+        max_c = 1 + nw_cost + barrier_cost + threat_cost
+        max_seed = nw_cost + barrier_cost + threat_cost
         cycle_len = max(max_c, max_seed) + 1
         frontier = [0] * cycle_len
-        frontier[0] = target_mask & nb_nt
-        frontier[barrier_cost % cycle_len] |= target_mask & b_nt
-        frontier[threat_cost % cycle_len] |= target_mask & nb_t
-        frontier[(barrier_cost + threat_cost) % cycle_len] |= target_mask & b_t
+        frontier[0]                                          = target_mask & wk_nb_nt
+        frontier[nw_cost % cycle_len]                       |= target_mask & nw_nb_nt
+        frontier[barrier_cost % cycle_len]                  |= target_mask & wk_b_nt
+        frontier[(nw_cost + barrier_cost) % cycle_len]      |= target_mask & nw_b_nt
+        frontier[threat_cost % cycle_len]                   |= target_mask & wk_nb_t
+        frontier[(nw_cost + threat_cost) % cycle_len]       |= target_mask & nw_nb_t
+        frontier[(barrier_cost + threat_cost) % cycle_len]  |= target_mask & wk_b_t
+        frontier[(nw_cost + barrier_cost + threat_cost) % cycle_len] |= target_mask & nw_b_t
 
         effective_len = max_seed + 1
         visited = 0
@@ -329,6 +347,8 @@ class Pathing:
                 vl_len = len(visited_layers)
 
                 extra_cost = 0
+                if start_bit & nw:
+                    extra_cost += nw_cost
                 if start_bit & barriers:
                     extra_cost += barrier_cost
                 if start_bit & threat:
@@ -400,10 +420,14 @@ class Pathing:
             expanded = h | (h << w) | (h >> w)
             new = expanded & not_avoid & ~visited
 
-            frontier[(i + 1) % cycle_len] |= new & nb_nt
-            frontier[(i + 1 + barrier_cost) % cycle_len] |= new & b_nt
-            frontier[(i + 1 + threat_cost) % cycle_len] |= new & nb_t
-            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len] |= new & b_t
+            frontier[(i + 1) % cycle_len]                                      |= new & wk_nb_nt
+            frontier[(i + 1 + nw_cost) % cycle_len]                             |= new & nw_nb_nt
+            frontier[(i + 1 + barrier_cost) % cycle_len]                        |= new & wk_b_nt
+            frontier[(i + 1 + nw_cost + barrier_cost) % cycle_len]              |= new & nw_b_nt
+            frontier[(i + 1 + threat_cost) % cycle_len]                         |= new & wk_nb_t
+            frontier[(i + 1 + nw_cost + threat_cost) % cycle_len]               |= new & nw_nb_t
+            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]          |= new & wk_b_t
+            frontier[(i + 1 + nw_cost + barrier_cost + threat_cost) % cycle_len] |= new & nw_b_t
             i += 1
 
     def bfs_route(self, start_mask: int, target_mask: int, avoid: int | None = None, end_cost_mask: int = 0):

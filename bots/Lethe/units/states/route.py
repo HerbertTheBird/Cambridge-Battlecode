@@ -54,7 +54,7 @@ def _too_expensive():
 
 def _dead_end_conveyors():
     """Bitmask of routable conveyors whose output is not connected to my ore-accepting network."""
-    return map_info._bm_dead_end & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
+    return map_info._bm_dead_end & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat & (map_info._bm_conv_ti | map_info._bm_conv_refined | map_info._bm_conv_raw_ax)
 
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""

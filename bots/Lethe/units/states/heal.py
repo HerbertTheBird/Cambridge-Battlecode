@@ -55,15 +55,10 @@ def _claimed_enemy_ids():
 
 def _find_chase_target():
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
-    my_team = map_info._my_team
-    zone = _conv_zone()
-    if not zone:
-        return None
-
     w = map_info._width
     claimed = _claimed_enemy_ids()
     # Filter enemy bots in zone, unclaimed
-    enemy_bots = map_info._bm_enemy_bots & zone
+    enemy_bots = map_info._bm_enemy_bots
     if not enemy_bots:
         return None
 
@@ -77,9 +72,11 @@ def _find_chase_target():
         if uid is not None and (uid & ID_MASK) not in claimed:
             filtered |= lsb
         mask ^= lsb
+    units.builder.draw_mask(enemy_bots, 0, 0, 255)
 
     if not filtered:
         return None
+    units.builder.draw_mask(filtered, 0, 255, 0)
 
     closest_pos, dist = nav.closest(filtered)
     if closest_pos is None or dist > 6:
@@ -111,8 +108,14 @@ def score():
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 7
-    if _find_chase_target() is not None:
-        return 7
+    target = _find_chase_target()
+    if target is not None:
+        if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
+            print("high priority heal")
+            return 7
+        else:
+            print("low priority heal")
+            return 4.5
     return 0
 
 
@@ -137,7 +140,7 @@ def _try_barrier_dead_ends():
         lsb = mask & -mask
         n = lsb.bit_length() - 1
         tn = conv_target[n]
-        if 0 <= tn < tiles:
+        if tn and 0 <= tn < tiles:
             tbit = 1 << tn
             if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
                 targets |= lsb

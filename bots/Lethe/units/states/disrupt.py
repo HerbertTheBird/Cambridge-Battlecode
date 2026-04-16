@@ -25,8 +25,8 @@ def _disruptable_ore():
                  | map_info._bm_et[map_info._IDX_MARKER])
     return (all_ore
             & (~map_info._bm_any_building | clearable)
-            & ~units.builder._harvest_zone
             & ~units.builder.forget[comm_flag]
+            & ~units.builder.forget[3]
             & ~map_info._bm_enemy_turret_threat
             & ~map_info._bm_enemy_launch_adj)
 
