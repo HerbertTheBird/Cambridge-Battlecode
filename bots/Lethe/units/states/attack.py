@@ -261,7 +261,7 @@ def _placement_candidates():
     enemy_team = map_info._bm_team[enemy_idx]
 
     # Location filter: conveyor outputs + cardinal adj to harvesters
-    candidates = map_info._bm_conveyor_targets
+    candidates = map_info._bm_ti_fed | map_info._bm_ax_fed
     harvesters = (map_info._bm_et[map_info._IDX_HARVESTER]&map_info._bm_env[map_info._IDX_ENV_ORE_TI]) | map_info._bm_et[map_info._IDX_FOUNDRY]  # double for safety margin
     if harvesters:
         candidates |= map_info.expand_manhattan(harvesters)

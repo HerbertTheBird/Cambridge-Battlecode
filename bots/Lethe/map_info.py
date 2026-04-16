@@ -152,6 +152,8 @@ _bm_conv_loaded: int = 0        # conveyor-type buildings with a stored resource
 _bm_conv_raw_ax: int = 0        # conveyors observed containing raw axionite
 _bm_conv_ti: int = 0            # conveyors observed containing titanium
 _bm_conv_refined: int = 0       # conveyors observed containing refined axionite
+_bm_ti_fed: int = 0             # targets of conveyors believed to carry titanium
+_bm_ax_fed: int = 0             # targets of conveyors believed to carry refined axionite
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
 _bm_visible: int = 0              # tiles visible this turn
@@ -885,7 +887,7 @@ def _compute_route_targets() -> int:
 
 def recompute_derived() -> None:
     """Rebuild derived bitmasks from the current tracked map state."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_ti_fed, _bm_ax_fed
     global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
     global _bm_enemy_turret_threat
 
@@ -918,15 +920,24 @@ def recompute_derived() -> None:
     _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
     _bm_blocked |= _bm_their_core_area
 
-    # Conveyor targets
+    # Conveyor targets + fed bitmasks
     _bm_conveyor_targets = 0
+    _bm_ti_fed = 0
+    _bm_ax_fed = 0
+    bm_conv_ti_local = _bm_conv_ti
+    bm_conv_refined_local = _bm_conv_refined
     mask = _bm_conveyors
     while mask:
         lsb = mask & -mask
         cn = lsb.bit_length() - 1
         tn = building_conv_target[cn]
         if tn >= 0:
-            _bm_conveyor_targets |= 1 << tn
+            tbit = 1 << tn
+            _bm_conveyor_targets |= tbit
+            if bm_conv_ti_local & lsb:
+                _bm_ti_fed |= tbit
+            if bm_conv_refined_local & lsb:
+                _bm_ax_fed |= tbit
         mask ^= lsb
 
     # Enemy launcher adjacency
