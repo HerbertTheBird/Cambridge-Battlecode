@@ -112,8 +112,6 @@ def run():
     map_info.update(recompute=False)
     handle_comms()
     map_info.recompute_derived()
-    # draw_mask(map_info._bm_dead_end, 255, 0, 0)
-    # draw_mask(map_info._bm_conv_ti, 0, 0, 255)
     pathing.rebuild_broken_barriers(rc)
     if map_info._my_core and not _harvest_zone_final:
         if map_info._solved_sym and map_info._predicted_enemy_core is not None:

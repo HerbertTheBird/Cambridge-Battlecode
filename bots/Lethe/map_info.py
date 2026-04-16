@@ -857,8 +857,6 @@ def _compute_route_targets() -> int:
                 dead_ends |= lsb
             elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti | _bm_conv_refined) & tbit) or (ti_harv_adj & tbit)):
                 dead_ends |= lsb
-            elif (_bm_conv_ti & lsb) and (_bm_conv_refined & tbit):
-                dead_ends |= lsb
         else:
             dead_ends |= lsb
         mask ^= lsb
