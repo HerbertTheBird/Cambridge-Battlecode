@@ -26,7 +26,7 @@ def _spawn_toward_center():
 
 
 def run():
-    # if rc.get_current_round() == 300:
+    # if rc.get_current_round() == 1100:
     #     rc.resign()
     titanium = rc.get_global_resources()[0]
     axionite = rc.get_global_resources()[1]

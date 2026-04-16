@@ -163,7 +163,6 @@ def run():
     avoid = avoid_mask()
     orphans = _orphan_harvesters() & ~avoid
     foundries = _orphan_foundries() & ~avoid
-
     best, _ = nav.closest(candidates)
     if best is None:
         print("no closest???")
@@ -206,6 +205,7 @@ def run():
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
+        print("PATH", path)
         if path is None:
             unpathable |= best_bit
             return

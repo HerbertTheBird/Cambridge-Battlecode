@@ -58,6 +58,19 @@ def init(c: Controller):
     _marker_id_at = [0] * (c.get_map_width() * c.get_map_height())
 
 
+def _estimate_turn(entity_id):
+    max_ids = map_info._max_id_by_round
+    lo, hi = 0, len(max_ids) - 1
+    result = hi
+    while lo <= hi:
+        mid = (lo + hi) >> 1
+        if max_ids[mid] < entity_id:
+            lo = mid + 1
+        else:
+            result = mid
+            hi = mid - 1
+    return result
+
 def get_new_messages():
     get_team = rc.get_team
     get_entity_type = rc.get_entity_type
@@ -91,7 +104,8 @@ def get_new_messages():
         sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
         sender_dir = _DIRS_8[sender_dir_idx]
         sender_pos = pos.add(sender_dir)
-        append((val, sender_pos))
+        estimated_turn = _estimate_turn(id)
+        append((val, sender_pos, estimated_turn))
 
     return messages
 
@@ -190,9 +204,9 @@ def mark(target_idx, type):
             rc.destroy(pos)
             
             # Don't bother updating map if we replaced marker with marker
-            if priority == 2:
-                map_info.update_at(pos)
+            map_info.update_at(pos)
 
         if rc.can_place_marker(pos):
             rc.place_marker(pos, val)
+            map_info.update_at(pos)
             _my_markers.add(rc.get_tile_building_id(pos))

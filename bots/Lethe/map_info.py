@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from collections import deque
 import time
 import pathing
-
+import units.builder as builder
 
 _HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
@@ -166,6 +166,9 @@ _bm_enemy_bots: int = 0          # bitmask of known enemy builder bot positions
 _bot_pos: dict[int, int] = {}    # uid -> tile index (both teams)
 _bot_team: dict[int, int] = {}   # uid -> team_idx
 _bot_at: dict[int, int] = {}    # tile index -> uid
+
+_max_id_by_round: list[int] = []  # max_id_by_round[round] = max entity id seen up to that round
+_max_id_seen: int = 0
 
 # --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
 _DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
@@ -479,6 +482,9 @@ def update_at(pos: Position) -> None:
     entity_id = rc.get_tile_building_id(pos)
     if entity_id is None:
         return
+    global _max_id_seen
+    if entity_id > _max_id_seen:
+        _max_id_seen = entity_id
     et = rc.get_entity_type(entity_id)
     if et == EntityType.MARKER:
         return
@@ -808,6 +814,8 @@ def _compute_route_targets() -> int:
                 dead_ends |= lsb
             elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti | _bm_conv_refined) & tbit) or (ti_harv_adj & tbit)):
                 dead_ends |= lsb
+            elif (_bm_conv_ti & lsb) and (_bm_conv_refined & tbit):
+                dead_ends |= lsb
         else:
             dead_ends |= lsb
         mask ^= lsb
@@ -967,6 +975,7 @@ def update(recompute: bool = True) -> None:
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
     global _bm_seen, _bm_visible, _prev_pos
     global _bm_friendly_bots, _bm_enemy_bots
+    global _max_id_seen
     rc = _rc
     building_id = _building_id
     building_et_idx = _building_et_idx
@@ -1054,6 +1063,8 @@ def update(recompute: bool = True) -> None:
 
 
         entity_id = rc_get_tile_building_id(tile)
+        if entity_id is not None and entity_id > _max_id_seen:
+            _max_id_seen = entity_id
         if entity_id is None:
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
@@ -1299,6 +1310,8 @@ def update(recompute: bool = True) -> None:
     _bm_enemy_bots = 0
     seen_uids = set()
     for uid in rc.get_nearby_units():
+        if uid > _max_id_seen:
+            _max_id_seen = uid
         if rc.get_entity_type(uid) != _ET_BUILDER_BOT:
             continue
         if uid == rc.get_id():
@@ -1337,6 +1350,11 @@ def update(recompute: bool = True) -> None:
             _bm_friendly_bots |= bit
         else:
             _bm_enemy_bots |= bit
+
+    current_round = rc.get_current_round()
+    while len(_max_id_by_round) <= current_round:
+        _max_id_by_round.append(0)
+    _max_id_by_round[current_round] = _max_id_seen
 
     if recompute:
         recompute_derived()
@@ -1390,7 +1408,7 @@ def get_avoid(
         ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
         w = _width
         landlocked = ore & (ore >> 1 & _not_right_col) & (ore << 1 & _not_left_col) & (ore >> w) & (ore << w)
-        mask |= ore & ~landlocked
+        mask |= ore & ~landlocked & builder._harvest_zone
     # if avoid_core:
     #     mask |= _bm_my_core_area
     if avoid_builders:

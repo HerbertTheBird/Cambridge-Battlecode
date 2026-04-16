@@ -15,7 +15,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], available)
+    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available)
 
 def init(c: Controller):
     global rc, nav

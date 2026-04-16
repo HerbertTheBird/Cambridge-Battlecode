@@ -93,9 +93,10 @@ def run():
 
     attempts = 0
     while attempts < 1:
-        if not nav.move_to(explore_target, rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2):
+        if not nav.move_to(explore_target):
             generate_explore_target()
         else:
             break
         attempts += 1
-    comms.mark(explore_target.x + explore_target.y * map_info._width, comm_flag)
+    if rc.get_global_resources()[0] >= rc.get_harvester_cost()[0]*5:
+        comms.mark(explore_target.x + explore_target.y * map_info._width, comm_flag)

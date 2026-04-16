@@ -45,17 +45,19 @@ def handle_comms():
     current_round = rc.get_current_round()
     comms_positional.start_round_stats()
     w = map_info._width
-    for v, sender_pos in comms.get_new_messages():
+    for v, sender_pos, estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
+        if estimated_turn + 3 < current_round:
+            continue
         idx = comms.decode_location(v)
         flag = comms.decode_type(v)
         claimed_targets[flag] |= 1 << idx
-        _target_rounds[flag][idx] = current_round
+        _target_rounds[flag][idx] = estimated_turn
         if map_info.in_bounds(sender_pos):
             sn = sender_pos.x + sender_pos.y * w
             claimed_senders[flag] |= 1 << sn
-            _sender_rounds[flag][sn] = current_round
+            _sender_rounds[flag][sn] = estimated_turn
     for p in rc.get_nearby_tiles():
         idx = p.x + p.y * w
         for i in range(len(claimed_targets)):
@@ -110,6 +112,8 @@ def run():
     map_info.update(recompute=False)
     handle_comms()
     map_info.recompute_derived()
+    # draw_mask(map_info._bm_dead_end, 255, 0, 0)
+    # draw_mask(map_info._bm_conv_ti, 0, 0, 255)
     pathing.rebuild_broken_barriers(rc)
     if map_info._my_core and not _harvest_zone_final:
         if map_info._solved_sym and map_info._predicted_enemy_core is not None:

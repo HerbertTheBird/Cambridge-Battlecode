@@ -24,7 +24,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 # (dx, dy, cost, valid_from_mask)
 
 bridge_cost = 6
-barrier_cost = 10
+barrier_cost = 15
 threat_cost = 20
 conveyor_end_cost = 10
 non_walkable_cost = 1
@@ -308,7 +308,10 @@ class Pathing:
         my_team_idx = map_info._my_team_idx
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
         barriers &= ~start_mask
+        # builder.draw_mask(target_mask, 0, 255, 255)
+        # builder.draw_mask(avoid, 255, 0, 255)
 
+        # builder.draw_mask(barriers, 0, 0, 255)
         threat = map_info._bm_enemy_launch_adj
         if avoid_turret:
             threat |= map_info._bm_enemy_turret_threat
@@ -470,6 +473,9 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
+        # builder.draw_mask(avoid, 255, 0, 0)
+
+        # builder.draw_mask(target_mask, 0, 255, 255)
         avoid &= ~start_mask
 
         start_time = time.perf_counter_ns()
@@ -574,7 +580,6 @@ class Pathing:
             ) & not_avoid
             frontier[(i + bridge_cost) % cycle_len] |= new_bridge
             i += 1
-        return None
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
         """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
         rc = self.rc
@@ -600,7 +605,7 @@ class Pathing:
                 adj.add(pos)
         return self.move_to(adj, **kwargs)
 
-    def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
+    def move_to(self, target: Position | set[Position], avoid_turret: bool = True):
         print("move to", target)
         if isinstance(target, Position):
             target_set = {target}
@@ -609,8 +614,6 @@ class Pathing:
         if target_set != self.target_p:
             self.forget_launcher.clear()
         avoid = map_info.get_avoid(False, True, False)
-        if avoid_empty:
-            avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = self.rc.get_position()
         if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
@@ -648,7 +651,6 @@ class Pathing:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
         else:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
-        builder.draw_mask(target, 0, 255, 0)
         if not target:
             return None
         if not update:
@@ -708,7 +710,8 @@ class Pathing:
         n4 = open_mask >> w
         at_least_two = ((n1 & n2) | (n1 & n3) | (n1 & n4)
                         | (n2 & n3) | (n2 & n4) | (n3 & n4))
-        return adj & ~blocked & at_least_two
+        core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
+        return (adj & ~blocked & at_least_two | core_adj) & (map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
 
     def _get_conveyor_targets_and_avoid(
         self, raw_axionite: bool, conveyor = None

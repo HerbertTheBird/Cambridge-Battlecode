@@ -81,11 +81,11 @@ def _find_chase_target():
                 if not nearby_friendly:
                     filtered |= lsb
         mask ^= lsb
-    units.builder.draw_mask(enemy_bots, 255, 0, 0)
+    # units.builder.draw_mask(enemy_bots, 255, 0, 0)
 
     if not filtered:
         return None
-    units.builder.draw_mask(filtered, 0, 255, 0)
+    # units.builder.draw_mask(filtered, 0, 255, 0)
 
     closest_pos, dist = nav.closest(filtered)
     if closest_pos is None or dist > 6:
