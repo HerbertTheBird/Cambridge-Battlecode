@@ -1131,32 +1131,9 @@ def update(recompute: bool = True) -> None:
             _bm_damaged &= ~bit
             _bm_very_damaged &= ~bit
             continue
-        et = rc_get_entity_type(entity_id)
-        if et == EntityType.MARKER:
-            if rc_get_team(entity_id) == my_team:
-                message = comms.decode_visible_marker(entity_id, tile)
-                if message is not None:
-                    estimated_turn = comms.estimate_turn(entity_id)
-                    _new_marker_messages.append((*message, estimated_turn))
-            old_et_idx = building_et_idx[n]
-            if old_et_idx >= 0:
-                old_tn = building_conv_target[n]
-                if old_tn >= 0 and (conv_reverse[old_tn] & bit):
-                    conv_reverse[old_tn] &= ~bit
-                building_conv_target[n] = 0
-                bm_et[old_et_idx] &= ~bit
-                _bm_any_building &= ~bit
-                for i in range(num_team):
-                    if bm_team[i] & bit:
-                        bm_team[i] &= ~bit
-                        break
-            building_id[n] = 0
-            building_et_idx[n] = -1
-            _bm_damaged &= ~bit
-            _bm_very_damaged &= ~bit
-            continue
-        et_idx = _ET_INT[et]
+        # Fast path: same building as before — skip get_entity_type/get_team/get_direction
         if building_id[n] == entity_id:
+            et_idx = building_et_idx[n]
             hp = rc_get_hp(entity_id)
             building_hp[n] = hp
             max_hp = _MAX_HP_BY_IDX[et_idx]
@@ -1185,7 +1162,37 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+        elif comms._marker_id_at[n] == entity_id:
+            # Already-seen marker — skip all controller calls
+            continue
         else:
+            # Different building ID — need full controller queries
+            et = rc_get_entity_type(entity_id)
+            if et == EntityType.MARKER:
+                if rc_get_team(entity_id) == my_team:
+                    message = comms.decode_visible_marker(entity_id, tile)
+                    if message is not None:
+                        estimated_turn = comms.estimate_turn(entity_id)
+                        _new_marker_messages.append((*message, estimated_turn))
+                old_et_idx = building_et_idx[n]
+                if old_et_idx >= 0:
+                    old_tn = building_conv_target[n]
+                    if old_tn >= 0 and (conv_reverse[old_tn] & bit):
+                        conv_reverse[old_tn] &= ~bit
+                    building_conv_target[n] = 0
+                    bm_et[old_et_idx] &= ~bit
+                    _bm_any_building &= ~bit
+                    for i in range(num_team):
+                        if bm_team[i] & bit:
+                            bm_team[i] &= ~bit
+                            break
+                building_id[n] = 0
+                building_et_idx[n] = -1
+                _bm_damaged &= ~bit
+                _bm_very_damaged &= ~bit
+                continue
+            et_idx = _ET_INT[et]
+
             # Clear old bits if replacing a different building
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
