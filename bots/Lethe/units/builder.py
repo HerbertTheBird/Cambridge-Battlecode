@@ -60,14 +60,12 @@ def handle_comms():
                     ni = nx + ny * w
                     forget[flag] |= 1 << ni
                     _forget_rounds[flag][ni] = current_round
-    for i, rounds in enumerate(_forget_rounds):
-        expired = []
-        for idx, claimed_round in rounds.items():
-            if claimed_round + 3 < current_round:
-                expired.append(idx)
-        for idx in expired:
-            del rounds[idx]
-            forget[i] &= ~(1 << idx)
+    for p in rc.get_nearby_tiles():
+        idx = p.x + p.y * map_info._width
+        for i in range(len(forget)):
+            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 3 < current_round:
+                del _forget_rounds[i][idx]
+                forget[i] &= ~(1 << idx)
     comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
     for p in map_info.iter_mask(mask):
