@@ -586,7 +586,7 @@ def update_at(pos: Position) -> None:
         res_ti = not res_ax and bool(_bm_conv_ti & bit)
         tn = _building_conv_target[n]
         for _ in range(3):
-            if tn <= 0:
+            if tn < 0:
                 break
             tbit = 1 << tn
             if not (_bm_conveyors & tbit):
@@ -1334,7 +1334,7 @@ def update(recompute: bool = True) -> None:
         res_ti = not res_ax and bool(bm_conv_ti & lsb)
         tn = building_conv_target[n]
         for _ in range(3):
-            if tn <= 0:
+            if tn < 0:
                 break
             tbit = 1 << tn
             if not (_bm_conveyors & tbit):

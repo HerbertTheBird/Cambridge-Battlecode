@@ -229,6 +229,4 @@ def run():
         best, dist = nav.closest(targets)
         if best is not None:
             nav.move_adjacent(best, avoid_turret=False)
-    if target is not None:
-        _try_barrier_dead_ends()
     _do_best_heal()

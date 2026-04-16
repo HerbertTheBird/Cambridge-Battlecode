@@ -716,7 +716,7 @@ class Pathing:
         at_least_two = ((n1 & n2) | (n1 & n3) | (n1 & n4)
                         | (n2 & n3) | (n2 & n4) | (n3 & n4))
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
-        return (adj & ~blocked & at_least_two | core_adj) & (map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
+        return (adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
 
     def _get_conveyor_targets_and_avoid(
         self, raw_axionite: bool, conveyor = None
