@@ -66,6 +66,10 @@ def harvestable_ore():
     )
     enemy_hard_adj = map_info.expand_manhattan(enemy_hard)
 
+    # Axionite ore adjacent to conveyors not carrying raw axionite — can't use those
+    non_raw_conveyors = map_info._bm_conveyors & ~map_info._bm_conv_raw_ax & map_info._bm_team[my_team_idx]
+    ax_ore_near_non_raw = map_info._bm_env[map_info._IDX_ENV_ORE_AX] & map_info.expand_manhattan(non_raw_conveyors) if non_raw_conveyors else 0
+
     return (ore
             & ~landlocked
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
@@ -74,7 +78,8 @@ def harvestable_ore():
             & ~enemy_hard_adj
             & ~map_info._bm_enemy_turret_threat
             & units.builder._harvest_zone
-            & ~cant_harvest)
+            & ~cant_harvest
+            & ~ax_ore_near_non_raw)
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
