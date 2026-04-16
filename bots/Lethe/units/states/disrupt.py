@@ -1,4 +1,5 @@
 import map_info
+import pathing
 from pathing import Pathing
 import comms
 import units.builder
@@ -15,29 +16,29 @@ def init(c: Controller):
     nav = Pathing(rc)
 
 def _disruptable_ore():
-    #filter out spots they can shoot, as well as spots with a builder bot within sqrt 20 euclidian distance (check in here using rc.get_nearby_units and filtering for builders)
-    
-    """Bitmask of ore tiles outside harvest zone that can have a barrier placed.
-    Includes tiles with road or marker (either team) since those can be cleared."""
     all_ore = (map_info._bm_env[map_info._IDX_ENV_ORE_TI]
                | map_info._bm_env[map_info._IDX_ENV_ORE_AX])
     clearable = (map_info._bm_et[map_info._IDX_ROAD]
                  | map_info._bm_et[map_info._IDX_MARKER])
     return (all_ore
             & (~map_info._bm_any_building | clearable)
-            & ~units.builder.forget[comm_flag]
-            & ~units.builder.forget[3]
+            & ~units.builder._harvest_zone
             & ~map_info._bm_enemy_turret_threat
             & ~map_info._bm_enemy_launch_adj)
+
+def _my_claims():
+    w = map_info._width
+    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _disruptable_ore())
 
 def score():
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
         return 0
-    return 2 if _disruptable_ore() else 0
+    return 2 if _my_claims() else 0
 
 def run():
     print("DISRUPT")
-    available = _disruptable_ore()
+    available = _my_claims()
     if not available:
         return
 

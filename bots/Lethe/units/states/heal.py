@@ -20,32 +20,33 @@ def init(c: Controller):
 
 
 def _conv_zone():
-    """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
-    my_team_idx = map_info._my_team_idx
-    my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
-    my_convs |= map_info._bm_my_core_area
-    if not my_convs:
-        return 0
-    w = map_info._width
-    board = (1 << (w * map_info._height)) - 1
-    avoid = map_info.get_avoid(False, False, False)
-    passable = ~avoid & board
-    nlc = map_info._not_left_col
-    nrc = map_info._not_right_col
-    visited = my_convs
-    frontier = my_convs
-    for _ in range(CONV_CHASE_CHEB):
-        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-        expanded = h | (h << w) | (h >> w)
-        frontier = expanded & passable & ~visited
-        visited |= frontier
-    return visited
+    return units.builder._harvest_zone
+    # """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
+    # my_team_idx = map_info._my_team_idx
+    # my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    # my_convs |= map_info._bm_my_core_area
+    # if not my_convs:
+    #     return 0
+    # w = map_info._width
+    # board = (1 << (w * map_info._height)) - 1
+    # avoid = map_info._bm_blocked
+    # passable = ~avoid & board
+    # nlc = map_info._not_left_col
+    # nrc = map_info._not_right_col
+    # visited = my_convs
+    # frontier = my_convs
+    # for _ in range(CONV_CHASE_CHEB):
+    #     h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+    #     expanded = h | (h << w) | (h >> w)
+    #     frontier = expanded & passable & ~visited
+    #     visited |= frontier
+    # return visited
 
 
 def _claimed_enemy_ids():
     """Set of enemy ID hashes (mod 2^12) already claimed by other builders."""
     claimed = set()
-    mask = units.builder.forget[comm_flag]
+    mask = units.builder.claimed_targets[comm_flag]
     while mask:
         lsb = mask & -mask
         claimed.add(lsb.bit_length() - 1)
@@ -62,17 +63,25 @@ def _find_chase_target():
     if not enemy_bots:
         return None
 
-    # Remove claimed enemies
+    friendly_bots = map_info._bm_friendly_bots
+    my_bit = 1 << (rc.get_position().x + rc.get_position().y * w)
+    other_friendly = friendly_bots & ~my_bit
+
     filtered = 0
     mask = enemy_bots
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
         uid = map_info._bot_at.get(n)
-        if uid is not None and (uid & ID_MASK) not in claimed:
-            filtered |= lsb
+        if uid is not None:
+            if (uid & ID_MASK) not in claimed:
+                filtered |= lsb
+            else:
+                nearby_friendly = map_info.expand_chebyshev(map_info.expand_chebyshev(lsb)) & other_friendly
+                if not nearby_friendly:
+                    filtered |= lsb
         mask ^= lsb
-    units.builder.draw_mask(enemy_bots, 0, 0, 255)
+    units.builder.draw_mask(enemy_bots, 255, 0, 0)
 
     if not filtered:
         return None
@@ -111,11 +120,11 @@ def score():
     target = _find_chase_target()
     if target is not None:
         if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
-            print("high priority heal")
+            print("high priority heal", target[0])
             return 7
         else:
-            print("low priority heal")
-            return 4.5
+            print("low priority heal", target[0])
+            return 2.5
     return 0
 
 
@@ -195,6 +204,7 @@ def run():
     # Priority 1: chase an enemy near my conveyors
     target = _find_chase_target()
     if target is not None:
+        print("target is",target)
         uid, ep = target
         _try_barrier_dead_ends()
         nav.move_to(ep)
@@ -209,6 +219,6 @@ def run():
         best, dist = nav.closest(targets)
         if best is not None:
             nav.move_adjacent(best, avoid_turret=False)
-    
-    _try_barrier_dead_ends()
+    if target is not None:
+        _try_barrier_dead_ends()
     _do_best_heal()

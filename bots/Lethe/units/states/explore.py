@@ -34,7 +34,7 @@ def generate_explore_target():
     # the nearest friendly bot toward each claim, plus my own position.
     seeds = 0
     claims = 0
-    for i, f in enumerate(units.builder.forget):
+    for i, f in enumerate(units.builder.claimed_targets):
         if i == 7:  # heal flag uses enemy IDs, not tile positions
             continue
         claims |= f
@@ -71,7 +71,7 @@ def generate_explore_target():
 
     # prev_frontier is the last ring before flood filled everything.
     # Pick a random unset bit from that ring (tiles NOT claimed by anyone).
-    unclaimed = prev_frontier & ~units.builder.forget[comm_flag]
+    unclaimed = prev_frontier & ~units.builder.claimed_targets[comm_flag]
     pool = unclaimed if unclaimed else prev_frontier
     count = pool.bit_count()
     if count == 0:

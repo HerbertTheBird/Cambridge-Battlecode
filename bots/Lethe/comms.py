@@ -73,7 +73,6 @@ def get_new_messages():
     append = messages.append
 
     for id in rc.get_nearby_buildings():
-        # Skip markers this bot placed itself.
         if id in my_markers:
             continue
         if get_entity_type(id) != marker_type:
@@ -89,7 +88,10 @@ def get_new_messages():
         marker_id_at[pos_n] = id
 
         val = get_marker_value(id) ^ key
-        append(val)
+        sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
+        sender_dir = _DIRS_8[sender_dir_idx]
+        sender_pos = pos.add(sender_dir)
+        append((val, sender_pos))
 
     return messages
 
@@ -134,6 +136,8 @@ def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
 def mark(target_idx, type):
+    if type != 7:
+        rc.draw_indicator_line(rc.get_position(), Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
     print("mark", target_idx, type)
 
     adjacent_tiles = rc.get_nearby_tiles(2)

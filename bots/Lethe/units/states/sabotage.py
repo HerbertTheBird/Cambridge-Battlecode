@@ -1,4 +1,5 @@
 import map_info
+import pathing
 from pathing import Pathing
 import comms
 import units.builder
@@ -33,7 +34,6 @@ def _sabotage_targets():
     # Exclude tiles in turret threat or adjacent to enemy launcher
     danger = map_info._bm_enemy_turret_threat | map_info._bm_enemy_launch_adj
     targets &= ~danger
-    targets &= ~units.builder.forget[comm_flag]
 
     # Avoid enemy builder bots within 6 pathing distance
     enemy_bots = map_info._bm_enemy_bots
@@ -83,13 +83,17 @@ def _sabotage_targets():
 
     return pruned_targets
 
+def _my_claims():
+    w = map_info._width
+    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _sabotage_targets())
+
 def score():
-    return 5 if _sabotage_targets() else 0
+    return 5 if _my_claims() else 0
 
 def run():
     print("SABOTAGE")
-    targets = _sabotage_targets()
-    # units.builder.draw_mask(targets, 255, 0, 255)
+    targets = _my_claims()
 
     if not targets:
         return

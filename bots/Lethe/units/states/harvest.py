@@ -10,6 +10,13 @@ nav: Pathing = None
 
 comm_flag = 3
 
+def _my_claims():
+    my_pos = rc.get_position()
+    w = map_info._width
+    my_mask = 1 << (my_pos.x + my_pos.y * w)
+    available = harvestable_ore() & ~_too_expensive()
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], available)
+
 def init(c: Controller):
     global rc, nav
     rc = c
@@ -61,7 +68,6 @@ def harvestable_ore():
     return (ore
             & ~landlocked
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
-            & ~units.builder.forget[comm_flag]
             & ~enemy_blocking
             & ~friendly_blocking
             & ~enemy_hard_adj
@@ -80,7 +86,7 @@ def _too_expensive():
     return result
 
 def score():
-    return 3 if (harvestable_ore() & ~_too_expensive()) else 0
+    return 3 if _my_claims() else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
@@ -130,8 +136,7 @@ def run():
             comms.mark(pn, comm_flag)
             return
 
-    expensive = _too_expensive()
-    available = harvestable_ore() & ~expensive
+    available = _my_claims()
     if not available:
         return
 

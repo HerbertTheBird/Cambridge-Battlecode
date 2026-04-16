@@ -36,36 +36,35 @@ def init(c: Controller):
     for s in states:
         s.init(c)
 
-forget = [0] * (len(states) + 1)            # bitmask per comm flag
-_forget_rounds = [dict() for _ in range(len(states) + 1)]  # idx -> round for expiry
+claimed_targets = [0] * (len(states) + 1)   # target bitmask per comm flag
+claimed_senders = [0] * (len(states) + 1)   # sender position bitmask per comm flag
+_target_rounds = [dict() for _ in range(len(states) + 1)]
+_sender_rounds = [dict() for _ in range(len(states) + 1)]
 
 def handle_comms():
     current_round = rc.get_current_round()
     comms_positional.start_round_stats()
-    for v in comms.get_new_messages():
+    w = map_info._width
+    for v, sender_pos in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
         idx = comms.decode_location(v)
         flag = comms.decode_type(v)
-        forget[flag] |= 1 << idx
-        _forget_rounds[flag][idx] = current_round
-        # Harvest claims also reserve cardinal neighbors (for barriers)
-        if flag == 3:
-            w = map_info._width
-            px = idx % w
-            py = idx // w
-            for dx, dy in [(0, -1), (1, 0), (0, 1), (-1, 0)]:
-                nx, ny = px + dx, py + dy
-                if 0 <= nx < w and 0 <= ny < map_info._height:
-                    ni = nx + ny * w
-                    forget[flag] |= 1 << ni
-                    _forget_rounds[flag][ni] = current_round
+        claimed_targets[flag] |= 1 << idx
+        _target_rounds[flag][idx] = current_round
+        if map_info.in_bounds(sender_pos):
+            sn = sender_pos.x + sender_pos.y * w
+            claimed_senders[flag] |= 1 << sn
+            _sender_rounds[flag][sn] = current_round
     for p in rc.get_nearby_tiles():
-        idx = p.x + p.y * map_info._width
-        for i in range(len(forget)):
-            if idx in _forget_rounds[i] and _forget_rounds[i][idx] + 3 < current_round:
-                del _forget_rounds[i][idx]
-                forget[i] &= ~(1 << idx)
+        idx = p.x + p.y * w
+        for i in range(len(claimed_targets)):
+            if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
+                del _target_rounds[i][idx]
+                claimed_targets[i] &= ~(1 << idx)
+            if idx in _sender_rounds[i] and _sender_rounds[i][idx] + 3 < current_round:
+                del _sender_rounds[i][idx]
+                claimed_senders[i] &= ~(1 << idx)
     comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
     for p in map_info.iter_mask(mask):

@@ -1,4 +1,5 @@
 import map_info
+import pathing
 from pathing import Pathing
 import comms
 from cambc import *
@@ -54,12 +55,12 @@ def _too_expensive():
 
 def _dead_end_conveyors():
     """Bitmask of routable conveyors whose output is not connected to my ore-accepting network."""
-    return map_info._bm_dead_end & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat & (map_info._bm_conv_ti | map_info._bm_conv_refined | map_info._bm_conv_raw_ax)
+    return map_info._bm_dead_end & ~map_info._bm_enemy_turret_threat
 
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
     my_team_idx = map_info._my_team_idx
-    my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
+    my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_team_idx]
     if not my_harvesters:
         return 0
 
@@ -72,7 +73,7 @@ def _orphan_harvesters():
     ) & map_info._bm_team[my_team_idx]
 
     served = map_info.expand_manhattan(my_connected)
-    return my_harvesters & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
+    return my_harvesters & ~served & ~map_info._bm_enemy_turret_threat
 def _orphan_foundries():
     """Bitmask of my foundries with no adjacent conveyor/turret/core."""
     my_team_idx = map_info._my_team_idx
@@ -99,7 +100,7 @@ def _orphan_foundries():
     )
 
     served = map_info.expand_manhattan(my_connected)
-    return my_foundries & ~served & ~units.builder.forget[comm_flag] & ~map_info._bm_enemy_turret_threat
+    return my_foundries & ~served & ~map_info._bm_enemy_turret_threat
 def cant_claim():
     w = map_info._width
     my_pos = rc.get_position()
@@ -137,32 +138,31 @@ def cant_claim():
 def avoid_mask():
     return _too_expensive() | cant_claim() | unpathable
 
-def score():
-    # units.builder.draw_mask(_orphan_harvesters(), 0, 0, 255)
-    # units.builder.draw_mask(_dead_end_conveyors() , 0, 255, 0)
+def _my_claims():
+    w = map_info._width
+    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
     avoid = avoid_mask()
-    return 4 if ((_dead_end_conveyors() & ~avoid) or (_orphan_harvesters() & ~avoid) or (_orphan_foundries() & ~avoid)) else 0
+    candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
+
+def score():
+    return 4 if _my_claims() else 0
 
 def run():
 
     global unpathable
     print("ROUTE")
-    avoid = avoid_mask()
-    dead_ends = _dead_end_conveyors() & ~avoid
-    orphans = _orphan_harvesters() & ~avoid
-    foundries = _orphan_foundries() & ~avoid
-    # units.builder.draw_mask(foundries, 255, 0, 0)
-    # units.builder.draw_mask(nav._get_conveyor_targets_and_avoid(True)[0], 0, 255, 0)
-
-    candidates = dead_ends | orphans | foundries
-    # units.builder.draw_mask(dead_ends, 0, 255, 0)
-    # units.builder.draw_mask(orphans, 0, 0, 255)
+    candidates = _my_claims()
 
     if not candidates:
         print("no candidates")
         return
     width = map_info._width
     height = map_info._height
+
+    avoid = avoid_mask()
+    orphans = _orphan_harvesters() & ~avoid
+    foundries = _orphan_foundries() & ~avoid
 
     best, _ = nav.closest(candidates)
     if best is None:

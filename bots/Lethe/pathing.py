@@ -62,6 +62,38 @@ def rebuild_broken_barriers(rc: Controller):
             break
     if rebuilt_pos is not None:
         destroyed_barriers.pop(rebuilt_pos, None)
+def voronoi_claim(my_mask, others_mask, claims):
+    if not claims:
+        return 0
+    if not others_mask:
+        return claims
+    w = map_info._width
+    board = (1 << (w * map_info._height)) - 1
+    avoid = map_info.get_avoid(False, False, False)
+    passable = (~avoid & board) | claims
+
+    my_front = my_mask & passable
+    other_front = others_mask & passable
+    my_claimed = my_front
+    other_claimed = other_front
+    all_claimed = my_claimed | other_claimed
+
+    while (claims & ~all_claimed) and (my_front or other_front):
+        if my_front:
+            my_expand = map_info.expand_chebyshev(my_front) & passable & ~all_claimed
+            my_claimed |= my_expand
+            all_claimed |= my_expand
+            my_front = my_expand
+        if not (claims & ~all_claimed):
+            break
+        if other_front:
+            other_expand = map_info.expand_chebyshev(other_front) & passable & ~all_claimed
+            other_claimed |= other_expand
+            all_claimed |= other_expand
+            other_front = other_expand
+
+    return my_claimed & claims
+
 class Pathing:
 
 
@@ -616,6 +648,7 @@ class Pathing:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
         else:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
+        builder.draw_mask(target, 0, 255, 0)
         if not target:
             return None
         if not update:
@@ -692,7 +725,7 @@ class Pathing:
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
-            target = (map_info._bm_route_targets & (map_info._bm_conv_ti | map_info._bm_conv_refined)) | map_info._bm_my_core_area
+            target = (map_info._bm_route_targets & ~map_info._bm_conv_raw_ax) | map_info._bm_my_core_area
             target &= ~ax_harvesters
             avoid |= ax_harvesters
             if not target:

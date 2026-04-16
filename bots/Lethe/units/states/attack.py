@@ -1,4 +1,5 @@
 import map_info
+import pathing
 from pathing import Pathing
 import comms
 import units.builder
@@ -283,7 +284,6 @@ def _placement_candidates():
 
     # Exclusions
     candidates &= ~map_info._bm_env[map_info._IDX_ENV_WALL]
-    candidates &= ~units.builder.forget[comm_flag]
 
     # Exclude tiles with any builder bots (except me)
     my_bit = 1 << (rc.get_position().x + rc.get_position().y * map_info._width)
@@ -361,20 +361,25 @@ def _get_attack_candidates():
     return non_roaded, roaded
 
 
+def _my_claims():
+    w = map_info._width
+    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    non_roaded, roaded = _get_attack_candidates()
+    combined = non_roaded | roaded
+    claimed = pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], combined)
+    return claimed & non_roaded, claimed & roaded
+
 def score():
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:
         return 0
-    non_roaded, roaded = _get_attack_candidates()
+    non_roaded, roaded = _my_claims()
     return 6 if (non_roaded or roaded) else 0
 
 
 def run():
     print("ATTACK")
-    non_roaded, roaded = _get_attack_candidates()
-    # units.builder.draw_mask(_placement_candidates(), 0, 255, 255)
-    # units.builder.draw_mask(non_roaded, 255, 0, 0)
-    # units.builder.draw_mask(roaded, 255, 255, 0)
-    
+    non_roaded, roaded = _my_claims()
+
     if not non_roaded and not roaded:
         return
 
