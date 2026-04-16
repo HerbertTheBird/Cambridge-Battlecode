@@ -282,7 +282,7 @@ def _placement_candidates():
     candidates &= ~map_info._bm_env[map_info._IDX_ENV_WALL]
 
     # Exclude tiles with any builder bots (except me)
-    my_bit = 1 << (rc.get_position().x + rc.get_position().y * map_info._width)
+    my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * map_info._width)
     all_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
     candidates &= ~all_bots
 
@@ -359,7 +359,7 @@ def _get_attack_candidates():
 
 def _my_claims():
     w = map_info._width
-    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     non_roaded, roaded = _get_attack_candidates()
     combined = non_roaded | roaded
     claimed = pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], combined)
@@ -389,7 +389,7 @@ def run():
     candidates = non_roaded | roaded
 
     # Evaluate all adjacent candidate tiles and pick highest scoring
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     best = None
     best_score = -1
     best_direction = Direction.NORTH

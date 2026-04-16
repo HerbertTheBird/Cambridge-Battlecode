@@ -104,7 +104,7 @@ def _orphan_foundries():
     return my_foundries & ~served & ~map_info._bm_enemy_turret_threat
 def cant_claim():
     w = map_info._width
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
 
     # My 5x5 (2 Chebyshev) zone — always claimable
     my_bit = 1 << (my_pos.x + my_pos.y * w)
@@ -141,7 +141,7 @@ def avoid_mask():
 
 def _my_claims():
     w = map_info._width
-    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     avoid = avoid_mask()
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
@@ -264,7 +264,7 @@ def run():
             return
     if near_enemy:
         nav.move_to(target_conveyor[1])
-        if rc.get_position() == target_conveyor[1]:
+        if map_info._my_pos == target_conveyor[1]:
             can_build = True
     else:
         nav.move_adjacent(target_conveyor[0])

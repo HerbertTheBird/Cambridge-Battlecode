@@ -153,6 +153,7 @@ _rc: Controller
 _width = _height = 0
 _MAP_CENTER = None
 _prev_pos: Position = None
+_my_pos: Position = None           # cached rc.get_position(), updated on move
 _my_team: Team = None
 _my_team_idx: int = 0
 
@@ -599,9 +600,10 @@ def update_at(pos: Position) -> None:
 
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
-    global _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos
+    global _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     rc = _rc
     new_pos = rc.get_position()
+    _my_pos = new_pos
     if new_pos == _prev_pos:
         return
     _prev_pos = new_pos
@@ -1005,7 +1007,7 @@ def update(recompute: bool = True) -> None:
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
-    global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos
+    global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
     global _new_marker_messages
     rc = _rc
@@ -1036,6 +1038,7 @@ def update(recompute: bool = True) -> None:
     my_team       = _my_team
     my_team_idx   = _my_team_idx
     my_pos        = rc.get_position()
+    _my_pos       = my_pos
 
     if _nearby_tiles_pos == my_pos:
         visible_tiles = _nearby_tiles
@@ -1447,7 +1450,7 @@ def get_avoid(
     if avoid_builders:
         mask |= _bm_friendly_bots | _bm_enemy_bots
     threat = _bm_enemy_turret_threat
-    pos = _rc.get_position()
+    pos = _my_pos
     my_bit = 1 << (pos.x + pos.y * _width)
     if not (threat & my_bit):
         mask |= threat

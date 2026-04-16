@@ -39,7 +39,7 @@ def rebuild_broken_barriers(rc: Controller):
     if rc.get_action_cooldown() > 0:
         return
 
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     my_team = map_info._my_team
     current_round = rc.get_current_round()
     
@@ -122,7 +122,7 @@ class Pathing:
         if targets == 0:
             return None, -1
         if pos is None:
-            pos = self.rc.get_position()
+            pos = map_info._my_pos
         w = map_info._width
         board = (1 << (w * map_info._height)) - 1
         avoid = map_info.get_avoid(False, False, False)
@@ -258,7 +258,7 @@ class Pathing:
 
     def move(self, dir: Direction):
         rc = self.rc
-        px, py = rc.get_position().x, rc.get_position().y
+        px, py = map_info._my_pos.x, map_info._my_pos.y
         dx, dy = map_info._DIRECTION_DELTAS[dir]
         new_pos = Position(px + dx, py + dy)
         if not map_info.in_bounds(new_pos):
@@ -586,7 +586,7 @@ class Pathing:
             p = map_info.pos_add(pos, d)
             if not map_info.in_bounds(p):
                 continue
-            if p == rc.get_position():
+            if p == map_info._my_pos:
                 adj.add(p)
                 continue
             if not map_info.is_passable(p):
@@ -612,7 +612,7 @@ class Pathing:
         avoid = map_info.get_avoid(False, True, False)
         if avoid_empty:
             avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
-        my_pos = self.rc.get_position()
+        my_pos = map_info._my_pos
         if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
         else:

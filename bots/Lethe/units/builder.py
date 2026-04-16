@@ -133,7 +133,7 @@ def run():
     best_state.run()
     # Heal the most damaged adjacent building, fall back to self
     heal._do_best_heal()
-    if rc.can_heal(rc.get_position()):
-        rc.heal(rc.get_position())
+    if rc.can_heal(map_info._my_pos):
+        rc.heal(map_info._my_pos)
     # if rc.get_tile_building_id(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team() and rc.can_fire(rc.get_position()):
     #     rc.fire(rc.get_position())

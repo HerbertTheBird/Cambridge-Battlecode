@@ -65,7 +65,7 @@ def _find_chase_target():
         return None
 
     friendly_bots = map_info._bm_friendly_bots
-    my_bit = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     other_friendly = friendly_bots & ~my_bit
 
     filtered = 0
@@ -161,7 +161,7 @@ def _try_barrier_dead_ends():
         mask ^= lsb
     if not targets:
         return
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     for d in map_info._ALL_DIRECTIONS:
         dx, dy = map_info._DIRECTION_DELTAS[d]
         p = Position(my_pos.x + dx, my_pos.y + dy)
@@ -185,7 +185,7 @@ def _do_best_heal():
     healable = _healable_mask() & map_info._bm_damaged
     best_heal = None
     best_heal_damage = -1
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     for d in map_info._ALL_DIRECTIONS:
         dx, dy = map_info._DIRECTION_DELTAS[d]
         p = Position(my_pos.x + dx, my_pos.y + dy)

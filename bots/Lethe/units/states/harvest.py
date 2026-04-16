@@ -12,7 +12,7 @@ nav: Pathing = None
 comm_flag = 3
 
 def _my_claims():
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
@@ -105,7 +105,7 @@ def run():
     harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
     has_building = map_info._bm_any_building
 
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     for d in (Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST, Direction.NORTHWEST):
         dx, dy = map_info._DIRECTION_DELTAS[d]
         p = Position(my_pos.x + dx, my_pos.y + dy)
@@ -158,7 +158,7 @@ def run():
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
         return
-    if rc.get_position().distance_squared(best_ore) > 2:
+    if map_info._my_pos.distance_squared(best_ore) > 2:
         nav.move_to(best_ore)
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return
@@ -168,7 +168,7 @@ def run():
         p = map_info.pos_add(best_ore, d)
         if not map_info.in_bounds(p):
             continue
-        if p == rc.get_position() and p in pathing.destroyed_barriers:
+        if p == map_info._my_pos and p in pathing.destroyed_barriers:
             continue
 
         pn = p.x + p.y * w
@@ -237,11 +237,11 @@ def run():
         is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
         if not is_mine and is_road:
             nav.move_to(best_ore)
-            if rc.can_fire(rc.get_position()):
-                rc.fire(rc.get_position())
+            if rc.can_fire(map_info._my_pos):
+                rc.fire(map_info._my_pos)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and rc.get_position() != best_ore:
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
 
