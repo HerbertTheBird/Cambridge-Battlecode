@@ -164,7 +164,9 @@ _building_et_idx: list[int] = []
 _building_hp: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
+_building_team_idx: list[int] = []  # team index per tile (-1 = no building)
 _conv_reverse: list[int] = []   # reverse[tn] = bitmask of my conveyors whose output target is tile tn
+_env_idx_by_tile: list[int] = []  # env index per tile (0=empty by default)
 
 # Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
 _bm_et: list[int] = []      # one bitmask per EntityType
@@ -172,6 +174,7 @@ _bm_team: list[int] = []    # one bitmask per Team
 _bm_env: list[int] = []     # one bitmask per Environment
 _bm_seen: int = 0           # seen tiles
 _bm_any_building: int = 0   # union of all tracked building bitmasks
+_board_mask: int = 0         # (1 << (w*h)) - 1, cached
 
 # Derived bitmasks
 _bm_blocked: int = 0            # walls + non-passable buildings + enemy core area
@@ -500,12 +503,11 @@ def update_at(pos: Position) -> None:
             tn = _building_conv_target[n]
             if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
-            if (_bm_team[_my_team_idx] & bit) and tn >= 0:
+            if (_building_team_idx[n] == _my_team_idx) and tn >= 0:
                 _conv_reverse[tn] &= ~bit
-        for i in range(_NUM_TEAM):
-            if _bm_team[i] & bit:
-                _bm_team[i] &= ~bit
-                break
+        old_ti = _building_team_idx[n]
+        if old_ti >= 0:
+            _bm_team[old_ti] &= ~bit
         _bm_blocked &= ~bit
         _bm_conveyors &= ~bit
         _bm_conv_loaded &= ~bit
@@ -520,6 +522,7 @@ def update_at(pos: Position) -> None:
         _building_hp[n] = 0
         _building_dir[n] = 0
         _building_conv_target[n] = 0
+        _building_team_idx[n] = -1
 
     # Read current state from controller
     entity_id = rc.get_tile_building_id(pos)
@@ -548,6 +551,7 @@ def update_at(pos: Position) -> None:
     _building_hp[n] = rc.get_hp(entity_id)
     _building_dir[n] = _DIR_INT[direction] if direction else 0
     _building_conv_target[n] = (target.x + target.y * _width) if target else -1
+    _building_team_idx[n] = team_idx
 
     _bm_et[et_idx] |= bit
     _bm_team[team_idx] |= bit
@@ -658,8 +662,8 @@ def update_move() -> None:
 def init(c: Controller):
     global _rc, _width, _height
     global _my_team, _my_team_idx
-    global _building_id, _building_et_idx, _building_hp, _building_dir, _building_conv_target, _conv_reverse
-    global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building
+    global _building_id, _building_et_idx, _building_hp, _building_dir, _building_conv_target, _building_team_idx, _conv_reverse, _env_idx_by_tile
+    global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building, _board_mask
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
     global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
     global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2, _not_left_col_3, _not_right_col_3
@@ -671,12 +675,15 @@ def init(c: Controller):
     _height = _rc.get_map_height()
     _MAP_CENTER = Position(_width // 2, _height // 2)
     tiles = _width * _height
+    _board_mask = (1 << tiles) - 1
     _building_id          = [0] * tiles
     _building_et_idx      = [-1] * tiles
     _building_hp          = [0] * tiles
     _building_dir         = [0] * tiles
     _building_conv_target = [0] * tiles
+    _building_team_idx    = [-1] * tiles
     _conv_reverse         = [0] * tiles
+    _env_idx_by_tile      = [_IDX_ENV_EMPTY] * tiles
 
     _bm_et   = [0] * _NUM_ET
     _bm_team = [0] * _NUM_TEAM
@@ -733,11 +740,7 @@ def update_symmetry_from_comms(sym_bits):
 
 def _env_at_idx(n):
     """Return the env list index for tile n."""
-    bit = 1 << n
-    for i in range(_NUM_ENV):
-        if _bm_env[i] & bit:
-            return i
-    return _IDX_ENV_EMPTY
+    return _env_idx_by_tile[n]
 
 def flip(pos: Position):
     if not _solved_sym:
@@ -768,8 +771,6 @@ def build_core_areas() -> None:
     _bm_their_core_area = 0
     bm_et = _bm_et
     bm_team = _bm_team
-    num_et = _NUM_ET
-    num_team = _NUM_TEAM
     if _my_core is not None:
         n = _my_core.x+_my_core.y*_width
         my_team_idx = _my_team_idx
@@ -778,12 +779,15 @@ def build_core_areas() -> None:
                 m = x+y*_width
                 bit = 1 << m
                 # Clear any old entity/team bits at this tile
-                for i in range(num_et):
-                    bm_et[i] &= ~bit
-                for i in range(num_team):
-                    bm_team[i] &= ~bit
+                old_et = _building_et_idx[m]
+                if old_et >= 0:
+                    bm_et[old_et] &= ~bit
+                old_ti = _building_team_idx[m]
+                if old_ti >= 0:
+                    bm_team[old_ti] &= ~bit
                 _building_id[m] = _building_id[n]
                 _building_et_idx[m] = _IDX_CORE
+                _building_team_idx[m] = my_team_idx
                 _building_hp[m] = _building_hp[n]
                 _bm_my_core_area |= bit
                 _bm_any_building |= bit
@@ -794,19 +798,22 @@ def build_core_areas() -> None:
         enemy_team_idx = 1 - _my_team_idx
         for x in range(_their_core.x - 1, _their_core.x + 2):
             for y in range(_their_core.y - 1, _their_core.y + 2):
-                    m = x+y*_width
-                    bit = 1 << m
-                    for i in range(num_et):
-                        bm_et[i] &= ~bit
-                    for i in range(num_team):
-                        bm_team[i] &= ~bit
-                    _building_id[m] = _building_id[n]
-                    _building_et_idx[m] = _IDX_CORE
-                    _building_hp[m] = _building_hp[n]
-                    _bm_their_core_area |= bit
-                    _bm_any_building |= bit
-                    bm_et[_IDX_CORE] |= bit
-                    bm_team[enemy_team_idx] |= bit
+                m = x+y*_width
+                bit = 1 << m
+                old_et = _building_et_idx[m]
+                if old_et >= 0:
+                    bm_et[old_et] &= ~bit
+                old_ti = _building_team_idx[m]
+                if old_ti >= 0:
+                    bm_team[old_ti] &= ~bit
+                _building_id[m] = _building_id[n]
+                _building_et_idx[m] = _IDX_CORE
+                _building_team_idx[m] = enemy_team_idx
+                _building_hp[m] = _building_hp[n]
+                _bm_their_core_area |= bit
+                _bm_any_building |= bit
+                bm_et[_IDX_CORE] |= bit
+                bm_team[enemy_team_idx] |= bit
 
 def _compute_route_targets() -> int:
     """Bitmask of tiles the route state can path toward.
@@ -877,6 +884,8 @@ def _compute_route_targets() -> int:
     _bm_dead_end = dead_ends
 
     # --- Downstream: validate chains from empty conveyors ---
+    # Interleaves upstream propagation so subsequent empty conveyors that
+    # are already validated (as feeders of a prior chain) skip their walk.
     empty_convs = my_convs & ~_bm_conv_loaded
     if not empty_convs:
         return result
@@ -889,6 +898,9 @@ def _compute_route_targets() -> int:
     while mask:
         lsb = mask & -mask
         mask ^= lsb
+
+        if valid_convs & lsb:
+            continue
 
         chain = 0
         cur = lsb
@@ -920,29 +932,27 @@ def _compute_route_targets() -> int:
             elif not (bm_seen & tbit):
                 chain_valid = True
             elif (cur & bm_visible) and not (tbit & bm_visible):
-                # Conveyor in vision but target is not — treat as unseen
                 chain_valid = True
             break
 
         if chain_valid:
             valid_convs |= chain
-
-    # --- Upstream: propagate from valid conveyors ---
-    to_visit = valid_convs
-    visited = valid_convs
-    while to_visit:
-        next_visit = 0
-        m = to_visit
-        while m:
-            lsb = m & -m
-            n = lsb.bit_length() - 1
-            feeders = reverse[n] & ~visited
-            if feeders:
-                visited |= feeders
-                valid_convs |= feeders
-                next_visit |= feeders
-            m ^= lsb
-        to_visit = next_visit
+            # Immediate upstream propagation from this chain
+            to_visit = chain
+            visited = valid_convs
+            while to_visit:
+                next_visit = 0
+                m = to_visit
+                while m:
+                    b = m & -m
+                    n = b.bit_length() - 1
+                    feeders = reverse[n] & ~visited
+                    if feeders:
+                        visited |= feeders
+                        valid_convs |= feeders
+                        next_visit |= feeders
+                    m ^= b
+                to_visit = next_visit
 
     result |= valid_convs
     return result
@@ -953,8 +963,6 @@ def recompute_derived() -> None:
     global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
     global _bm_enemy_turret_threat, _bm_harv_adj
 
-    width = _width
-    height = _height
     my_team_idx = _my_team_idx
     bm_et = _bm_et
     bm_team = _bm_team
@@ -982,7 +990,7 @@ def recompute_derived() -> None:
     _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
     _bm_blocked |= _bm_their_core_area
 
-    # Conveyor targets + fed bitmasks
+    # Conveyor targets + fed bitmasks — single pass over all conveyors
     _bm_conveyor_targets = 0
     _bm_ti_fed = 0
     _bm_ax_fed = 0
@@ -1004,19 +1012,7 @@ def recompute_derived() -> None:
 
     # Enemy launcher adjacency
     enemy_launchers = bm_et[_IDX_LAUNCHER] & ~bm_team[my_team_idx]
-    _bm_enemy_launch_adj = 0
-    mask = enemy_launchers
-    while mask:
-        lsb = mask & -mask
-        ln = lsb.bit_length() - 1
-        lx = ln % width
-        ly = ln // width
-        for dx, dy in _DIRECTION_DELTAS.values():
-            nx = lx + dx
-            ny = ly + dy
-            if 0 <= nx < width and 0 <= ny < height:
-                _bm_enemy_launch_adj |= 1 << (nx + ny * width)
-        mask ^= lsb
+    _bm_enemy_launch_adj = expand_chebyshev(enemy_launchers) if enemy_launchers else 0
 
     # Enemy turret threat
     _bm_enemy_turret_threat = _compute_enemy_turret_threat()
@@ -1041,6 +1037,8 @@ def update(recompute: bool = True) -> None:
     building_hp = _building_hp
     building_dir = _building_dir
     building_conv_target = _building_conv_target
+    building_team_idx = _building_team_idx
+    env_idx_by_tile = _env_idx_by_tile
 
     bm_et = _bm_et
     bm_team = _bm_team
@@ -1052,7 +1050,6 @@ def update(recompute: bool = True) -> None:
     bm_conv_refined = _bm_conv_refined
     conv_reverse = _conv_reverse
     my_team_idx_local = _my_team_idx
-    num_team = _NUM_TEAM
     is_conv = _IS_CONVEYOR
     has_dir = _HAS_DIR
     deltas_i = _DIRECTION_DELTAS_I
@@ -1097,6 +1094,7 @@ def update(recompute: bool = True) -> None:
             env = rc_get_tile_env(tile)
             env_idx = _ENV_INT[env]
             bm_env[env_idx] |= bit
+            env_idx_by_tile[n] = env_idx
             bm_seen |= bit
             if _solved_sym:
                 # Symmetry committed — skip verification and propagate env to the flipped tile.
@@ -1109,6 +1107,7 @@ def update(recompute: bool = True) -> None:
                 fn = fx+fy*width
                 fbit = 1 << fn
                 bm_env[env_idx] |= fbit
+                env_idx_by_tile[fn] = env_idx
                 bm_seen |= fbit
             else:
                 rx = width-1-x
@@ -1140,12 +1139,12 @@ def update(recompute: bool = True) -> None:
                 building_conv_target[n] = 0
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
-                for i in range(num_team):
-                    if bm_team[i] & bit:
-                        bm_team[i] &= ~bit
-                        break
+                old_ti = building_team_idx[n]
+                if old_ti >= 0:
+                    bm_team[old_ti] &= ~bit
                 building_id[n] = 0
                 building_et_idx[n] = -1
+                building_team_idx[n] = -1
             _bm_damaged &= ~bit
             _bm_very_damaged &= ~bit
             continue
@@ -1200,10 +1199,10 @@ def update(recompute: bool = True) -> None:
                     building_conv_target[n] = 0
                     bm_et[old_et_idx] &= ~bit
                     _bm_any_building &= ~bit
-                    for i in range(num_team):
-                        if bm_team[i] & bit:
-                            bm_team[i] &= ~bit
-                            break
+                    old_ti = building_team_idx[n]
+                    if old_ti >= 0:
+                        bm_team[old_ti] &= ~bit
+                    building_team_idx[n] = -1
                 building_id[n] = 0
                 building_et_idx[n] = -1
                 _bm_damaged &= ~bit
@@ -1219,10 +1218,9 @@ def update(recompute: bool = True) -> None:
                     conv_reverse[old_tn] &= ~bit
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
-                for i in range(num_team):
-                    if bm_team[i] & bit:
-                        bm_team[i] &= ~bit
-                        break
+                old_ti = building_team_idx[n]
+                if old_ti >= 0:
+                    bm_team[old_ti] &= ~bit
 
             direction     = rc_get_direction(entity_id) if has_dir[et_idx] else None
             team_val = rc_get_team(entity_id)
@@ -1235,6 +1233,7 @@ def update(recompute: bool = True) -> None:
                 target = Position(tile.x + _ddx, tile.y + _ddy)
             building_id[n] = entity_id
             building_et_idx[n] = et_idx
+            building_team_idx[n] = team_idx
             hp = rc_get_hp(entity_id)
             building_hp[n] = hp
             building_dir[n] = _DIR_INT[direction] if direction else 0
@@ -1303,25 +1302,25 @@ def update(recompute: bool = True) -> None:
                 bm_team[enemy_team_idx] |= pbit
                 building_hp[pos] = GameConstants.CORE_MAX_HP
             build_core_areas()
-        for x in range(width):
-            for y in range(height):
-                n = x+y*width
-                nbit = 1 << n
-                if bm_seen & nbit:
-                    if _ver_sym:
-                        flipped = (x)+(height-1-y)*width
-                    elif _hor_sym:
-                        flipped = (width-1-x)+(y)*width
-                    else:
-                        flipped = (width-1-x)+(height-1-y)*width
-                    fbit = 1 << flipped
-                    if not (bm_seen & fbit):
-                        # Copy env from source tile to flipped tile
-                        for env_i in range(_NUM_ENV):
-                            if bm_env[env_i] & nbit:
-                                bm_env[env_i] |= fbit
-                                break
-                        bm_seen |= fbit
+        remaining = bm_seen
+        while remaining:
+            lsb = remaining & -remaining
+            n = lsb.bit_length() - 1
+            remaining ^= lsb
+            x = n % width
+            y = n // width
+            if _ver_sym:
+                flipped = x+(height-1-y)*width
+            elif _hor_sym:
+                flipped = (width-1-x)+y*width
+            else:
+                flipped = (width-1-x)+(height-1-y)*width
+            fbit = 1 << flipped
+            if not (bm_seen & fbit):
+                src_env = env_idx_by_tile[n]
+                bm_env[src_env] |= fbit
+                env_idx_by_tile[flipped] = src_env
+                bm_seen |= fbit
         _bm_seen = bm_seen
 
     if _my_core:

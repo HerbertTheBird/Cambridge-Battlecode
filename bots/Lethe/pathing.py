@@ -71,7 +71,7 @@ def voronoi_claim(my_mask, others_mask, claims):
 
     mi = map_info
     w = mi._width
-    board = (1 << (w * mi._height)) - 1
+    board = mi._board_mask
     nlc = mi._not_left_col
     nrc = mi._not_right_col
     passable = (~mi.get_avoid(False, False, False) & board) | claims
@@ -82,8 +82,9 @@ def voronoi_claim(my_mask, others_mask, claims):
     my_claimed = my_front
     all_claimed = my_front | other_front
     remaining = claims & ~all_claimed
-
-    while remaining and (my_front or other_front):
+    c = 0
+    while remaining and (my_front or other_front) and c < 10:
+        c += 1
         if my_front:
             h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
             my_front = (h | (h << w) | (h >> w)) & passable & ~all_claimed
@@ -99,7 +100,7 @@ def voronoi_claim(my_mask, others_mask, claims):
             all_claimed |= other_front
             remaining = claims & ~all_claimed
 
-    return my_claimed & claims
+    return ~(all_claimed & ~my_claimed) & claims
 
 class Pathing:
 
@@ -130,7 +131,7 @@ class Pathing:
         if pos is None:
             pos = map_info._my_pos
         w = map_info._width
-        board = (1 << (w * map_info._height)) - 1
+        board = map_info._board_mask
         avoid = map_info.get_avoid(False, False, False)
         passable = (~avoid & board) |  targets
         start = 1 << (pos.x + pos.y * w)
@@ -310,8 +311,9 @@ class Pathing:
         width = self.width
         height = self.height
         if avoid is None:
-            avoid = map_info.get_avoid(False, True, False)
+            avoid = map_info.get_avoid(False, False, False)
         avoid &= ~start_mask
+        builders_mask = map_info._bm_friendly_bots | map_info._bm_enemy_bots
         my_team_idx = map_info._my_team_idx
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
         barriers &= ~start_mask
@@ -336,7 +338,7 @@ class Pathing:
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
         w = width
-        board = (1 << (w * height)) - 1
+        board = map_info._board_mask
         not_avoid = board & ~avoid
 
         wk = walkable & board
@@ -408,20 +410,21 @@ class Pathing:
                 cur_edge_dist = min(cx, cy, w_minus_1 - cx, h_minus_1 - cy)
                 in_edge_band = cur_edge_dist < 4
 
-                best_key = (2, 2, 2, 3)
+                best_key = (2, 2, 2, 2, 2, 3)
                 chosen_prev = None
                 for dx, dy, step_cost in self._MOVE_OFFSETS:
                     px = cx - dx
                     py = cy - dy
                     if not (0 <= px < width and 0 <= py < height):
                         continue
-                    prev_layer = i - step_cost - extra_cost
-                    if prev_layer < 0 or prev_layer >= vl_len:
-                        continue
                     prev_bit = 1 << (py * width + px)
-                    if not (visited_layers[prev_layer] & prev_bit):
+                    if prev_bit & builders_mask:
                         continue
-
+                    if prev_bit & avoid:
+                        continue
+                    prev_layer = i - step_cost - extra_cost
+                    is_optimal = (0 <= prev_layer < vl_len) and bool(visited_layers[prev_layer] & prev_bit)
+                    k_opt = 0 if is_optimal else 1
                     diag = dx != 0 and dy != 0
                     k0 = 0 if diag else 1
 
@@ -438,7 +441,7 @@ class Pathing:
                         else:
                             k3 = 2
 
-                    key = (k0, k1, k2, k3)
+                    key = (k_opt, k0, k1, k2, k3)
                     if key < best_key:
                         best_key = key
                         chosen_prev = Position(px, py)
@@ -450,6 +453,7 @@ class Pathing:
             if cur_frontier == 0:
                 i += 1
                 if i >= effective_len:
+                    print("bfs move miss")
                     return None
                 continue
 
@@ -508,7 +512,7 @@ class Pathing:
         nlc3 = map_info._not_left_col_3
         nrc3 = map_info._not_right_col_3
         w = width
-        board = (1 << (w * height)) - 1
+        board = map_info._board_mask
         not_avoid = board & ~avoid
 
         effective_len = max_seed + 1
@@ -612,7 +616,7 @@ class Pathing:
                 adj.add(pos)
         return self.move_to(adj, **kwargs)
 
-    def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
+    def move_to(self, target: Position | set[Position], avoid_turret: bool = True):
         log("move to", target)
         if isinstance(target, Position):
             target_set = {target}
@@ -620,9 +624,7 @@ class Pathing:
             target_set = target
         if target_set != self.target_p:
             self.forget_launcher.clear()
-        avoid = map_info.get_avoid(False, True, False)
-        if avoid_empty:
-            avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+        avoid = map_info.get_avoid(False, False, False)
         my_pos = map_info._my_pos
         if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
@@ -657,10 +659,7 @@ class Pathing:
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
         log("conveyors from ", start, raw_axionite)
         w = self.width
-        if update:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
-        else:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
+        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
             return None
         if not update:
@@ -672,7 +671,7 @@ class Pathing:
             if start_mask == 0:
                 return None
         else:
-            start_mask = 1 << (map_info._building_conv_target[start.x + start.y * w])
+            start_mask = 1 << (start.x + start.y * w)
         end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
         result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
         if result is None:
@@ -724,18 +723,13 @@ class Pathing:
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
         return (adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
 
-    def _get_conveyor_targets_and_avoid(
-        self, raw_axionite: bool, conveyor = None
-    ):
+    def _get_conveyor_targets_and_avoid(self, raw_axionite: bool):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
             ti_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
-            if conveyor:
-                avoid &= ~(1<<map_info._building_conv_target[conveyor])
-                target &= ~(1<<conveyor)
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
@@ -744,7 +738,4 @@ class Pathing:
             avoid |= ax_harvesters
             if not target:
                 return 0, 0
-            if conveyor:
-                avoid &= ~(1<<map_info._building_conv_target[conveyor])
-                target &= ~(1<<conveyor)
             return target, avoid

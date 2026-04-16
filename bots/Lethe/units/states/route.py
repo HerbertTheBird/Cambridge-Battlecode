@@ -130,6 +130,7 @@ def _my_claims():
 _cached_claims = 0  # set by score(), reused by run()
 
 def score():
+    # units.builder.draw_mask(units.builder.claimed_senders[comm_flag], 255, 0, 0)
     global _cached_claims
     _cached_claims = _my_claims()
     return 4 if _cached_claims else 0
@@ -183,6 +184,7 @@ def run():
     else:
         # Dead-end conveyor: route from its output tile
         target_n = map_info._building_conv_target[best_n]
+        target_pos = Position(target_n % width, target_n // width)
 
         can_heal_road = False
         target_zone = 1 << target_n
@@ -190,17 +192,17 @@ def run():
             target_zone = map_info.expand_chebyshev(target_zone)
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
-        path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
-        print("PATH", path)
+        path = nav.calculate_conveyor_path(target_pos, is_raw_ax, update=True)
         if path is None:
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
         if (map_info._bm_team[1-map_info._my_team_idx] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
-            new_path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
+            new_path = nav.calculate_conveyor_path(target_pos, is_raw_ax, update=True)
             if new_path is not None and new_path[1] != path[0]:
                 path = new_path
                 target_conveyor = [path[0], path[1]]
+    claim_n = target_conveyor[0].x + target_conveyor[0].y * width
     near_enemy = False
     if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
         tc1_zone = 1 << (target_conveyor[1].x + target_conveyor[1].y * width)
@@ -213,7 +215,7 @@ def run():
         nav.move_to(target)
         if rc.can_fire(target):
             rc.fire(target)
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
+        comms.mark(claim_n, comm_flag)
         return
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
     # units.builder.draw_mask(foundry_sites, 255, 0, 0)
@@ -222,7 +224,7 @@ def run():
         foundry_cost = rc.get_foundry_cost()[0]
         _cost_map[best_n] = foundry_cost + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.5)
         if rc.get_global_resources()[0] < foundry_cost + nav.conveyor_cost(path[2]):
-            comms.mark(best.x + best.y * map_info._width, comm_flag)
+            comms.mark(claim_n, comm_flag)
             return
         nav.move_adjacent(target_conveyor[0])
         if rc.get_action_cooldown() == 0:
@@ -232,16 +234,19 @@ def run():
             if rc.can_build_foundry(target_conveyor[0]):
                 rc.build_foundry(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
+        comms.mark(claim_n, comm_flag)
         return
     can_build = False
     cost = nav.conveyor_cost(path[2])
+    if rc.get_global_resources()[0] < nav.conveyor_cost(path[2]):
+        comms.mark(claim_n, comm_flag)
+        return
     best_n = best.x + best.y * width
     if not is_refined:
         _cost_map[best_n] = cost
         if rc.get_global_resources()[0] < cost:
             log("can't afford", cost)
-            comms.mark(best.x + best.y * map_info._width, comm_flag)
+            comms.mark(claim_n, comm_flag)
             return
     if near_enemy:
         nav.move_to(target_conveyor[1])
@@ -297,4 +302,4 @@ def run():
             map_info._bm_conv_loaded |= last_unloaded_bit
             log("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
 
-    comms.mark(best.x + best.y * map_info._width, comm_flag)
+    comms.mark(claim_n, comm_flag)

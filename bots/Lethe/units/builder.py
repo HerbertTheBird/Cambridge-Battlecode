@@ -78,8 +78,7 @@ def _compute_voronoi_harvest_zone():
     """Flood-fill Manhattan from both cores simultaneously.
     Tiles reached by my core first are my harvest zone."""
     w = map_info._width
-    h = map_info._height
-    board = (1 << (w * h)) - 1
+    board = map_info._board_mask
     walls = map_info._bm_env[map_info._IDX_ENV_WALL]
     passable = board & ~walls
 

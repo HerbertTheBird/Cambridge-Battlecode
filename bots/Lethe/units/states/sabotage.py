@@ -40,7 +40,7 @@ def _sabotage_targets():
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
         w = map_info._width
-        board = (1 << (w * map_info._height)) - 1
+        board = map_info._board_mask
         avoid = map_info.get_avoid(False, False, False)
         passable = ~avoid & board
         nlc = map_info._not_left_col

@@ -25,7 +25,7 @@ def generate_explore_target():
     w = map_info._width
     nlc = map_info._not_left_col
     nrc = map_info._not_right_col
-    board = (1 << (w * map_info._height)) - 1
+    board = map_info._board_mask
     avoid = map_info.get_avoid(False, False, False)
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
         avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
