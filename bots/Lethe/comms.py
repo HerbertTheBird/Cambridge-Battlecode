@@ -15,8 +15,10 @@ _TYPE_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
 rc: Controller
 ENCRYPT = True
 key = 0
-_marker_at = {}  # physical tile index -> (marker entity id, decrypted val)
+
+_marker_id_at: list = []  # tile idx -> last-seen marker entity id (0 = none)
 _my_markers = set()  # entity ids of markers this bot placed
+
 def random_hash() -> int:
     # Force inputs into 32-bit unsigned space
     a = rc.get_map_width()
@@ -36,12 +38,14 @@ def random_hash() -> int:
 
     # Return 32-bit unsigned int
     return x & 0xFFFFFFFF
+
 def init(c: Controller):
-    global rc
+    global rc, _marker_id_at
     rc = c
     if ENCRYPT:
         global key
         key = random_hash()
+    _marker_id_at = [0] * (c.get_map_width() * c.get_map_height())
 
 
 def get_new_messages():
@@ -51,55 +55,33 @@ def get_new_messages():
     rc_get_position = rc.get_position
     my_team = map_info._my_team
     marker_type = EntityType.MARKER
-    width = rc.get_map_width()
-    marker_at = _marker_at
+    width = map_info._width
+    marker_id_at = _marker_id_at
     my_markers = _my_markers
 
     messages = []
     append = messages.append
 
-    seen_positions = set()
-
     for id in rc.get_nearby_buildings():
-        if get_entity_type(id) == marker_type and get_team(id) == my_team:
-            pos = rc_get_position(id)
-            pos_n = pos.x + pos.y * width
-            seen_positions.add(pos_n)
-
-            # Skip markers this bot placed itself.
-            if id in my_markers:
-                marker_at.pop(pos_n, None)
-                continue
-
-            # Freshness is tracked by marker entity id: a new marker id at
-            # this position means the content was replaced since last turn.
-            old_entry = marker_at.get(pos_n)
-            if old_entry is not None and old_entry[0] == id:
-                continue
-
-            val = get_marker_value(id) ^ key
-
-            marker_at[pos_n] = (id, val)
-            # Off for now while testing feature
-            # comms_positional.record_marker_read()
-            # comms_positional.apply_message(pos, decode_sym(val), decode_sample_bits(val))
-            append(val)
-
-    # Cleanup: tracked markers that are now gone from visible tiles
-    to_remove = []
-    bm_visible = map_info._bm_visible
-    for pos_n in marker_at:
-        if pos_n in seen_positions:
+        # Skip markers this bot placed itself.
+        if id in my_markers:
             continue
-        if bm_visible & (1 << pos_n):
-            to_remove.append(pos_n)
-    for pos_n in to_remove:
-        del marker_at[pos_n]
-    return messages
+        if get_entity_type(id) != marker_type:
+            continue
+        if get_team(id) != my_team:
+            continue
 
-def get_messages():
-    get_new_messages()
-    return [val for _mid, val in _marker_at.values()]
+        pos = rc_get_position(id)
+        pos_n = pos.x + pos.y * width
+
+        if marker_id_at[pos_n] == id:
+            continue
+        marker_id_at[pos_n] = id
+
+        val = get_marker_value(id) ^ key
+        append(val)
+
+    return messages
 
 def decode_location(v):
     return v & _POS_MASK
