@@ -501,16 +501,13 @@ def update_at(pos: Position) -> None:
     _bm_team[team_idx] |= bit
     _bm_any_building |= bit
 
+    _freshly_loaded = False
     if et in _CONVEYOR_TYPES:
         _bm_conveyors |= bit
         res = rc.get_stored_resource(entity_id)
-        if res is None:
-            _bm_conv_loaded &= ~bit
-            _bm_conv_raw_ax &= ~bit
-            _bm_conv_ti &= ~bit
-            _bm_conv_refined &= ~bit
-        else:
+        if res is not None:
             _bm_conv_loaded |= bit
+            _freshly_loaded = True
             if res == ResourceType.RAW_AXIONITE:
                 _bm_conv_raw_ax |= bit
                 _bm_conv_ti &= ~bit
@@ -539,6 +536,30 @@ def update_at(pos: Position) -> None:
         _bm_damaged |= bit
     if hp < max_hp - 2:
         _bm_very_damaged |= bit
+
+    if _freshly_loaded:
+        res_ax = bool(_bm_conv_raw_ax & bit)
+        res_ti = not res_ax and bool(_bm_conv_ti & bit)
+        tn = _building_conv_target[n]
+        for _ in range(3):
+            if tn <= 0:
+                break
+            tbit = 1 << tn
+            if not (_bm_conveyors & tbit):
+                break
+            if res_ax:
+                _bm_conv_raw_ax |= tbit
+                _bm_conv_ti &= ~tbit
+                _bm_conv_refined &= ~tbit
+            elif res_ti:
+                _bm_conv_ti |= tbit
+                _bm_conv_raw_ax &= ~tbit
+                _bm_conv_refined &= ~tbit
+            else:
+                _bm_conv_refined |= tbit
+                _bm_conv_raw_ax &= ~tbit
+                _bm_conv_ti &= ~tbit
+            tn = _building_conv_target[tn]
 
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
@@ -822,7 +843,7 @@ def _compute_route_targets() -> int:
 
             if my_convs & tbit:
                 downstream += 1
-                if downstream >= 8:
+                if downstream >= 4:
                     break
                 cur = tbit
                 cur_n = tn
@@ -944,7 +965,7 @@ def update(recompute: bool = True) -> None:
     bm_team = _bm_team
     bm_env = _bm_env
     bm_seen = _bm_seen
-    bm_conv_loaded = _bm_conv_loaded
+    bm_conv_loaded = 0
     bm_conv_raw_ax = _bm_conv_raw_ax
     bm_conv_ti = _bm_conv_ti
     bm_conv_refined = _bm_conv_refined
@@ -975,6 +996,7 @@ def update(recompute: bool = True) -> None:
     rc_get_direction          = rc.get_direction
     rc_get_bridge_target      = rc.get_bridge_target
     rc_get_tile_env           = rc.get_tile_env
+    freshly_loaded = 0
 
     for tile in visible_tiles:
         x = tile.x
@@ -1071,13 +1093,9 @@ def update(recompute: bool = True) -> None:
                 _bm_very_damaged &= ~bit
             if et in _CONVEYOR_TYPES:
                 res = rc_get_stored_resource(entity_id)
-                if res is None:
-                    bm_conv_loaded &= ~bit
-                    bm_conv_raw_ax &= ~bit
-                    bm_conv_ti &= ~bit
-                    bm_conv_refined &= ~bit
-                else:
+                if res is not None:
                     bm_conv_loaded |= bit
+                    freshly_loaded |= bit
                     if res == ResourceType.RAW_AXIONITE:
                         bm_conv_raw_ax |= bit
                         bm_conv_ti &= ~bit
@@ -1139,13 +1157,9 @@ def update(recompute: bool = True) -> None:
 
             if et in _CONVEYOR_TYPES:
                 res = rc_get_stored_resource(entity_id)
-                if res is None:
-                    bm_conv_loaded &= ~bit
-                    bm_conv_raw_ax &= ~bit
-                    bm_conv_ti &= ~bit
-                    bm_conv_refined &= ~bit
-                else:
+                if res is not None:
                     bm_conv_loaded |= bit
+                    freshly_loaded |= bit
                     if res == ResourceType.RAW_AXIONITE:
                         bm_conv_raw_ax |= bit
                         bm_conv_ti &= ~bit
@@ -1234,6 +1248,34 @@ def update(recompute: bool = True) -> None:
                     _predicted_enemy_core = vsym_core
                 else:
                     _predicted_enemy_core = hsym_core
+
+    mask = freshly_loaded
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        res_ax = bool(bm_conv_raw_ax & lsb)
+        res_ti = not res_ax and bool(bm_conv_ti & lsb)
+        tn = building_conv_target[n]
+        for _ in range(3):
+            if tn <= 0:
+                break
+            tbit = 1 << tn
+            if not (_bm_conveyors & tbit):
+                break
+            if res_ax:
+                bm_conv_raw_ax |= tbit
+                bm_conv_ti &= ~tbit
+                bm_conv_refined &= ~tbit
+            elif res_ti:
+                bm_conv_ti |= tbit
+                bm_conv_raw_ax &= ~tbit
+                bm_conv_refined &= ~tbit
+            else:
+                bm_conv_refined |= tbit
+                bm_conv_raw_ax &= ~tbit
+                bm_conv_ti &= ~tbit
+            tn = building_conv_target[tn]
+        mask ^= lsb
 
     _bm_conv_loaded = bm_conv_loaded
     _bm_conv_raw_ax = bm_conv_raw_ax

@@ -1,17 +1,27 @@
-from cambc import Controller, Position, EntityType, GameError
+from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
 import comms_positional
 #type = 0:launch, 1:explore, 2:harvest, 3:route
-SYM_BITS = 3
 POS_BITS = 12
+SYM_BITS = 3
 SAMPLE_BITS = 9
-TYPE_BITS = 32 - POS_BITS - SYM_BITS - SAMPLE_BITS
-_SYM_MASK = (1 << SYM_BITS) - 1
+SENDER_BITS = 3
+TYPE_BITS = 32 - POS_BITS - SYM_BITS - SAMPLE_BITS - SENDER_BITS
 _POS_MASK = (1 << POS_BITS) - 1
+_SYM_MASK = (1 << SYM_BITS) - 1
 _SAMPLE_MASK = (1 << SAMPLE_BITS) - 1
+_SENDER_MASK = (1 << SENDER_BITS) - 1
 _TYPE_MASK = (1 << TYPE_BITS) - 1
-_SAMPLE_SHIFT = POS_BITS + SYM_BITS
-_TYPE_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
+_SYM_SHIFT = POS_BITS
+_SAMPLE_SHIFT = _SYM_SHIFT + SYM_BITS
+_SENDER_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
+_TYPE_SHIFT = _SENDER_SHIFT + SENDER_BITS
+
+_DIRS_8 = [
+    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
+    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
+]
+_DIR_TO_IDX = {d: i for i, d in enumerate(_DIRS_8)}
 rc: Controller
 ENCRYPT = True
 key = 0
@@ -87,19 +97,23 @@ def decode_location(v):
     return v & _POS_MASK
 
 def decode_sym(v):
-    return (v >> POS_BITS) & _SYM_MASK
+    return (v >> _SYM_SHIFT) & _SYM_MASK
 
 def decode_sample_bits(v):
     return (v >> _SAMPLE_SHIFT) & _SAMPLE_MASK
 
+def decode_sender_location(v):
+    return (v >> _SENDER_SHIFT) & _SENDER_MASK
+
 def decode_type(v):
     return (v >> _TYPE_SHIFT) & _TYPE_MASK
 
-def encode(target, type, sym=0, sample_bits=0):
+def encode(target, type, sym=0, sample_bits=0, sender_loc=0):
     return (
         (target & _POS_MASK)
-        | ((sym & _SYM_MASK) << POS_BITS)
+        | ((sym & _SYM_MASK) << _SYM_SHIFT)
         | ((sample_bits & _SAMPLE_MASK) << _SAMPLE_SHIFT)
+        | ((sender_loc & _SENDER_MASK) << _SENDER_SHIFT)
         | ((type & _TYPE_MASK) << _TYPE_SHIFT)
     ) ^ key
 
@@ -163,7 +177,9 @@ def mark(target_idx, type):
         sym = get_sym_bits()
         sample_bits = 0
         # sample_bits = comms_positional.encode_sample_bits(pos, sym)
-        val = encode(target_idx, type, sym, sample_bits)
+        sender_dir = pos.direction_to(rc.get_position())
+        sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
+        val = encode(target_idx, type, sym, sample_bits, sender_loc)
 
         _my_markers.discard(tile_id)
         if tile_id is not None and rc.can_destroy(pos):

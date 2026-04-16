@@ -23,10 +23,10 @@ from typing import TypeAlias
 Step: TypeAlias = tuple[int, int, int, int]
 # (dx, dy, cost, valid_from_mask)
 
-bridge_cost = 10
+bridge_cost = 6
 barrier_cost = 10
 threat_cost = 20
-conveyor_end_cost = 10
+conveyor_end_cost = 6
 
 
 
