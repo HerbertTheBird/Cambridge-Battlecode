@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError, GameConstants
-from dataclasses import dataclass, field
 from collections import deque
-import time
 import pathing
 import units.builder as builder
+import comms
+from log import log
 
 _HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
@@ -71,6 +71,15 @@ _INT_DIR =  {i: t for i, t in enumerate(Direction)}
 _TM_INT =   {t: i for i, t in enumerate(Team)}
 _INT_TM =   {i: t for i, t in enumerate(Team)}
 
+# Claude gen'ed explanation:
+# Fast enum->int lists: index by id(enum)//16 & mask, but simpler:
+# use a list where list[enum_int_index] = int_index.  We build these
+# as identity since _ET_INT already maps enum->sequential int.
+# For the hot path we want:  et_idx = _ET_TO_IDX[et]  where et is the enum.
+# Python enums from cambc don't have a .value that's an int index, so we
+# keep the dict lookups for the initial et->et_idx conversion, but replace
+# all *subsequent* frozenset membership tests with bool-list indexing.
+
 # Pre-computed indices for fast list access
 _IDX_CONVEYOR          = _ET_INT[EntityType.CONVEYOR]
 _IDX_ARMOURED_CONVEYOR = _ET_INT[EntityType.ARMOURED_CONVEYOR]
@@ -113,14 +122,39 @@ _NUM_ET   = len(EntityType)
 _NUM_TEAM = len(Team)
 _NUM_ENV  = len(Environment)
 
+# Bool lookup tables indexed by et_idx — avoid frozenset hashing in hot paths
+_IS_CONVEYOR = [False] * _NUM_ET
+for _e in _CONVEYOR_TYPES: _IS_CONVEYOR[_ET_INT[_e]] = True
+
+_HAS_DIR = [False] * _NUM_ET
+for _e in _HAS_DIRECTION: _HAS_DIR[_ET_INT[_e]] = True
+
+_IS_BLOCKED = [False] * _NUM_ET
+for _e in (EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.GUNNER,
+           EntityType.SENTINEL, EntityType.BREACH, EntityType.LAUNCHER):
+    _IS_BLOCKED[_ET_INT[_e]] = True
+
 _DIR_CENTRE = Direction.CENTRE
 _ALL_DIRECTIONS = tuple(Direction)
-_CARDINAL = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+_DIRECTIONS = (
+    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
+    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
+)
+_CARDINAL = (Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)
 _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
+# Int-indexed version: _DIRECTION_DELTAS_I[dir_int] = (dx, dy)
+_DIRECTION_DELTAS_I = [d.delta() for d in Direction]
+
+def pos_add(pos: Position, d: Direction) -> Position:
+    """Fast Position.add() replacement using cached deltas."""
+    dx, dy = _DIRECTION_DELTAS[d]
+    return Position(pos.x + dx, pos.y + dy)
+
 _rc: Controller
 _width = _height = 0
 _MAP_CENTER = None
 _prev_pos: Position = None
+_my_pos: Position = None           # cached rc.get_position(), updated on move
 _my_team: Team = None
 _my_team_idx: int = 0
 
@@ -157,6 +191,8 @@ _bm_ax_fed: int = 0             # targets of conveyors believed to carry refined
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
 _bm_visible: int = 0              # tiles visible this turn
+_nearby_tiles: list = []           # cached rc.get_nearby_tiles() for this round
+_nearby_tiles_pos = None           # position at which _nearby_tiles was computed
 _bm_damaged: int = 0              # buildings not at full HP
 _bm_very_damaged: int = 0         # buildings with > 2 damage
 
@@ -169,6 +205,7 @@ _bot_at: dict[int, int] = {}    # tile index -> uid
 
 _max_id_by_round: list[int] = []  # max_id_by_round[round] = max entity id seen up to that round
 _max_id_seen: int = 0
+_new_marker_messages: list[tuple[int, Position, int]] = []
 
 # --- Turret attack offset tables (dir_idx 0-7 -> list of (dx,dy)) ---
 _DIR_VECS = [(0,-1),(1,-1),(1,0),(1,1),(0,1),(-1,1),(-1,0),(-1,-1)]
@@ -452,8 +489,7 @@ def update_at(pos: Position) -> None:
     if old_et_idx >= 0:
         _bm_et[old_et_idx] &= ~bit
         _bm_any_building &= ~bit
-        old_et = _INT_ET[old_et_idx]
-        if old_et in _CONVEYOR_TYPES:
+        if _IS_CONVEYOR[old_et_idx]:
             tn = _building_conv_target[n]
             if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
@@ -489,16 +525,17 @@ def update_at(pos: Position) -> None:
     if et == EntityType.MARKER:
         return
 
-    direction = rc.get_direction(entity_id) if et in _HAS_DIRECTION else None
+    et_idx = _ET_INT[et]
+    direction = rc.get_direction(entity_id) if _HAS_DIR[et_idx] else None
     team_idx = _TM_INT[rc.get_team(entity_id)]
 
     target = None
     if et == EntityType.BRIDGE:
         target = rc.get_bridge_target(entity_id)
-    elif et in _CONVEYOR_TYPES and direction is not None:
-        target = pos.add(direction)
+    elif _IS_CONVEYOR[et_idx] and direction is not None:
+        dx, dy = _DIRECTION_DELTAS_I[_DIR_INT[direction]]
+        target = Position(pos.x + dx, pos.y + dy)
 
-    et_idx = _ET_INT[et]
     _building_id[n] = entity_id
     _building_et_idx[n] = et_idx
     _building_hp[n] = rc.get_hp(entity_id)
@@ -510,7 +547,7 @@ def update_at(pos: Position) -> None:
     _bm_any_building |= bit
 
     _freshly_loaded = False
-    if et in _CONVEYOR_TYPES:
+    if _IS_CONVEYOR[et_idx]:
         _bm_conveyors |= bit
         res = rc.get_stored_resource(entity_id)
         if res is not None:
@@ -533,8 +570,7 @@ def update_at(pos: Position) -> None:
             if team_idx == _my_team_idx:
                 _conv_reverse[_building_conv_target[n]] |= bit
 
-    if et in (EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.GUNNER,
-              EntityType.SENTINEL, EntityType.BREACH, EntityType.LAUNCHER):
+    if _IS_BLOCKED[et_idx]:
         _bm_blocked |= bit
 
     # Damaged check
@@ -570,16 +606,23 @@ def update_at(pos: Position) -> None:
 
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
-    global _bm_visible, _prev_pos
+    global _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     rc = _rc
     new_pos = rc.get_position()
+    _my_pos = new_pos
     if new_pos == _prev_pos:
         return
     _prev_pos = new_pos
 
     width = _width
+    if _nearby_tiles_pos == new_pos:
+        nearby = _nearby_tiles
+    else:
+        nearby = rc.get_nearby_tiles()
+        _nearby_tiles = nearby
+        _nearby_tiles_pos = new_pos
     new_visible = 0
-    for tile in rc.get_nearby_tiles():
+    for tile in nearby:
         new_visible |= 1 << (tile.x + tile.y * width)
 
     newly_visible = new_visible & ~_bm_visible
@@ -968,14 +1011,14 @@ def recompute_derived() -> None:
     _bm_enemy_turret_threat = _compute_enemy_turret_threat()
 
 def update(recompute: bool = True) -> None:
-    print("updating")
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
-    global _bm_seen, _bm_visible, _prev_pos
+    global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
     global _max_id_seen
+    global _new_marker_messages
     rc = _rc
     building_id = _building_id
     building_et_idx = _building_et_idx
@@ -993,22 +1036,30 @@ def update(recompute: bool = True) -> None:
     bm_conv_refined = _bm_conv_refined
     conv_reverse = _conv_reverse
     my_team_idx_local = _my_team_idx
-
-    num_et = _NUM_ET
     num_team = _NUM_TEAM
+    is_conv = _IS_CONVEYOR
+    has_dir = _HAS_DIR
+    deltas_i = _DIRECTION_DELTAS_I
 
     width = _width
     height = _height
 
-    visible_tiles = rc.get_nearby_tiles()
-    bm_visible = 0
-    for tile in visible_tiles:
-        bm_visible |= 1 << (tile.x + tile.y * _width)
-    _bm_visible = bm_visible
-
     my_team       = _my_team
     my_team_idx   = _my_team_idx
     my_pos        = rc.get_position()
+    _my_pos       = my_pos
+
+    if _nearby_tiles_pos == my_pos:
+        visible_tiles = _nearby_tiles
+        bm_visible = _bm_visible
+    else:
+        visible_tiles = rc.get_nearby_tiles()
+        _nearby_tiles = visible_tiles
+        _nearby_tiles_pos = my_pos
+        bm_visible = 0
+        for tile in visible_tiles:
+            bm_visible |= 1 << (tile.x + tile.y * width)
+        _bm_visible = bm_visible
     _prev_pos     = my_pos
     rc_get_tile_building_id   = rc.get_tile_building_id
     rc_get_entity_type        = rc.get_entity_type
@@ -1019,6 +1070,7 @@ def update(recompute: bool = True) -> None:
     rc_get_bridge_target      = rc.get_bridge_target
     rc_get_tile_env           = rc.get_tile_env
     freshly_loaded = 0
+    _new_marker_messages = []
 
     for tile in visible_tiles:
         x = tile.x
@@ -1060,8 +1112,6 @@ def update(recompute: bool = True) -> None:
                     fbit = 1 << fn
                     if (bm_seen & fbit) and not (bm_env[env_idx] & fbit):
                         _rot_sym = False
-
-
         entity_id = rc_get_tile_building_id(tile)
         if entity_id is not None and entity_id > _max_id_seen:
             _max_id_seen = entity_id
@@ -1085,6 +1135,11 @@ def update(recompute: bool = True) -> None:
             continue
         et = rc_get_entity_type(entity_id)
         if et == EntityType.MARKER:
+            if rc_get_team(entity_id) == my_team:
+                message = comms.decode_visible_marker(entity_id, tile)
+                if message is not None:
+                    estimated_turn = comms.estimate_turn(entity_id)
+                    _new_marker_messages.append((*message, estimated_turn))
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
                 old_tn = building_conv_target[n]
@@ -1102,10 +1157,10 @@ def update(recompute: bool = True) -> None:
             _bm_damaged &= ~bit
             _bm_very_damaged &= ~bit
             continue
+        et_idx = _ET_INT[et]
         if building_id[n] == entity_id:
             hp = rc_get_hp(entity_id)
             building_hp[n] = hp
-            et_idx = _ET_INT[et]
             max_hp = _MAX_HP_BY_IDX[et_idx]
             if hp < max_hp:
                 _bm_damaged |= bit
@@ -1115,7 +1170,7 @@ def update(recompute: bool = True) -> None:
                 _bm_very_damaged |= bit
             else:
                 _bm_very_damaged &= ~bit
-            if et in _CONVEYOR_TYPES:
+            if is_conv[et_idx]:
                 res = rc_get_stored_resource(entity_id)
                 if res is not None:
                     bm_conv_loaded |= bit
@@ -1146,23 +1201,23 @@ def update(recompute: bool = True) -> None:
                         bm_team[i] &= ~bit
                         break
 
-            direction     = rc_get_direction(entity_id) if et in _HAS_DIRECTION else None
+            direction     = rc_get_direction(entity_id) if has_dir[et_idx] else None
             team_val = rc_get_team(entity_id)
             team_idx = _TM_INT[team_val]
             target = None
             if et == EntityType.BRIDGE:
                 target = rc_get_bridge_target(entity_id)
-            elif et in _CONVEYOR_TYPES and direction is not None:
-                target = tile.add(direction)
+            elif is_conv[et_idx] and direction is not None:
+                _ddx, _ddy = deltas_i[_DIR_INT[direction]]
+                target = Position(tile.x + _ddx, tile.y + _ddy)
             building_id[n] = entity_id
-            et_idx = _ET_INT[et]
             building_et_idx[n] = et_idx
             hp = rc_get_hp(entity_id)
             building_hp[n] = hp
             building_dir[n] = _DIR_INT[direction] if direction else 0
             new_tn = (target.x + target.y * width) if target else -1
             building_conv_target[n] = new_tn
-            if new_tn >= 0 and et in _CONVEYOR_TYPES and team_idx == my_team_idx_local:
+            if new_tn >= 0 and is_conv[et_idx] and team_idx == my_team_idx_local:
                 conv_reverse[new_tn] |= bit
 
             # Set new bitmask bits
@@ -1179,7 +1234,7 @@ def update(recompute: bool = True) -> None:
             else:
                 _bm_very_damaged &= ~bit
 
-            if et in _CONVEYOR_TYPES:
+            if is_conv[et_idx]:
                 res = rc_get_stored_resource(entity_id)
                 if res is not None:
                     bm_conv_loaded |= bit
@@ -1263,11 +1318,11 @@ def update(recompute: bool = True) -> None:
                     if abs(my_pos.x - hsym_core.x) + abs(my_pos.y - hsym_core.y) < abs(my_pos.x - vsym_core.x) + abs(my_pos.y - vsym_core.y):
                         _predicted_enemy_core = hsym_core
                         _rush_tiebroken = 2
-                        print("Tiebreaking enemy core sym - HORIZONTAL")
+                        log("Tiebreaking enemy core sym - HORIZONTAL")
                     else:
                         _predicted_enemy_core = vsym_core
                         _rush_tiebroken = 1
-                        print("Tiebreaking enemy core sym - VERTICAL")
+                        log("Tiebreaking enemy core sym - VERTICAL")
                 elif _ver_sym:
                     _predicted_enemy_core = vsym_core
                 else:
@@ -1414,7 +1469,7 @@ def get_avoid(
     if avoid_builders:
         mask |= _bm_friendly_bots | _bm_enemy_bots
     threat = _bm_enemy_turret_threat
-    pos = _rc.get_position()
+    pos = _my_pos
     my_bit = 1 << (pos.x + pos.y * _width)
     if not (threat & my_bit):
         mask |= threat

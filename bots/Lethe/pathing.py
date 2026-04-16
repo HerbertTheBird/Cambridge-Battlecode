@@ -8,6 +8,7 @@ import time
 import units.builder as builder
 import sys
 from functools import lru_cache
+from log import DRAW_DEBUG, log
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -38,7 +39,7 @@ def rebuild_broken_barriers(rc: Controller):
     if rc.get_action_cooldown() > 0:
         return
 
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     my_team = map_info._my_team
     current_round = rc.get_current_round()
     
@@ -121,7 +122,7 @@ class Pathing:
         if targets == 0:
             return None, -1
         if pos is None:
-            pos = self.rc.get_position()
+            pos = map_info._my_pos
         w = map_info._width
         board = (1 << (w * map_info._height)) - 1
         avoid = map_info.get_avoid(False, False, False)
@@ -257,8 +258,8 @@ class Pathing:
 
     def move(self, dir: Direction):
         rc = self.rc
-        px, py = rc.get_position().x, rc.get_position().y
-        dx, dy = dir.delta()
+        px, py = map_info._my_pos.x, map_info._my_pos.y
+        dx, dy = map_info._DIRECTION_DELTAS[dir]
         new_pos = Position(px + dx, py + dy)
         if not map_info.in_bounds(new_pos):
             return False
@@ -276,7 +277,7 @@ class Pathing:
             rc.move(dir)
             map_info.update_move()
             self.last_last_dir = self.last_dir
-            self.last_dir = dir.delta()
+            self.last_dir = map_info._DIRECTION_DELTAS[dir]
             return True
         return False
     # Move reconstruction offsets: (dx, dy, step_cost) for all 8 dirs
@@ -363,7 +364,7 @@ class Pathing:
         visited_layers: list[int] = []
         i = 0
         while True:
-            # print("move",i,file=sys.stderr)
+            # log("move",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
@@ -373,7 +374,7 @@ class Pathing:
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
-                print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                log("bfs time " + str((end_time - start_time) / 1000) + "us")
                 start_bit = hit & -hit
                 s_idx = start_bit.bit_length() - 1
                 cx = s_idx % width
@@ -509,7 +510,7 @@ class Pathing:
         visited_layers: list[int] = []
         i = 0
         while True:
-            # print("route",i,file=sys.stderr)
+            # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
@@ -519,7 +520,7 @@ class Pathing:
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
-                print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                log("bfs time " + str((end_time - start_time) / 1000) + "us")
                 start_bit = hit & -hit
                 s_idx = start_bit.bit_length() - 1
                 cx = s_idx % width
@@ -587,10 +588,10 @@ class Pathing:
         for d in ALL_DIRS:
             if d == Direction.CENTRE:
                 continue
-            p = pos.add(d)
+            p = map_info.pos_add(pos, d)
             if not map_info.in_bounds(p):
                 continue
-            if p == rc.get_position():
+            if p == map_info._my_pos:
                 adj.add(p)
                 continue
             if not map_info.is_passable(p):
@@ -605,8 +606,8 @@ class Pathing:
                 adj.add(pos)
         return self.move_to(adj, **kwargs)
 
-    def move_to(self, target: Position | set[Position], avoid_turret: bool = True):
-        print("move to", target)
+    def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
+        log("move to", target)
         if isinstance(target, Position):
             target_set = {target}
         else:
@@ -614,7 +615,9 @@ class Pathing:
         if target_set != self.target_p:
             self.forget_launcher.clear()
         avoid = map_info.get_avoid(False, True, False)
-        my_pos = self.rc.get_position()
+        if avoid_empty:
+            avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+        my_pos = map_info._my_pos
         if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
         else:
@@ -639,13 +642,14 @@ class Pathing:
         s_pos, p_pos, _ = result
         if s_pos == p_pos:
             return False
-        self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
         return self.move(s_pos.direction_to(p_pos))
 
 
 
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
-        print("conveyors from ", start, raw_axionite)
+        log("conveyors from ", start, raw_axionite)
         w = self.width
         if update:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
@@ -656,7 +660,7 @@ class Pathing:
         if not update:
             start_mask = 0
             for d in CARD_DIR:
-                sp = start.add(d)
+                sp = map_info.pos_add(start, d)
                 if map_info.in_bounds(sp) and ((avoid >> (sp.x + sp.y * w)) & 1) == 0:
                     start_mask |= 1 << (sp.x + sp.y * w)
             if start_mask == 0:
@@ -668,8 +672,9 @@ class Pathing:
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-        self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
+            self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):

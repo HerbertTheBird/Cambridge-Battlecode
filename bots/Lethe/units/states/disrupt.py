@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -28,7 +29,7 @@ def _disruptable_ore():
 
 def _my_claims():
     w = map_info._width
-    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _disruptable_ore())
 
 def score():
@@ -37,7 +38,7 @@ def score():
     return 2 if _my_claims() else 0
 
 def run():
-    print("DISRUPT")
+    log("DISRUPT")
     available = _my_claims()
     if not available:
         return

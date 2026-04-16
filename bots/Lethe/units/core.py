@@ -1,5 +1,6 @@
 from cambc import Controller, Position
 import map_info
+from log import log
 
 rc: Controller
 
@@ -40,4 +41,3 @@ def run():
 def init(c: Controller):
     global rc
     rc = c
-    map_info.init(c)

@@ -18,7 +18,7 @@ import units.states.heal     as heal
 import units.states.sabotage as sabotage
 import units.states.attack   as attack
 
-
+from log import DRAW_DEBUG, log
 
 
 rc: Controller
@@ -29,8 +29,6 @@ def init(c: Controller):
     global rc, harvest_radius
     rc = c
     harvest_radius = (c.get_map_width() + c.get_map_height()) // 3
-    map_info.init(c)
-    comms.init(c)
     if comms_stats.is_enabled():
         comms_stats.init(c)
     for s in states:
@@ -58,7 +56,7 @@ def handle_comms():
             sn = sender_pos.x + sender_pos.y * w
             claimed_senders[flag] |= 1 << sn
             _sender_rounds[flag][sn] = estimated_turn
-    for p in rc.get_nearby_tiles():
+    for p in map_info._nearby_tiles:
         idx = p.x + p.y * w
         for i in range(len(claimed_targets)):
             if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
@@ -69,6 +67,8 @@ def handle_comms():
                 claimed_senders[i] &= ~(1 << idx)
     comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
+    if not DRAW_DEBUG:
+        return
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
 
@@ -137,7 +137,7 @@ def run():
     best_state.run()
     # Heal the most damaged adjacent building, fall back to self
     heal._do_best_heal()
-    if rc.can_heal(rc.get_position()):
-        rc.heal(rc.get_position())
+    if rc.can_heal(map_info._my_pos):
+        rc.heal(map_info._my_pos)
     # if rc.get_tile_building_id(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team() and rc.can_fire(rc.get_position()):
     #     rc.fire(rc.get_position())

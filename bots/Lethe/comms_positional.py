@@ -4,6 +4,7 @@ from cambc import Position
 
 import comms_stats
 import map_info
+from log import log
 
 COMMS_SAMPLE_DISTANCE = 8
 

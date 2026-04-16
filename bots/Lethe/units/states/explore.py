@@ -4,6 +4,7 @@ import comms
 import units.builder
 from cambc import *
 import random
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -40,7 +41,7 @@ def generate_explore_target():
         claims |= f
     seeds |= claims
 
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     my_n = my_pos.x + my_pos.y * w
     seeds |= 1 << my_n
 
@@ -87,8 +88,8 @@ def generate_explore_target():
     explore_target = Position(n % w, n // w)
 
 def run():
-    print("EXPLORE")
-    if explore_target is None or rc.get_position().distance_squared(explore_target) <= 18:
+    log("EXPLORE")
+    if explore_target is None or map_info._my_pos.distance_squared(explore_target) <= 18:
         generate_explore_target()
 
     attempts = 0

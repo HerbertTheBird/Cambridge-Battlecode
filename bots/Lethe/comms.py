@@ -1,5 +1,6 @@
 from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
+from log import DRAW_DEBUG, log
 import comms_positional
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
@@ -58,7 +59,7 @@ def init(c: Controller):
     _marker_id_at = [0] * (c.get_map_width() * c.get_map_height())
 
 
-def _estimate_turn(entity_id):
+def estimate_turn(entity_id):
     max_ids = map_info._max_id_by_round
     lo, hi = 0, len(max_ids) - 1
     result = hi
@@ -71,43 +72,32 @@ def _estimate_turn(entity_id):
             hi = mid - 1
     return result
 
-def get_new_messages():
-    get_team = rc.get_team
-    get_entity_type = rc.get_entity_type
-    get_marker_value = rc.get_marker_value
-    rc_get_position = rc.get_position
-    my_team = map_info._my_team
-    marker_type = EntityType.MARKER
+def decode_visible_marker(id: int, pos: Position):
     width = map_info._width
     marker_id_at = _marker_id_at
     my_markers = _my_markers
+    if id in my_markers:
+        return None
 
-    messages = []
-    append = messages.append
+    if not map_info.in_bounds(pos):
+        return None
+    pos_n = pos.x + pos.y * width
+    if pos_n < 0 or pos_n >= len(marker_id_at):
+        return None
+    if marker_id_at[pos_n] == id:
+        return None
+    marker_id_at[pos_n] = id
 
-    for id in rc.get_nearby_buildings():
-        if id in my_markers:
-            continue
-        if get_entity_type(id) != marker_type:
-            continue
-        if get_team(id) != my_team:
-            continue
+    val = rc.get_marker_value(id) ^ key
+    sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
+    sender_dir = _DIRS_8[sender_dir_idx]
+    dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
+    sender_pos = Position(pos.x + dx, pos.y + dy)
+    return (val, sender_pos)
 
-        pos = rc_get_position(id)
-        pos_n = pos.x + pos.y * width
 
-        if marker_id_at[pos_n] == id:
-            continue
-        marker_id_at[pos_n] = id
-
-        val = get_marker_value(id) ^ key
-        sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
-        sender_dir = _DIRS_8[sender_dir_idx]
-        sender_pos = pos.add(sender_dir)
-        estimated_turn = _estimate_turn(id)
-        append((val, sender_pos, estimated_turn))
-
-    return messages
+def get_new_messages():
+    return map_info._new_marker_messages
 
 def decode_location(v):
     return v & _POS_MASK
@@ -150,9 +140,9 @@ def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
 def mark(target_idx, type):
-    if type != 7:
-        rc.draw_indicator_line(rc.get_position(), Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
-    print("mark", target_idx, type)
+    if DRAW_DEBUG and type != 7:
+        rc.draw_indicator_line(map_info._my_pos, Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
+    log("mark", target_idx, type)
 
     adjacent_tiles = rc.get_nearby_tiles(2)
 
@@ -195,7 +185,7 @@ def mark(target_idx, type):
         sym = get_sym_bits()
         sample_bits = 0
         # sample_bits = comms_positional.encode_sample_bits(pos, sym)
-        sender_dir = pos.direction_to(rc.get_position())
+        sender_dir = pos.direction_to(map_info._my_pos)
         sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
         val = encode(target_idx, type, sym, sample_bits, sender_loc)
 

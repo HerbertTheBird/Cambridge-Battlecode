@@ -1,5 +1,6 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
 import map_info
+from log import log
 
 rc: Controller = None
 my_pos: Position = None
@@ -9,11 +10,7 @@ skipped_firing_turns: int = 0
 
 # --- Ported from dragonfruit/globals.py ---
 TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
-DIRECTIONS = [
-    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
-    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
-]
-CARDINAL_DIRECTIONS = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+
 INF = 999999
 
 def init(c: Controller):
@@ -22,7 +19,6 @@ def init(c: Controller):
     my_pos = rc.get_position()
     last_fired_round = rc.get_current_round()
     skipped_firing_turns = 0
-    map_info.init(c)
     my_team = map_info._my_team
 
 # --- Ported and adapted from dragonfruit/units/gunner/combat.py ---
@@ -58,7 +54,7 @@ def choose_gunner_target() -> Position | None:
     direction = rc.get_direction()
     attackable_tiles = set(rc.get_attackable_tiles()) # Re-added this line
     ray_tiles = []
-    tile = my_pos.add(direction)
+    tile = map_info.pos_add(my_pos, direction)
 
     invalid_sabotage_locations = _get_invalid_sabotage_locations()
 
@@ -68,7 +64,7 @@ def choose_gunner_target() -> Position | None:
         if tile not in attackable_tiles: # Re-added this check
             break
         ray_tiles.append(tile)
-        tile = tile.add(direction)
+        tile = map_info.pos_add(tile, direction)
 
     first_enemy_idx = None
     for i, current_ray_tile in enumerate(ray_tiles):
@@ -127,9 +123,9 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
     width = map_info._width
     height = map_info._height
 
-    for d in DIRECTIONS:
-        dx, dy = d.delta()
-        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+    for d in map_info._DIRECTIONS:
+        dx, dy = map_info._DIRECTION_DELTAS[d]
+        max_range = 3 if d in map_info._CARDINAL else 2
 
         x, y = tpos.x, tpos.y
         for _ in range(max_range):
@@ -169,7 +165,7 @@ def get_enemy_units():
     global my_team
     enemy_units = []
 
-    for p in rc.get_nearby_tiles():
+    for p in map_info._nearby_tiles:
         # --- builder bots ---
         bbid = rc.get_tile_builder_bot_id(p)
         if bbid is not None:
@@ -236,11 +232,11 @@ def run():
     map_info.update()
     enemies = get_enemy_units()
     target = choose_gunner_target()
-    print(f"gunner target: {target}")
+    log(f"gunner target: {target}")
 
     if target is not None and rc.can_fire(target):
         rc.fire(target)
-        print(f"gunner fired at {target}")
+        log(f"gunner fired at {target}")
         last_fired_round = rc.get_current_round()
         skipped_firing_turns = 0
 
@@ -250,7 +246,7 @@ def run():
         if rotate_dir is not None and rc.can_rotate(rotate_dir):
             rc.rotate(rotate_dir)
             skipped_firing_turns = 0
-            print(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+            log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
 
     if rc.get_action_cooldown() == 0:
         skipped_firing_turns += 1

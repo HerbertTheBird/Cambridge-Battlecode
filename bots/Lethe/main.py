@@ -12,10 +12,12 @@ import units.turret_gunner as gunner
 import units.turret_sentinel as sentinel
 import units.turret_breach as breach
 import units.turret_launcher as launcher
+import map_info
+import comms
 import comms_stats
+from log import log
 
-
-ENABLE_PROFILER = False
+ENABLE_PROFILER = True
 ENABLE_COMMS_STATS = False
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:
@@ -133,6 +135,8 @@ class Player:
                 elif etype == EntityType.LAUNCHER:
                     self.me = launcher
 
+                map_info.init(c)
+                comms.init(c)
                 self.me.init(c)
                 self.initialized = True
 
@@ -141,10 +145,10 @@ class Player:
             end_time = time.perf_counter_ns()
             elapsed_us = end_time - start_time
 
-            print(f"{elapsed_us/1000000:.3f} ms")
+            log(f"{elapsed_us/1000000:.3f} ms")
 
             if end_time - start_time > 2_000_000:
-                print(
+                log(
                     "timed out",
                     c.get_id(),
                     c.get_current_round(),

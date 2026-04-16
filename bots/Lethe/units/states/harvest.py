@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 from cambc import *
 import units.builder
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -11,7 +12,7 @@ nav: Pathing = None
 comm_flag = 3
 
 def _my_claims():
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
@@ -80,7 +81,7 @@ def _too_expensive():
     ti = rc.get_global_resources()[0]
     result = 0
     for n, cost in _cost_map.items():
-        # print(n%map_info._width, n//map_info._width, cost)
+        # log(n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     return result
@@ -93,7 +94,7 @@ CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 def run():
     global cant_harvest
-    print("HARVEST")
+    log("HARVEST")
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
     my_team_idx = map_info._my_team_idx
@@ -104,8 +105,10 @@ def run():
     harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
     has_building = map_info._bm_any_building
 
+    my_pos = map_info._my_pos
     for d in (Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST, Direction.NORTHWEST):
-        p = rc.get_position().add(d)
+        dx, dy = map_info._DIRECTION_DELTAS[d]
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if not map_info.in_bounds(p):
             continue
         pn = p.x + p.y * w
@@ -115,7 +118,7 @@ def run():
         # Check all 4 cardinal sides are secured
         secured = True
         for cd in CARD:
-            cp = p.add(cd)
+            cp = map_info.pos_add(p, cd)
             if not map_info.in_bounds(cp):
                 continue
             cn = cp.x + cp.y * w
@@ -155,17 +158,17 @@ def run():
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
         return
-    if rc.get_position().distance_squared(best_ore) > 2:
+    if map_info._my_pos.distance_squared(best_ore) > 2:
         nav.move_to(best_ore)
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return
     # --- Secure each cardinal side ---
     all_secured = True
     for d in CARD:
-        p = best_ore.add(d)
+        p = map_info.pos_add(best_ore, d)
         if not map_info.in_bounds(p):
             continue
-        if p == rc.get_position() and p in pathing.destroyed_barriers:
+        if p == map_info._my_pos and p in pathing.destroyed_barriers:
             continue
 
         pn = p.x + p.y * w
@@ -215,8 +218,8 @@ def run():
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]
     targets = set()
-    for d in Direction:
-        p = path[0].add(d)
+    for d in map_info._ALL_DIRECTIONS:
+        p = map_info.pos_add(path[0], d)
         if p == best_ore or not map_info.in_bounds(p):
             continue
         if p.distance_squared(best_ore) > 2:
@@ -224,9 +227,9 @@ def run():
         pbit = 1 << (p.x + p.y * w)
         if map_info.is_passable(p):
             targets.add(p)
-    print("all secured")
+    log("all secured")
     if targets:
-        print("attempt move?", targets)
+        log("attempt move?", targets)
         nav.move_to(targets)
 
     if ore_id:
@@ -234,11 +237,11 @@ def run():
         is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
         if not is_mine and is_road:
             nav.move_to(best_ore)
-            if rc.can_fire(rc.get_position()):
-                rc.fire(rc.get_position())
+            if rc.can_fire(map_info._my_pos):
+                rc.fire(map_info._my_pos)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and rc.get_position() != best_ore:
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
 

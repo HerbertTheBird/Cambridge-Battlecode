@@ -1,5 +1,6 @@
 from cambc import Controller, Position, EntityType, Direction
 import map_info
+from log import log
 
 rc = None
 _no_ammo_turns = 0
@@ -28,7 +29,6 @@ _WEIGHTS = {
 def init(c: Controller):
     global rc
     rc = c
-    map_info.init(c)
 
 
 def _should_stay():
@@ -62,7 +62,7 @@ def _get_feeder_positions():
             feeders.add(p)
         elif etype in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
             d = rc.get_direction(bid)
-            ddx, ddy = d.delta()
+            ddx, ddy = map_info._DIRECTION_DELTAS[d]
             if p.x + ddx == my_pos.x and p.y + ddy == my_pos.y:
                 feeders.add(p)
     return feeders

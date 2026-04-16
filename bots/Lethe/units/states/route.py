@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 from cambc import *
 import units.builder
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -103,7 +104,7 @@ def _orphan_foundries():
     return my_foundries & ~served & ~map_info._bm_enemy_turret_threat
 def cant_claim():
     w = map_info._width
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
 
     # My 5x5 (2 Chebyshev) zone — always claimable
     my_bit = 1 << (my_pos.x + my_pos.y * w)
@@ -140,22 +141,26 @@ def avoid_mask():
 
 def _my_claims():
     w = map_info._width
-    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     avoid = avoid_mask()
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
 
+_cached_claims = 0  # set by score(), reused by run()
+
 def score():
-    return 4 if _my_claims() else 0
+    global _cached_claims
+    _cached_claims = _my_claims()
+    return 4 if _cached_claims else 0
 
 def run():
 
     global unpathable
-    print("ROUTE")
-    candidates = _my_claims()
+    log("ROUTE")
+    candidates = _cached_claims
 
     if not candidates:
-        print("no candidates")
+        log("no candidates")
         return
     width = map_info._width
     height = map_info._height
@@ -165,7 +170,7 @@ def run():
     foundries = _orphan_foundries() & ~avoid
     best, _ = nav.closest(candidates)
     if best is None:
-        print("no closest???")
+        log("no closest???")
         unpathable |= candidates
         return
     
@@ -254,12 +259,12 @@ def run():
     if not is_refined:
         _cost_map[best_n] = cost
         if rc.get_global_resources()[0] < cost:
-            print("can't afford", cost)
+            log("can't afford", cost)
             comms.mark(best.x + best.y * map_info._width, comm_flag)
             return
     if near_enemy:
         nav.move_to(target_conveyor[1])
-        if rc.get_position() == target_conveyor[1]:
+        if map_info._my_pos == target_conveyor[1]:
             can_build = True
     else:
         nav.move_adjacent(target_conveyor[0])
@@ -290,18 +295,18 @@ def run():
         last_unloaded_bit = 0
         visited = 0
         while True:
-            print("at", cur_n%width, cur_n//width)
-            print("next", conv_target[cur_n]%width, conv_target[cur_n]//width)
+            log("at", cur_n%width, cur_n//width)
+            log("next", conv_target[cur_n]%width, conv_target[cur_n]//width)
             cur_bit = 1 << cur_n
             if visited & cur_bit:
-                print("cycle detected")
+                log("cycle detected")
                 break
             visited |= cur_bit
             if (map_info._bm_routable & cur_bit) and not (map_info._bm_conv_loaded & cur_bit):
                 last_unloaded_bit = cur_bit
             tn = conv_target[cur_n]
             if tn < 0 or tn >= tiles:
-                print("invalid target", tn)
+                log("invalid target", tn)
                 break
             tbit = 1 << tn
             if not (map_info._bm_conveyors & tbit):
@@ -309,6 +314,6 @@ def run():
             cur_n = tn
         if last_unloaded_bit:
             map_info._bm_conv_loaded |= last_unloaded_bit
-            print("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
+            log("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
 
     comms.mark(best.x + best.y * map_info._width, comm_flag)

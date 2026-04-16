@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -56,7 +57,7 @@ def _sabotage_targets():
     # expensive calculations - nonbitmasked, leave at end. calculates conveyors that go into a turret.
     pruned_targets = 0
     invalid_sabotage_locations = set()
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
         front_positions = []
         
@@ -85,14 +86,14 @@ def _sabotage_targets():
 
 def _my_claims():
     w = map_info._width
-    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _sabotage_targets())
 
 def score():
     return 5 if _my_claims() else 0
 
 def run():
-    print("SABOTAGE")
+    log("SABOTAGE")
     targets = _my_claims()
 
     if not targets:

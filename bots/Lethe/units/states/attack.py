@@ -4,17 +4,13 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
 
 
 rc: Controller = None
 nav: Pathing = None
 
 comm_flag = 6
-
-DIRECTIONS = (
-    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
-    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
-)
 
 
 def init(c: Controller):
@@ -119,7 +115,7 @@ def get_best_direction(pos):
                                 core_counted = True
             if b_score > best_b_score:
                 best_b_score = b_score
-                best_b_dir = DIRECTIONS[di]
+                best_b_dir = map_info._DIRECTIONS[di]
 
         # Sentinel score
         if di not in sentinel_blocked:
@@ -137,7 +133,7 @@ def get_best_direction(pos):
                                 core_counted = True
             if s_score > best_s_score:
                 best_s_score = s_score
-                best_s_dir = DIRECTIONS[di]
+                best_s_dir = map_info._DIRECTIONS[di]
 
         # Gunner score — single ray, wall/friendly-blocked
         if di not in gunner_blocked:
@@ -159,7 +155,7 @@ def get_best_direction(pos):
             g_score *= 5
             if g_score > best_g_score:
                 best_g_score = g_score
-                best_g_dir = DIRECTIONS[di]
+                best_g_dir = map_info._DIRECTIONS[di]
 
     if adj_foundry:
         if best_b_score > 0:
@@ -286,7 +282,7 @@ def _placement_candidates():
     candidates &= ~map_info._bm_env[map_info._IDX_ENV_WALL]
 
     # Exclude tiles with any builder bots (except me)
-    my_bit = 1 << (rc.get_position().x + rc.get_position().y * map_info._width)
+    my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * map_info._width)
     all_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
     candidates &= ~all_bots
 
@@ -363,22 +359,27 @@ def _get_attack_candidates():
 
 def _my_claims():
     w = map_info._width
-    my_mask = 1 << (rc.get_position().x + rc.get_position().y * w)
+    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     non_roaded, roaded = _get_attack_candidates()
     combined = non_roaded | roaded
     claimed = pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], combined)
     return claimed & non_roaded, claimed & roaded
 
+_cached_claims = (0, 0)  # set by score(), reused by run()
+
 def score():
+    global _cached_claims
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:
+        _cached_claims = (0, 0)
         return 0
-    non_roaded, roaded = _my_claims()
+    _cached_claims = _my_claims()
+    non_roaded, roaded = _cached_claims
     return 6 if (non_roaded or roaded) else 0
 
 
 def run():
-    print("ATTACK")
-    non_roaded, roaded = _my_claims()
+    log("ATTACK")
+    non_roaded, roaded = _cached_claims
 
     if not non_roaded and not roaded:
         return
@@ -388,7 +389,7 @@ def run():
     candidates = non_roaded | roaded
 
     # Evaluate all adjacent candidate tiles and pick highest scoring
-    my_pos = rc.get_position()
+    my_pos = map_info._my_pos
     best = None
     best_score = -1
     best_direction = Direction.NORTH
@@ -436,7 +437,7 @@ def run():
     direction = best_direction
     turret_type = best_turret_type
     is_enemy_road = best_is_enemy_road
-    print(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
+    log(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
 
     my_team = map_info._my_team
 
@@ -452,7 +453,7 @@ def run():
         if rc.can_fire(best):
             if count == 0 or rc.get_hp(best_id) <= 2: # bait them to move away
                 rc.fire(best)
-        for d in Direction:
+        for d in map_info._ALL_DIRECTIONS:
             if d == Direction.CENTRE:
                 continue
             if rc.can_move(d):
@@ -464,7 +465,7 @@ def run():
         nav.move_adjacent(best)
         if best_id and is_mine:
             if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
-                print(f"Attack destroy own building at {best}")
+                log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)
 
