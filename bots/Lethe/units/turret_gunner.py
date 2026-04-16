@@ -1,5 +1,6 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
 import map_info
+from log import log
 
 rc: Controller = None
 my_pos: Position = None
@@ -235,11 +236,11 @@ def run():
     map_info.update()
     enemies = get_enemy_units()
     target = choose_gunner_target()
-    print(f"gunner target: {target}")
+    log(f"gunner target: {target}")
 
     if target is not None and rc.can_fire(target):
         rc.fire(target)
-        print(f"gunner fired at {target}")
+        log(f"gunner fired at {target}")
         last_fired_round = rc.get_current_round()
         skipped_firing_turns = 0
 
@@ -249,7 +250,7 @@ def run():
         if rotate_dir is not None and rc.can_rotate(rotate_dir):
             rc.rotate(rotate_dir)
             skipped_firing_turns = 0
-            print(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+            log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
 
     if rc.get_action_cooldown() == 0:
         skipped_firing_turns += 1

@@ -1,5 +1,6 @@
 from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
+from log import log
 import comms_positional
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
@@ -128,7 +129,7 @@ def get_sym_bits() -> int:
 def mark(target_idx, type):
     if type != 7:
         rc.draw_indicator_line(rc.get_position(), Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
-    print("mark", target_idx, type)
+    log("mark", target_idx, type)
 
     adjacent_tiles = rc.get_nearby_tiles(2)
 

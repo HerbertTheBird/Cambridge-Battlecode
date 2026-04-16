@@ -4,6 +4,7 @@ import comms
 import units.builder
 from cambc import *
 import random
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -87,7 +88,7 @@ def generate_explore_target():
     explore_target = Position(n % w, n // w)
 
 def run():
-    print("EXPLORE")
+    log("EXPLORE")
     if explore_target is None or rc.get_position().distance_squared(explore_target) <= 18:
         generate_explore_target()
 

@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 from cambc import *
 import units.builder
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -80,7 +81,7 @@ def _too_expensive():
     ti = rc.get_global_resources()[0]
     result = 0
     for n, cost in _cost_map.items():
-        # print(n%map_info._width, n//map_info._width, cost)
+        # log(n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     return result
@@ -93,7 +94,7 @@ CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 def run():
     global cant_harvest
-    print("HARVEST")
+    log("HARVEST")
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
     my_team_idx = map_info._my_team_idx
@@ -224,9 +225,9 @@ def run():
         pbit = 1 << (p.x + p.y * w)
         if map_info.is_passable(p):
             targets.add(p)
-    print("all secured")
+    log("all secured")
     if targets:
-        print("attempt move?", targets)
+        log("attempt move?", targets)
         nav.move_to(targets)
 
     if ore_id:

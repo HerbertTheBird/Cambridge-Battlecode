@@ -1,5 +1,6 @@
 from cambc import Controller, Position
 import map_info
+from log import log
 
 rc: Controller
 

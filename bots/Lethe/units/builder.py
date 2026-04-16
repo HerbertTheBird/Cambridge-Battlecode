@@ -18,7 +18,7 @@ import units.states.heal     as heal
 import units.states.sabotage as sabotage
 import units.states.attack   as attack
 
-
+from log import log
 
 
 rc: Controller

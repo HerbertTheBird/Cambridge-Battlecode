@@ -8,6 +8,7 @@ import time
 import units.builder as builder
 import sys
 from functools import lru_cache
+from log import log
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -360,7 +361,7 @@ class Pathing:
         visited_layers: list[int] = []
         i = 0
         while True:
-            # print("move",i,file=sys.stderr)
+            # log("move",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
@@ -370,7 +371,7 @@ class Pathing:
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
-                print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                log("bfs time " + str((end_time - start_time) / 1000) + "us")
                 start_bit = hit & -hit
                 s_idx = start_bit.bit_length() - 1
                 cx = s_idx % width
@@ -503,7 +504,7 @@ class Pathing:
         visited_layers: list[int] = []
         i = 0
         while True:
-            # print("route",i,file=sys.stderr)
+            # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
@@ -513,7 +514,7 @@ class Pathing:
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
-                print("bfs time " + str((end_time - start_time) / 1000) + "us")
+                log("bfs time " + str((end_time - start_time) / 1000) + "us")
                 start_bit = hit & -hit
                 s_idx = start_bit.bit_length() - 1
                 cx = s_idx % width
@@ -601,7 +602,7 @@ class Pathing:
         return self.move_to(adj, **kwargs)
 
     def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
-        print("move to", target)
+        log("move to", target)
         if isinstance(target, Position):
             target_set = {target}
         else:
@@ -642,7 +643,7 @@ class Pathing:
 
 
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
-        print("conveyors from ", start, raw_axionite)
+        log("conveyors from ", start, raw_axionite)
         w = self.width
         if update:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)

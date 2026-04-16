@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -92,7 +93,7 @@ def score():
     return 5 if _my_claims() else 0
 
 def run():
-    print("SABOTAGE")
+    log("SABOTAGE")
     targets = _my_claims()
 
     if not targets:

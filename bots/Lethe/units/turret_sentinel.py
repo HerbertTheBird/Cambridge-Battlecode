@@ -1,5 +1,6 @@
 from cambc import Controller, Position, EntityType, Direction
 import map_info
+from log import log
 
 rc = None
 _no_ammo_turns = 0

@@ -4,6 +4,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
 
 
 rc: Controller = None
@@ -377,7 +378,7 @@ def score():
 
 
 def run():
-    print("ATTACK")
+    log("ATTACK")
     non_roaded, roaded = _my_claims()
 
     if not non_roaded and not roaded:
@@ -436,7 +437,7 @@ def run():
     direction = best_direction
     turret_type = best_turret_type
     is_enemy_road = best_is_enemy_road
-    print(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
+    log(f"Attack: best={best}, dir={direction}, type={turret_type}, enemy_road={is_enemy_road}")
 
     my_team = map_info._my_team
 
@@ -464,7 +465,7 @@ def run():
         nav.move_adjacent(best)
         if best_id and is_mine:
             if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
-                print(f"Attack destroy own building at {best}")
+                log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)
 

@@ -4,6 +4,7 @@ from cambc import Controller, Position, Environment, EntityType, Team, Direction
 from collections import deque
 import pathing
 import comms
+from log import log
 
 _HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
@@ -1253,11 +1254,11 @@ def update(recompute: bool = True) -> None:
                     if abs(my_pos.x - hsym_core.x) + abs(my_pos.y - hsym_core.y) < abs(my_pos.x - vsym_core.x) + abs(my_pos.y - vsym_core.y):
                         _predicted_enemy_core = hsym_core
                         _rush_tiebroken = 2
-                        print("Tiebreaking enemy core sym - HORIZONTAL")
+                        log("Tiebreaking enemy core sym - HORIZONTAL")
                     else:
                         _predicted_enemy_core = vsym_core
                         _rush_tiebroken = 1
-                        print("Tiebreaking enemy core sym - VERTICAL")
+                        log("Tiebreaking enemy core sym - VERTICAL")
                 elif _ver_sym:
                     _predicted_enemy_core = vsym_core
                 else:

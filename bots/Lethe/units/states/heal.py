@@ -3,6 +3,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
+from log import log
 
 rc: Controller = None
 nav: Pathing = None
@@ -120,10 +121,10 @@ def score():
     target = _find_chase_target()
     if target is not None:
         if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
-            print("high priority heal", target[0])
+            log("high priority heal", target[0])
             return 7
         else:
-            print("low priority heal", target[0])
+            log("low priority heal", target[0])
             return 2.5
     return 0
 
@@ -200,12 +201,12 @@ def _do_best_heal():
 
 
 def run():
-    print("HEAL")
+    log("HEAL")
 
     # Priority 1: chase an enemy near my conveyors
     target = _find_chase_target()
     if target is not None:
-        print("target is",target)
+        log("target is",target)
         uid, ep = target
         _try_barrier_dead_ends()
         nav.move_to(ep)
