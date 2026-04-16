@@ -10,11 +10,7 @@ skipped_firing_turns: int = 0
 
 # --- Ported from dragonfruit/globals.py ---
 TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
-DIRECTIONS = [
-    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
-    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
-]
-CARDINAL_DIRECTIONS = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+
 INF = 999999
 
 def init(c: Controller):
@@ -127,9 +123,9 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
     width = map_info._width
     height = map_info._height
 
-    for d in DIRECTIONS:
+    for d in map_info._DIRECTIONS:
         dx, dy = map_info._DIRECTION_DELTAS[d]
-        max_range = 3 if d in CARDINAL_DIRECTIONS else 2
+        max_range = 3 if d in map_info._CARDINAL else 2
 
         x, y = tpos.x, tpos.y
         for _ in range(max_range):

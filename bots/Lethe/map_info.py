@@ -114,7 +114,11 @@ _NUM_ENV  = len(Environment)
 
 _DIR_CENTRE = Direction.CENTRE
 _ALL_DIRECTIONS = tuple(Direction)
-_CARDINAL = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+_DIRECTIONS = (
+    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
+    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
+)
+_CARDINAL = (Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST)
 _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
 
 def pos_add(pos: Position, d: Direction) -> Position:

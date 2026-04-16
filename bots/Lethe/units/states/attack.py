@@ -12,11 +12,6 @@ nav: Pathing = None
 
 comm_flag = 6
 
-DIRECTIONS = (
-    Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
-    Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
-)
-
 
 def init(c: Controller):
     global rc, nav
@@ -120,7 +115,7 @@ def get_best_direction(pos):
                                 core_counted = True
             if b_score > best_b_score:
                 best_b_score = b_score
-                best_b_dir = DIRECTIONS[di]
+                best_b_dir = map_info._DIRECTIONS[di]
 
         # Sentinel score
         if di not in sentinel_blocked:
@@ -138,7 +133,7 @@ def get_best_direction(pos):
                                 core_counted = True
             if s_score > best_s_score:
                 best_s_score = s_score
-                best_s_dir = DIRECTIONS[di]
+                best_s_dir = map_info._DIRECTIONS[di]
 
         # Gunner score — single ray, wall/friendly-blocked
         if di not in gunner_blocked:
@@ -160,7 +155,7 @@ def get_best_direction(pos):
             g_score *= 5
             if g_score > best_g_score:
                 best_g_score = g_score
-                best_g_dir = DIRECTIONS[di]
+                best_g_dir = map_info._DIRECTIONS[di]
 
     if adj_foundry:
         if best_b_score > 0:
@@ -453,7 +448,7 @@ def run():
         if rc.can_fire(best):
             if count == 0 or rc.get_hp(best_id) <= 2: # bait them to move away
                 rc.fire(best)
-        for d in Direction:
+        for d in map_info._ALL_DIRECTIONS:
             if d == Direction.CENTRE:
                 continue
             if rc.can_move(d):

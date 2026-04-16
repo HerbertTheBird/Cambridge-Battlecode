@@ -218,7 +218,7 @@ def run():
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]
     targets = set()
-    for d in Direction:
+    for d in map_info._ALL_DIRECTIONS:
         p = map_info.pos_add(path[0], d)
         if p == best_ore or not map_info.in_bounds(p):
             continue
