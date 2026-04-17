@@ -128,6 +128,9 @@ def run():
     handle_comms()
     map_info.recompute_derived()
     pathing.rebuild_broken_barriers(rc)
+    # Debug: purple dots on stuck conveyors.
+    if DRAW_DEBUG and map_info._bm_conv_stuck:
+        draw_mask(map_info._bm_conv_stuck, 128, 0, 128)
     if map_info._my_core and not _harvest_zone_final:
         if map_info._solved_sym and map_info._predicted_enemy_core is not None:
             # Symmetry solved — compute Voronoi partition once

@@ -12,6 +12,8 @@ nav: Pathing = None
 
 comm_flag = 2
 
+cant_disrupt = 0
+
 def init(c: Controller):
     global rc, nav
     rc = c
@@ -26,7 +28,8 @@ def _disruptable_ore():
               & (~map_info._bm_any_building | clearable)
               & ~units.builder._harvest_zone
               & ~map_info._bm_enemy_turret_threat
-              & ~map_info._bm_enemy_launch_adj)
+              & ~map_info._bm_enemy_launch_adj
+              & ~cant_disrupt)
     if rc.get_current_round() < 200:
         w = map_info._width
         my_zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
@@ -46,6 +49,7 @@ def score():
     return 2 if _my_claims() else 0
 
 def run():
+    global cant_disrupt
     log("DISRUPT")
     available = _my_claims()
     if not available:
@@ -53,6 +57,7 @@ def run():
 
     best, _ = nav.closest(available)
     if best is None:
+        cant_disrupt |= available
         return
 
     width = map_info._width

@@ -14,6 +14,9 @@ comm_flag = 7
 CONV_CHASE_CHEB = 8
 ID_MASK = (1 << 12) - 1
 
+# Friendly buildings previously unreachable for heal — excluded from target sets.
+cant_heal = 0
+
 
 def init(c: Controller):
     global rc, nav
@@ -107,12 +110,12 @@ def _healable_mask():
 
 def _very_damaged_targets():
     """Bitmask of friendly buildings with > 2 damage."""
-    return _healable_mask() & map_info._bm_very_damaged
+    return _healable_mask() & map_info._bm_very_damaged & ~cant_heal
 
 
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
-    return _healable_mask() & map_info._bm_damaged & ~map_info._bm_enemy_bots
+    return _healable_mask() & map_info._bm_damaged & ~map_info._bm_enemy_bots & ~cant_heal
 
 
 _cached_chase_target = None  # set by score(), reused by run()
@@ -212,11 +215,14 @@ def run():
         return
 
     # Priority 2: move to most damaged building and heal
+    global cant_heal
     very_damaged = _very_damaged_targets()
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None:
+        if best is None:
+            cant_heal |= targets
+        else:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()
     if rc.can_fire(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team():

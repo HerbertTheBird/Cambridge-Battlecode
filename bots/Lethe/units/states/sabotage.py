@@ -12,6 +12,8 @@ nav: Pathing = None
 
 comm_flag = 5
 
+cant_sabotage = 0
+
 def init(c: Controller):
     global rc, nav
     rc = c
@@ -83,7 +85,7 @@ def _sabotage_targets():
         if target not in invalid_sabotage_locations:
             pruned_targets |= (1 << (target.x + target.y * map_info._width))
 
-    return pruned_targets
+    return pruned_targets & ~cant_sabotage
 
 def _my_claims():
     w = map_info._width
@@ -94,6 +96,7 @@ def score():
     return 5 if _my_claims() else 0
 
 def run():
+    global cant_sabotage
     log("SABOTAGE")
     targets = _my_claims()
 
@@ -102,6 +105,7 @@ def run():
 
     best, _ = nav.closest(targets)
     if best is None:
+        cant_sabotage |= targets
         return
 
     # Move onto the tile and fire

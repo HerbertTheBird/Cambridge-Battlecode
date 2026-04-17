@@ -191,6 +191,9 @@ _bm_conv_loaded: int = 0        # conveyor-type buildings with a stored resource
 _bm_conv_raw_ax: int = 0        # conveyors observed containing raw axionite
 _bm_conv_ti: int = 0            # conveyors observed containing titanium
 _bm_conv_refined: int = 0       # conveyors observed containing refined axionite
+_bm_conv_stuck: int = 0         # conveyors observed holding the same resource stack
+                                # across consecutive observations (not moving)
+_conveyor_resource_id: list[int] = []  # per-tile: last-observed resource stack id (0 = none)
 _bm_ti_fed: int = 0             # targets of conveyors believed to carry titanium
 _bm_ax_fed: int = 0             # targets of conveyors believed to carry refined axionite
 _bm_dead_end: int = 0           # tiles that dead-end conveyors point into (output tiles)
@@ -524,7 +527,7 @@ def _clear_downstream_conv_bits(n: int, start_n: int, exclude: int,
 
 def update_at(pos: Position) -> None:
     """Re-scan a single tile from the controller and update all bitmasks. Call after any build/destroy."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building, _bm_harv_adj
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building, _bm_harv_adj, _bm_conv_stuck
     if not in_bounds(pos):
         return
 
@@ -556,6 +559,7 @@ def update_at(pos: Position) -> None:
         _bm_conv_raw_ax &= ~bit
         _bm_conv_ti &= ~bit
         _bm_conv_refined &= ~bit
+        _bm_conv_stuck &= ~bit
         _bm_dead_end &= ~bit
         _bm_damaged &= ~bit
         _bm_very_damaged &= ~bit
@@ -565,6 +569,7 @@ def update_at(pos: Position) -> None:
         _building_dir[n] = 0
         _building_conv_target[n] = -1
         _building_team_idx[n] = -1
+        _conveyor_resource_id[n] = 0
 
     # Read current state from controller
     entity_id = rc.get_tile_building_id(pos)
@@ -618,6 +623,16 @@ def update_at(pos: Position) -> None:
                 _bm_conv_refined |= bit
                 _bm_conv_raw_ax &= ~bit
                 _bm_conv_ti &= ~bit
+            # Stuck check: compare the stored resource stack id to last obs.
+            res_id = rc.get_stored_resource_id(entity_id)
+            if res_id is not None and res_id == _conveyor_resource_id[n]:
+                _bm_conv_stuck |= bit
+            else:
+                _bm_conv_stuck &= ~bit
+            _conveyor_resource_id[n] = res_id if res_id is not None else 0
+        else:
+            _bm_conv_stuck &= ~bit
+            _conveyor_resource_id[n] = 0
         if _building_conv_target[n] >= 0:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
             _conv_reverse[_building_conv_target[n]] |= bit
@@ -706,7 +721,7 @@ def init(c: Controller):
     global _my_team, _my_team_idx
     global _building_id, _building_et_idx, _building_hp, _building_dir, _building_conv_target, _building_team_idx, _conv_reverse, _env_idx_by_tile
     global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building, _board_mask
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_stuck, _conveyor_resource_id
     global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
     global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2, _not_left_col_3, _not_right_col_3
     global _MAP_CENTER
@@ -735,6 +750,8 @@ def init(c: Controller):
     _bm_blocked = 0
     _bm_conveyors = 0
     _bm_conveyor_targets = 0
+    _bm_conv_stuck = 0
+    _conveyor_resource_id = [0] * tiles
 
     # Column masks for safe bit-shifting (prevent wrap-around)
     left_col = 0
@@ -1014,6 +1031,9 @@ def _compute_route_targets() -> int:
                 to_visit = next_visit
 
     result |= valid_convs
+    # Stuck conveyors (resource hasn't moved across observations) are dead
+    # destinations — routing into them just adds to the backlog.
+    result &= ~_bm_conv_stuck
     return result
 
 def recompute_derived() -> None:
@@ -1085,7 +1105,7 @@ def update(recompute: bool = True) -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building, _bm_conv_stuck
     global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
     global _bm_others_5x5, _bm_others_3x3
@@ -1136,6 +1156,7 @@ def update(recompute: bool = True) -> None:
     rc_get_tile_building_id   = rc.get_tile_building_id
     rc_get_entity_type        = rc.get_entity_type
     rc_get_stored_resource    = rc.get_stored_resource
+    rc_get_stored_resource_id = rc.get_stored_resource_id
     rc_get_team               = rc.get_team
     rc_get_hp                 = rc.get_hp
     rc_get_direction          = rc.get_direction
@@ -1199,6 +1220,9 @@ def update(recompute: bool = True) -> None:
                     bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                         n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                     )
+                if is_conv[old_et_idx]:
+                    _bm_conv_stuck &= ~bit
+                    _conveyor_resource_id[n] = 0
                 building_conv_target[n] = -1
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
@@ -1242,10 +1266,18 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+                    res_id = rc_get_stored_resource_id(entity_id)
+                    if res_id is not None and res_id == _conveyor_resource_id[n]:
+                        _bm_conv_stuck |= bit
+                    else:
+                        _bm_conv_stuck &= ~bit
+                    _conveyor_resource_id[n] = res_id if res_id is not None else 0
                 else:
                     bm_conv_raw_ax &= ~bit
                     bm_conv_ti &= ~bit
                     bm_conv_refined &= ~bit
+                    _bm_conv_stuck &= ~bit
+                    _conveyor_resource_id[n] = 0
         elif comms._marker_id_at[n] == entity_id:
             # Already-seen marker — skip all controller calls
             continue
@@ -1267,6 +1299,9 @@ def update(recompute: bool = True) -> None:
                         bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                             n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                         )
+                    if is_conv[old_et_idx]:
+                        _bm_conv_stuck &= ~bit
+                        _conveyor_resource_id[n] = 0
                     building_conv_target[n] = -1
                     bm_et[old_et_idx] &= ~bit
                     _bm_any_building &= ~bit
@@ -1291,6 +1326,9 @@ def update(recompute: bool = True) -> None:
                     bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                         n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                     )
+                if is_conv[old_et_idx]:
+                    _bm_conv_stuck &= ~bit
+                    _conveyor_resource_id[n] = 0
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
                 old_ti = building_team_idx[n]
@@ -1348,10 +1386,18 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+                    res_id = rc_get_stored_resource_id(entity_id)
+                    if res_id is not None and res_id == _conveyor_resource_id[n]:
+                        _bm_conv_stuck |= bit
+                    else:
+                        _bm_conv_stuck &= ~bit
+                    _conveyor_resource_id[n] = res_id if res_id is not None else 0
                 else:
                     bm_conv_raw_ax &= ~bit
                     bm_conv_ti &= ~bit
                     bm_conv_refined &= ~bit
+                    _bm_conv_stuck &= ~bit
+                    _conveyor_resource_id[n] = 0
 
             if et is EntityType.CORE:
                 if _my_core is None and team_val == my_team:
@@ -1607,9 +1653,9 @@ def get_avoid(
     #     mask |= _bm_my_core_area
     if avoid_builders:
         mask |= _bm_friendly_bots | _bm_enemy_bots
-    threat = _bm_enemy_turret_threat
-    pos = _my_pos
-    my_bit = 1 << (pos.x + pos.y * _width)
-    if not (threat & my_bit):
-        mask |= threat
+    # threat = _bm_enemy_turret_threat
+    # pos = _my_pos
+    # my_bit = 1 << (pos.x + pos.y * _width)
+    # if not (threat & my_bit):
+    #     mask |= threat
     return mask
