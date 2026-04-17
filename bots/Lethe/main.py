@@ -39,8 +39,9 @@ class Player:
         self.me: ModuleType
 
         if ENABLE_PROFILER:
-            self.profiler = None
             self.profiler_path = None
+            self.accumulated_stats: pstats.Stats | None = None
+            self.timeout_count = 0
 
     def _prepare_profile_dir(self, c: Controller) -> None:
         if not (ENABLE_PROFILER or ENABLE_COMMS_STATS):
@@ -60,16 +61,14 @@ class Player:
             comms_stats.prepare_dir()
 
     def _write_profile(self) -> None:
-        if not ENABLE_PROFILER or self.profiler is None or self.profiler_path is None:
+        if not ENABLE_PROFILER or self.accumulated_stats is None or self.profiler_path is None:
             return
-
-        stats = pstats.Stats(self.profiler)
 
         # stats.stats:
         # key   = (filename, lineno, funcname)
         # value = (cc, nc, tt, ct, callers)
         # tt = tottime, ct = cumtime
-        rows = list(stats.stats.items())
+        rows = list(self.accumulated_stats.stats.items())
         rows.sort(key=lambda item: item[1][2], reverse=True)  # sort by tottime
 
         total_calls = sum(v[1] for _, v in rows)
@@ -77,8 +76,9 @@ class Player:
         total_cumtime = sum(v[3] for _, v in rows)
 
         with self.profiler_path.open("w", encoding="utf-8") as f:
-            f.write("Profile sorted by total time (tottime)\n")
+            f.write("Profile sorted by total time (tottime) — timed-out turns only\n")
             f.write(f"Unit profile: {self.profiler_path.name}\n")
+            f.write(f"Timed-out turns: {self.timeout_count}\n")
             f.write(f"Total calls: {total_calls}\n")
             f.write(f"Total tottime: {total_tottime * 1_000_000:.3f} us\n")
             f.write(f"Total cumtime: {total_cumtime * 1_000_000:.3f} us\n")
@@ -107,14 +107,11 @@ class Player:
 
             if ENABLE_PROFILER:
                 self.profiler_path = PROFILE_DIR / f"unit_{c.get_id()}.txt"
-                self.profiler = cProfile.Profile()
 
         if SPAWN_TURN == -2:
             SPAWN_TURN = c.get_current_round() - 1
 
-        if ENABLE_PROFILER and self.profiler is not None:
-            self.profiler.enable()
-
+        turn_profiler = None
         try:
             start_time = time.perf_counter_ns()
             etype = c.get_entity_type()
@@ -140,7 +137,14 @@ class Player:
                 self.me.init(c)
                 self.initialized = True
 
+            if ENABLE_PROFILER:
+                turn_profiler = cProfile.Profile()
+                turn_profiler.enable()
+
             self.me.run()
+
+            if ENABLE_PROFILER and turn_profiler is not None:
+                turn_profiler.disable()
 
             end_time = time.perf_counter_ns()
             elapsed_us = end_time - start_time
@@ -156,21 +160,21 @@ class Player:
                     file=sys.stderr,
                 )
                 c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
-            #     if ENABLE_PROFILER and self.profiler is not None:
-            #         self.profiler.disable()
-            #         self._write_profile()
-            # else:
-            #     if ENABLE_PROFILER and self.profiler is not None:
-            #         self.profiler.disable()
-                    # self.profiler.clear()
+                if ENABLE_PROFILER and turn_profiler is not None:
+                    self.timeout_count += 1
+                    import io
+                    turn_stats = pstats.Stats(turn_profiler, stream=io.StringIO())
+                    if self.accumulated_stats is None:
+                        self.accumulated_stats = turn_stats
+                    else:
+                        self.accumulated_stats.add(turn_profiler)
+                    self._write_profile()
 
         except Exception as e:
+            if ENABLE_PROFILER and turn_profiler is not None:
+                turn_profiler.disable()
             print("Error:", e)
             print(f"Error: {e}", file=sys.stderr)
             c.draw_indicator_line(Position(-100, -100), c.get_position(), 255, 0, 0)
             traceback.print_exc(file=sys.stdout)
             traceback.print_exc(file=sys.stderr)
-
-        if ENABLE_PROFILER and self.profiler is not None:
-            self.profiler.disable()
-            self._write_profile()

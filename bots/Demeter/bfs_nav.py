@@ -381,8 +381,8 @@ def _get_goal_mask() -> int:
 def _draw_path(ct: Controller):
     r, g, b = path_color
     debug_path = _build_debug_draw_path()
-    for i in range(len(debug_path) - 1):
-        ct.draw_indicator_line(debug_path[i], debug_path[i + 1], r, g, b)
+    # for i in range(len(debug_path) - 1):
+    #     ct.draw_indicator_line(debug_path[i], debug_path[i + 1], r, g, b)
 
 def _build_debug_draw_path() -> list[Position]:
     if not path:

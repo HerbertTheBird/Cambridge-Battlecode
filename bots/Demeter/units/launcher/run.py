@@ -146,5 +146,5 @@ def run_launcher(player, ct: Controller, my_pos: Position) -> None:
     if best_pos is not None and ct.can_launch(enemy_targets[0][0], best_pos):
         ct.launch(enemy_targets[0][0], best_pos)
         log(f"launched at {best_pos} targeting {enemy_targets[0][0]}")
-        ct.draw_indicator_dot(enemy_targets[0][0], 255, 0, 0)
-        ct.draw_indicator_line(best_pos, enemy_targets[0][0], 255, 255, 0)
+        # ct.draw_indicator_dot(enemy_targets[0][0], 255, 0, 0)
+        # ct.draw_indicator_line(best_pos, enemy_targets[0][0], 255, 255, 0)

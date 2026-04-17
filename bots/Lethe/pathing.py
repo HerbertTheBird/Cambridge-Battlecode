@@ -90,6 +90,7 @@ def voronoi_claim(my_mask, others_mask, claims):
             my_claimed |= my_front
             all_claimed |= my_front
             remaining = claims & ~all_claimed
+            # builder.draw_mask(my_claimed, 0, 255, 0)
             if not remaining:
                 break
 
@@ -347,7 +348,7 @@ class Pathing:
 
         max_c = 1 + barrier_cost + threat_cost
         max_seed = barrier_cost + threat_cost
-        cycle_len = max(max_c, max_seed) + 1
+        cycle_len = (max(max_c, max_seed) + 1) * 2
         frontier = [0] * cycle_len
         frontier[0]                                         = target_mask & nb_nt
         frontier[barrier_cost % cycle_len]                 |= target_mask & b_nt
@@ -362,6 +363,7 @@ class Pathing:
             # log("move",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
+            # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
@@ -395,9 +397,13 @@ class Pathing:
                 cur_edge_dist = min(cx, cy, w_minus_1 - cx, h_minus_1 - cy)
                 in_edge_band = cur_edge_dist < 4
 
-                best_key = (2, 2, 2, 2, 2, 3)
-                chosen_prev = None
+                # For each non-blocked neighbor, scan layers from optimal (i - step_cost - extra_cost) to i
+                # to find the first (closest-to-target) layer where the tile is set
+                best_layer = -1
+                candidates = []
                 for dx, dy, step_cost in self._MOVE_OFFSETS:
+                    if dx == 0 and dy == 0:
+                        continue
                     px = cx - dx
                     py = cy - dy
                     if not (0 <= px < width and 0 <= py < height):
@@ -407,9 +413,26 @@ class Pathing:
                         continue
                     if prev_bit & avoid:
                         continue
-                    prev_layer = i - step_cost - extra_cost
-                    is_optimal = (0 <= prev_layer < vl_len) and bool(visited_layers[prev_layer] & prev_bit)
-                    k_opt = 0 if is_optimal else 1
+                    layer = -1
+                    start_l = (i - step_cost - extra_cost) % vl_len
+                    l = start_l
+                    while True:
+                        if visited_layers[l] & prev_bit:
+                            layer = l
+                            break
+                        if l == i:
+                            break
+                        l = (l + 1) % vl_len
+                    candidates.append((dx, dy, px, py, prev_bit, layer))
+                    if layer >= 0 and (best_layer < 0 or layer < best_layer):
+                        best_layer = layer
+
+                # Tiebreak among tiles at the best (lowest) layer
+                best_key = (2, 2, 2, 2, 3)
+                chosen_prev = None
+                for dx, dy, px, py, prev_bit, layer in candidates:
+                    if layer != best_layer:
+                        continue
                     k_wk = 0 if (prev_bit & walkable) else 1
                     diag = dx != 0 and dy != 0
                     k0 = 0 if diag else 1
@@ -427,7 +450,7 @@ class Pathing:
                         else:
                             k3 = 2
 
-                    key = (k_opt, k_wk, k0, k1, k2, k3)
+                    key = (k_wk, k0, k1, k2, k3)
                     if key < best_key:
                         best_key = key
                         chosen_prev = Position(px, py)
@@ -632,8 +655,8 @@ class Pathing:
         s_pos, p_pos, _ = result
         if s_pos == p_pos:
             return False
-        if DRAW_DEBUG:
-            self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
+        # if DRAW_DEBUG:
+        #     self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
         return self.move(s_pos.direction_to(p_pos))
 
 
@@ -659,9 +682,9 @@ class Pathing:
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        if DRAW_DEBUG:
-            self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-            self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
+        # if DRAW_DEBUG:
+        #     self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
+        #     self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):

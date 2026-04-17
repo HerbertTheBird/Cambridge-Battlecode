@@ -786,9 +786,9 @@ def debug_draw_intercept_masks(
         bit_idx = low.bit_length() - 1
         x = bit_idx % width
         y = bit_idx // width
-        ct.draw_indicator_dot(Position(x, y), 0, 60, 80)
+        # ct.draw_indicator_dot(Position(x, y), 0, 60, 80)
         a ^= low
-    ct.draw_indicator_dot(intercept_pos, 255, 0, 255)
+    # ct.draw_indicator_dot(intercept_pos, 255, 0, 255)
 
     bright = {
         "core": (255, 0, 0),
@@ -809,7 +809,7 @@ def debug_draw_intercept_masks(
             x = bit_idx % width
             y = bit_idx // width
             r, g, b = bright[key] if (attack >> bit_idx) & 1 else dim[key]
-            ct.draw_indicator_dot(Position(x, y), r, g, b)
+            pass # ct.draw_indicator_dot(Position(x, y), r, g, b)
             m ^= low
 
     _draw(core_mask, "core")

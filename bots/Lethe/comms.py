@@ -141,6 +141,8 @@ def mark(target_idx, type):
     best = None # (priority, pos, tile_id)
 
     for pos in adjacent_tiles:
+        if pos == rc.get_position():
+            continue
         if _is_bad_marker_spot(pos):
             continue
 

@@ -82,7 +82,7 @@ def choose_spawn_plan(ct: Controller, my_pos: Position):
 def draw_spawn_plan(ct: Controller, my_pos: Position, spawn_plan, width: int, height: int) -> None:
     for d in spawn_plan:
         endpoint = get_ray_endpoint(my_pos, d, width, height)
-        ct.draw_indicator_line(my_pos, endpoint, 0, 255, 0)
+        pass # ct.draw_indicator_line(my_pos, endpoint, 0, 255, 0)
 
 def should_spawn(player, ct: Controller) -> bool:
     builder_cost = ct.get_builder_bot_cost()[0]

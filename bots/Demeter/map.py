@@ -2291,6 +2291,7 @@ def get_best_bridge_output_with_fallback_idx(bridge_pos: Position, core_pos: Pos
     )
 
 def indicate_entity_map(ct: Controller, my_team: Team):
+    return
     _UNIT_TYPES = (EntityType.CORE, EntityType.BUILDER_BOT, *TURRET_TYPES, EntityType.LAUNCHER)
     for idx in range(tile_count):
         entity_id_val = _entity_id[idx]
@@ -2305,20 +2306,21 @@ def indicate_entity_map(ct: Controller, my_team: Team):
         pos = Position(x, y)
         if team != my_team:
             if etype in _UNIT_TYPES:
-                ct.draw_indicator_dot(pos, 255, 0, 0)      # red
+                pass # ct.draw_indicator_dot(pos, 255, 0, 0)      # red
             elif etype in CONVEYOR_TYPES:
-                ct.draw_indicator_dot(pos, 255, 165, 0)    # orange
+                pass # ct.draw_indicator_dot(pos, 255, 165, 0)    # orange
             else:
-                ct.draw_indicator_dot(pos, 255, 255, 0)    # yellow
+                pass # ct.draw_indicator_dot(pos, 255, 255, 0)    # yellow
         else:
             if etype in _UNIT_TYPES:
-                ct.draw_indicator_dot(pos, 0, 255, 0)      # green
+                pass # ct.draw_indicator_dot(pos, 0, 255, 0)      # green
             elif etype in CONVEYOR_TYPES:
-                ct.draw_indicator_dot(pos, 0, 100, 255)    # blue
+                pass # ct.draw_indicator_dot(pos, 0, 100, 255)    # blue
             else:
-                ct.draw_indicator_dot(pos, 180, 0, 255)    # purple
+                pass # ct.draw_indicator_dot(pos, 180, 0, 255)    # purple
 
 def indicate_reachability(ct: Controller):
+    return
     seen = _bm_seen
     reachable = _bm_reachable
     might = _bm_might_reach
@@ -2334,6 +2336,7 @@ def indicate_reachability(ct: Controller):
             ct.draw_indicator_dot(Position(idx % width, idx // width), 255, 0, 0)
 
 def indicate_seen(ct: Controller):
+    return
     for idx in range(tile_count):
         ei = _env_idx[idx]
         if ei < 0:

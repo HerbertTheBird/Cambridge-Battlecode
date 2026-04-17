@@ -1,7 +1,7 @@
 from cambc import Controller
 
-DEBUG_LOGGING = True
-TIME_LOGGING = True
+DEBUG_LOGGING = False
+TIME_LOGGING = False
 
 if DEBUG_LOGGING:
     def log(*args, **kwargs):

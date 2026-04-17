@@ -10,12 +10,16 @@ from log import log
 _HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
 _CONVEYOR_TYPES = frozenset(
     e for e in (
-        EntityType.CONVEYOR, 
+        EntityType.CONVEYOR,
         EntityType.ARMOURED_CONVEYOR,
-        EntityType.BRIDGE, 
+        EntityType.BRIDGE,
         EntityType.SPLITTER
     )
 )
+
+# Max tiles a resource propagates along a conveyor chain per scan, and max tiles
+# ahead to invalidate when a conveyor changes. Stops earlier at intersections.
+_CONV_PROP_DEPTH = 3
 
 _ACCEPT_ORE = frozenset(
     e for e in (
@@ -191,7 +195,7 @@ _bm_conv_ti: int = 0            # conveyors observed containing titanium
 _bm_conv_refined: int = 0       # conveyors observed containing refined axionite
 _bm_ti_fed: int = 0             # targets of conveyors believed to carry titanium
 _bm_ax_fed: int = 0             # targets of conveyors believed to carry refined axionite
-_bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
+_bm_dead_end: int = 0           # tiles that dead-end conveyors point into (output tiles)
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
 _bm_visible: int = 0              # tiles visible this turn
 _nearby_tiles: list = []           # cached rc.get_nearby_tiles() for this round
@@ -482,6 +486,41 @@ def _compute_enemy_turret_threat() -> int:
     return threat
 
 
+def _clear_downstream_conv_bits(n: int, start_n: int, exclude: int,
+                                 bm_loaded: int, bm_ax: int, bm_ti: int, bm_ref: int):
+    """Conveyor at tile n has changed: invalidate predicted resource bits on up
+    to _CONV_PROP_DEPTH tiles ahead of it along its (old) chain. Stops when the
+    next tile isn't a conveyor, is in `exclude` (e.g. freshly observed this
+    round), or is an intersection (has other incoming conveyors)."""
+    if start_n < 0:
+        return bm_loaded, bm_ax, bm_ti, bm_ref
+    bm_et = _bm_et
+    conv_types = (bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+                  | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER])
+    conv_reverse = _conv_reverse
+    building_conv_target = _building_conv_target
+    prev_bit = 1 << n
+    cur = start_n
+    for _ in range(_CONV_PROP_DEPTH):
+        cur_bit = 1 << cur
+        if not (conv_types & cur_bit):
+            break
+        if exclude & cur_bit:
+            break
+        if conv_reverse[cur] & ~prev_bit:
+            break
+        nmask = ~cur_bit
+        bm_loaded &= nmask
+        bm_ax &= nmask
+        bm_ti &= nmask
+        bm_ref &= nmask
+        prev_bit = cur_bit
+        cur = building_conv_target[cur]
+        if cur < 0:
+            break
+    return bm_loaded, bm_ax, bm_ti, bm_ref
+
+
 def update_at(pos: Position) -> None:
     """Re-scan a single tile from the controller and update all bitmasks. Call after any build/destroy."""
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building, _bm_harv_adj
@@ -505,6 +544,10 @@ def update_at(pos: Position) -> None:
                 _bm_conveyor_targets &= ~(1 << tn)
             if (_building_team_idx[n] == _my_team_idx) and tn >= 0:
                 _conv_reverse[tn] &= ~bit
+            if tn >= 0:
+                _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined = _clear_downstream_conv_bits(
+                    n, tn, 0, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined
+                )
         old_ti = _building_team_idx[n]
         if old_ti >= 0:
             _bm_team[old_ti] &= ~bit
@@ -576,7 +619,7 @@ def update_at(pos: Position) -> None:
                 _bm_conv_refined |= bit
                 _bm_conv_raw_ax &= ~bit
                 _bm_conv_ti &= ~bit
-        if _building_conv_target[n]:
+        if _building_conv_target[n] >= 0:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
             if team_idx == _my_team_idx:
                 _conv_reverse[_building_conv_target[n]] |= bit
@@ -595,8 +638,9 @@ def update_at(pos: Position) -> None:
     if _freshly_loaded:
         res_ax = bool(_bm_conv_raw_ax & bit)
         res_ti = not res_ax and bool(_bm_conv_ti & bit)
-        tn = _building_conv_target[n]
-        for _ in range(3):
+        cur = n
+        for _ in range(_CONV_PROP_DEPTH):
+            tn = _building_conv_target[cur]
             if tn < 0:
                 break
             tbit = 1 << tn
@@ -613,7 +657,7 @@ def update_at(pos: Position) -> None:
                 _bm_conv_refined |= tbit
                 _bm_conv_raw_ax &= ~tbit
                 _bm_conv_ti &= ~tbit
-            tn = _building_conv_target[tn]
+            cur = tn
 
     # Refresh harvester adjacency if a harvester was added or removed
     has_harvester = _building_et_idx[n] == _IDX_HARVESTER
@@ -859,6 +903,9 @@ def _compute_route_targets() -> int:
     ti_harv_adj = expand_manhattan(ti_harvesters) if ti_harvesters else 0
 
     dead_ends = 0
+    conv_loaded = _bm_conv_ti | _bm_conv_refined | _bm_conv_raw_ax
+    enemy_hard_non_road = bm_enemy & ~_bm_et[_IDX_MARKER] & ~_bm_et[_IDX_ROAD]
+    marker_mask = _bm_et[_IDX_MARKER]
 
     mask = all_convs
     while mask:
@@ -866,19 +913,30 @@ def _compute_route_targets() -> int:
         n = lsb.bit_length() - 1
         tn = conv_target[n]
         is_my_conv = bool(bm_my & lsb)
+        is_loaded = bool(conv_loaded & lsb)
 
         # Dead-end: output not pointing into an ore-accepting building
         if 0 <= tn < tiles:
             tbit = 1 << tn
+            # My conveyor pointing into enemy non-marker, non-road building:
+            # mark THIS conveyor so route rebuilds it in a different direction.
+            if is_my_conv and (enemy_hard_non_road & tbit):
+                print("set dead end at", Position(n % _width, n // _width), "because of enemy building at", Position(tn % _width, tn // _width))
+                dead_ends |= lsb
             # Enemy conveyors: NOT dead-end if pointing into enemy non-marker building
-            if not is_my_conv and (enemy_hard & tbit):
+            elif not is_my_conv and (enemy_hard & tbit):
+                pass
+            # Output is a marker: ignore (markers should not trigger routing)
+            elif marker_mask & tbit:
                 pass
             elif not (ore_accepting & tbit):
-                dead_ends |= lsb
-            elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti | _bm_conv_refined) & tbit) or (ti_harv_adj & tbit)):
-                dead_ends |= lsb
-        else:
-            dead_ends |= lsb
+                if is_loaded:
+                    print("set dead end at", Position(n % _width, n // _width), "because output", Position(tn % _width, tn // _width), "is not ore-accepting")
+                    dead_ends |= tbit
+            elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti) & tbit) or (ti_harv_adj & tbit)):
+                if is_loaded:
+                    print("set dead end at", Position(n % _width, n // _width), "because raw ax output", Position(tn % _width, tn // _width), "is not going into foundry and has titanium harvester adjacency")
+                    dead_ends |= tbit
         mask ^= lsb
 
     _bm_dead_end = dead_ends
@@ -979,8 +1037,6 @@ def recompute_derived() -> None:
 
     # Routable = my team's conveyor-type buildings
     _bm_routable = _bm_conveyors & bm_team[my_team_idx]
-
-    _bm_route_targets = _compute_route_targets()
 
     # Blocked = walls + non-passable buildings + enemy core area
     _bm_blocked = bm_env[_IDX_ENV_WALL]
@@ -1136,6 +1192,10 @@ def update(recompute: bool = True) -> None:
                 old_tn = building_conv_target[n]
                 if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                     conv_reverse[old_tn] &= ~bit
+                if is_conv[old_et_idx] and old_tn >= 0:
+                    bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
+                        n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
+                    )
                 building_conv_target[n] = 0
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
@@ -1196,6 +1256,10 @@ def update(recompute: bool = True) -> None:
                     old_tn = building_conv_target[n]
                     if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                         conv_reverse[old_tn] &= ~bit
+                    if is_conv[old_et_idx] and old_tn >= 0:
+                        bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
+                            n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
+                        )
                     building_conv_target[n] = 0
                     bm_et[old_et_idx] &= ~bit
                     _bm_any_building &= ~bit
@@ -1216,6 +1280,10 @@ def update(recompute: bool = True) -> None:
                 old_tn = building_conv_target[n]
                 if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                     conv_reverse[old_tn] &= ~bit
+                if is_conv[old_et_idx] and old_tn >= 0:
+                    bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
+                        n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
+                    )
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
                 old_ti = building_team_idx[n]
@@ -1350,19 +1418,28 @@ def update(recompute: bool = True) -> None:
                 else:
                     _predicted_enemy_core = hsym_core
 
+    fresh_conveyors = bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR] | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER]
     mask = freshly_loaded
     while mask:
         lsb = mask & -mask
+        mask ^= lsb
+        if not (fresh_conveyors & lsb):
+            continue
         n = lsb.bit_length() - 1
         res_ax = bool(bm_conv_raw_ax & lsb)
         res_ti = not res_ax and bool(bm_conv_ti & lsb)
-        tn = building_conv_target[n]
-        for _ in range(3):
+        cur = n
+        print("propagate", Position(cur % width, cur // width), "loaded", "raw_ax" if res_ax else ("ti" if res_ti else "refined"))
+        for _ in range(_CONV_PROP_DEPTH):
+            tn = building_conv_target[cur]
             if tn < 0:
                 break
             tbit = 1 << tn
-            if not (_bm_conveyors & tbit):
+            if not (fresh_conveyors & tbit):
                 break
+            if freshly_loaded & tbit:
+                break
+            print("hit", Position(tn % width, tn // width), "during propagation")
             if res_ax:
                 if not ((bm_conv_ti | bm_conv_refined) & tbit):
                     bm_conv_raw_ax |= tbit
@@ -1374,13 +1451,14 @@ def update(recompute: bool = True) -> None:
                 bm_conv_refined |= tbit
                 bm_conv_raw_ax &= ~tbit
                 bm_conv_ti &= ~tbit
-            tn = building_conv_target[tn]
-        mask ^= lsb
+            cur = tn
 
     _bm_conv_loaded = bm_conv_loaded
     _bm_conv_raw_ax = bm_conv_raw_ax
     _bm_conv_ti = bm_conv_ti
     _bm_conv_refined = bm_conv_refined
+
+    _bm_route_targets = _compute_route_targets()
 
     # --- Update builder bot tracking ---
     _bm_friendly_bots = 0

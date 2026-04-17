@@ -27,7 +27,7 @@ def _sabotage_targets():
         map_info._bm_et[map_info._IDX_CONVEYOR]
         | map_info._bm_et[map_info._IDX_SPLITTER]
         | map_info._bm_et[map_info._IDX_BRIDGE]
-    ) & enemy
+    ) & enemy & (map_info._bm_conv_ti | map_info._bm_conv_raw_ax | map_info._bm_conv_refined)
 
     if not targets:
         return 0

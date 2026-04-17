@@ -134,31 +134,19 @@ def score():
 
 
 def _try_barrier_dead_ends():
-    """Barrier any adjacent tiles that are dead-end conveyor targets."""
+    """Barrier any adjacent dead-end conveyor output tiles."""
     w = map_info._width
     dead_ends = map_info._bm_dead_end
     if not dead_ends:
         return
-    # Only dead-end conveyors whose output is empty / marker / enemy building
+    # dead_ends are output tiles; only barrier those that are empty / marker / enemy building
     my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     enemy_any = map_info._bm_team[enemy_idx]
     marker = map_info._bm_et[map_info._IDX_MARKER]
     empty_mask = ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
 
-    targets = 0
-    mask = dead_ends
-    conv_target = map_info._building_conv_target
-    tiles = w * map_info._height
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        tn = conv_target[n]
-        if tn and 0 <= tn < tiles:
-            tbit = 1 << tn
-            if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
-                targets |= lsb
-        mask ^= lsb
+    targets = dead_ends & (empty_mask | marker | enemy_any)
     if not targets:
         return
     my_pos = map_info._my_pos
