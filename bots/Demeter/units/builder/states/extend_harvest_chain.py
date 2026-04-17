@@ -277,6 +277,8 @@ def run(player, ct: Controller) -> None:
                                 continue
                             dx, dy = DELTAS[sd]
                             side_pos = Position(bx + dx, by + dy)
+                            if not map_mod.on_map(side_pos, map_mod.width, map_mod.height):
+                                continue
                             if map_mod.has_conflict_idx(chain_resource, map_mod.pos_to_idx(side_pos), ct):
                                 return False
                         return True
