@@ -175,8 +175,7 @@ def mark(target_idx, type):
     if best:
         priority, pos, tile_id = best
         sym = get_sym_bits()
-        sample_bits = 0
-        # sample_bits = comms_positional.encode_sample_bits(pos, sym)
+        sample_bits = comms_positional.encode_sample_bits(pos, sym)
         sender_dir = pos.direction_to(map_info._my_pos)
         sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
         val = encode(target_idx, type, sym, sample_bits, sender_loc)

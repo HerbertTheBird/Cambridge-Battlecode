@@ -50,6 +50,9 @@ def handle_comms():
             continue
         idx = comms.decode_location(v)
         flag = comms.decode_type(v)
+        sample = comms.decode_sample_bits(v)
+        comms_positional.apply_message(sender_pos, sym, sample)
+        
         claimed_targets[flag] |= 1 << idx
         _target_rounds[flag][idx] = estimated_turn
         if map_info.in_bounds(sender_pos):
