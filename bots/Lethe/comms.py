@@ -169,7 +169,7 @@ def mark(target_idx, type):
                 best = (1, pos, tile_id)
 
         # Priority 2: replace own road
-        elif (entity_type == EntityType.ROAD and not rc.get_tile_builder_bot_id(pos)):
+        elif (entity_type == EntityType.ROAD and not map_info.has_builder_bot(pos)):
             if best is None or best[0] > 2:
                 best = (2, pos, tile_id)
 
@@ -183,7 +183,7 @@ def mark(target_idx, type):
         val = encode(target_idx, type, sym, sample_bits, sender_loc)
 
         _my_markers.discard(tile_id)
-        if tile_id is not None and rc.can_destroy(pos):
+        if tile_id is not None and not map_info.has_builder_bot(pos) and rc.can_destroy(pos):
             rc.destroy(pos)
             
             # Don't bother updating map if we replaced marker with marker

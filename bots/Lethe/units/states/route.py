@@ -231,7 +231,7 @@ def run():
             return
         nav.move_adjacent(target_conveyor[0])
         if rc.get_action_cooldown() == 0:
-            if rc.can_destroy(target_conveyor[0]):
+            if not map_info.has_builder_bot(target_conveyor[0]) and rc.can_destroy(target_conveyor[0]):
                 rc.destroy(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
             if rc.can_build_foundry(target_conveyor[0]):

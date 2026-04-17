@@ -1470,8 +1470,19 @@ def is_tile_empty(pos: Position):
     bid = _rc.get_tile_building_id(pos)
     return bid is not None and _rc.get_entity_type(bid) is EntityType.MARKER
 
+def has_builder_bot(pos: Position, include_self: bool = False) -> bool:
+    if not in_bounds(pos):
+        return False
+    if include_self and pos == _my_pos:
+        return True
+    n = pos.x + pos.y * _width
+    bit = 1 << n
+    return bool((_bm_friendly_bots | _bm_enemy_bots) & bit)
+
 def can_place_at_restrictive(pos: Position):
     if not in_bounds(pos): 
+        return False
+    if has_builder_bot(pos, include_self=True):
         return False
     if is_tile_empty(pos): 
         return True

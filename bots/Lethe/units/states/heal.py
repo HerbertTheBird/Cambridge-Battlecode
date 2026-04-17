@@ -172,7 +172,7 @@ def _try_barrier_dead_ends():
         if not (targets & pbit):
             continue
         if rc.get_action_cooldown() == 0:
-            if rc.can_destroy(p):
+            if not map_info.has_builder_bot(p) and rc.can_destroy(p):
                 rc.destroy(p)
                 map_info.update_at(p)
         if rc.can_build_barrier(p):
