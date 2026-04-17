@@ -28,7 +28,7 @@ def _spawn_toward_center():
 
 
 def run():
-    # if rc.get_current_round() == 1200:
+    # if rc.get_current_round() == 200:
     #     rc.resign()
     titanium, axionite = rc.get_global_resources()
     scaling = rc.get_scale_percent()

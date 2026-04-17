@@ -167,7 +167,7 @@ _building_hp: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
 _building_team_idx: list[int] = []  # team index per tile (-1 = no building)
-_conv_reverse: list[int] = []   # reverse[tn] = bitmask of my conveyors whose output target is tile tn
+_conv_reverse: list[int] = []   # reverse[tn] = bitmask of conveyors (either team) whose output target is tile tn
 _env_idx_by_tile: list[int] = []  # env index per tile (0=empty by default)
 
 # Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
@@ -543,8 +543,7 @@ def update_at(pos: Position) -> None:
             tn = _building_conv_target[n]
             if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
-                if _building_team_idx[n] == _my_team_idx:
-                    _conv_reverse[tn] &= ~bit
+                _conv_reverse[tn] &= ~bit
                 _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined = _clear_downstream_conv_bits(
                     n, tn, 0, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined
                 )
@@ -621,8 +620,7 @@ def update_at(pos: Position) -> None:
                 _bm_conv_ti &= ~bit
         if _building_conv_target[n] >= 0:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
-            if team_idx == _my_team_idx:
-                _conv_reverse[_building_conv_target[n]] |= bit
+            _conv_reverse[_building_conv_target[n]] |= bit
 
     if _IS_BLOCKED[et_idx]:
         _bm_blocked |= bit
@@ -906,6 +904,7 @@ def _compute_route_targets() -> int:
     conv_loaded = _bm_conv_ti | _bm_conv_refined | _bm_conv_raw_ax
     enemy_hard_non_road = bm_enemy & ~_bm_et[_IDX_MARKER] & ~_bm_et[_IDX_ROAD]
     marker_mask = _bm_et[_IDX_MARKER]
+    seen_mask = _bm_seen
 
     mask = all_convs
     while mask:
@@ -927,6 +926,9 @@ def _compute_route_targets() -> int:
                 pass
             # Output is a marker: ignore (markers should not trigger routing)
             elif marker_mask & tbit:
+                pass
+            # Output is unseen territory: not a dead end (we don't know what's there)
+            elif not (seen_mask & tbit):
                 pass
             elif not (ore_accepting & tbit):
                 if is_loaded:
@@ -1106,7 +1108,6 @@ def update(recompute: bool = True) -> None:
     bm_conv_ti = _bm_conv_ti
     bm_conv_refined = _bm_conv_refined
     conv_reverse = _conv_reverse
-    my_team_idx_local = _my_team_idx
     is_conv = _IS_CONVEYOR
     has_dir = _HAS_DIR
     deltas_i = _DIRECTION_DELTAS_I
@@ -1312,7 +1313,7 @@ def update(recompute: bool = True) -> None:
             building_dir[n] = _DIR_INT[direction] if direction else 0
             new_tn = (target.x + target.y * width) if target else -1
             building_conv_target[n] = new_tn
-            if new_tn >= 0 and is_conv[et_idx] and team_idx == my_team_idx_local:
+            if new_tn >= 0 and is_conv[et_idx]:
                 conv_reverse[new_tn] |= bit
 
             # Set new bitmask bits

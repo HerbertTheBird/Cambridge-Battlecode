@@ -93,6 +93,7 @@ def _too_expensive():
     return result
 
 def score():
+    units.builder.draw_mask(possible_ore(), 255, 0, 0)
     return 3 if _my_claims() else 0
 
 
