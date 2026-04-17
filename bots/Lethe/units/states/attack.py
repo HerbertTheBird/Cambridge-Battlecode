@@ -21,16 +21,16 @@ def init(c: Controller):
 
 
 BUILDING_SCORE = [0] * map_info._NUM_ET
-BUILDING_SCORE[map_info._IDX_CORE] = 100
-BUILDING_SCORE[map_info._IDX_HARVESTER] = 10
-BUILDING_SCORE[map_info._IDX_FOUNDRY] = 15
+BUILDING_SCORE[map_info._IDX_CORE] = 96
+BUILDING_SCORE[map_info._IDX_HARVESTER] = 12
+BUILDING_SCORE[map_info._IDX_FOUNDRY] = 16
 BUILDING_SCORE[map_info._IDX_GUNNER] = 20
 BUILDING_SCORE[map_info._IDX_SENTINEL] = 20
-BUILDING_SCORE[map_info._IDX_BREACH] = 25
-BUILDING_SCORE[map_info._IDX_LAUNCHER] = 15
+BUILDING_SCORE[map_info._IDX_BREACH] = 24
+BUILDING_SCORE[map_info._IDX_LAUNCHER] = 8
 BUILDING_SCORE[map_info._IDX_CONVEYOR] = 2
-BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 3
-BUILDING_SCORE[map_info._IDX_BARRIER] = 1
+BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 4
+BUILDING_SCORE[map_info._IDX_BARRIER] = 4
 BUILDING_SCORE[map_info._IDX_BRIDGE] = 2
 BUILDING_SCORE[map_info._IDX_SPLITTER] = 2
 
@@ -53,11 +53,23 @@ _NUM_PLANES = 10  # enough for per-tile scores up to 1023
 
 # Only candidate tiles whose best sentinel/breach direction score is at least
 # `SCORE_THRESHOLD_FACTOR * global_best_score` survive the attack-candidate filter.
-SCORE_THRESHOLD_FACTOR = 0.2
+SCORE_THRESHOLD_FACTOR = 0.5
 
 # Attack state refuses to enter at all if the global best sentinel/breach score
 # across candidates is below this. Tune up to make attack pickier.
-MIN_ATTACK_SCORE = 10
+MIN_ATTACK_SCORE = 16
+
+# Gunner raw score is multiplied by this factor when compared against sentinel/breach
+# scores, to artificially prefer gunner placements. Tune up to bias harder.
+GUNNER_SCORE_MULTIPLIER = 4
+
+# Flat score penalty applied to candidate tiles inside an enemy turret's
+# attack pattern (_bm_enemy_turret_threat). Baked into plane construction by
+# adding +THREAT_PENALTY to NON-threat tiles — so threat tiles are effectively
+# THREAT_PENALTY lower in score than equivalent non-threat tiles, with no
+# per-read adjustment needed. Gunner (which is per-tile, not plane-based) still
+# subtracts this value inline.
+THREAT_PENALTY = 4 
 
 
 _SCORE_BITS_CACHE: dict = {}
@@ -131,27 +143,36 @@ def _ge_threshold_mask(planes, threshold, candidates):
     return gt | eq
 
 
-def _compute_dir_scores(offsets_table, enemy_team_bm):
+def _compute_dir_scores(offsets_table, enemy_team_bm, my_coverage, threat):
     """For each of 8 facing directions, compute per-tile turret score planes.
     Uses `_turret_shift_masks` to move enemy-building masks by (-dx, -dy)
     so each tile's planes sum its attackable enemies' BUILDING_SCOREs.
-    Core reach is OR'd (counted once per position) to match `core_counted`."""
+    Core reach is OR'd (counted once per position) to match `core_counted`.
+    Enemy tiles already covered by my turrets are subtracted — attacking
+    redundant targets earns no score. Threat penalty is baked into planes:
+    non-threat tiles receive a +THREAT_PENALTY bonus so threat tiles are
+    effectively scored THREAT_PENALTY lower (equivalent to subtracting from
+    threat but avoids underflow from wrap-around addition)."""
     w = map_info._width
     shift_masks = map_info._turret_shift_masks
     bm_et = map_info._bm_et
-    core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
+
+    # Exclude enemies already covered by my turrets from the scorable set.
+    uncovered = enemy_team_bm & ~my_coverage
+    core_mask = bm_et[map_info._IDX_CORE] & uncovered
     core_score = BUILDING_SCORE[map_info._IDX_CORE]
 
-    # Group non-core types by score — each (P+offset) holds at most one building,
-    # so within a single offset the masks for types sharing a score are disjoint.
-    # Unioning lets us issue one _add_const_to_planes call per (offset, score) instead
-    # of per (offset, type). 11 types collapse to ~7 score groups.
+    # Group non-core types by score — within one offset the masks for types
+    # sharing a score are disjoint (one building per tile), so OR-unioning them
+    # lets us make one _add_const_to_planes call per (offset, score).
     score_to_union = {}
     for t_idx, s in _SCORED_NON_CORE_TYPES:
-        bm_t = bm_et[t_idx] & enemy_team_bm
+        bm_t = bm_et[t_idx] & uncovered
         if bm_t:
             score_to_union[s] = score_to_union.get(s, 0) | bm_t
-    score_groups = list(score_to_union.items())  # [(score, union_mask), ...]
+    score_groups = list(score_to_union.items())
+
+    non_threat = map_info._board_mask & ~threat
 
     all_planes = []
     for d in range(8):
@@ -180,6 +201,10 @@ def _compute_dir_scores(offsets_table, enemy_team_bm):
                 _add_const_to_planes(planes, s, contrib)
         if core_reach:
             _add_const_to_planes(planes, core_score, core_reach)
+        # Threat penalty baked in: add +THREAT_PENALTY to non-threat tiles so
+        # threat tiles are relatively THREAT_PENALTY lower. No per-read adjust.
+        if THREAT_PENALTY:
+            _add_const_to_planes(planes, THREAT_PENALTY, non_threat)
         all_planes.append(planes)
     return all_planes
 
@@ -267,6 +292,9 @@ def get_best_direction(pos):
             loader_count += 1
     gunner_allows_all = loader_count >= 2
 
+    # Threat penalty for gunner only (sentinel/breach have it baked into planes).
+    gunner_penalty = THREAT_PENALTY if (map_info._bm_enemy_turret_threat & bit) else 0
+
     best_b_dir, best_b_score = Direction.NORTH, -1
     best_s_dir, best_s_score = Direction.NORTH, -1
     best_g_dir, best_g_score = Direction.NORTH, -1
@@ -275,6 +303,7 @@ def get_best_direction(pos):
     building_et_idx = map_info._building_et_idx
     gunner_rays = map_info._GUNNER_RAYS
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
+    my_coverage = _round_cache_coverage
 
     for di in range(8):
         direction_blocked = bool(blocked_dirs & (1 << di))
@@ -289,7 +318,9 @@ def get_best_direction(pos):
                 best_s_score = s_score
                 best_s_dir = directions[di]
 
-        # Gunner: single ray, wall/friendly-blocked — still per-tile.
+        # Gunner: single ray, wall/friendly-blocked — still per-tile. Subtract
+        # scores for enemies already covered by my turrets, and apply the
+        # threat penalty inline (gunner isn't plane-based).
         if gunner_allows_all or not direction_blocked:
             g_score = 0
             for dx, dy in gunner_rays[di]:
@@ -303,11 +334,11 @@ def get_best_direction(pos):
                 if my_buildings & sbit:
                     if not road_mask & sbit:
                         break
-                if enemy_buildings & sbit:
+                if enemy_buildings & sbit and not (my_coverage & sbit):
                     et_idx = building_et_idx[tile_n]
                     if et_idx >= 0:
                         g_score += BUILDING_SCORE[et_idx]
-            g_score *= 5
+            g_score = g_score * GUNNER_SCORE_MULTIPLIER - gunner_penalty
             if g_score > best_g_score:
                 best_g_score = g_score
                 best_g_dir = directions[di]
@@ -382,28 +413,6 @@ def _my_turret_coverage():
     return coverage
 
 
-def _high_value_targets():
-    """Bitmask of enemy high-value buildings not already covered by my turrets."""
-    my_team_idx = map_info._my_team_idx
-    enemy_idx = 1 - my_team_idx
-    enemy = map_info._bm_team[enemy_idx]
-
-    high_value = (
-        map_info._bm_et[map_info._IDX_FOUNDRY]
-        | map_info._bm_et[map_info._IDX_GUNNER]
-        | map_info._bm_et[map_info._IDX_SENTINEL]
-        | map_info._bm_et[map_info._IDX_BREACH]
-        | map_info._bm_et[map_info._IDX_CORE]
-        | map_info._bm_et[map_info._IDX_LAUNCHER]
-        | map_info._bm_et[map_info._IDX_HARVESTER]
-    ) & enemy
-    if not high_value:
-        return 0
-
-    my_coverage = _my_turret_coverage()
-    return high_value & ~my_coverage
-
-
 def _placement_candidates():
     """Bitmask of tiles where a turret could be placed."""
     my_team_idx = map_info._my_team_idx
@@ -441,50 +450,21 @@ def _placement_candidates():
     all_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
     candidates &= ~all_bots
 
-    # Avoid all tiles within 4 Chebyshev of any enemy builder bot.
+    # Danger zones that only disqualify enemy-road candidates (we'd have to
+    # commit the builder to stand on the road and be vulnerable there):
+    #   - 4-Chebyshev reach of any enemy builder bot
+    #   - 1-Chebyshev adjacency to any enemy launcher (could throw us away)
+    enemy_roads = map_info._bm_et[map_info._IDX_ROAD] & enemy_team
+    danger_for_roads = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
         danger = enemy_bots
         for _ in range(4):
             danger = map_info.expand_chebyshev(danger)
-        candidates &= ~danger
+        danger_for_roads |= danger
+    candidates &= ~(danger_for_roads & enemy_roads)
 
     return candidates
-
-
-_sentinel_reverse_ops = None
-
-def _init_sentinel_reverse_ops():
-    """Precompute (shift_mask, offset) pairs for the reverse-shift over all unique sentinel offsets."""
-    global _sentinel_reverse_ops
-    w = map_info._width
-    seen = set()
-    ops = []
-    for di in range(8):
-        for dx, dy in map_info._SENTINEL_OFFSETS[di]:
-            rdx, rdy = -dx, -dy
-            if (rdx, rdy) in seen:
-                continue
-            seen.add((rdx, rdy))
-            sm = map_info._turret_shift_masks.get((rdx, rdy))
-            if sm is None:
-                continue
-            ops.append((sm, rdx + rdy * w))
-    _sentinel_reverse_ops = ops
-
-
-def _sentinel_all_reach(targets):
-    """Bitmask of positions from which a sentinel (any direction) could hit at least one target."""
-    if _sentinel_reverse_ops is None:
-        _init_sentinel_reverse_ops()
-    reachable = 0
-    for sm, offset in _sentinel_reverse_ops:
-        masked = targets & sm
-        if offset > 0:
-            reachable |= masked << offset
-        else:
-            reachable |= masked >> (-offset)
-    return reachable
 
 
 def _get_attack_candidates():
@@ -492,17 +472,7 @@ def _get_attack_candidates():
     candidates = _placement_candidates()
     if not candidates:
         return 0, 0
-
-    targets = _high_value_targets()
-    if not targets:
-        return 0, 0
-
-    # Filter to candidates that can hit at least one target in some direction
-    reachable = _sentinel_all_reach(targets)
-    filtered = candidates & reachable
-
-    if not filtered:
-        return 0, 0
+    filtered = candidates
 
     # Determine whether breach is worth evaluating: breach only wins in
     # `get_best_direction` when the candidate is cardinally adjacent to one of
@@ -516,6 +486,8 @@ def _get_attack_candidates():
 
     # Threshold filter: keep only candidates whose best non-blocked sentinel/breach
     # direction score is within SCORE_THRESHOLD_FACTOR of the global best.
+    # Threat penalty is baked into planes (non-threat tiles get +THREAT_PENALTY
+    # during plane construction), so no per-tile adjustment here.
     _ensure_score_planes()
     sent_planes = _round_cache_sentinel_planes
     brch_planes = _round_cache_breach_planes  # may be None
@@ -532,10 +504,13 @@ def _get_attack_candidates():
             b = _max_score_in_mask(brch_planes[d], allowed)
             if b > max_score:
                 max_score = b
+    global _round_cache_threshold
+    _round_cache_threshold = 0
     if max_score < MIN_ATTACK_SCORE:
         return 0, 0
     if max_score > 0:
         threshold = int(max_score * SCORE_THRESHOLD_FACTOR)
+        _round_cache_threshold = threshold
         keep = 0
         for d in range(8):
             allowed = filtered & ~blockers[d]
@@ -563,13 +538,15 @@ _round_cache_round = -1
 _round_cache_attack_candidates = (0, 0)
 _round_cache_sentinel_planes = None
 _round_cache_breach_planes = None
+_round_cache_threshold = 0
 _round_cache_loader_blockers = None
 _round_cache_need_breach = False
+_round_cache_coverage = 0
 
 def _ensure_round_cache():
     global _round_cache_round, _round_cache_attack_candidates
     global _round_cache_sentinel_planes, _round_cache_breach_planes, _round_cache_loader_blockers
-    global _round_cache_need_breach
+    global _round_cache_need_breach, _round_cache_coverage
     r = rc.get_current_round()
     if _round_cache_round == r:
         return
@@ -580,6 +557,7 @@ def _ensure_round_cache():
     _round_cache_breach_planes = None
     _round_cache_need_breach = False
     _round_cache_loader_blockers = _compute_loader_blockers()
+    _round_cache_coverage = _my_turret_coverage()
     _round_cache_attack_candidates = _get_attack_candidates()
     if DRAW_DEBUG:
         non_roaded, roaded = _round_cache_attack_candidates
@@ -591,37 +569,88 @@ def _ensure_round_cache():
 
 
 def _draw_attack_candidates(mask, sent_planes, brch_planes):
-    """Debug: draw a dot on each candidate tile and a length-1 line
-    toward its best non-blocked sentinel/breach direction."""
+    """Debug: for every (tile, direction) where sentinel/breach plane score >=
+    threshold, draw a white length-1 line. For every tile where ANY gunner
+    direction's score >= threshold, draw a red dot on the tile (gunners can
+    rotate, so direction is arbitrary — the dot is the per-tile marker).
+    Intentionally expensive — for inspection only."""
     w = map_info._width
+    h = map_info._height
     dir_vecs = map_info._DIR_VECS
     blockers = _round_cache_loader_blockers
+    threshold = _round_cache_threshold
+    gunner_rays = map_info._GUNNER_RAYS
+    building_et_idx = map_info._building_et_idx
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    my_team_idx = map_info._my_team_idx
+    my_buildings = map_info._bm_team[my_team_idx]
+    enemy_buildings = map_info._bm_team[1 - my_team_idx]
+    road_mask = map_info._bm_et[map_info._IDX_ROAD]
+
+    # Sentinel/breach: one white length-1 line per (tile, direction) whose
+    # plane score meets the threshold (threat penalty already baked in).
+    for d in range(8):
+        allowed = mask & ~blockers[d]
+        if not allowed:
+            continue
+        sb_above = _ge_threshold_mask(sent_planes[d], threshold, allowed)
+        if brch_planes is not None:
+            sb_above |= _ge_threshold_mask(brch_planes[d], threshold, allowed)
+        if not sb_above:
+            continue
+        dx, dy = dir_vecs[d]
+        m = sb_above
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            x, y = n % w, n // w
+            ex, ey = x + dx, y + dy
+            if 0 <= ex < w and 0 <= ey < h:
+                rc.draw_indicator_line(Position(x, y), Position(ex, ey), 255, 255, 255)
+            m ^= lsb
+
+    # Gunner: per tile, check if ANY direction's (multiplied) score meets the
+    # threshold. If so, draw a red dot on the tile. Direction isn't shown since
+    # gunners can rotate freely.
+    threat = map_info._bm_enemy_turret_threat
+    coverage = _round_cache_coverage
     m = mask
     while m:
         lsb = m & -m
         n = lsb.bit_length() - 1
         x, y = n % w, n // w
-        best_d = -1
-        best_score = -1
+        penalty = THREAT_PENALTY if (threat & lsb) else 0
+        loader_count = 0
         for d in range(8):
             if blockers[d] & lsb:
+                loader_count += 1
+        gunner_allows_all = loader_count >= 2
+        any_gunner = False
+        for d in range(8):
+            if not gunner_allows_all and (blockers[d] & lsb):
                 continue
-            s = _read_score(sent_planes[d], n)
-            if s > best_score:
-                best_score = s
-                best_d = d
-            if brch_planes is not None:
-                b = _read_score(brch_planes[d], n)
-                if b > best_score:
-                    best_score = b
-                    best_d = d
-        pos = Position(x, y)
-        rc.draw_indicator_dot(pos, 255, 0, 0)
-        if best_d >= 0:
-            dx, dy = dir_vecs[best_d]
-            end = Position(x + dx, y + dy)
-            if map_info.in_bounds(end):
-                rc.draw_indicator_line(pos, end, 255, 0, 0)
+            g_score = 0
+            for dx, dy in gunner_rays[d]:
+                sx, sy = x + dx, y + dy
+                if not (0 <= sx < w and 0 <= sy < h):
+                    break
+                tile_n = sx + sy * w
+                sbit = 1 << tile_n
+                if walls & sbit:
+                    break
+                if my_buildings & sbit:
+                    if not road_mask & sbit:
+                        break
+                if enemy_buildings & sbit and not (coverage & sbit):
+                    et_idx = building_et_idx[tile_n]
+                    if et_idx >= 0:
+                        g_score += BUILDING_SCORE[et_idx]
+            g_score = g_score * GUNNER_SCORE_MULTIPLIER - penalty
+            if g_score >= threshold:
+                any_gunner = True
+                break
+        if any_gunner:
+            rc.draw_indicator_dot(Position(x, y), 255, 0, 0)
         m ^= lsb
 
 
@@ -633,9 +662,15 @@ def _ensure_score_planes():
     if _round_cache_sentinel_planes is not None:
         return
     enemy_team_bm = map_info._bm_team[1 - map_info._my_team_idx]
-    _round_cache_sentinel_planes = _compute_dir_scores(map_info._SENTINEL_OFFSETS, enemy_team_bm)
+    coverage = _round_cache_coverage
+    threat = map_info._bm_enemy_turret_threat
+    _round_cache_sentinel_planes = _compute_dir_scores(
+        map_info._SENTINEL_OFFSETS, enemy_team_bm, coverage, threat
+    )
     if _round_cache_need_breach:
-        _round_cache_breach_planes = _compute_dir_scores(map_info._BREACH_OFFSETS, enemy_team_bm)
+        _round_cache_breach_planes = _compute_dir_scores(
+            map_info._BREACH_OFFSETS, enemy_team_bm, coverage, threat
+        )
     else:
         _round_cache_breach_planes = None
 
@@ -658,7 +693,11 @@ def score():
         return 0
     _cached_claims = _my_claims()
     non_roaded, roaded = _cached_claims
-    return 6 if (non_roaded or roaded) else 0
+    if non_roaded:
+        return 8
+    if roaded:
+        return 6
+    return 0
 
 
 def run():
@@ -702,8 +741,11 @@ def run():
         mask ^= lsb
 
     if best is None:
-        # No adjacent candidates, move toward closest
-        best, _ = nav.closest(non_roaded | roaded)
+        # No adjacent candidates, move toward closest — prefer non-roaded.
+        if non_roaded:
+            best, _ = nav.closest(non_roaded)
+        if best is None and roaded:
+            best, _ = nav.closest(roaded)
         if best is None:
             return
         best_direction, best_turret_type, _ = get_best_direction(best)

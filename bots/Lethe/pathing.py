@@ -738,6 +738,22 @@ class Pathing:
             target = (map_info._bm_route_targets & (map_info._bm_conv_ti | map_info._bm_conv_refined)) | map_info._bm_my_core_area
             target &= ~ax_harvesters
             avoid |= ax_harvesters
+            # Ti/refined chains must not run cardinally adjacent to axionite ore —
+            # a future ax harvester on that ore would pick up the wrong resource.
+            # Skip landlocked ax ore (4 cardinal neighbors are also ore): no ax
+            # harvester can get output through that tile, so it doesn't matter.
+            ax_ore = map_info._bm_env[map_info._IDX_ENV_ORE_AX]
+            if ax_ore:
+                w = map_info._width
+                all_ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI] | ax_ore
+                nrc = map_info._not_right_col
+                nlc = map_info._not_left_col
+                landlocked = (all_ore
+                              & (all_ore >> 1 & nrc)
+                              & (all_ore << 1 & nlc)
+                              & (all_ore >> w)
+                              & (all_ore << w))
+                avoid |= map_info.expand_manhattan(ax_ore & ~landlocked)
             if not target:
                 return 0, 0
             return target, avoid

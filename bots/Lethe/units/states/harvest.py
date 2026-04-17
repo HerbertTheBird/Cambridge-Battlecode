@@ -28,7 +28,7 @@ cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
 def possible_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
-    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
+    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 750:
         ore |= map_info._bm_env[map_info._IDX_ENV_ORE_AX]
     return ore
 def harvestable_ore():
@@ -80,7 +80,7 @@ def harvestable_ore():
             & ~friendly_blocking
             & ~enemy_hard_adj
             & ~map_info._bm_enemy_turret_threat
-            & units.builder._harvest_zone
+            # & units.builder._harvest_zone
             & ~cant_harvest
             & ~ax_ore_near_non_raw)
 
@@ -95,7 +95,9 @@ def _too_expensive():
     return result
 
 def score():
-    # units.builder.draw_mask(possible_ore(), 255, 0, 0)
+    units.builder.draw_mask(possible_ore(), 255, 0, 0)
+    units.builder.draw_mask(harvestable_ore(), 0, 255, 0)
+
     return 3 if _my_claims() else 0
 
 
@@ -238,6 +240,21 @@ def run():
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]
+
+    # If an enemy road sits on the ore, step ONTO the ore and fire until it's
+    # gone. This has to happen before any adjacent-move, because move cooldown
+    # is spent by the first nav.move_to of the turn.
+    if ore_id:
+        is_mine = bool(map_info._bm_team[my_team_idx] & ore_bit)
+        is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
+        if not is_mine and is_road:
+            nav.move_to(best_ore)
+            if rc.can_fire(map_info._my_pos):
+                rc.fire(map_info._my_pos)
+            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
+            return
+
+    # Pick a passable tile adjacent to best_ore to stand on while building.
     targets = set()
     for d in map_info._ALL_DIRECTIONS:
         p = map_info.pos_add(path[0], d)
@@ -255,13 +272,6 @@ def run():
 
     if ore_id:
         is_mine = bool(map_info._bm_team[my_team_idx] & ore_bit)
-        is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
-        if not is_mine and is_road:
-            nav.move_to(best_ore)
-            if rc.can_fire(map_info._my_pos):
-                rc.fire(map_info._my_pos)
-            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
-            return
         if is_mine and not map_info.has_builder_bot(best_ore) and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
