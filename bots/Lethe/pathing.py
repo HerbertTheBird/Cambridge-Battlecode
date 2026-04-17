@@ -1,13 +1,8 @@
-import heapq
-import map_info
-from cambc import Controller, Direction, Position, EntityType, ResourceType, Environment
-import comms
-import math
-from collections.abc import Collection
+from cambc import Controller, Direction, Position, EntityType
+
 import time
-import units.builder as builder
-import sys
-from functools import lru_cache
+
+import map_info
 from log import DRAW_DEBUG, log
 
 ALL_DIRS = list(Direction)
@@ -52,7 +47,7 @@ def rebuild_broken_barriers(rc: Controller):
         if destroyed_barriers[p]+1 > current_round:
             continue
         id = rc.get_tile_building_id(p)
-        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == my_team and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p):
+        if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == my_team and rc.can_destroy(p) and not map_info.has_builder_bot(p):
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_barrier(p):
@@ -271,7 +266,7 @@ class Pathing:
         if not map_info.in_bounds(new_pos):
             return False
         id = rc.get_tile_building_id(new_pos)
-        if rc.get_tile_builder_bot_id(new_pos) != None:
+        if map_info.has_builder_bot(new_pos):
             return False
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0]:
             rc.destroy(new_pos)
@@ -611,7 +606,7 @@ class Pathing:
                 continue
             if not map_info.is_passable(p):
                 continue
-            if rc.is_in_vision(p) and rc.get_tile_builder_bot_id(p):
+            if map_info.has_builder_bot(p):
                 continue
             adj.add(p)
         if not adj:

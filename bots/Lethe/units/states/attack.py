@@ -1,9 +1,10 @@
+from cambc import *
+
 import map_info
 import pathing
 from pathing import Pathing
 import comms
 import units.builder
-from cambc import *
 from log import log
 
 
@@ -464,7 +465,7 @@ def run():
         # Move adjacent and destroy own building if needed
         nav.move_adjacent(best)
         if best_id and is_mine:
-            if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
+            if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
                 log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)

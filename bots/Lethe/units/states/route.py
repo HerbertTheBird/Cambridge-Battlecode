@@ -1,8 +1,8 @@
+from cambc import *
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-from cambc import *
 import units.builder
 from log import log
 
@@ -110,9 +110,12 @@ def cant_claim():
     my_small = map_info.expand_chebyshev(my_bit)
     my_zone = map_info.expand_chebyshev(my_small)
 
-    cant_3x3 = map_info._bm_others_3x3 & ~my_zone
+    # 5x5 rule: blocked unless in my 5x5
+    cant_5x5 = map_info._bm_others_5x5 & ~my_zone
+    # 3x3 rule: in someone else's 3x3 but not my 3x3 — blocked regardless
+    cant_3x3 = map_info._bm_others_3x3 & ~my_small
 
-    return cant_3x3
+    return cant_5x5 | cant_3x3
 def avoid_mask():
     return _too_expensive() | cant_claim() | unpathable
 
@@ -205,14 +208,14 @@ def run():
     # units.builder.draw_mask(foundry_sites, 255, 0, 0)
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit):
-        foundry_cost = 40*(rc.get_scale_percent()/100+path[2]*0.01)
+        foundry_cost = rc.get_foundry_cost()[0]
         _cost_map[best_n] = foundry_cost + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.5)
         if rc.get_global_resources()[0] < foundry_cost + nav.conveyor_cost(path[2]):
             comms.mark(claim_n, comm_flag)
             return
         nav.move_adjacent(target_conveyor[0])
         if rc.get_action_cooldown() == 0:
-            if rc.can_destroy(target_conveyor[0]):
+            if not map_info.has_builder_bot(target_conveyor[0]) and rc.can_destroy(target_conveyor[0]):
                 rc.destroy(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
             if rc.can_build_foundry(target_conveyor[0]):
@@ -222,7 +225,6 @@ def run():
         return
     can_build = False
     cost = nav.conveyor_cost(path[2])
-    print("expected cost", cost)
     best_n = best.x + best.y * width
     if not is_refined:
         _cost_map[best_n] = cost

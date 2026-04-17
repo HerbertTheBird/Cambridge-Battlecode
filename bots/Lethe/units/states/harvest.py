@@ -1,8 +1,9 @@
+from cambc import *
+
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-from cambc import *
 import units.builder
 from log import log
 
@@ -94,8 +95,6 @@ def _too_expensive():
 def score():
     return 3 if _my_claims() else 0
 
-CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
-
 
 def run():
     global cant_harvest
@@ -123,7 +122,7 @@ def run():
             continue
         # Check all 4 cardinal sides are secured
         secured = True
-        for cd in CARD:
+        for cd in map_info._CARDINAL:
             cp = map_info.pos_add(p, cd)
             if not map_info.in_bounds(cp):
                 continue
@@ -147,7 +146,7 @@ def run():
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
-        if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not ((map_info._bm_friendly_bots | map_info._bm_enemy_bots) & pbit):
+        if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not map_info.has_builder_bot(p):
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_harvester(p):
@@ -183,7 +182,7 @@ def run():
         return
     # --- Secure each cardinal side ---
     all_secured = True
-    for d in CARD:
+    for d in map_info._CARDINAL:
         p = map_info.pos_add(best_ore, d)
         if not map_info.in_bounds(p):
             continue
@@ -218,7 +217,7 @@ def run():
         # Empty, marker, enemy marker, or my road — needs barrier
         all_secured = False
         nav.move_to(best_ore)
-        if pid and is_mine and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
+        if pid and is_mine and not map_info.has_builder_bot(p) and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_barrier(p):
@@ -260,7 +259,7 @@ def run():
                 rc.fire(map_info._my_pos)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
+        if is_mine and not map_info.has_builder_bot(best_ore) and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
 

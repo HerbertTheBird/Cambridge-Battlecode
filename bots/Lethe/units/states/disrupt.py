@@ -1,9 +1,10 @@
+from cambc import *
+
 import map_info
 import pathing
 from pathing import Pathing
 import comms
 import units.builder
-from cambc import *
 from log import log
 
 rc: Controller = None
@@ -57,7 +58,7 @@ def run():
     if best_id and (map_info._bm_team[my_team_idx] & best_bit):
         # Friendly road/marker — move adjacent and destroy
         nav.move_adjacent(best)
-        if rc.can_destroy(best) and rc.get_action_cooldown() == 0:
+        if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
             rc.destroy(best)
             map_info.update_at(best)
     elif best_id and (map_info._bm_et[map_info._IDX_ROAD]&best_bit):

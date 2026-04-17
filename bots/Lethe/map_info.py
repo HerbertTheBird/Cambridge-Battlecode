@@ -1,7 +1,5 @@
-from __future__ import annotations
-from typing import Optional, Set, Tuple
-from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError, GameConstants
-from collections import deque
+from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameConstants
+
 import pathing
 import units.builder as builder
 import comms
@@ -317,7 +315,10 @@ def team_at(x, y):
 def dir_at(x, y):
     return _INT_DIR[_building_dir[x+y*_width]]
 def conv_target_at(x, y):
-    return Position(_building_conv_target[x+y*_width]%_width, _building_conv_target[x+y*_width]//_width)
+    tn = _building_conv_target[x+y*_width]
+    if tn < 0:
+        return None
+    return Position(tn % _width, tn // _width)
 def is_conveyor(type):
     return type in _CONVEYOR_TYPES
 def is_turret(type):
@@ -542,9 +543,8 @@ def update_at(pos: Position) -> None:
             tn = _building_conv_target[n]
             if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
-            if (_building_team_idx[n] == _my_team_idx) and tn >= 0:
-                _conv_reverse[tn] &= ~bit
-            if tn >= 0:
+                if _building_team_idx[n] == _my_team_idx:
+                    _conv_reverse[tn] &= ~bit
                 _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined = _clear_downstream_conv_bits(
                     n, tn, 0, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined
                 )
@@ -564,7 +564,7 @@ def update_at(pos: Position) -> None:
         _building_et_idx[n] = -1
         _building_hp[n] = 0
         _building_dir[n] = 0
-        _building_conv_target[n] = 0
+        _building_conv_target[n] = -1
         _building_team_idx[n] = -1
 
     # Read current state from controller
@@ -724,7 +724,7 @@ def init(c: Controller):
     _building_et_idx      = [-1] * tiles
     _building_hp          = [0] * tiles
     _building_dir         = [0] * tiles
-    _building_conv_target = [0] * tiles
+    _building_conv_target = [-1] * tiles
     _building_team_idx    = [-1] * tiles
     _conv_reverse         = [0] * tiles
     _env_idx_by_tile      = [_IDX_ENV_EMPTY] * tiles
@@ -921,7 +921,6 @@ def _compute_route_targets() -> int:
             # My conveyor pointing into enemy non-marker, non-road building:
             # mark THIS conveyor so route rebuilds it in a different direction.
             if is_my_conv and (enemy_hard_non_road & tbit):
-                print("set dead end at", Position(n % _width, n // _width), "because of enemy building at", Position(tn % _width, tn // _width))
                 dead_ends |= lsb
             # Enemy conveyors: NOT dead-end if pointing into enemy non-marker building
             elif not is_my_conv and (enemy_hard & tbit):
@@ -931,12 +930,12 @@ def _compute_route_targets() -> int:
                 pass
             elif not (ore_accepting & tbit):
                 if is_loaded:
-                    print("set dead end at", Position(n % _width, n // _width), "because output", Position(tn % _width, tn // _width), "is not ore-accepting")
                     dead_ends |= tbit
-            elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti) & tbit) or (ti_harv_adj & tbit)):
+            elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti | _bm_conv_refined) & tbit) or (ti_harv_adj & tbit)):
                 if is_loaded:
-                    print("set dead end at", Position(n % _width, n // _width), "because raw ax output", Position(tn % _width, tn // _width), "is not going into foundry and has titanium harvester adjacency")
                     dead_ends |= tbit
+        else:
+            dead_ends |= lsb
         mask ^= lsb
 
     _bm_dead_end = dead_ends
@@ -1037,6 +1036,8 @@ def recompute_derived() -> None:
 
     # Routable = my team's conveyor-type buildings
     _bm_routable = _bm_conveyors & bm_team[my_team_idx]
+
+    _bm_route_targets = _compute_route_targets()
 
     # Blocked = walls + non-passable buildings + enemy core area
     _bm_blocked = bm_env[_IDX_ENV_WALL]
@@ -1196,7 +1197,7 @@ def update(recompute: bool = True) -> None:
                     bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                         n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                     )
-                building_conv_target[n] = 0
+                building_conv_target[n] = -1
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
                 old_ti = building_team_idx[n]
@@ -1239,6 +1240,10 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+                else:
+                    bm_conv_raw_ax &= ~bit
+                    bm_conv_ti &= ~bit
+                    bm_conv_refined &= ~bit
         elif comms._marker_id_at[n] == entity_id:
             # Already-seen marker — skip all controller calls
             continue
@@ -1260,7 +1265,7 @@ def update(recompute: bool = True) -> None:
                         bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                             n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                         )
-                    building_conv_target[n] = 0
+                    building_conv_target[n] = -1
                     bm_et[old_et_idx] &= ~bit
                     _bm_any_building &= ~bit
                     old_ti = building_team_idx[n]
@@ -1341,6 +1346,10 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+                else:
+                    bm_conv_raw_ax &= ~bit
+                    bm_conv_ti &= ~bit
+                    bm_conv_refined &= ~bit
 
             if et is EntityType.CORE:
                 if _my_core is None and team_val == my_team:
@@ -1429,7 +1438,6 @@ def update(recompute: bool = True) -> None:
         res_ax = bool(bm_conv_raw_ax & lsb)
         res_ti = not res_ax and bool(bm_conv_ti & lsb)
         cur = n
-        print("propagate", Position(cur % width, cur // width), "loaded", "raw_ax" if res_ax else ("ti" if res_ti else "refined"))
         for _ in range(_CONV_PROP_DEPTH):
             tn = building_conv_target[cur]
             if tn < 0:
@@ -1439,7 +1447,6 @@ def update(recompute: bool = True) -> None:
                 break
             if freshly_loaded & tbit:
                 break
-            print("hit", Position(tn % width, tn // width), "during propagation")
             if res_ax:
                 if not ((bm_conv_ti | bm_conv_refined) & tbit):
                     bm_conv_raw_ax |= tbit
@@ -1539,8 +1546,19 @@ def is_tile_empty(pos: Position):
     bid = _rc.get_tile_building_id(pos)
     return bid is not None and _rc.get_entity_type(bid) is EntityType.MARKER
 
+def has_builder_bot(pos: Position, include_self: bool = False) -> bool:
+    if not in_bounds(pos):
+        return False
+    if include_self and pos == _my_pos:
+        return True
+    n = pos.x + pos.y * _width
+    bit = 1 << n
+    return bool((_bm_friendly_bots | _bm_enemy_bots) & bit)
+
 def can_place_at_restrictive(pos: Position):
     if not in_bounds(pos): 
+        return False
+    if has_builder_bot(pos, include_self=True):
         return False
     if is_tile_empty(pos): 
         return True

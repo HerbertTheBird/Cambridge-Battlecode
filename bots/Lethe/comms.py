@@ -1,7 +1,9 @@
-from cambc import Controller, Position, Direction, EntityType, GameError
+from cambc import Controller, Position, Direction, EntityType
+
 import map_info
 from log import DRAW_DEBUG, log
 import comms_positional
+
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
 SYM_BITS = 3
@@ -169,7 +171,7 @@ def mark(target_idx, type):
                 best = (1, pos, tile_id)
 
         # Priority 2: replace own road
-        elif (entity_type == EntityType.ROAD and not rc.get_tile_builder_bot_id(pos)):
+        elif (entity_type == EntityType.ROAD and not map_info.has_builder_bot(pos)):
             if best is None or best[0] > 2:
                 best = (2, pos, tile_id)
 
@@ -177,14 +179,13 @@ def mark(target_idx, type):
     if best:
         priority, pos, tile_id = best
         sym = get_sym_bits()
-        sample_bits = 0
-        # sample_bits = comms_positional.encode_sample_bits(pos, sym)
+        sample_bits = comms_positional.encode_sample_bits(pos, sym)
         sender_dir = pos.direction_to(map_info._my_pos)
         sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
         val = encode(target_idx, type, sym, sample_bits, sender_loc)
 
         _my_markers.discard(tile_id)
-        if tile_id is not None and rc.can_destroy(pos):
+        if tile_id is not None and not map_info.has_builder_bot(pos) and rc.can_destroy(pos):
             rc.destroy(pos)
             
             # Don't bother updating map if we replaced marker with marker

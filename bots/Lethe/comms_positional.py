@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 from cambc import Position
 
 import comms_stats
 import map_info
 from log import log
 
-COMMS_SAMPLE_DISTANCE = 8
+COMMS_SAMPLE_DISTANCE = 7
 
 OFFSETS = (
     (0, 0),
@@ -80,7 +78,7 @@ def _sample_env_idx(marker_pos: Position) -> int:
     return map_info._IDX_ENV_ORE_TI
 
 def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
-    corresponding = get_corresponding_pos_by_symmetry(marker_pos, sym_bits)
+    corresponding = get_corresponding_pos(marker_pos)
     env_mask = map_info._bm_env[_sample_env_idx(marker_pos)]
     seen = map_info._bm_seen
     width = map_info._width
@@ -97,7 +95,7 @@ def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
     return result
 
 def decode_sample_positions(marker_pos: Position, sample_bits: int, sym_bits: int):
-    corresponding = get_corresponding_pos_by_symmetry(marker_pos, sym_bits)
+    corresponding = get_corresponding_pos(marker_pos)
     for i, (dx, dy) in enumerate(OFFSETS):
         if not ((sample_bits >> i) & 1):
             continue

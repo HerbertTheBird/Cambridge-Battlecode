@@ -1,4 +1,5 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
+
 import map_info
 from log import log
 

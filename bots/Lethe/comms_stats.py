@@ -1,9 +1,7 @@
-from __future__ import annotations
+from cambc import Controller
 
 import json
 from pathlib import Path
-
-from cambc import Controller
 
 PROFILE_DIR = Path("profiles")
 SUMMARY_PATH = PROFILE_DIR / "comm_stats_summary.txt"
