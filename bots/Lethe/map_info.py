@@ -1061,6 +1061,19 @@ def recompute_derived() -> None:
     # Routable = my team's conveyor-type buildings
     _bm_routable = _bm_conveyors & bm_team[my_team_idx]
 
+    # Guard conveyors (those pointing into a harvester) must be recomputed
+    # BEFORE _compute_route_targets, which reads _bm_guard_conveyors to keep
+    # guards out of the route-targets set.
+    harv = bm_et[_IDX_HARVESTER]
+    guard = 0
+    m = harv
+    while m:
+        lsb = m & -m
+        hn = lsb.bit_length() - 1
+        guard |= _conv_reverse[hn]
+        m ^= lsb
+    _bm_guard_conveyors = guard
+
     _bm_route_targets = _compute_route_targets()
 
     # Blocked = walls + non-passable buildings + enemy core area
@@ -1099,18 +1112,7 @@ def recompute_derived() -> None:
     _bm_enemy_turret_threat = _compute_enemy_turret_threat()
 
     # Harvester adjacency (for _is_bad_marker_spot)
-    harv = bm_et[_IDX_HARVESTER]
     _bm_harv_adj = expand_manhattan(harv) if harv else 0
-
-    # Guard conveyors: those whose output target is a harvester tile
-    guard = 0
-    m = harv
-    while m:
-        lsb = m & -m
-        hn = lsb.bit_length() - 1
-        guard |= _conv_reverse[hn]
-        m ^= lsb
-    _bm_guard_conveyors = guard
 
 def update(recompute: bool = True) -> None:
     global _my_core, _their_core, _core_id, _solved_sym
@@ -1639,8 +1641,12 @@ def get_avoid(
     # avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
     mask = _bm_blocked
     if avoid_conveyors:
-        # Guard conveyors (pointing into a harvester) are walkable route starts.
-        mask |= (_bm_conveyors & ~_bm_guard_conveyors) | _bm_conveyor_targets | _bm_my_core_area
+        # Guards of a specific ore tile are unmasked at the call site in
+        # calculate_conveyor_path (scoped via _conv_reverse[start]). Here we
+        # treat all conveyors (including guards) as avoid, so a routing BFS
+        # can't step through an unrelated guard and feed the wrong resource
+        # into someone else's harvester.
+        mask |= _bm_conveyors | _bm_conveyor_targets | _bm_my_core_area
     if avoid_ore:
         ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
         w = _width

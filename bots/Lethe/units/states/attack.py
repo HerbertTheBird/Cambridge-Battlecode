@@ -60,24 +60,36 @@ SCORE_THRESHOLD_FACTOR = 0.2
 MIN_ATTACK_SCORE = 10
 
 
+_SCORE_BITS_CACHE: dict = {}
+
+def _bits_of_score(c):
+    b = _SCORE_BITS_CACHE.get(c)
+    if b is None:
+        b = []
+        x, i = c, 0
+        while x:
+            if x & 1:
+                b.append(i)
+            x >>= 1
+            i += 1
+        _SCORE_BITS_CACHE[c] = b
+    return b
+
+
 def _add_const_to_planes(planes, c, mask):
     """Bit-sliced: add constant `c` to counters at every set bit of `mask`."""
     if not mask or not c:
         return
-    i = 0
-    while c and i < _NUM_PLANES:
-        if c & 1:
-            # Add 2^i to counters at `mask` — XOR, carry propagates up.
-            carry = planes[i] & mask
-            planes[i] ^= mask
-            j = i + 1
-            while carry and j < _NUM_PLANES:
-                new_carry = planes[j] & carry
-                planes[j] ^= carry
-                carry = new_carry
-                j += 1
-        c >>= 1
-        i += 1
+    for i in _bits_of_score(c):
+        # Add 2^i to counters at `mask` — XOR, carry propagates up.
+        carry = planes[i] & mask
+        planes[i] ^= mask
+        j = i + 1
+        while carry and j < _NUM_PLANES:
+            new_carry = planes[j] & carry
+            planes[j] ^= carry
+            carry = new_carry
+            j += 1
 
 
 def _read_score(planes, tile_n):
@@ -130,12 +142,16 @@ def _compute_dir_scores(offsets_table, enemy_team_bm):
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
     core_score = BUILDING_SCORE[map_info._IDX_CORE]
 
-    # Pre-mask type bitmasks once; skip types with no enemy presence.
-    type_masks = []
+    # Group non-core types by score — each (P+offset) holds at most one building,
+    # so within a single offset the masks for types sharing a score are disjoint.
+    # Unioning lets us issue one _add_const_to_planes call per (offset, score) instead
+    # of per (offset, type). 11 types collapse to ~7 score groups.
+    score_to_union = {}
     for t_idx, s in _SCORED_NON_CORE_TYPES:
         bm_t = bm_et[t_idx] & enemy_team_bm
         if bm_t:
-            type_masks.append((bm_t, s))
+            score_to_union[s] = score_to_union.get(s, 0) | bm_t
+    score_groups = list(score_to_union.items())  # [(score, union_mask), ...]
 
     all_planes = []
     for d in range(8):
@@ -153,8 +169,8 @@ def _compute_dir_scores(offsets_table, enemy_team_bm):
                         core_reach |= masked << rev_off
                     else:
                         core_reach |= masked >> (-rev_off)
-            for bm_t, s in type_masks:
-                masked = bm_t & sm
+            for s, bm_group in score_groups:
+                masked = bm_group & sm
                 if not masked:
                     continue
                 if rev_off >= 0:
