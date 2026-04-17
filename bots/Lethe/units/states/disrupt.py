@@ -22,11 +22,18 @@ def _disruptable_ore():
                | map_info._bm_env[map_info._IDX_ENV_ORE_AX])
     clearable = (map_info._bm_et[map_info._IDX_ROAD]
                  | map_info._bm_et[map_info._IDX_MARKER])
-    return (all_ore
-            & (~map_info._bm_any_building | clearable)
-            & ~units.builder._harvest_zone
-            & ~map_info._bm_enemy_turret_threat
-            & ~map_info._bm_enemy_launch_adj)
+    result = (all_ore
+              & (~map_info._bm_any_building | clearable)
+              & ~units.builder._harvest_zone
+              & ~map_info._bm_enemy_turret_threat
+              & ~map_info._bm_enemy_launch_adj)
+    if rc.get_current_round() < 200:
+        w = map_info._width
+        my_zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
+        for _ in range(5):
+            my_zone = map_info.expand_chebyshev(my_zone)
+        result &= my_zone
+    return result
 
 def _my_claims():
     w = map_info._width

@@ -58,7 +58,9 @@ def _dead_end_conveyors():
     """Bitmask of dead-end conveyor output tiles not connected to my ore-accepting network."""
     return map_info._bm_dead_end & ~map_info._bm_enemy_turret_threat
 def _orphan_harvesters():
-    """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
+    """Bitmask of my harvesters with no adjacent conveyor/turret/core.
+    Conveyors pointing INTO a harvester don't count (they deliver nothing
+    useful to the harvester's output flow)."""
     my_team_idx = map_info._my_team_idx
     my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_team[my_team_idx]
     if not my_harvesters:
@@ -71,6 +73,7 @@ def _orphan_harvesters():
         | map_info._bm_et[map_info._IDX_SPLITTER]
         | map_info._bm_et[map_info._IDX_CORE]
     ) & map_info._bm_team[my_team_idx]
+    my_connected &= ~map_info._bm_guard_conveyors
 
     served = map_info.expand_manhattan(my_connected)
     return my_harvesters & ~served & ~map_info._bm_enemy_turret_threat
@@ -93,10 +96,10 @@ def _orphan_foundries():
         map_info._bm_et[map_info._IDX_CONVEYOR]
         | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
         | map_info._bm_et[map_info._IDX_SPLITTER]
+        | map_info._bm_et[map_info._IDX_BRIDGE]
     ) & map_info._bm_team[my_team_idx]
     my_connected = (directional & ~pointing_into) | (
-        (map_info._bm_et[map_info._IDX_BRIDGE] | map_info._bm_et[map_info._IDX_CORE])
-        & map_info._bm_team[my_team_idx]
+        map_info._bm_et[map_info._IDX_CORE] & map_info._bm_team[my_team_idx]
     )
 
     served = map_info.expand_manhattan(my_connected)

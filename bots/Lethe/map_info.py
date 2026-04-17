@@ -182,6 +182,7 @@ _board_mask: int = 0         # (1 << (w*h)) - 1, cached
 _bm_blocked: int = 0            # walls + non-passable buildings + enemy core area
 _bm_conveyors: int = 0          # all conveyor-type buildings + my core area
 _bm_conveyor_targets: int = 0   # output target tiles of conveyors
+_bm_guard_conveyors: int = 0    # conveyors whose output target is a harvester tile
 _bm_my_core_area: int = 0       # my core 3x3
 _bm_their_core_area: int = 0    # enemy core 3x3
 _bm_enemy_launch_adj: int = 0   # tiles adjacent to enemy launchers
@@ -524,7 +525,7 @@ def _clear_downstream_conv_bits(n: int, start_n: int, exclude: int,
 
 def update_at(pos: Position) -> None:
     """Re-scan a single tile from the controller and update all bitmasks. Call after any build/destroy."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building, _bm_harv_adj
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_damaged, _bm_very_damaged, _bm_any_building, _bm_harv_adj, _bm_guard_conveyors
     if not in_bounds(pos):
         return
 
@@ -540,6 +541,7 @@ def update_at(pos: Position) -> None:
         _bm_et[old_et_idx] &= ~bit
         _bm_any_building &= ~bit
         if _IS_CONVEYOR[old_et_idx]:
+            _bm_guard_conveyors &= ~bit
             tn = _building_conv_target[n]
             if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
@@ -547,6 +549,8 @@ def update_at(pos: Position) -> None:
                 _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined = _clear_downstream_conv_bits(
                     n, tn, 0, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined
                 )
+        elif old_et_idx == _IDX_HARVESTER:
+            _bm_guard_conveyors &= ~_conv_reverse[n]
         old_ti = _building_team_idx[n]
         if old_ti >= 0:
             _bm_team[old_ti] &= ~bit
@@ -619,8 +623,14 @@ def update_at(pos: Position) -> None:
                 _bm_conv_raw_ax &= ~bit
                 _bm_conv_ti &= ~bit
         if _building_conv_target[n] >= 0:
-            _bm_conveyor_targets |= (1 << _building_conv_target[n])
-            _conv_reverse[_building_conv_target[n]] |= bit
+            tn_new = _building_conv_target[n]
+            _bm_conveyor_targets |= (1 << tn_new)
+            _conv_reverse[tn_new] |= bit
+            if _bm_et[_IDX_HARVESTER] & (1 << tn_new):
+                _bm_guard_conveyors |= bit
+
+    if et_idx == _IDX_HARVESTER:
+        _bm_guard_conveyors |= _conv_reverse[n]
 
     if _IS_BLOCKED[et_idx]:
         _bm_blocked |= bit
@@ -735,6 +745,8 @@ def init(c: Controller):
     _bm_blocked = 0
     _bm_conveyors = 0
     _bm_conveyor_targets = 0
+    global _bm_guard_conveyors
+    _bm_guard_conveyors = 0
 
     # Column masks for safe bit-shifting (prevent wrap-around)
     left_col = 0
@@ -1014,13 +1026,23 @@ def _compute_route_targets() -> int:
                 to_visit = next_visit
 
     result |= valid_convs
+    # Conveyors pointing into a harvester or my foundry are dead-end endpoints;
+    # they shouldn't be valid route destinations.
+    foundry_feeders = 0
+    m = _bm_et[_IDX_FOUNDRY] & bm_my
+    while m:
+        lsb = m & -m
+        fn = lsb.bit_length() - 1
+        foundry_feeders |= _conv_reverse[fn]
+        m ^= lsb
+    result &= ~_bm_guard_conveyors & ~foundry_feeders
     return result
 
 def recompute_derived() -> None:
     """Rebuild derived bitmasks from the current tracked map state."""
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_ti_fed, _bm_ax_fed
     global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
-    global _bm_enemy_turret_threat, _bm_harv_adj
+    global _bm_enemy_turret_threat, _bm_harv_adj, _bm_guard_conveyors
 
     my_team_idx = _my_team_idx
     bm_et = _bm_et
@@ -1080,11 +1102,21 @@ def recompute_derived() -> None:
     harv = bm_et[_IDX_HARVESTER]
     _bm_harv_adj = expand_manhattan(harv) if harv else 0
 
+    # Guard conveyors: those whose output target is a harvester tile
+    guard = 0
+    m = harv
+    while m:
+        lsb = m & -m
+        hn = lsb.bit_length() - 1
+        guard |= _conv_reverse[hn]
+        m ^= lsb
+    _bm_guard_conveyors = guard
+
 def update(recompute: bool = True) -> None:
     global _my_core, _their_core, _core_id, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building, _bm_guard_conveyors
     global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
     global _bm_others_5x5, _bm_others_3x3
@@ -1198,6 +1230,10 @@ def update(recompute: bool = True) -> None:
                     bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                         n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                     )
+                if is_conv[old_et_idx]:
+                    _bm_guard_conveyors &= ~bit
+                elif old_et_idx == _IDX_HARVESTER:
+                    _bm_guard_conveyors &= ~conv_reverse[n]
                 building_conv_target[n] = -1
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
@@ -1266,6 +1302,10 @@ def update(recompute: bool = True) -> None:
                         bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                             n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                         )
+                    if is_conv[old_et_idx]:
+                        _bm_guard_conveyors &= ~bit
+                    elif old_et_idx == _IDX_HARVESTER:
+                        _bm_guard_conveyors &= ~conv_reverse[n]
                     building_conv_target[n] = -1
                     bm_et[old_et_idx] &= ~bit
                     _bm_any_building &= ~bit
@@ -1290,6 +1330,10 @@ def update(recompute: bool = True) -> None:
                     bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined = _clear_downstream_conv_bits(
                         n, old_tn, freshly_loaded, bm_conv_loaded, bm_conv_raw_ax, bm_conv_ti, bm_conv_refined
                     )
+                if is_conv[old_et_idx]:
+                    _bm_guard_conveyors &= ~bit
+                elif old_et_idx == _IDX_HARVESTER:
+                    _bm_guard_conveyors &= ~conv_reverse[n]
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
                 old_ti = building_team_idx[n]
@@ -1315,6 +1359,10 @@ def update(recompute: bool = True) -> None:
             building_conv_target[n] = new_tn
             if new_tn >= 0 and is_conv[et_idx]:
                 conv_reverse[new_tn] |= bit
+                if bm_et[_IDX_HARVESTER] & (1 << new_tn):
+                    _bm_guard_conveyors |= bit
+            if et_idx == _IDX_HARVESTER:
+                _bm_guard_conveyors |= conv_reverse[n]
 
             # Set new bitmask bits
             bm_et[et_idx] |= bit
@@ -1593,7 +1641,8 @@ def get_avoid(
     # avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
     mask = _bm_blocked
     if avoid_conveyors:
-        mask |= _bm_conveyors | _bm_conveyor_targets | _bm_my_core_area
+        # Guard conveyors (pointing into a harvester) are walkable route starts.
+        mask |= (_bm_conveyors & ~_bm_guard_conveyors) | _bm_conveyor_targets | _bm_my_core_area
     if avoid_ore:
         ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
         w = _width

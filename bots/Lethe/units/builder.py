@@ -39,7 +39,7 @@ def handle_comms():
     current_round = rc.get_current_round()
     comms_positional.start_round_stats()
     w = map_info._width
-    for v, sender_pos, estimated_turn in comms.get_new_messages():
+    for v, marker_pos, sender_pos, estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
         if estimated_turn + 3 < current_round:
@@ -47,7 +47,7 @@ def handle_comms():
         idx = comms.decode_location(v)
         flag = comms.decode_type(v)
         sample = comms.decode_sample_bits(v)
-        comms_positional.apply_message(sender_pos, sym, sample)
+        comms_positional.apply_message(marker_pos, sym, sample)
         
         claimed_targets[flag] |= 1 << idx
         _target_rounds[flag][idx] = estimated_turn

@@ -93,7 +93,7 @@ def _too_expensive():
     return result
 
 def score():
-    units.builder.draw_mask(possible_ore(), 255, 0, 0)
+    # units.builder.draw_mask(possible_ore(), 255, 0, 0)
     return 3 if _my_claims() else 0
 
 
@@ -215,14 +215,15 @@ def run():
             # Has a real building (mine or enemy, not road/marker) — side is done
             continue
 
-        # Empty, marker, enemy marker, or my road — needs barrier
+        # Empty, marker, enemy marker, or my road — build conveyor pointing into the ore
         all_secured = False
         nav.move_to(best_ore)
         if pid and is_mine and not map_info.has_builder_bot(p) and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
             rc.destroy(p)
             map_info.update_at(p)
-        if rc.can_build_barrier(p):
-            rc.build_barrier(p)
+        conv_dir = d.opposite()
+        if rc.can_build_conveyor(p, conv_dir):
+            rc.build_conveyor(p, conv_dir)
             map_info.update_at(p)
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return

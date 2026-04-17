@@ -219,3 +219,5 @@ def run():
         if best is not None:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()
+    if rc.can_fire(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team():
+        rc.fire(rc.get_position())

@@ -660,6 +660,8 @@ class Pathing:
         log("conveyors from ", start, raw_axionite)
         w = self.width
         target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
+        # Conveyors pointing into `start` are legitimate route starts; unmask them.
+        avoid &= ~map_info._conv_reverse[start.x + start.y * w]
         if not target:
             return None
         if not update:
