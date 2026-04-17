@@ -184,6 +184,9 @@ def run():
     else:
         # Dead-end conveyor: route from its output tile
         target_n = map_info._building_conv_target[best_n]
+        if target_n < 0:
+            unpathable |= best_bit
+            return
         target_pos = Position(target_n % width, target_n // width)
 
         can_heal_road = False

@@ -154,7 +154,7 @@ def _try_barrier_dead_ends():
         lsb = mask & -mask
         n = lsb.bit_length() - 1
         tn = conv_target[n]
-        if tn and 0 <= tn < tiles:
+        if 0 <= tn < tiles:
             tbit = 1 << tn
             if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
                 targets |= lsb

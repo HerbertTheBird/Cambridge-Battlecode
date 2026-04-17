@@ -313,7 +313,10 @@ def team_at(x, y):
 def dir_at(x, y):
     return _INT_DIR[_building_dir[x+y*_width]]
 def conv_target_at(x, y):
-    return Position(_building_conv_target[x+y*_width]%_width, _building_conv_target[x+y*_width]//_width)
+    tn = _building_conv_target[x+y*_width]
+    if tn < 0:
+        return None
+    return Position(tn % _width, tn // _width)
 def is_conveyor(type):
     return type in _CONVEYOR_TYPES
 def is_turret(type):
@@ -503,8 +506,8 @@ def update_at(pos: Position) -> None:
             tn = _building_conv_target[n]
             if tn >= 0:
                 _bm_conveyor_targets &= ~(1 << tn)
-            if (_building_team_idx[n] == _my_team_idx) and tn >= 0:
-                _conv_reverse[tn] &= ~bit
+                if _building_team_idx[n] == _my_team_idx:
+                    _conv_reverse[tn] &= ~bit
         old_ti = _building_team_idx[n]
         if old_ti >= 0:
             _bm_team[old_ti] &= ~bit
@@ -521,7 +524,7 @@ def update_at(pos: Position) -> None:
         _building_et_idx[n] = -1
         _building_hp[n] = 0
         _building_dir[n] = 0
-        _building_conv_target[n] = 0
+        _building_conv_target[n] = -1
         _building_team_idx[n] = -1
 
     # Read current state from controller
@@ -576,7 +579,7 @@ def update_at(pos: Position) -> None:
                 _bm_conv_refined |= bit
                 _bm_conv_raw_ax &= ~bit
                 _bm_conv_ti &= ~bit
-        if _building_conv_target[n]:
+        if _building_conv_target[n] >= 0:
             _bm_conveyor_targets |= (1 << _building_conv_target[n])
             if team_idx == _my_team_idx:
                 _conv_reverse[_building_conv_target[n]] |= bit
@@ -680,7 +683,7 @@ def init(c: Controller):
     _building_et_idx      = [-1] * tiles
     _building_hp          = [0] * tiles
     _building_dir         = [0] * tiles
-    _building_conv_target = [0] * tiles
+    _building_conv_target = [-1] * tiles
     _building_team_idx    = [-1] * tiles
     _conv_reverse         = [0] * tiles
     _env_idx_by_tile      = [_IDX_ENV_EMPTY] * tiles
@@ -1136,7 +1139,7 @@ def update(recompute: bool = True) -> None:
                 old_tn = building_conv_target[n]
                 if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                     conv_reverse[old_tn] &= ~bit
-                building_conv_target[n] = 0
+                building_conv_target[n] = -1
                 bm_et[old_et_idx] &= ~bit
                 _bm_any_building &= ~bit
                 old_ti = building_team_idx[n]
@@ -1179,6 +1182,10 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+                else:
+                    bm_conv_raw_ax &= ~bit
+                    bm_conv_ti &= ~bit
+                    bm_conv_refined &= ~bit
         elif comms._marker_id_at[n] == entity_id:
             # Already-seen marker — skip all controller calls
             continue
@@ -1196,7 +1203,7 @@ def update(recompute: bool = True) -> None:
                     old_tn = building_conv_target[n]
                     if old_tn >= 0 and (conv_reverse[old_tn] & bit):
                         conv_reverse[old_tn] &= ~bit
-                    building_conv_target[n] = 0
+                    building_conv_target[n] = -1
                     bm_et[old_et_idx] &= ~bit
                     _bm_any_building &= ~bit
                     old_ti = building_team_idx[n]
@@ -1273,6 +1280,10 @@ def update(recompute: bool = True) -> None:
                         bm_conv_refined |= bit
                         bm_conv_raw_ax &= ~bit
                         bm_conv_ti &= ~bit
+                else:
+                    bm_conv_raw_ax &= ~bit
+                    bm_conv_ti &= ~bit
+                    bm_conv_refined &= ~bit
 
             if et is EntityType.CORE:
                 if _my_core is None and team_val == my_team:

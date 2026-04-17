@@ -62,12 +62,20 @@ def handle_comms():
     for p in map_info._nearby_tiles:
         idx = p.x + p.y * w
         for i in range(len(claimed_targets)):
-            if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
-                del _target_rounds[i][idx]
-                claimed_targets[i] &= ~(1 << idx)
+            # Heal flag stores enemy UIDs, not tile indices,
+            # so tile-based target pruning doesn't apply.
+            if i != 7:
+                if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
+                    del _target_rounds[i][idx]
+                    claimed_targets[i] &= ~(1 << idx)
             if idx in _sender_rounds[i] and _sender_rounds[i][idx] + 3 < current_round:
                 del _sender_rounds[i][idx]
                 claimed_senders[i] &= ~(1 << idx)
+    # Age-based prune for heal flag target claims (UIDs, not tiles).
+    stale_heal = [k for k, r in _target_rounds[7].items() if r + 3 < current_round]
+    for k in stale_heal:
+        del _target_rounds[7][k]
+        claimed_targets[7] &= ~(1 << k)
     comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
     if not DRAW_DEBUG:
