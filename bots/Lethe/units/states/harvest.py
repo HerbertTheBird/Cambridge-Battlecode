@@ -1,8 +1,9 @@
+from cambc import *
+
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-from cambc import *
 import units.builder
 from log import log
 
@@ -94,8 +95,6 @@ def _too_expensive():
 def score():
     return 3 if _my_claims() else 0
 
-CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
-
 
 def run():
     global cant_harvest
@@ -123,7 +122,7 @@ def run():
             continue
         # Check all 4 cardinal sides are secured
         secured = True
-        for cd in CARD:
+        for cd in map_info._CARDINAL:
             cp = map_info.pos_add(p, cd)
             if not map_info.in_bounds(cp):
                 continue
@@ -183,7 +182,7 @@ def run():
         return
     # --- Secure each cardinal side ---
     all_secured = True
-    for d in CARD:
+    for d in map_info._CARDINAL:
         p = map_info.pos_add(best_ore, d)
         if not map_info.in_bounds(p):
             continue

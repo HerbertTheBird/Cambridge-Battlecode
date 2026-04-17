@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from cambc import Position
 
 import comms_stats

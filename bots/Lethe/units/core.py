@@ -1,4 +1,5 @@
 from cambc import Controller, Position
+
 import map_info
 from log import log
 
@@ -29,12 +30,13 @@ def _spawn_toward_center():
 def run():
     # if rc.get_current_round() == 200:
     #     rc.resign()
-    titanium = rc.get_global_resources()[0]
-    axionite = rc.get_global_resources()[1]
+    titanium, axionite = rc.get_global_resources()
     scaling = rc.get_scale_percent()
     if scaling * SCALE_MULT + 300 < titanium:
         _spawn_toward_center()
     if rc.get_current_round() < 1500 and titanium < 4 * rc.get_harvester_cost()[0]:
+        # Idea: change this to axionite - 2 before final submission
+        # Since other teams are also keeping 1 axionite in reserve for tiebreakers
         rc.convert(min(max(axionite - 1, 0), max((3 * rc.get_harvester_cost()[0] - titanium) // 4, 0)))
 
 

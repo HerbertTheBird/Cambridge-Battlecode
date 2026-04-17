@@ -1,13 +1,8 @@
-import heapq
-import map_info
-from cambc import Controller, Direction, Position, EntityType, ResourceType, Environment
-import comms
-import math
-from collections.abc import Collection
+from cambc import Controller, Direction, Position, EntityType
+
 import time
-import units.builder as builder
-import sys
-from functools import lru_cache
+
+import map_info
 from log import DRAW_DEBUG, log
 
 ALL_DIRS = list(Direction)

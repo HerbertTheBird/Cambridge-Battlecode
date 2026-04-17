@@ -1,8 +1,4 @@
-from cambc import Controller, Position, Direction, EntityType, Environment, GameError
-
-from enum import Enum
-import random
-import sys
+from cambc import *
 
 import map_info
 import pathing

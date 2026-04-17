@@ -1,9 +1,10 @@
+from cambc import *
+
 import map_info
 import pathing
 from pathing import Pathing
 import comms
 import units.builder
-from cambc import *
 from log import log
 
 

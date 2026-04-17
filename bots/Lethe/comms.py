@@ -1,7 +1,9 @@
-from cambc import Controller, Position, Direction, EntityType, GameError
+from cambc import Controller, Position, Direction, EntityType
+
 import map_info
 from log import DRAW_DEBUG, log
 import comms_positional
+
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
 SYM_BITS = 3

@@ -1,4 +1,5 @@
-from cambc import Controller, Position, EntityType, Direction
+from cambc import Controller, Position, EntityType
+
 import map_info
 from log import log
 
