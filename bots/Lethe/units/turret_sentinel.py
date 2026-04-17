@@ -75,8 +75,11 @@ def _tile_score(tile, feeders):
         return 0
     # Turrets hit builder bot first if present
     builder_id = rc.get_tile_builder_bot_id(tile)
-    if builder_id and rc.get_team(builder_id) != my_team:
-        return _WEIGHTS.get(EntityType.BUILDER_BOT, 0)
+    if builder_id:
+        if rc.get_team(builder_id) != my_team:
+            return _WEIGHTS.get(EntityType.BUILDER_BOT, 0)
+        else:
+            return -5
     building_id = rc.get_tile_building_id(tile)
     if building_id and rc.get_team(building_id) != my_team:
         return _WEIGHTS.get(rc.get_entity_type(building_id), 0)
