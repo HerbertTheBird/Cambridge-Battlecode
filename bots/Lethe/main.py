@@ -17,7 +17,7 @@ import comms
 import comms_stats
 from log import log
 
-ENABLE_PROFILER = False
+ENABLE_PROFILER = True
 ENABLE_COMMS_STATS = False
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:

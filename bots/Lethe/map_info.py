@@ -1514,8 +1514,6 @@ def update(recompute: bool = True) -> None:
     _bm_conv_ti = bm_conv_ti
     _bm_conv_refined = bm_conv_refined
 
-    _bm_route_targets = _compute_route_targets()
-
     # --- Update builder bot tracking ---
     _bm_friendly_bots = 0
     _bm_enemy_bots = 0

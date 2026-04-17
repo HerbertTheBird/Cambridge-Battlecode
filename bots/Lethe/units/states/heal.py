@@ -128,9 +128,9 @@ def score():
         if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
             log("high priority heal", target[0])
             return 7
-        else:
-            log("low priority heal", target[0])
-            return 2.5
+        # else:
+        #     log("low priority heal", target[0])
+        #     return 2.5
     return 0
 
 

@@ -55,18 +55,27 @@ def handle_comms():
             sn = sender_pos.x + sender_pos.y * w
             claimed_senders[flag] |= 1 << sn
             _sender_rounds[flag][sn] = estimated_turn
+    # Tile-based prune: 3-turn expiry inside vision, 50-turn expiry outside.
+    vision_mask = 0
     for p in map_info._nearby_tiles:
-        idx = p.x + p.y * w
-        for i in range(len(claimed_targets)):
-            # Heal flag stores enemy UIDs, not tile indices,
-            # so tile-based target pruning doesn't apply.
-            if i != 7:
-                if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
-                    del _target_rounds[i][idx]
-                    claimed_targets[i] &= ~(1 << idx)
-            if idx in _sender_rounds[i] and _sender_rounds[i][idx] + 3 < current_round:
-                del _sender_rounds[i][idx]
-                claimed_senders[i] &= ~(1 << idx)
+        vision_mask |= 1 << (p.x + p.y * w)
+    for i in range(len(claimed_targets)):
+        if i != 7:
+            # Heal flag stores enemy UIDs, not tile indices, so skip it here.
+            stale = [
+                k for k, r in _target_rounds[i].items()
+                if r + (3 if (vision_mask >> k) & 1 else 50) < current_round
+            ]
+            for k in stale:
+                del _target_rounds[i][k]
+                claimed_targets[i] &= ~(1 << k)
+        stale = [
+            k for k, r in _sender_rounds[i].items()
+            if r + (3 if (vision_mask >> k) & 1 else 50) < current_round
+        ]
+        for k in stale:
+            del _sender_rounds[i][k]
+            claimed_senders[i] &= ~(1 << k)
     # Age-based prune for heal flag target claims (UIDs, not tiles).
     stale_heal = [k for k, r in _target_rounds[7].items() if r + 3 < current_round]
     for k in stale_heal:
