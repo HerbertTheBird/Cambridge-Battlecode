@@ -62,10 +62,13 @@ def voronoi_claim(my_mask, others_mask, claims):
         return 0
     if not others_mask:
         return claims
-    w = map_info._width
-    board = (1 << (w * map_info._height)) - 1
-    avoid = map_info.get_avoid(False, False, False)
-    passable = (~avoid & board) | claims
+
+    mi = map_info
+    w = mi._width
+    board = mi._board_mask
+    nlc = mi._not_left_col
+    nrc = mi._not_right_col
+    passable = (~mi.get_avoid(False, False, False) & board) | claims
 
     my_front = my_mask & passable
     other_front = others_mask & passable
@@ -75,14 +78,16 @@ def voronoi_claim(my_mask, others_mask, claims):
 
     while (claims & ~all_claimed) and (my_front or other_front):
         if my_front:
-            my_expand = map_info.expand_chebyshev(my_front) & passable & ~all_claimed
+            h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
+            my_expand = (h | (h << w) | (h >> w)) & passable & ~all_claimed
             my_claimed |= my_expand
             all_claimed |= my_expand
             my_front = my_expand
         if not (claims & ~all_claimed):
             break
         if other_front:
-            other_expand = map_info.expand_chebyshev(other_front) & passable & ~all_claimed
+            h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
+            other_expand = (h | (h << w) | (h >> w)) & passable & ~all_claimed
             other_claimed |= other_expand
             all_claimed |= other_expand
             other_front = other_expand

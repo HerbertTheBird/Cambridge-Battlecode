@@ -15,6 +15,9 @@ _CONVEYOR_TYPES = frozenset(
     )
 )
 
+# Max tiles a resource propagates along a conveyor chain per scan.
+_CONV_PROP_DEPTH = 3
+
 _ACCEPT_ORE = frozenset(
     e for e in (
         EntityType.CONVEYOR, 
@@ -596,8 +599,9 @@ def update_at(pos: Position) -> None:
     if _freshly_loaded:
         res_ax = bool(_bm_conv_raw_ax & bit)
         res_ti = not res_ax and bool(_bm_conv_ti & bit)
-        tn = _building_conv_target[n]
-        for _ in range(3):
+        cur = n
+        for _ in range(_CONV_PROP_DEPTH):
+            tn = _building_conv_target[cur]
             if tn < 0:
                 break
             tbit = 1 << tn
@@ -614,7 +618,7 @@ def update_at(pos: Position) -> None:
                 _bm_conv_refined |= tbit
                 _bm_conv_raw_ax &= ~tbit
                 _bm_conv_ti &= ~tbit
-            tn = _building_conv_target[tn]
+            cur = tn
 
     # Refresh harvester adjacency if a harvester was added or removed
     has_harvester = _building_et_idx[n] == _IDX_HARVESTER
@@ -980,6 +984,8 @@ def recompute_derived() -> None:
 
     _bm_route_targets = _compute_route_targets()
 
+    harv = bm_et[_IDX_HARVESTER]
+
     # Blocked = walls + non-passable buildings + enemy core area
     _bm_blocked = bm_env[_IDX_ENV_WALL]
     _bm_blocked |= bm_et[_IDX_HARVESTER] | bm_et[_IDX_FOUNDRY]
@@ -1016,7 +1022,6 @@ def recompute_derived() -> None:
     _bm_enemy_turret_threat = _compute_enemy_turret_threat()
 
     # Harvester adjacency (for _is_bad_marker_spot)
-    harv = bm_et[_IDX_HARVESTER]
     _bm_harv_adj = expand_manhattan(harv) if harv else 0
 
 def update(recompute: bool = True) -> None:
@@ -1354,8 +1359,9 @@ def update(recompute: bool = True) -> None:
         n = lsb.bit_length() - 1
         res_ax = bool(bm_conv_raw_ax & lsb)
         res_ti = not res_ax and bool(bm_conv_ti & lsb)
-        tn = building_conv_target[n]
-        for _ in range(3):
+        cur = n
+        for _ in range(_CONV_PROP_DEPTH):
+            tn = building_conv_target[cur]
             if tn < 0:
                 break
             tbit = 1 << tn
@@ -1372,7 +1378,7 @@ def update(recompute: bool = True) -> None:
                 bm_conv_refined |= tbit
                 bm_conv_raw_ax &= ~tbit
                 bm_conv_ti &= ~tbit
-            tn = building_conv_target[tn]
+            cur = tn
         mask ^= lsb
 
     _bm_conv_loaded = bm_conv_loaded
