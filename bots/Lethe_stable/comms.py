@@ -1,25 +1,37 @@
 from cambc import Controller, Position, Direction, EntityType
+import random
 
 import map_info
 from log import DRAW_DEBUG, log
 import comms_positional
 from bisect import bisect_left
 
-#type = 0:launch, 1:explore, 2:harvest, 3:route
+# type = 0: learn_map, 1: explore, 2: disrupt, 3: harvest,
+#        4: route, 5: sabotage, 6: attack, 7: heal
+LEARN_MAP_TYPE = 0
+TYPE_BITS = 3
 POS_BITS = 12
 SYM_BITS = 3
 SAMPLE_BITS = 9
 SENDER_BITS = 3
-TYPE_BITS = 32 - POS_BITS - SYM_BITS - SAMPLE_BITS - SENDER_BITS
+UNUSED_BITS = 32 - TYPE_BITS - POS_BITS - SYM_BITS - SAMPLE_BITS - SENDER_BITS
+LEARN_MAP_POS_BITS = 7
+LEARN_MAP_SAMPLE_BITS = 21
+LEARN_MAP_ENV_BITS = 1
 _POS_MASK = (1 << POS_BITS) - 1
 _SYM_MASK = (1 << SYM_BITS) - 1
 _SAMPLE_MASK = (1 << SAMPLE_BITS) - 1
 _SENDER_MASK = (1 << SENDER_BITS) - 1
 _TYPE_MASK = (1 << TYPE_BITS) - 1
+_LEARN_MAP_POS_MASK = (1 << LEARN_MAP_POS_BITS) - 1
+_LEARN_MAP_SAMPLE_MASK = (1 << LEARN_MAP_SAMPLE_BITS) - 1
+_LEARN_MAP_ENV_MASK = (1 << LEARN_MAP_ENV_BITS) - 1
 _SYM_SHIFT = POS_BITS
 _SAMPLE_SHIFT = _SYM_SHIFT + SYM_BITS
 _SENDER_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
-_TYPE_SHIFT = _SENDER_SHIFT + SENDER_BITS
+_TYPE_SHIFT = 32 - TYPE_BITS
+_LEARN_MAP_SAMPLE_SHIFT = LEARN_MAP_POS_BITS
+_LEARN_MAP_ENV_SHIFT = _LEARN_MAP_SAMPLE_SHIFT + LEARN_MAP_SAMPLE_BITS
 
 _DIRS_8 = [
     Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
@@ -84,10 +96,13 @@ def decode_visible_marker(id: int, pos: Position):
     marker_id_at[pos_n] = id
 
     val = rc.get_marker_value(id) ^ key
-    sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
-    sender_dir = _DIRS_8[sender_dir_idx]
-    dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
-    sender_pos = Position(pos.x + dx, pos.y + dy)
+    if decode_type(val) == LEARN_MAP_TYPE:
+        sender_pos = pos
+    else:
+        sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
+        sender_dir = _DIRS_8[sender_dir_idx]
+        dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
+        sender_pos = Position(pos.x + dx, pos.y + dy)
     return (val, pos, sender_pos)
 
 
@@ -118,6 +133,33 @@ def encode(target, type, sym=0, sample_bits=0, sender_loc=0):
         | ((type & _TYPE_MASK) << _TYPE_SHIFT)
     ) ^ key
 
+def _encode_learn_map_pos(corresponding_pos: Position) -> int:
+    corresponding_pos = comms_positional.get_learn_map_corresponding_pos(corresponding_pos)
+    return corresponding_pos.x // 5 + 10 * (corresponding_pos.y // 5)
+
+def decode_learn_map_corresponding_pos(v: int) -> Position:
+    code = v & _LEARN_MAP_POS_MASK
+    x_bucket = code % 10
+    y_bucket = code // 10
+    return comms_positional.get_learn_map_bucket_pos(x_bucket, y_bucket)
+
+def decode_learn_map_sample_bits(v: int) -> int:
+    return (v >> _LEARN_MAP_SAMPLE_SHIFT) & _LEARN_MAP_SAMPLE_MASK
+
+def decode_learn_map_env_bit(v: int) -> int:
+    return (v >> _LEARN_MAP_ENV_SHIFT) & _LEARN_MAP_ENV_MASK
+
+def encode_learn_map(marker_pos: Position, corresponding_pos: Position, env_bit: int) -> int:
+    corresponding_pos = comms_positional.get_learn_map_corresponding_pos(corresponding_pos)
+    pos_code = _encode_learn_map_pos(corresponding_pos)
+    sample_bits = comms_positional.encode_learn_map_sample_bits(corresponding_pos, marker_pos, env_bit)
+    return (
+        (pos_code & _LEARN_MAP_POS_MASK)
+        | ((sample_bits & _LEARN_MAP_SAMPLE_MASK) << _LEARN_MAP_SAMPLE_SHIFT)
+        | ((env_bit & _LEARN_MAP_ENV_MASK) << _LEARN_MAP_ENV_SHIFT)
+        | (LEARN_MAP_TYPE << _TYPE_SHIFT)
+    ) ^ key
+
 def _is_bad_marker_spot(pos):
     """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
     bit = 1 << (pos.x + pos.y * map_info._width)
@@ -126,10 +168,13 @@ def _is_bad_marker_spot(pos):
 def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
-def mark(target_idx, type):
-    if DRAW_DEBUG and type != 7:
-        rc.draw_indicator_line(map_info._my_pos, Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
-    log("mark", target_idx, type)
+def mark(target_idx, type, corresponding_pos=None, env_bit=None):
+    if DRAW_DEBUG:
+        if type == LEARN_MAP_TYPE and corresponding_pos is not None:
+            rc.draw_indicator_line(map_info._my_pos, comms_positional.get_learn_map_corresponding_pos(corresponding_pos), 0, 200, 255)
+        elif type != 7:
+            rc.draw_indicator_line(map_info._my_pos, Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
+    log("mark", target_idx, type, corresponding_pos, env_bit)
 
     adjacent_tiles = rc.get_nearby_tiles(2)
 
@@ -138,7 +183,7 @@ def mark(target_idx, type):
     for pos in adjacent_tiles:
         if pos == rc.get_position():
             continue
-        if _is_bad_marker_spot(pos):
+        if type != LEARN_MAP_TYPE and _is_bad_marker_spot(pos):
             continue
 
         tile_id = rc.get_tile_building_id(pos)
@@ -159,23 +204,30 @@ def mark(target_idx, type):
             continue
 
         # Priority 1: overwrite own marker
-        if (entity_type == EntityType.MARKER and can_place):
+        if (type != LEARN_MAP_TYPE and entity_type == EntityType.MARKER and can_place):
             if best is None or best[0] > 1:
                 best = (1, pos, tile_id)
 
         # Priority 2: replace own road
-        elif (entity_type == EntityType.ROAD and not map_info.has_builder_bot(pos)):
+        elif (type != LEARN_MAP_TYPE and entity_type == EntityType.ROAD and not map_info.has_builder_bot(pos)):
             if best is None or best[0] > 2:
                 best = (2, pos, tile_id)
 
     # Execute best fallback
     if best:
         priority, pos, tile_id = best
-        sym = get_sym_bits()
-        sample_bits = comms_positional.encode_sample_bits(pos, sym)
-        sender_dir = pos.direction_to(map_info._my_pos)
-        sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
-        val = encode(target_idx, type, sym, sample_bits, sender_loc)
+        if type == LEARN_MAP_TYPE:
+            if corresponding_pos is None:
+                corresponding_pos = map_info._my_pos
+            if env_bit is None:
+                env_bit = random.randint(0, 1)
+            val = encode_learn_map(pos, corresponding_pos, env_bit)
+        else:
+            sym = get_sym_bits()
+            sample_bits = comms_positional.encode_sample_bits(pos, sym)
+            sender_dir = pos.direction_to(map_info._my_pos)
+            sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
+            val = encode(target_idx, type, sym, sample_bits, sender_loc)
 
         _my_markers.discard(tile_id)
         if tile_id is not None and not map_info.has_builder_bot(pos) and rc.can_destroy(pos):

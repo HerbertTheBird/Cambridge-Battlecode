@@ -17,6 +17,12 @@ OFFSETS = (
     (-1, 0),
     (-1, 1),
 )
+LEARN_MAP_OFFSETS = tuple(
+    (dx, dy)
+    for dy in range(-2, 3)
+    for dx in range(-2, 3)
+    if dx * dx + dy * dy <= 5
+)
 _active_stats = None
 
 def get_corresponding_pos(pos: Position) -> Position:
@@ -72,6 +78,24 @@ def get_corresponding_pos_by_symmetry(pos: Position, sym_bits: int) -> Position:
 def communicates_walls(marker_pos: Position) -> bool:
     return marker_pos.y % 2 == 0
 
+def get_learn_map_bucket_pos(x_bucket: int, y_bucket: int) -> Position:
+    return Position(
+        min(x_bucket * 5 + 2, map_info._width - 1),
+        min(y_bucket * 5 + 2, map_info._height - 1),
+    )
+
+def get_learn_map_corresponding_pos(pos: Position) -> Position:
+    return get_learn_map_bucket_pos(pos.x // 5, pos.y // 5)
+
+def _learn_map_env_indices(marker_pos: Position) -> tuple[int, int]:
+    if marker_pos.y % 2 == 0:
+        return map_info._IDX_ENV_ORE_TI, map_info._IDX_ENV_WALL
+    return map_info._IDX_ENV_ORE_AX, map_info._IDX_ENV_EMPTY
+
+def _learn_map_env_idx(marker_pos: Position, env_bit: int) -> int:
+    low_idx, high_idx = _learn_map_env_indices(marker_pos)
+    return high_idx if env_bit else low_idx
+
 def _sample_env_idx(marker_pos: Position) -> int:
     if communicates_walls(marker_pos):
         return map_info._IDX_ENV_WALL
@@ -94,16 +118,23 @@ def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
             result |= 1 << i
     return result
 
-def decode_sample_positions(marker_pos: Position, sample_bits: int, sym_bits: int):
-    corresponding = get_corresponding_pos(marker_pos)
-    for i, (dx, dy) in enumerate(OFFSETS):
-        if not ((sample_bits >> i) & 1):
-            continue
+def encode_learn_map_sample_bits(corresponding_pos: Position, marker_pos: Position, env_bit: int) -> int:
+    corresponding = get_learn_map_corresponding_pos(corresponding_pos)
+    env_idx = _learn_map_env_idx(marker_pos, env_bit)
+    env_mask = map_info._bm_env[env_idx]
+    seen = map_info._bm_seen
+    width = map_info._width
+    result = 0
+
+    for i, (dx, dy) in enumerate(LEARN_MAP_OFFSETS):
         x = corresponding.x + dx
         y = corresponding.y + dy
-        if map_info.in_bounds_coords(x, y):
-            pos = Position(x, y)
-            yield pos
+        if not map_info.in_bounds_coords(x, y):
+            continue
+        bit = 1 << (x + y * width)
+        if (seen & bit) and (env_mask & bit):
+            result |= 1 << i
+    return result
 
 def _new_stats():
     return {
@@ -128,12 +159,12 @@ def record_marker_read() -> None:
     if _active_stats is not None:
         _active_stats["markers_read"] += 1
 
-def _record_sample_stats(stats, marker_pos: Position, sample_pos: Position, status: str) -> None:
+def _record_sample_stats(stats, marker_x: int, marker_y: int, sample_x: int, sample_y: int, status: str) -> None:
     if status not in ("known", "learned", "conflict"):
         return
 
-    manhattan_dist = abs(sample_pos.x - marker_pos.x) + abs(sample_pos.y - marker_pos.y)
-    chebyshev_dist = max(abs(sample_pos.x - marker_pos.x), abs(sample_pos.y - marker_pos.y))
+    manhattan_dist = abs(sample_x - marker_x) + abs(sample_y - marker_y)
+    chebyshev_dist = max(abs(sample_x - marker_x), abs(sample_y - marker_y))
 
     if status == "known":
         stats["tiles_known"] += 1
@@ -146,15 +177,13 @@ def _record_sample_stats(stats, marker_pos: Position, sample_pos: Position, stat
     else:
         stats["tiles_conflict"] += 1
 
-def note_comm_env(pos: Position, env_idx: int) -> str:
+def note_comm_env(x: int, y: int, env_idx: int) -> str:
     """Record a communicated environment tile if it was previously unknown."""
-    if not map_info.in_bounds(pos):
+    if not map_info.in_bounds_coords(x, y):
         return "oob"
 
     width = map_info._width
     height = map_info._height
-    x = pos.x
-    y = pos.y
     n = x + y * width
     bit = 1 << n
     if map_info._bm_seen & bit:
@@ -202,10 +231,42 @@ def apply_message(marker_pos: Position, sym_bits: int, sample_bits: int, stats=N
     if stats is None:
         stats = _active_stats
     env_idx = _sample_env_idx(marker_pos)
-    for sample_pos in decode_sample_positions(marker_pos, sample_bits, sym_bits):
-        status = note_comm_env(sample_pos, env_idx)
+    corresponding = get_corresponding_pos(marker_pos)
+    marker_x = marker_pos.x
+    marker_y = marker_pos.y
+    base_x = corresponding.x
+    base_y = corresponding.y
+
+    for i, (dx, dy) in enumerate(OFFSETS):
+        if not ((sample_bits >> i) & 1):
+            continue
+        sample_x = base_x + dx
+        sample_y = base_y + dy
+        if not map_info.in_bounds_coords(sample_x, sample_y):
+            continue
+        status = note_comm_env(sample_x, sample_y, env_idx)
         if stats is not None:
-            _record_sample_stats(stats, marker_pos, sample_pos, status)
+            _record_sample_stats(stats, marker_x, marker_y, sample_x, sample_y, status)
+
+def apply_learn_map_message(marker_pos: Position, corresponding_pos: Position, env_bit: int, sample_bits: int, stats=None) -> None:
+    if stats is None:
+        stats = _active_stats
+    corresponding = get_learn_map_corresponding_pos(corresponding_pos)
+    marker_x = corresponding.x
+    marker_y = corresponding.y
+    base_x = corresponding.x
+    base_y = corresponding.y
+    env_idx = _learn_map_env_idx(marker_pos, env_bit)
+    for i, (dx, dy) in enumerate(LEARN_MAP_OFFSETS):
+        if not ((sample_bits >> i) & 1):
+            continue
+        sample_x = base_x + dx
+        sample_y = base_y + dy
+        if not map_info.in_bounds_coords(sample_x, sample_y):
+            continue
+        status = note_comm_env(sample_x, sample_y, env_idx)
+        if stats is not None:
+            _record_sample_stats(stats, marker_x, marker_y, sample_x, sample_y, status)
 
 def flush_round_stats(current_round: int) -> None:
     global _active_stats
