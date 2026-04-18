@@ -142,6 +142,9 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
 
             threat_tiles.add(cur)
 
+            if not rc.is_in_vision(cur):
+                continue
+
             bbid = rc.get_tile_builder_bot_id(cur)
             if bbid is not None:
                 if rc.get_team(bbid) == my_team:
