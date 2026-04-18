@@ -145,6 +145,8 @@ def run_gauntlet(
                 if not verbose:
                     pct = completed / total_matches * 100
                     print(f"\r  Progress: {completed}/{total_matches} ({pct:.0f}%)", end="", flush=True)
+                    main_stats = stats[main_bot]
+                    print(f" | {main_bot}: {main_stats.wins}W-{main_stats.losses}L-{main_stats.draws}D", end="", flush=True)
         if not verbose:
             print()
 
