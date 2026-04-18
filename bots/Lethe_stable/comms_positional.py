@@ -162,6 +162,7 @@ def note_comm_env(pos: Position, env_idx: int) -> str:
     for i in range(map_info._NUM_ENV):
         map_info._bm_env[i] &= ~bit
     map_info._bm_env[env_idx] |= bit
+    map_info._env_idx_by_tile[n] = env_idx
     return "learned"
 
 def apply_message(marker_pos: Position, sym_bits: int, sample_bits: int, stats=None) -> None:
