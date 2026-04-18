@@ -1,8 +1,9 @@
+from cambc import *
+
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-from cambc import *
 import units.builder
 from log import log
 
@@ -55,10 +56,10 @@ def harvestable_ore():
     )
     w = map_info._width
     ore = possible_ore()
-    # Ore tiles surrounded on all 4 cardinal sides by ore - unreachable by conveyor
+    # Ore tiles surrounded on all 4 cardinal sides by ore — unreachable by conveyor
     landlocked = ore & (ore >> 1 & map_info._not_right_col) & (ore << 1 & map_info._not_left_col) & (ore >> w) & (ore << w)
 
-    # Enemy hard buildings (not road/marker) cardinally adjacent - can't harvest next to these
+    # Enemy hard buildings (not road/marker) cardinally adjacent — can't harvest next to these
     enemy_hard = (
         map_info._bm_team[enemy_idx]
         & ~map_info._bm_et[map_info._IDX_ROAD]
@@ -186,7 +187,7 @@ def run():
         pn = p.x + p.y * w
         pbit = 1 << pn
 
-        # Wall - done
+        # Wall — done
         if map_info._bm_env[map_info._IDX_ENV_WALL] & pbit:
             continue
 
@@ -196,7 +197,7 @@ def run():
         is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
 
         if pid and not is_mine and is_road:
-            # Enemy road - move onto it and fire repeatedly
+            # Enemy road — move onto it and fire repeatedly
             all_secured = False
             nav.move_to(p)
             if rc.can_fire(p):
@@ -205,10 +206,10 @@ def run():
             return
 
         if pid and not is_road and not is_marker:
-            # Has a real building (mine or enemy, not road/marker) - side is done
+            # Has a real building (mine or enemy, not road/marker) — side is done
             continue
 
-        # Empty, marker, enemy marker, or my road - needs barrier
+        # Empty, marker, enemy marker, or my road — needs barrier
         all_secured = False
         nav.move_to(best_ore)
         if pid and is_mine and not map_info.has_builder_bot(p) and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
@@ -224,7 +225,7 @@ def run():
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         return
 
-    # --- All 4 sides covered - place harvester ---
+    # --- All 4 sides covered — place harvester ---
     # Clear ore tile if needed
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n

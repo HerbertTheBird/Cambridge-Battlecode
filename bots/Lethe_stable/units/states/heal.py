@@ -1,8 +1,9 @@
+from cambc import *
+
 import map_info
 from pathing import Pathing
 import comms
 import units.builder
-from cambc import *
 from log import log
 
 rc: Controller = None
