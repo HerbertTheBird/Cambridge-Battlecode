@@ -3,6 +3,7 @@ from cambc import Controller, Position, Direction, EntityType
 import map_info
 from log import DRAW_DEBUG, log
 import comms_positional
+from bisect import bisect_left
 
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
@@ -63,16 +64,8 @@ def init(c: Controller):
 
 def estimate_turn(entity_id):
     max_ids = map_info._max_id_by_round
-    lo, hi = 0, len(max_ids) - 1
-    result = hi
-    while lo <= hi:
-        mid = (lo + hi) >> 1
-        if max_ids[mid] < entity_id:
-            lo = mid + 1
-        else:
-            result = mid
-            hi = mid - 1
-    return result
+    idx = bisect_left(max_ids, entity_id)
+    return min(idx, len(max_ids) - 1)
 
 def decode_visible_marker(id: int, pos: Position):
     width = map_info._width
