@@ -144,7 +144,7 @@ def run():
 
     if rc.get_action_cooldown() > 0:
         return
-    if rc.get_ammo_amount() < 5:
+    if rc.get_ammo_amount() < 10:
         return
 
     feeders = _get_feeder_positions()
