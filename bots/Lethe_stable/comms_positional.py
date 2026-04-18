@@ -151,7 +151,11 @@ def note_comm_env(pos: Position, env_idx: int) -> str:
     if not map_info.in_bounds(pos):
         return "oob"
 
-    n = pos.x + pos.y * map_info._width
+    width = map_info._width
+    height = map_info._height
+    x = pos.x
+    y = pos.y
+    n = x + y * width
     bit = 1 << n
     if map_info._bm_seen & bit:
         if map_info._bm_env[env_idx] & bit:
@@ -163,6 +167,35 @@ def note_comm_env(pos: Position, env_idx: int) -> str:
         map_info._bm_env[i] &= ~bit
     map_info._bm_env[env_idx] |= bit
     map_info._env_idx_by_tile[n] = env_idx
+
+    if map_info._solved_sym:
+        if map_info._hor_sym:
+            fn = (width - 1 - x) + y * width
+        elif map_info._ver_sym:
+            fn = x + (height - 1 - y) * width
+        else:
+            fn = (width - 1 - x) + (height - 1 - y) * width
+        fbit = 1 << fn
+        map_info._bm_env[env_idx] |= fbit
+        map_info._env_idx_by_tile[fn] = env_idx
+        map_info._bm_seen |= fbit
+    else:
+        bm_seen = map_info._bm_seen
+        bm_env_match = map_info._bm_env[env_idx]
+        rx = width - 1 - x
+        ry = height - 1 - y
+        if map_info._hor_sym:
+            fbit = 1 << (rx + y * width)
+            if (bm_seen & fbit) and not (bm_env_match & fbit):
+                map_info._hor_sym = False
+        if map_info._ver_sym:
+            fbit = 1 << (x + ry * width)
+            if (bm_seen & fbit) and not (bm_env_match & fbit):
+                map_info._ver_sym = False
+        if map_info._rot_sym:
+            fbit = 1 << (rx + ry * width)
+            if (bm_seen & fbit) and not (bm_env_match & fbit):
+                map_info._rot_sym = False
     return "learned"
 
 def apply_message(marker_pos: Position, sym_bits: int, sample_bits: int, stats=None) -> None:

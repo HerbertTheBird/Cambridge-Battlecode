@@ -964,12 +964,86 @@ def recompute_derived() -> None:
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_ti_fed, _bm_ax_fed
     global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
     global _bm_enemy_turret_threat, _bm_harv_adj
+    global _solved_sym, _their_core, _predicted_enemy_core, _rush_tiebroken
+    global _bm_seen, _bm_any_building
 
+    width = _width
+    height = _height
     my_team_idx = _my_team_idx
     bm_et = _bm_et
     bm_team = _bm_team
     bm_env = _bm_env
+    building_id = _building_id
+    building_et_idx = _building_et_idx
+    building_hp = _building_hp
+    env_idx_by_tile = _env_idx_by_tile
     building_conv_target = _building_conv_target
+
+    possible_syms = int(_hor_sym) + int(_ver_sym) + int(_rot_sym)
+    if possible_syms == 1 and not _solved_sym:
+        _solved_sym = True
+        if _my_core:
+            _their_core = flip(_my_core)
+            if _their_core is not None:
+                pos = _their_core.x+_their_core.y*width
+                pbit = 1 << pos
+                building_id[pos] = -1
+                building_et_idx[pos] = _IDX_CORE
+                bm_et[_IDX_CORE] |= pbit
+                _bm_any_building |= pbit
+                enemy_team_idx = 1 - my_team_idx
+                bm_team[enemy_team_idx] |= pbit
+                building_hp[pos] = GameConstants.CORE_MAX_HP
+            build_core_areas()
+        bm_seen = _bm_seen
+        remaining = bm_seen
+        while remaining:
+            lsb = remaining & -remaining
+            n = lsb.bit_length() - 1
+            remaining ^= lsb
+            x = n % width
+            y = n // width
+            if _ver_sym:
+                flipped = x+(height-1-y)*width
+            elif _hor_sym:
+                flipped = (width-1-x)+y*width
+            else:
+                flipped = (width-1-x)+(height-1-y)*width
+            fbit = 1 << flipped
+            if not (bm_seen & fbit):
+                src_env = env_idx_by_tile[n]
+                bm_env[src_env] |= fbit
+                env_idx_by_tile[flipped] = src_env
+                bm_seen |= fbit
+        _bm_seen = bm_seen
+
+    if _my_core:
+        if _their_core:
+            _predicted_enemy_core = _their_core
+        else:
+            if _rot_sym:
+                _predicted_enemy_core = rot_flip(_my_core)
+            else:
+                hsym_core = hor_flip(_my_core)
+                vsym_core = ver_flip(_my_core)
+                my_pos = _my_pos
+                if _rush_tiebroken == 1 and _ver_sym:
+                    _predicted_enemy_core = vsym_core
+                elif _rush_tiebroken == 2 and _hor_sym:
+                    _predicted_enemy_core = hsym_core
+                elif _ver_sym and _hor_sym:
+                    if abs(my_pos.x - hsym_core.x) + abs(my_pos.y - hsym_core.y) < abs(my_pos.x - vsym_core.x) + abs(my_pos.y - vsym_core.y):
+                        _predicted_enemy_core = hsym_core
+                        _rush_tiebroken = 2
+                        log("Tiebreaking enemy core sym - HORIZONTAL")
+                    else:
+                        _predicted_enemy_core = vsym_core
+                        _rush_tiebroken = 1
+                        log("Tiebreaking enemy core sym - VERTICAL")
+                elif _ver_sym:
+                    _predicted_enemy_core = vsym_core
+                else:
+                    _predicted_enemy_core = hsym_core
 
     # Conveyors (all conveyor-type buildings + my core area)
     _bm_conveyors = (
@@ -1025,9 +1099,8 @@ def recompute_derived() -> None:
     _bm_harv_adj = expand_manhattan(harv) if harv else 0
 
 def update(recompute: bool = True) -> None:
-    global _my_core, _their_core, _core_id, _solved_sym
+    global _my_core, _their_core, _core_id
     global _hor_sym, _ver_sym, _rot_sym
-    global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
     global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
@@ -1288,70 +1361,6 @@ def update(recompute: bool = True) -> None:
 
     # Write back bm_seen to global (int is immutable, local was a copy)
     _bm_seen = bm_seen
-
-    possible_syms = int(_hor_sym) + int(_ver_sym) + int(_rot_sym)
-    if possible_syms == 1 and not _solved_sym:
-        _solved_sym = True
-        if _my_core:
-            _their_core = flip(_my_core)
-            if _their_core is not None:
-                pos = _their_core.x+_their_core.y*width
-                pbit = 1 << pos
-                building_id[pos] = -1
-                building_et_idx[pos] = _IDX_CORE
-                bm_et[_IDX_CORE] |= pbit
-                _bm_any_building |= pbit
-                enemy_team_idx = 1 - my_team_idx
-                bm_team[enemy_team_idx] |= pbit
-                building_hp[pos] = GameConstants.CORE_MAX_HP
-            build_core_areas()
-        remaining = bm_seen
-        while remaining:
-            lsb = remaining & -remaining
-            n = lsb.bit_length() - 1
-            remaining ^= lsb
-            x = n % width
-            y = n // width
-            if _ver_sym:
-                flipped = x+(height-1-y)*width
-            elif _hor_sym:
-                flipped = (width-1-x)+y*width
-            else:
-                flipped = (width-1-x)+(height-1-y)*width
-            fbit = 1 << flipped
-            if not (bm_seen & fbit):
-                src_env = env_idx_by_tile[n]
-                bm_env[src_env] |= fbit
-                env_idx_by_tile[flipped] = src_env
-                bm_seen |= fbit
-        _bm_seen = bm_seen
-
-    if _my_core:
-        if _their_core:
-            _predicted_enemy_core = _their_core
-        else:
-            if _rot_sym:
-                _predicted_enemy_core = rot_flip(_my_core)
-            else:
-                hsym_core = hor_flip(_my_core)
-                vsym_core = ver_flip(_my_core)
-                if _rush_tiebroken == 1 and _ver_sym:
-                    _predicted_enemy_core = vsym_core
-                elif _rush_tiebroken == 2 and _hor_sym:
-                    _predicted_enemy_core = hsym_core
-                elif _ver_sym and _hor_sym:
-                    if abs(my_pos.x - hsym_core.x) + abs(my_pos.y - hsym_core.y) < abs(my_pos.x - vsym_core.x) + abs(my_pos.y - vsym_core.y):
-                        _predicted_enemy_core = hsym_core
-                        _rush_tiebroken = 2
-                        log("Tiebreaking enemy core sym - HORIZONTAL")
-                    else:
-                        _predicted_enemy_core = vsym_core
-                        _rush_tiebroken = 1
-                        log("Tiebreaking enemy core sym - VERTICAL")
-                elif _ver_sym:
-                    _predicted_enemy_core = vsym_core
-                else:
-                    _predicted_enemy_core = hsym_core
 
     mask = freshly_loaded
     while mask:
