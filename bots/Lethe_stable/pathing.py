@@ -582,22 +582,21 @@ class Pathing:
             i += 1
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
         """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
-        rc = self.rc
         adj = set()
         for d in ALL_DIRS:
             if d == Direction.CENTRE:
                 continue
-            p = map_info.pos_add(pos, d)
-            if not map_info.in_bounds(p):
+            x, y = map_info.pos_add_xy(pos.x, pos.y, d)
+            if not map_info.in_bounds_xy(x, y):
                 continue
-            if p == map_info._my_pos:
-                adj.add(p)
+            if x == map_info._my_pos.x and y == map_info._my_pos.y:
+                adj.add(Position(x, y))
                 continue
-            if not map_info.is_passable(p):
+            if not map_info.is_passable_xy(x, y):
                 continue
-            if map_info.has_builder_bot(p):
+            if map_info.has_builder_bot_xy(x, y):
                 continue
-            adj.add(p)
+            adj.add(Position(x, y))
         if not adj:
             if fallback is not None:
                 adj.add(fallback)
@@ -647,11 +646,11 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
-        log("conveyors from ", start, raw_axionite)
+    def calculate_conveyor_path(self, start_x: int, start_y: int, raw_axionite: bool, update: bool = False):
+        log("conveyors from ", start_x, start_y, raw_axionite)
         w = self.width
         if update:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
+            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start_x + start_y * map_info._width)
         else:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
@@ -659,13 +658,13 @@ class Pathing:
         if not update:
             start_mask = 0
             for d in CARD_DIR:
-                sp = map_info.pos_add(start, d)
-                if map_info.in_bounds(sp) and ((avoid >> (sp.x + sp.y * w)) & 1) == 0:
-                    start_mask |= 1 << (sp.x + sp.y * w)
+                x, y = map_info.pos_add_xy(start_x, start_y, d)
+                if map_info.in_bounds_xy(x, y) and ((avoid >> (x + y * w)) & 1) == 0:
+                    start_mask |= 1 << (x + y * w)
             if start_mask == 0:
                 return None
         else:
-            start_mask = 1 << (map_info._building_conv_target[start.x + start.y * w])
+            start_mask = 1 << (map_info._building_conv_target[start_x + start_y * w])
         end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
         result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
         if result is None:

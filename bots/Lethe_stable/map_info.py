@@ -146,10 +146,9 @@ _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
 # Int-indexed version: _DIRECTION_DELTAS_I[dir_int] = (dx, dy)
 _DIRECTION_DELTAS_I = [d.delta() for d in Direction]
 
-def pos_add(pos: Position, d: Direction) -> Position:
-    """Fast Position.add() replacement using cached deltas."""
+def pos_add_xy(x: int, y: int, d: Direction) -> tuple[int, int]:
     dx, dy = _DIRECTION_DELTAS[d]
-    return Position(pos.x + dx, pos.y + dy)
+    return x + dx, y + dy
 
 _rc: Controller
 _width = _height = 0
@@ -324,7 +323,7 @@ def is_turret(type):
     return type in _TURRET_TYPES
 def in_bounds(pos: Position) -> bool:
     return 0 <= pos.x < _width and 0 <= pos.y < _height
-def in_bounds_coords(x, y) -> bool:
+def in_bounds_xy(x, y) -> bool:
     return 0 <= x < _width and 0 <= y < _height
 
 
@@ -1475,11 +1474,14 @@ def is_tile_empty(pos: Position):
     return bid is not None and _rc.get_entity_type(bid) is EntityType.MARKER
 
 def has_builder_bot(pos: Position, include_self: bool = False) -> bool:
-    if not in_bounds(pos):
+    return has_builder_bot_xy(pos.x, pos.y, include_self)
+
+def has_builder_bot_xy(x: int, y: int, include_self: bool = False) -> bool:
+    if not in_bounds_xy(x, y):
         return False
-    if include_self and pos == _my_pos:
+    if include_self and x == _my_pos.x and y == _my_pos.y:
         return True
-    n = pos.x + pos.y * _width
+    n = x + y * _width
     bit = 1 << n
     return bool((_bm_friendly_bots | _bm_enemy_bots) & bit)
 
@@ -1494,8 +1496,11 @@ def can_place_at_restrictive(pos: Position):
     return bid is not None and _rc.get_entity_type(bid) is EntityType.ROAD
 
 def is_passable(pos: Position):
-    if not in_bounds(pos): return False
-    n = pos.x + pos.y * _width
+    return is_passable_xy(pos.x, pos.y)
+
+def is_passable_xy(x: int, y: int) -> bool:
+    if not in_bounds_xy(x, y): return False
+    n = x + y * _width
     bit = 1 << n
     if _bm_env[_IDX_ENV_WALL] & bit: return False
     if _building_id[n] == 0: return True

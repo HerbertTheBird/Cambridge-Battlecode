@@ -178,7 +178,7 @@ def run():
             is_raw_ax = True
         elif map_info._bm_env[map_info._IDX_ENV_ORE_TI] & best_bit_env:
             is_raw_ax = False
-        path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
+        path = nav.calculate_conveyor_path(best.x, best.y, is_raw_ax, update=False)
         if path is None:
             unpathable |= best_bit
             return
@@ -194,13 +194,13 @@ def run():
             target_zone = map_info.expand_chebyshev(target_zone)
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
-        path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
+        path = nav.calculate_conveyor_path(best.x, best.y, is_raw_ax, update=True)
         if path is None:
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
         if (map_info._bm_team[1-map_info._my_team_idx] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):
-            new_path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
+            new_path = nav.calculate_conveyor_path(best.x, best.y, is_raw_ax, update=False)
             if new_path is not None and new_path[1] != path[0]:
                 path = new_path
                 target_conveyor = [path[0], path[1]]

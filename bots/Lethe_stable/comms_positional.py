@@ -111,7 +111,7 @@ def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
     for i, (dx, dy) in enumerate(OFFSETS):
         x = corresponding.x + dx
         y = corresponding.y + dy
-        if not map_info.in_bounds_coords(x, y):
+        if not map_info.in_bounds_xy(x, y):
             continue
         bit = 1 << (x + y * width)
         if (seen & bit) and (env_mask & bit):
@@ -129,7 +129,7 @@ def encode_learn_map_sample_bits(corresponding_pos: Position, marker_pos: Positi
     for i, (dx, dy) in enumerate(LEARN_MAP_OFFSETS):
         x = corresponding.x + dx
         y = corresponding.y + dy
-        if not map_info.in_bounds_coords(x, y):
+        if not map_info.in_bounds_xy(x, y):
             continue
         bit = 1 << (x + y * width)
         if (seen & bit) and (env_mask & bit):
@@ -179,7 +179,7 @@ def _record_sample_stats(stats, marker_x: int, marker_y: int, sample_x: int, sam
 
 def note_comm_env(x: int, y: int, env_idx: int) -> str:
     """Record a communicated environment tile if it was previously unknown."""
-    if not map_info.in_bounds_coords(x, y):
+    if not map_info.in_bounds_xy(x, y):
         return "oob"
 
     width = map_info._width
@@ -242,7 +242,7 @@ def apply_message(marker_pos: Position, sym_bits: int, sample_bits: int, stats=N
             continue
         sample_x = base_x + dx
         sample_y = base_y + dy
-        if not map_info.in_bounds_coords(sample_x, sample_y):
+        if not map_info.in_bounds_xy(sample_x, sample_y):
             continue
         status = note_comm_env(sample_x, sample_y, env_idx)
         if stats is not None:
@@ -262,7 +262,7 @@ def apply_learn_map_message(marker_pos: Position, corresponding_pos: Position, e
             continue
         sample_x = base_x + dx
         sample_y = base_y + dy
-        if not map_info.in_bounds_coords(sample_x, sample_y):
+        if not map_info.in_bounds_xy(sample_x, sample_y):
             continue
         status = note_comm_env(sample_x, sample_y, env_idx)
         if stats is not None:

@@ -56,17 +56,18 @@ def choose_gunner_target() -> Position | None:
     direction = rc.get_direction()
     attackable_tiles = set(rc.get_attackable_tiles()) # Re-added this line
     ray_tiles = []
-    tile = map_info.pos_add(my_pos, direction)
+    x, y = map_info.pos_add_xy(my_pos.x, my_pos.y, direction)
 
     invalid_sabotage_locations = _get_invalid_sabotage_locations()
 
     for _ in range(3):
-        if not map_info.in_bounds(tile):
+        if not map_info.in_bounds_xy(x, y):
             break
-        if tile not in attackable_tiles: # Re-added this check
+        p = Position(x, y)
+        if p not in attackable_tiles: # Re-added this check
             break
-        ray_tiles.append(tile)
-        tile = map_info.pos_add(tile, direction)
+        ray_tiles.append(p)
+        x, y = map_info.pos_add_xy(x, y, direction)
 
     first_enemy_idx = None
     for i, current_ray_tile in enumerate(ray_tiles):
@@ -269,9 +270,10 @@ def choose_rotate_dir(enemies) -> Direction | None:
 def choose_builder_bot_rotate_dir() -> Direction | None:
     """Rotates towards adjacent enemy builder bots on allied conveyors."""
     for d in tuple(Direction):
-        adj_pos = map_info.pos_add(my_pos, d)
-        if not map_info.in_bounds(adj_pos):
+        ax, ay = map_info.pos_add_xy(my_pos.x, my_pos.y, d)
+        if not map_info.in_bounds_xy(ax, ay):
             continue
+        adj_pos = Position(ax, ay)
 
         bot_id = rc.get_tile_builder_bot_id(adj_pos)
         if bot_id is None or rc.get_team(bot_id) == my_team:

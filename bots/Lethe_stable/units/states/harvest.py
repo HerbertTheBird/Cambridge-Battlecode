@@ -28,23 +28,23 @@ def has_gunner_covering(p: Position):
     """Checks if a tile is covered by a nearby friendly gunner."""
     # Note: does not check for vision, assumes rc.is_in_vision(p) is true.
     for d in map_info._ALL_DIRECTIONS:
-        check = map_info.pos_add(p, d)
-        if not map_info.in_bounds(check):
+        cx, cy = map_info.pos_add_xy(p.x, p.y, d)
+        if not map_info.in_bounds_xy(cx, cy):
             continue
 
-        check_n = check.x + check.y * map_info._width
-        
+        check_n = cx + cy * map_info._width
+
         bid = map_info._building_id[check_n]
         if not bid:
             continue
-            
+
         is_mine = bool(map_info._bm_team[map_info._my_team_idx] & (1 << check_n))
         if not is_mine:
             continue
 
         is_gunner = bool(map_info._bm_et[map_info._IDX_GUNNER] & (1 << check_n))
         if is_gunner:
-            if check.distance_squared(p) <= 2:
+            if (cx - p.x) ** 2 + (cy - p.y) ** 2 <= 2:
                 return True
     return False
 
@@ -134,20 +134,21 @@ def run():
     harvestable = harvestable_ore() & ~_too_expensive()
     for d in (Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST, Direction.NORTHWEST):
         dx, dy = map_info._DIRECTION_DELTAS[d]
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if not map_info.in_bounds(p):
+        x = my_pos.x + dx
+        y = my_pos.y + dy
+        if not map_info.in_bounds_xy(x, y):
             continue
-        pn = p.x + p.y * w
+        pn = x + y * w
         pbit = 1 << pn
         if not (harvestable & pbit):
             continue
         # Check all 4 cardinal sides are secured
         secured = True
         for cd in map_info._CARDINAL:
-            cp = map_info.pos_add(p, cd)
-            if not map_info.in_bounds(cp):
+            cpx, cpy = map_info.pos_add_xy(x, y, cd)
+            if not map_info.in_bounds_xy(cpx, cpy):
                 continue
-            cn = cp.x + cp.y * w
+            cn = cpx + cpy * w
             cbit = 1 << cn
             if wall_mask & cbit:
                 continue
@@ -158,7 +159,7 @@ def run():
         if not secured:
             continue
         is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & pbit)
-        path = nav.calculate_conveyor_path(p, is_raw_ax)
+        path = nav.calculate_conveyor_path(x, y, is_raw_ax)
         if path is None:
             cant_harvest |= pbit
             continue
@@ -167,6 +168,7 @@ def run():
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
+        p = Position(x, y)
         if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not map_info.has_builder_bot(p):
             rc.destroy(p)
             map_info.update_at(p)
@@ -189,7 +191,7 @@ def run():
     my_team_idx = map_info._my_team_idx
     best_n = best_ore.x + best_ore.y * w
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
-    path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
+    path = nav.calculate_conveyor_path(best_ore.x, best_ore.y, is_raw_ax)
     if path is not None:
         _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
     else:
@@ -204,13 +206,14 @@ def run():
     # --- Secure each cardinal side ---
     all_secured = True
     for d in map_info._CARDINAL:
-        p = map_info.pos_add(best_ore, d)
-        if not map_info.in_bounds(p):
+        x, y = map_info.pos_add_xy(best_ore.x, best_ore.y, d)
+        if not map_info.in_bounds_xy(x, y):
             continue
+        p = Position(x, y)
         if p == map_info._my_pos and p in pathing.destroyed_barriers:
             continue
 
-        pn = p.x + p.y * w
+        pn = x + y * w
         pbit = 1 << pn
 
         # Wall — done
@@ -276,14 +279,15 @@ def run():
     ore_id = map_info._building_id[ore_n]
     targets = set()
     for d in map_info._ALL_DIRECTIONS:
-        p = map_info.pos_add(path[0], d)
-        if p == best_ore or not map_info.in_bounds(p):
+        px, py = path[0]
+        x, y = map_info.pos_add_xy(px, py, d)
+        if (x == best_ore.x and y == best_ore.y) or not map_info.in_bounds_xy(x, y):
             continue
-        if p.distance_squared(best_ore) > 2:
+        if (x - best_ore.x) ** 2 + (y - best_ore.y) ** 2 > 2:
             continue
-        pbit = 1 << (p.x + p.y * w)
-        if map_info.is_passable(p):
-            targets.add(p)
+        pbit = 1 << (x + y * w)
+        if map_info.is_passable_xy(x, y):
+            targets.add(Position(x, y))
     log("all secured")
     if targets:
         log("attempt move?", targets)
