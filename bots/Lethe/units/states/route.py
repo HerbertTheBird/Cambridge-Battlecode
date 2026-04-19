@@ -56,7 +56,7 @@ def _too_expensive():
 
 def _dead_end_conveyors():
     """Bitmask of dead-end conveyor output tiles not connected to my ore-accepting network."""
-    return map_info._bm_dead_end & ~map_info._bm_enemy_turret_threat & ~map_info._bm_et[map_info._IDX_HARVESTER]
+    return map_info._bm_dead_end & ~(map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat) & ~map_info._bm_et[map_info._IDX_HARVESTER]
 def _orphan_harvesters():
     """Bitmask of my harvesters with no adjacent conveyor/turret/core."""
     my_team_idx = map_info._my_team_idx
@@ -73,7 +73,7 @@ def _orphan_harvesters():
     ) & map_info._bm_team[my_team_idx]
 
     served = map_info.expand_manhattan(my_connected)
-    return my_harvesters & ~served & ~map_info._bm_enemy_turret_threat
+    return my_harvesters & ~served & ~(map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
 def _orphan_foundries():
     """Bitmask of my foundries with no adjacent conveyor/turret/core."""
     my_team_idx = map_info._my_team_idx
@@ -100,7 +100,7 @@ def _orphan_foundries():
     )
 
     served = map_info.expand_manhattan(my_connected)
-    return my_foundries & ~served & ~map_info._bm_enemy_turret_threat
+    return my_foundries & ~served & ~(map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
 def cant_claim():
     w = map_info._width
     my_pos = map_info._my_pos

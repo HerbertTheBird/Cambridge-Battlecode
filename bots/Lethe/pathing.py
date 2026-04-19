@@ -7,7 +7,7 @@ from log import DRAW_DEBUG, log
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
-
+import units.builder as builder
 CARD_DIR = [
     Direction.NORTH,
     Direction.SOUTH,
@@ -22,7 +22,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 bridge_cost = 6
 barrier_cost = 15
 threat_cost = 20
-conveyor_end_cost = 10
+conveyor_end_cost = 6
 
 
 
@@ -318,7 +318,7 @@ class Pathing:
         # builder.draw_mask(barriers, 0, 0, 255)
         threat = map_info._bm_enemy_launch_adj
         if avoid_turret:
-            threat |= map_info._bm_enemy_turret_threat
+            threat |= (map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
         if threat & start_mask:
             threat &= ~start_mask
 
@@ -484,12 +484,15 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
-        # builder.draw_mask(avoid, 255, 0, 0)
 
         # builder.draw_mask(target_mask, 0, 255, 255)
-        avoid &= ~start_mask
+        # avoid &= ~start_mask
+
+        # builder.draw_mask(avoid, 255, 0, 0)
+        # builder.draw_mask(avoid_target, 255, 255, 0)
 
         start_time = time.perf_counter_ns()
+        # builder.draw_mask(target_mask, 0, 0, 255)
 
         if end_cost_mask:
             t_end = target_mask & end_cost_mask
@@ -498,6 +501,8 @@ class Pathing:
             convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
             t_end = target_mask & convs
             t_core = target_mask & ~convs
+        # builder.draw_mask(t_end, 255, 0, 0)
+        # builder.draw_mask(t_core, 0, 255, 0)
 
         max_c = bridge_cost
         max_seed = conveyor_end_cost
@@ -526,7 +531,7 @@ class Pathing:
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
-
+            # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
@@ -659,7 +664,7 @@ class Pathing:
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
         log("conveyors from ", start, raw_axionite)
         w = self.width
-        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
+        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * w)
         # Conveyors pointing into `start` are legitimate route starts; unmask them.
         avoid &= ~map_info._conv_reverse[start.x + start.y * w]
         if not target:
@@ -674,8 +679,11 @@ class Pathing:
                 return None
         else:
             start_mask = 1 << (start.x + start.y * w)
-        end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
-        result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
+        if raw_axionite:
+            end_cost_mask = self.raw_ax_foundry_sites() & ~map_info._bm_et[map_info._IDX_FOUNDRY]
+            result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
+        else:
+            result = self.bfs_route(start_mask, target, avoid)
         if result is None:
             return None
         s_pos, p_pos, dist = result
@@ -725,18 +733,27 @@ class Pathing:
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
         return (adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
 
-    def _get_conveyor_targets_and_avoid(self, raw_axionite: bool):
+    def _get_conveyor_targets_and_avoid(self, raw_axionite: bool, from_route: int):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
             ti_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
+            avoid &= ~(1<<from_route)
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
+            # Existing allied foundries are free endpoints — routing into one
+            # avoids building a redundant foundry. Added to t_core (not
+            # end_cost_mask), so they seed at cost 0 like raw-ax chains.
+            target |= map_info._bm_et[map_info._IDX_FOUNDRY] & map_info._bm_team[map_info._my_team_idx]
+            # builder.draw_mask(avoid, 255, 0, 0)
+            # builder.draw_mask(target, 0, 255, 0)
+
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
             target = (map_info._bm_route_targets & (map_info._bm_conv_ti | map_info._bm_conv_refined)) | map_info._bm_my_core_area
             target &= ~ax_harvesters
+            avoid &= ~(1<<from_route)
             avoid |= ax_harvesters
             # Ti/refined chains must not run cardinally adjacent to axionite ore —
             # a future ax harvester on that ore would pick up the wrong resource.

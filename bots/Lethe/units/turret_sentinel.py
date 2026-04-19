@@ -13,7 +13,7 @@ _WEIGHTS = {
     EntityType.BREACH: 60,
     EntityType.SENTINEL: 50,
     EntityType.LAUNCHER: 10,
-    EntityType.HARVESTER: 35,
+    EntityType.HARVESTER: 0,
     EntityType.BUILDER_BOT: 15,
     EntityType.GUNNER: 40,
     EntityType.FOUNDRY: 55,
