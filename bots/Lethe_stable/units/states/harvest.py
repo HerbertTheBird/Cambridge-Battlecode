@@ -279,8 +279,7 @@ def run():
     ore_id = map_info._building_id[ore_n]
     targets = set()
     for d in map_info._ALL_DIRECTIONS:
-        px, py = path[0]
-        x, y = map_info.pos_add_xy(px, py, d)
+        x, y = map_info.pos_add_xy(path[0].x, path[0].y, d)
         if (x == best_ore.x and y == best_ore.y) or not map_info.in_bounds_xy(x, y):
             continue
         if (x - best_ore.x) ** 2 + (y - best_ore.y) ** 2 > 2:
