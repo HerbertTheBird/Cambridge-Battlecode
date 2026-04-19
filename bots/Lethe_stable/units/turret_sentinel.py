@@ -36,14 +36,17 @@ def _should_stay():
     my_pos = rc.get_position()
     my_team = map_info._my_team
     for dx, dy in CARDINAL_OFFSETS:
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if map_info.in_bounds(p):
-            bid = rc.get_tile_building_id(p)
-            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
-                return True
-            bot_id = rc.get_tile_builder_bot_id(p)
-            if bot_id and rc.get_team(bot_id) != my_team:
-                return True
+        x = my_pos.x + dx
+        y = my_pos.y + dy
+        if not map_info.in_bounds_xy(x, y):
+            continue
+        p = Position(x, y)
+        bid = rc.get_tile_building_id(p)
+        if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+            return True
+        bot_id = rc.get_tile_builder_bot_id(p)
+        if bot_id and rc.get_team(bot_id) != my_team:
+            return True
     return False
 
 
@@ -52,9 +55,11 @@ def _get_feeder_positions():
     my_pos = rc.get_position()
     feeders = set()
     for dx, dy in CARDINAL_OFFSETS:
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if not map_info.in_bounds(p):
+        x = my_pos.x + dx
+        y = my_pos.y + dy
+        if not map_info.in_bounds_xy(x, y):
             continue
+        p = Position(x, y)
         bid = rc.get_tile_building_id(p)
         if not bid:
             continue
@@ -97,7 +102,9 @@ def _prune_conveyor_targets(target_positions):
     for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
         front_positions = []
 
-        if p.distance_squared(my_pos) <= 100:
+        dx = p.x - my_pos.x
+        dy = p.y - my_pos.y
+        if dx * dx + dy * dy <= 100:
             # Iterating over conveyors that feed into p
             for conv_pos in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
                 # Allow skipping blacklisting if it's in vision and has a builder bot

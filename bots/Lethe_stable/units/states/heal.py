@@ -166,14 +166,16 @@ def _try_barrier_dead_ends():
     my_pos = map_info._my_pos
     for d in map_info._ALL_DIRECTIONS:
         dx, dy = map_info._DIRECTION_DELTAS[d]
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if not map_info.in_bounds(p):
+        x = my_pos.x + dx
+        y = my_pos.y + dy
+        if not map_info.in_bounds_xy(x, y):
             continue
-        pbit = 1 << (p.x + p.y * w)
+        pbit = 1 << (x + y * w)
         if not (targets & pbit):
             continue
+        p = Position(x, y)
         if rc.get_action_cooldown() == 0:
-            if not map_info.has_builder_bot(p) and rc.can_destroy(p):
+            if not map_info.has_builder_bot_xy(x, y) and rc.can_destroy(p):
                 rc.destroy(p)
                 map_info.update_at(p)
         if rc.can_build_barrier(p):
@@ -190,15 +192,17 @@ def _do_best_heal():
     my_pos = map_info._my_pos
     for d in map_info._ALL_DIRECTIONS:
         dx, dy = map_info._DIRECTION_DELTAS[d]
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if not map_info.in_bounds(p):
+        x = my_pos.x + dx
+        y = my_pos.y + dy
+        if not map_info.in_bounds_xy(x, y):
             continue
-        pbit = 1 << (p.x + p.y * w)
+        pbit = 1 << (x + y * w)
         if not (healable & pbit):
             continue
+        p = Position(x, y)
         if not rc.can_heal(p):
             continue
-        n = p.x + p.y * w
+        n = x + y * w
         hp = map_info._building_hp[n]
         et_idx = map_info._building_et_idx[n]
         if et_idx >= 0:

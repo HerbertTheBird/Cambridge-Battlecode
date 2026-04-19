@@ -205,7 +205,9 @@ def run():
                 path = new_path
                 target_conveyor = [path[0], path[1]]
     near_enemy = False
-    if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
+    dx = target_conveyor[0].x - target_conveyor[1].x
+    dy = target_conveyor[0].y - target_conveyor[1].y
+    if dx * dx + dy * dy == 1:
         tc1_zone = 1 << (target_conveyor[1].x + target_conveyor[1].y * width)
         for _ in range(4):
             tc1_zone = map_info.expand_chebyshev(tc1_zone)
@@ -262,15 +264,19 @@ def run():
         if rc.can_destroy(destroy):
             rc.destroy(destroy)
             map_info.update_at(destroy)
-        bridge = destroy.distance_squared(next) > 1
+        dx = destroy.x - next.x
+        dy = destroy.y - next.y
+        bridge = dx * dx + dy * dy > 1
         if bridge and rc.can_build_bridge(destroy, next):
             rc.build_bridge(destroy, next)
             map_info.update_at(destroy)
             built = True
-        elif not bridge and rc.can_build_conveyor(destroy, destroy.direction_to(next)):
-            rc.build_conveyor(destroy, destroy.direction_to(next))
-            map_info.update_at(destroy)
-            built = True
+        else:
+            direction = destroy.direction_to(next)
+            if rc.can_build_conveyor(destroy, direction):
+                rc.build_conveyor(destroy, direction)
+                map_info.update_at(destroy)
+                built = True
     if built:
         # Trace downstream from best, mark the furthest unloaded conveyor as loaded
         conv_target = map_info._building_conv_target

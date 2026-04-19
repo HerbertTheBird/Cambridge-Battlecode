@@ -259,12 +259,14 @@ class Pathing:
         rc = self.rc
         px, py = map_info._my_pos.x, map_info._my_pos.y
         dx, dy = map_info._DIRECTION_DELTAS[dir]
-        new_pos = Position(px + dx, py + dy)
-        if not map_info.in_bounds(new_pos):
+        nx = px + dx
+        ny = py + dy
+        if not map_info.in_bounds_xy(nx, ny):
             return False
+        if map_info.has_builder_bot_xy(nx, ny):
+            return False
+        new_pos = Position(nx, ny)
         id = rc.get_tile_building_id(new_pos)
-        if map_info.has_builder_bot(new_pos):
-            return False
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0]:
             rc.destroy(new_pos)
             map_info.update_at(new_pos)

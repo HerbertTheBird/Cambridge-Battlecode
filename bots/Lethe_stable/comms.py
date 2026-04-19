@@ -177,11 +177,12 @@ def mark(target_idx, type, corresponding_pos=None, env_bit=None):
     log("mark", target_idx, type, corresponding_pos, env_bit)
 
     adjacent_tiles = rc.get_nearby_tiles(2)
+    my_pos = map_info._my_pos
 
     best = None # (priority, pos, tile_id)
 
     for pos in adjacent_tiles:
-        if pos == rc.get_position():
+        if pos == my_pos:
             continue
         if type != LEARN_MAP_TYPE and _is_bad_marker_spot(pos):
             continue
@@ -230,7 +231,7 @@ def mark(target_idx, type, corresponding_pos=None, env_bit=None):
             val = encode(target_idx, type, sym, sample_bits, sender_loc)
 
         _my_markers.discard(tile_id)
-        if tile_id is not None and not map_info.has_builder_bot(pos) and rc.can_destroy(pos):
+        if tile_id is not None and not map_info.has_builder_bot_xy(pos.x, pos.y) and rc.can_destroy(pos):
             rc.destroy(pos)
             
             # Don't bother updating map if we replaced marker with marker

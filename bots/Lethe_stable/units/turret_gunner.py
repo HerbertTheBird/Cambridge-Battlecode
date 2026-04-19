@@ -134,14 +134,13 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
         for _ in range(max_range):
             x += dx
             y += dy
-            cur = Position(x, y)
-
-            if not map_info.in_bounds(cur):
+            if not map_info.in_bounds_xy(x, y):
                 break
 
             if map_info.ground_at(x, y) == Environment.WALL:
                 break
 
+            cur = Position(x, y)
             threat_tiles.add(cur)
 
             if not rc.is_in_vision(cur):
