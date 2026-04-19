@@ -19,6 +19,7 @@ from log import log
 
 ENABLE_PROFILER = True
 ENABLE_COMMS_STATS = False
+PROFILER_ONLY_TLE = False
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:
     import cProfile
@@ -41,6 +42,7 @@ class Player:
         if ENABLE_PROFILER:
             self.profiler_path = None
             self.accumulated_stats: pstats.Stats | None = None
+            self.profiled_turn_count = 0
             self.timeout_count = 0
 
     def _prepare_profile_dir(self, c: Controller) -> None:
@@ -76,8 +78,10 @@ class Player:
         total_cumtime = sum(v[3] for _, v in rows)
 
         with self.profiler_path.open("w", encoding="utf-8") as f:
-            f.write("Profile sorted by total time (tottime) — timed-out turns only\n")
+            scope = "timed-out turns only" if PROFILER_ONLY_TLE else "all profiled turns"
+            f.write(f"Profile sorted by total time (tottime) — {scope}\n")
             f.write(f"Unit profile: {self.profiler_path.name}\n")
+            f.write(f"Profiled turns: {self.profiled_turn_count}\n")
             f.write(f"Timed-out turns: {self.timeout_count}\n")
             f.write(f"Total calls: {total_calls}\n")
             f.write(f"Total tottime: {total_tottime * 1_000_000:.3f} us\n")
@@ -101,6 +105,9 @@ class Player:
 
     def run(self, c: Controller) -> None:
         global SPAWN_TURN
+        
+        if c.get_current_round()  >= 200:
+            c.resign()
 
         if not self.initialized:
             self._prepare_profile_dir(c)
@@ -151,7 +158,21 @@ class Player:
 
             log(f"{elapsed_us/1000000:.3f} ms")
 
-            if end_time - start_time > 2_000_000:
+            timed_out = end_time - start_time > 2_000_000
+            if timed_out:
+                self.timeout_count += 1
+
+            if ENABLE_PROFILER and turn_profiler is not None and (timed_out or not PROFILER_ONLY_TLE):
+                import io
+                turn_stats = pstats.Stats(turn_profiler, stream=io.StringIO())
+                self.profiled_turn_count += 1
+                if self.accumulated_stats is None:
+                    self.accumulated_stats = turn_stats
+                else:
+                    self.accumulated_stats.add(turn_profiler)
+                self._write_profile()
+
+            if timed_out:
                 log(
                     "timed out",
                     c.get_id(),
@@ -160,15 +181,6 @@ class Player:
                     file=sys.stderr,
                 )
                 c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
-                if ENABLE_PROFILER and turn_profiler is not None:
-                    self.timeout_count += 1
-                    import io
-                    turn_stats = pstats.Stats(turn_profiler, stream=io.StringIO())
-                    if self.accumulated_stats is None:
-                        self.accumulated_stats = turn_stats
-                    else:
-                        self.accumulated_stats.add(turn_profiler)
-                    self._write_profile()
 
         except Exception as e:
             if ENABLE_PROFILER and turn_profiler is not None:
