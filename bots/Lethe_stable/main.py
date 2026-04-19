@@ -124,7 +124,7 @@ class Player:
             etype = c.get_entity_type()
 
             if not self.initialized:
-                random.seed(c.get_current_round())
+                random.seed(c.get_id())
 
                 if etype == EntityType.CORE:
                     self.me = core
