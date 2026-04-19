@@ -131,6 +131,7 @@ def _my_claims():
 
 _cached_claims = 0  # set by score(), reused by run()
 
+MAX_SCORE = 4
 def score():
     # units.builder.draw_mask(map_info._bm_route_targets, 255, 255, 0)
     global _cached_claims

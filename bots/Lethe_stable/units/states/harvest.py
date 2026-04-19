@@ -112,6 +112,7 @@ def _too_expensive():
             result |= 1 << n
     return result
 
+MAX_SCORE = 3
 def score():
     return 3 if _my_claims() else 0
 
