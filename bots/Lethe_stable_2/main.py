@@ -38,6 +38,8 @@ class Player:
     def __init__(self):
         self.initialized = False
         self.me: ModuleType
+        self.profiled_turn_count = 0
+        self.timeout_count = 0
 
         if ENABLE_PROFILER:
             self.profiler_path = None

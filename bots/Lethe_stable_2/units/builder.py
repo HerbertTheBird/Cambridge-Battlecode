@@ -51,7 +51,7 @@ def handle_comms():
             corresponding_pos = comms.decode_learn_map_corresponding_pos(v)
             sample = comms.decode_learn_map_sample_bits(v)
             env_bit = comms.decode_learn_map_env_bit(v)
-            # comms_positional.apply_learn_map_message(marker_pos, corresponding_pos, env_bit, sample)
+            comms_positional.apply_learn_map_message(marker_pos, corresponding_pos, env_bit, sample)
             continue
 
         sym = comms.decode_sym(v)
@@ -90,10 +90,10 @@ def handle_comms():
             del _sender_rounds[i][k]
             claimed_senders[i] &= ~(1 << k)
     # Age-based prune for heal flag target claims (UIDs, not tiles).
-    # stale_heal = [k for k, r in _target_rounds[HEAL_COMM_FLAG].items() if r + 3 < current_round]
-    # for k in stale_heal:
-    #     del _target_rounds[HEAL_COMM_FLAG][k]
-    #     claimed_targets[HEAL_COMM_FLAG] &= ~(1 << k)
+    stale_heal = [k for k, r in _target_rounds[HEAL_COMM_FLAG].items() if r + 200 < current_round]
+    for k in stale_heal:
+        del _target_rounds[HEAL_COMM_FLAG][k]
+        claimed_targets[HEAL_COMM_FLAG] &= ~(1 << k)
     comms_positional.flush_round_stats(current_round)
 def draw_mask(mask, r, g, b):
     if not DRAW_DEBUG:
