@@ -10,6 +10,7 @@ FILES = glob.glob("profiles/*.txt")
 data = defaultdict(lambda: [0, 0.0, 0.0])
 
 header_totals = {
+    "profiled_turns": 0,
     "timed_out_turns": 0,
     "total_calls": 0,
     "total_tottime": 0.0,
@@ -52,7 +53,9 @@ for file in FILES:
             line = line.strip()
 
             # Header aggregation
-            if line.startswith("Timed-out turns:"):
+            if line.startswith("Profiled turns:"):
+                header_totals["profiled_turns"] += int(line.split(":")[1])
+            elif line.startswith("Timed-out turns:"):
                 header_totals["timed_out_turns"] += int(line.split(":")[1])
             elif line.startswith("Total calls:"):
                 header_totals["total_calls"] += int(line.split(":")[1])
@@ -84,6 +87,7 @@ sorted_rows = sorted(
 # Output
 with open("combined_profile.txt", "w") as out:
     out.write("Combined profile\n")
+    out.write(f"Profiled turns: {header_totals['profiled_turns']}\n")
     out.write(f"Timed-out turns: {header_totals['timed_out_turns']}\n")
     out.write(f"Total calls: {header_totals['total_calls']}\n")
     out.write(f"Total tottime: {header_totals['total_tottime']:.2f} us\n")
