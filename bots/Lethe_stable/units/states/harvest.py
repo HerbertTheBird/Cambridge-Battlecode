@@ -24,6 +24,31 @@ def init(c: Controller):
     rc = c
     nav = Pathing(rc)
 
+def has_gunner_covering(p: Position):
+    """Checks if a tile is covered by a nearby friendly gunner."""
+    # Note: does not check for vision, assumes rc.is_in_vision(p) is true.
+    for d in map_info._ALL_DIRECTIONS:
+        check = map_info.pos_add(p, d)
+        if not map_info.in_bounds(check):
+            continue
+
+        check_n = check.x + check.y * map_info._width
+        
+        bid = map_info._building_id[check_n]
+        if not bid:
+            continue
+            
+        is_mine = bool(map_info._bm_team[map_info._my_team_idx] & (1 << check_n))
+        if not is_mine:
+            continue
+
+        is_gunner = bool(map_info._bm_et[map_info._IDX_GUNNER] & (1 << check_n))
+        if is_gunner:
+            if check.distance_squared(p) <= 2:
+                return True
+    return False
+
+
 cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
 def possible_ore():
@@ -209,13 +234,31 @@ def run():
             # Has a real building (mine or enemy, not road/marker) — side is done
             continue
 
-        # Empty, marker, enemy marker, or my road — needs barrier
+        # Empty, marker, enemy marker, or my road — needs barrier or gunner
         all_secured = False
         nav.move_to(best_ore)
         if pid and is_mine and not map_info.has_builder_bot(p) and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
             rc.destroy(p)
             map_info.update_at(p)
-        if rc.can_build_barrier(p):
+
+        # --- Gunner defense logic ---
+        gunner_built = False
+        if map_info._rc.get_current_round() > 50 and not has_gunner_covering(p) and map_info.ground_at(p.x, p.y) != Environment.ORE_TITANIUM:
+            # Per user hint, point 45 degrees towards a tile adjacent to harvester
+            dir_to_ore = p.direction_to(best_ore)
+            dir1 = dir_to_ore.rotate_left()
+            dir2 = dir_to_ore.rotate_right()
+            
+            direction_to_build = dir1
+            if not rc.can_build_gunner(p, dir1):
+                direction_to_build = dir2
+
+            if rc.can_build_gunner(p, direction_to_build):
+                rc.build_gunner(p, direction_to_build)
+                map_info.update_at(p)
+                gunner_built = True
+        
+        if not gunner_built and rc.can_build_barrier(p):
             rc.build_barrier(p)
             map_info.update_at(p)
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
