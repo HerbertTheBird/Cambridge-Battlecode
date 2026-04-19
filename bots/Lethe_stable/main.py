@@ -79,7 +79,7 @@ class Player:
 
         with self.profiler_path.open("w", encoding="utf-8") as f:
             scope = "timed-out turns only" if PROFILER_ONLY_TLE else "all profiled turns"
-            f.write(f"Profile sorted by total time (tottime) — {scope}\n")
+            f.write(f"Profile sorted by total time (tottime) - {scope}\n")
             f.write(f"Unit profile: {self.profiler_path.name}\n")
             f.write(f"Profiled turns: {self.profiled_turn_count}\n")
             f.write(f"Timed-out turns: {self.timeout_count}\n")
@@ -106,8 +106,8 @@ class Player:
     def run(self, c: Controller) -> None:
         global SPAWN_TURN
         
-        if c.get_current_round()  >= 200:
-            c.resign()
+        # if c.get_current_round()  >= 200:
+        #     c.resign()
 
         if not self.initialized:
             self._prepare_profile_dir(c)
@@ -185,6 +185,15 @@ class Player:
         except Exception as e:
             if ENABLE_PROFILER and turn_profiler is not None:
                 turn_profiler.disable()
+                if not PROFILER_ONLY_TLE:
+                    import io
+                    turn_stats = pstats.Stats(turn_profiler, stream=io.StringIO())
+                    self.profiled_turn_count += 1
+                    if self.accumulated_stats is None:
+                        self.accumulated_stats = turn_stats
+                    else:
+                        self.accumulated_stats.add(turn_profiler)
+                    self._write_profile()
             print("Error:", e)
             print(f"Error: {e}", file=sys.stderr)
             c.draw_indicator_line(Position(-100, -100), c.get_position(), 255, 0, 0)
