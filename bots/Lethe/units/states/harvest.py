@@ -79,7 +79,7 @@ def harvestable_ore():
             & ~enemy_blocking
             & ~friendly_blocking
             & ~enemy_hard_adj
-            & ~map_info._bm_enemy_turret_threat
+            & ~(map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
             # & units.builder._harvest_zone
             & ~cant_harvest
             & ~ax_ore_near_non_raw)
@@ -95,8 +95,6 @@ def _too_expensive():
     return result
 
 def score():
-    units.builder.draw_mask(possible_ore(), 255, 0, 0)
-    units.builder.draw_mask(harvestable_ore(), 0, 255, 0)
 
     return 3 if _my_claims() else 0
 

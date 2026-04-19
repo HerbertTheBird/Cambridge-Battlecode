@@ -27,7 +27,7 @@ def _disruptable_ore():
     result = (all_ore
               & (~map_info._bm_any_building | clearable)
               & ~units.builder._harvest_zone
-              & ~map_info._bm_enemy_turret_threat
+              & ~(map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
               & ~map_info._bm_enemy_launch_adj
               & ~cant_disrupt)
     if rc.get_current_round() < 200:

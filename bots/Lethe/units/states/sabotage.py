@@ -36,7 +36,7 @@ def _sabotage_targets():
         return 0
 
     # Exclude tiles in turret threat or adjacent to enemy launcher
-    danger = map_info._bm_enemy_turret_threat | map_info._bm_enemy_launch_adj
+    danger = (map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat) | map_info._bm_enemy_launch_adj
     targets &= ~danger
 
     # Avoid enemy builder bots within 6 pathing distance

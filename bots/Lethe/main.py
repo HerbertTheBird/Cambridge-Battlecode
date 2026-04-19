@@ -19,6 +19,7 @@ from log import log
 
 ENABLE_PROFILER = False
 ENABLE_COMMS_STATS = False
+ENABLE_VIS = False  # emit ##VIS## grids to stdout for the Rust replay viewer
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:
     import cProfile
@@ -27,8 +28,71 @@ if ENABLE_PROFILER or ENABLE_COMMS_STATS:
     import shutil
 
     PROFILE_DIR = pathlib.Path("profiles")
-    
+
     comms_stats.ENABLED = ENABLE_COMMS_STATS
+
+if ENABLE_VIS:
+    from visualiser import (
+        BoolGrid, Colour, FOG, Palette, PaletteStop, Tiles, TRANSPARENT, emit,
+    )
+
+    def _p(r: int, g: int, b: int, a: int) -> Palette:
+        return Palette(stops=[
+            PaletteStop(t=False, colour=TRANSPARENT),
+            PaletteStop(t=True, colour=Colour(r, g, b, a)),
+        ])
+
+    P_CONV_LOADED = _p(100, 255, 100, 140)
+    P_DEAD_END    = _p(255, 150,   0, 180)
+    P_CONV_STUCK  = _p(200,   0, 200, 180)
+    P_THREAT      = _p(255,  50,  50, 140)
+    P_TURRET_ADJ  = _p(255, 120,  60, 120)
+
+
+def _bm_to_bool_grid(bm: int, total: int) -> list[bool]:
+    """Bitmask → flat row-major bool list of length `total`. Bit `x + y*w`
+    maps to index `x + y*w`, matching tile indexing used throughout.
+
+    Fast path: format the int as a 0-padded binary string (C-implemented),
+    reverse to get LSB-first ordering, then one char comparison per tile.
+    ~10× faster than a per-tile shift on large ints for 60×60+ maps."""
+    if not bm:
+        return [False] * total
+    bm &= (1 << total) - 1
+    return [c == '1' for c in format(bm, f'0{total}b')[::-1]]
+
+
+def _mask_positions(bm: int, w: int) -> list[tuple[int, int]]:
+    """Bitmask → list of (x, y) positions. Used for the Tiles overlay, which
+    is much cheaper than a full BoolGrid when the set is sparse."""
+    positions = []
+    while bm:
+        lsb = bm & -bm
+        n = lsb.bit_length() - 1
+        positions.append((n % w, n // w))
+        bm ^= lsb
+    return positions
+
+
+def _emit_vis() -> None:
+    """Emit this unit's belief state. Each unit is sandboxed, so its
+    map_info globals reflect only what *it* has personally seen. In the
+    viewer, per-unit toggles show each bot's individual view of the world."""
+    w = map_info._width
+    total = w * map_info._height
+    board = map_info._board_mask
+
+    emit(
+        fog=BoolGrid(_bm_to_bool_grid(~map_info._bm_seen & board, total), palette=FOG),
+        conv_loaded=BoolGrid(_bm_to_bool_grid(map_info._bm_conv_loaded, total), palette=P_CONV_LOADED),
+        dead_end=BoolGrid(_bm_to_bool_grid(map_info._bm_dead_end, total), palette=P_DEAD_END),
+        conv_stuck=BoolGrid(_bm_to_bool_grid(map_info._bm_conv_stuck, total), palette=P_CONV_STUCK),
+        threat=BoolGrid(_bm_to_bool_grid((map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat), total), palette=P_THREAT),
+        turret_adj=BoolGrid(_bm_to_bool_grid(map_info._bm_enemy_launch_adj, total), palette=P_TURRET_ADJ),
+        friendly_bots=Tiles(_mask_positions(map_info._bm_friendly_bots, w)),
+        enemy_bots=Tiles(_mask_positions(map_info._bm_enemy_bots, w)),
+    )
+
 
 SPAWN_TURN = -2
 
@@ -145,6 +209,9 @@ class Player:
 
             if ENABLE_PROFILER and turn_profiler is not None:
                 turn_profiler.disable()
+
+            if ENABLE_VIS:
+                _emit_vis()
 
             end_time = time.perf_counter_ns()
             elapsed_us = end_time - start_time

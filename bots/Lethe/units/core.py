@@ -6,7 +6,7 @@ from log import log
 rc: Controller
 
 # --- Configurable ---
-SCALE_MULT = 0.7
+SCALE_MULT = 0.6
 
 
 def get_closest_titanium_tile() -> Position | None:
@@ -58,7 +58,7 @@ def _spawn_toward_center():
 
 
 def run():
-    # if rc.get_current_round() == 200:
+    # if rc.get_current_round() == 1500:
     #     rc.resign()
     round_num = rc.get_current_round()
     core_pos = rc.get_position()
@@ -76,7 +76,7 @@ def run():
 
     titanium, axionite = rc.get_global_resources()
     scaling = rc.get_scale_percent()
-    if scaling * SCALE_MULT + 200 < titanium:
+    if scaling * SCALE_MULT + 250 < titanium:
         _spawn_toward_center()
     if rc.get_current_round() < 1500 and titanium < 4 * rc.get_harvester_cost()[0]:
         # Idea: change this to axionite - 2 before final submission

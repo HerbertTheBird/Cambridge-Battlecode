@@ -72,27 +72,29 @@ def voronoi_claim(my_mask, others_mask, claims):
 
     my_front = my_mask & passable
     other_front = others_mask & passable
-    my_claimed = my_front
-    other_claimed = other_front
-    all_claimed = my_claimed | other_claimed
 
-    while (claims & ~all_claimed) and (my_front or other_front):
+    my_claimed = my_front
+    all_claimed = my_front | other_front
+    remaining = claims & ~all_claimed
+    c = 0
+    while remaining and (my_front or other_front) and c < 10:
+        c += 1
         if my_front:
             h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
-            my_expand = (h | (h << w) | (h >> w)) & passable & ~all_claimed
-            my_claimed |= my_expand
-            all_claimed |= my_expand
-            my_front = my_expand
-        if not (claims & ~all_claimed):
-            break
+            my_front = (h | (h << w) | (h >> w)) & passable & ~all_claimed
+            my_claimed |= my_front
+            all_claimed |= my_front
+            remaining = claims & ~all_claimed
+            if not remaining:
+                break
+
         if other_front:
             h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
-            other_expand = (h | (h << w) | (h >> w)) & passable & ~all_claimed
-            other_claimed |= other_expand
-            all_claimed |= other_expand
-            other_front = other_expand
+            other_front = (h | (h << w) | (h >> w)) & passable & ~all_claimed
+            all_claimed |= other_front
+            remaining = claims & ~all_claimed
 
-    return my_claimed & claims
+    return ~(all_claimed & ~my_claimed) & claims
 
 class Pathing:
 
@@ -305,18 +307,15 @@ class Pathing:
         width = self.width
         height = self.height
         if avoid is None:
-            avoid = map_info.get_avoid(False, True, False)
+            avoid = map_info.get_avoid(False, False, False)
         avoid &= ~start_mask
+        builders_mask = map_info._bm_friendly_bots | map_info._bm_enemy_bots
         my_team_idx = map_info._my_team_idx
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
         barriers &= ~start_mask
-        # builder.draw_mask(target_mask, 0, 255, 255)
-        # builder.draw_mask(avoid, 255, 0, 255)
-
-        # builder.draw_mask(barriers, 0, 0, 255)
         threat = map_info._bm_enemy_launch_adj
         if avoid_turret:
-            threat |= map_info._bm_enemy_turret_threat
+            threat |= (map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
         if threat & start_mask:
             threat &= ~start_mask
 
@@ -324,7 +323,6 @@ class Pathing:
                     | map_info._bm_conveyors
                     | map_info._bm_my_core_area
                     | map_info._bm_their_core_area)
-        nw_cost = 1
 
         start_time = time.perf_counter_ns()
 
@@ -334,31 +332,20 @@ class Pathing:
         board = map_info._board_mask
         not_avoid = board & ~avoid
 
-        wk = walkable & board
-        nw = ~walkable & board
+        # 4 combo masks: barrier/no-barrier x threat/no-threat
+        nb_nt = board & ~barriers & ~threat
+        b_nt  = board & barriers & ~threat
+        nb_t  = board & ~barriers & threat
+        b_t   = board & barriers & threat
 
-        # 8 combo masks: walkable/non-walkable x barrier/no-barrier x threat/no-threat
-        wk_nb_nt = wk & ~barriers & ~threat
-        wk_b_nt  = wk & barriers & ~threat
-        wk_nb_t  = wk & ~barriers & threat
-        wk_b_t   = wk & barriers & threat
-        nw_nb_nt = nw & ~barriers & ~threat
-        nw_b_nt  = nw & barriers & ~threat
-        nw_nb_t  = nw & ~barriers & threat
-        nw_b_t   = nw & barriers & threat
-
-        max_c = 1 + nw_cost + barrier_cost + threat_cost
-        max_seed = nw_cost + barrier_cost + threat_cost
-        cycle_len = max(max_c, max_seed) + 1
+        max_c = 1 + barrier_cost + threat_cost
+        max_seed = barrier_cost + threat_cost
+        cycle_len = (max(max_c, max_seed) + 1) * 2
         frontier = [0] * cycle_len
-        frontier[0]                                          = target_mask & wk_nb_nt
-        frontier[nw_cost % cycle_len]                       |= target_mask & nw_nb_nt
-        frontier[barrier_cost % cycle_len]                  |= target_mask & wk_b_nt
-        frontier[(nw_cost + barrier_cost) % cycle_len]      |= target_mask & nw_b_nt
-        frontier[threat_cost % cycle_len]                   |= target_mask & wk_nb_t
-        frontier[(nw_cost + threat_cost) % cycle_len]       |= target_mask & nw_nb_t
-        frontier[(barrier_cost + threat_cost) % cycle_len]  |= target_mask & wk_b_t
-        frontier[(nw_cost + barrier_cost + threat_cost) % cycle_len] |= target_mask & nw_b_t
+        frontier[0]                                         = target_mask & nb_nt
+        frontier[barrier_cost % cycle_len]                 |= target_mask & b_nt
+        frontier[threat_cost % cycle_len]                  |= target_mask & nb_t
+        frontier[(barrier_cost + threat_cost) % cycle_len] |= target_mask & b_t
 
         effective_len = max_seed + 1
         visited = 0
@@ -384,8 +371,6 @@ class Pathing:
                 vl_len = len(visited_layers)
 
                 extra_cost = 0
-                if start_bit & nw:
-                    extra_cost += nw_cost
                 if start_bit & barriers:
                     extra_cost += barrier_cost
                 if start_bit & threat:
@@ -403,20 +388,41 @@ class Pathing:
                 cur_edge_dist = min(cx, cy, w_minus_1 - cx, h_minus_1 - cy)
                 in_edge_band = cur_edge_dist < 4
 
-                best_key = (2, 2, 2, 3)
-                chosen_prev = None
+                # Scan neighbors, find lowest layer where tile is set
+                best_layer = -1
+                candidates = []
                 for dx, dy, step_cost in self._MOVE_OFFSETS:
+                    if dx == 0 and dy == 0:
+                        continue
                     px = cx - dx
                     py = cy - dy
                     if not (0 <= px < width and 0 <= py < height):
                         continue
-                    prev_layer = i - step_cost - extra_cost
-                    if prev_layer < 0 or prev_layer >= vl_len:
-                        continue
                     prev_bit = 1 << (py * width + px)
-                    if not (visited_layers[prev_layer] & prev_bit):
+                    if prev_bit & builders_mask:
                         continue
+                    if prev_bit & avoid:
+                        continue
+                    layer = -1
+                    start_l = (i - step_cost - extra_cost) % vl_len
+                    l = start_l
+                    while True:
+                        if visited_layers[l] & prev_bit:
+                            layer = l
+                            break
+                        if l == i:
+                            break
+                        l = (l + 1) % vl_len
+                    candidates.append((dx, dy, px, py, prev_bit, layer))
+                    if layer >= 0 and (best_layer < 0 or layer < best_layer):
+                        best_layer = layer
 
+                best_key = (2, 2, 2, 2, 3)
+                chosen_prev = None
+                for dx, dy, px, py, prev_bit, layer in candidates:
+                    if layer != best_layer:
+                        continue
+                    k_wk = 0 if (prev_bit & walkable) else 1
                     diag = dx != 0 and dy != 0
                     k0 = 0 if diag else 1
 
@@ -433,7 +439,7 @@ class Pathing:
                         else:
                             k3 = 2
 
-                    key = (k0, k1, k2, k3)
+                    key = (k_wk, k0, k1, k2, k3)
                     if key < best_key:
                         best_key = key
                         chosen_prev = Position(px, py)
@@ -457,14 +463,10 @@ class Pathing:
             expanded = h | (h << w) | (h >> w)
             new = expanded & not_avoid & ~visited
 
-            frontier[(i + 1) % cycle_len]                                      |= new & wk_nb_nt
-            frontier[(i + 1 + nw_cost) % cycle_len]                             |= new & nw_nb_nt
-            frontier[(i + 1 + barrier_cost) % cycle_len]                        |= new & wk_b_nt
-            frontier[(i + 1 + nw_cost + barrier_cost) % cycle_len]              |= new & nw_b_nt
-            frontier[(i + 1 + threat_cost) % cycle_len]                         |= new & wk_nb_t
-            frontier[(i + 1 + nw_cost + threat_cost) % cycle_len]               |= new & nw_nb_t
-            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]          |= new & wk_b_t
-            frontier[(i + 1 + nw_cost + barrier_cost + threat_cost) % cycle_len] |= new & nw_b_t
+            frontier[(i + 1) % cycle_len]                                     |= new & nb_nt
+            frontier[(i + 1 + barrier_cost) % cycle_len]                       |= new & b_nt
+            frontier[(i + 1 + threat_cost) % cycle_len]                        |= new & nb_t
+            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]         |= new & b_t
             i += 1
 
     def bfs_route(self, start_mask: int, target_mask: int, avoid: int | None = None, end_cost_mask: int = 0):
@@ -614,7 +616,7 @@ class Pathing:
             target_set = target
         if target_set != self.target_p:
             self.forget_launcher.clear()
-        avoid = map_info.get_avoid(False, True, False)
+        avoid = map_info.get_avoid(False, False, False)
         if avoid_empty:
             avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = map_info._my_pos
@@ -651,10 +653,10 @@ class Pathing:
     def calculate_conveyor_path(self, start_x: int, start_y: int, raw_axionite: bool, update: bool = False):
         log("conveyors from ", start_x, start_y, raw_axionite)
         w = self.width
-        if update:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start_x + start_y * map_info._width)
-        else:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
+        start_n = start_x + start_y * w
+        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start_n)
+        # Conveyors pointing into `start` are legitimate route starts; unmask them.
+        avoid &= ~map_info._conv_reverse[start_n]
         if not target:
             return None
         if not update:
@@ -666,15 +668,16 @@ class Pathing:
             if start_mask == 0:
                 return None
         else:
-            start_mask = 1 << (map_info._building_conv_target[start_x + start_y * w])
-        end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
-        result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
+            # Stable semantic: start from conveyor's output tile
+            start_mask = 1 << (map_info._building_conv_target[start_n])
+        if raw_axionite:
+            end_cost_mask = self.raw_ax_foundry_sites() & ~map_info._bm_et[map_info._IDX_FOUNDRY]
+            result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
+        else:
+            result = self.bfs_route(start_mask, target, avoid)
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        # if DRAW_DEBUG:
-        #     self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-        #     self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):
@@ -718,27 +721,36 @@ class Pathing:
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
         return (adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
 
-    def _get_conveyor_targets_and_avoid(
-        self, raw_axionite: bool, conveyor = None
-    ):
+    def _get_conveyor_targets_and_avoid(self, raw_axionite: bool, from_route: int = 0):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
             ti_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
+            avoid &= ~(1 << from_route)
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
-            if conveyor:
-                avoid &= ~(1<<map_info._building_conv_target[conveyor])
-                target &= ~(1<<conveyor)
+            # Existing allied foundries are free endpoints — seed at cost 0.
+            target |= map_info._bm_et[map_info._IDX_FOUNDRY] & map_info._bm_team[map_info._my_team_idx]
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
-            target = (map_info._bm_route_targets & ~map_info._bm_conv_raw_ax) | map_info._bm_my_core_area
+            target = (map_info._bm_route_targets & (map_info._bm_conv_ti | map_info._bm_conv_refined)) | map_info._bm_my_core_area
             target &= ~ax_harvesters
+            avoid &= ~(1 << from_route)
             avoid |= ax_harvesters
+            # Ti/refined chains must not run cardinally adjacent to axionite ore.
+            ax_ore = map_info._bm_env[map_info._IDX_ENV_ORE_AX]
+            if ax_ore:
+                w = map_info._width
+                all_ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI] | ax_ore
+                nrc = map_info._not_right_col
+                nlc = map_info._not_left_col
+                landlocked = (all_ore
+                              & (all_ore >> 1 & nrc)
+                              & (all_ore << 1 & nlc)
+                              & (all_ore >> w)
+                              & (all_ore << w))
+                avoid |= map_info.expand_manhattan(ax_ore & ~landlocked)
             if not target:
                 return 0, 0
-            if conveyor:
-                avoid &= ~(1<<map_info._building_conv_target[conveyor])
-                target &= ~(1<<conveyor)
             return target, avoid

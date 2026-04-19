@@ -11,6 +11,7 @@ skipped_firing_turns: int = 0
 
 # --- Ported from dragonfruit/globals.py ---
 TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
+CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
 INF = 999999
 
@@ -137,10 +138,13 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
             if not map_info.in_bounds(cur):
                 break
 
-            if map_info.ground_at(x, y):
+            if map_info.ground_at(x, y) == Environment.WALL:
                 break
 
             threat_tiles.add(cur)
+
+            if not rc.is_in_vision(cur):
+                continue
 
             bbid = rc.get_tile_builder_bot_id(cur)
             if bbid is not None:
@@ -201,10 +205,43 @@ def get_enemy_units():
 
     return enemy_units
 
+def _get_loaders(pos):
+    """Return list of direction indices (0-7) from pos toward buildings that feed it."""
+    w = map_info._width
+    h = map_info._height
+    px, py = pos.x, pos.y
+    pos_n = px + py * w
+    loaders = []
+
+    harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
+    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]
+                 | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
+
+    # Cardinal-adjacent harvesters
+    for di, (dx, dy) in zip([0, 2, 4, 6], [(0, -1), (1, 0), (0, 1), (-1, 0)]):
+        nx, ny = px + dx, py + dy
+        if 0 <= nx < w and 0 <= ny < h:
+            if harvesters & (1 << (nx + ny * w)):
+                loaders.append(di)
+
+    # Any neighbor conveyor whose output targets this tile
+    for di in range(8):
+        dx, dy = map_info._DIR_VECS[di]
+        nx, ny = px + dx, py + dy
+        if 0 <= nx < w and 0 <= ny < h:
+            nn = nx + ny * w
+            if (conveyors & (1 << nn)) and map_info._building_conv_target[nn] == pos_n:
+                if di not in loaders:
+                    loaders.append(di)
+
+    return loaders
+
 def choose_rotate_dir(enemies) -> Direction | None:
     current_dir = rc.get_direction()
     rotate_dir = None
     rotate_dist = INF
+    blocked_dirs = _get_loaders(my_pos)
+    can_face_any_dir = len(blocked_dirs) >= 2
 
     for (eid, etype, tpos, team) in enemies:
         if etype not in TURRET_TYPES:
@@ -220,12 +257,39 @@ def choose_rotate_dir(enemies) -> Direction | None:
 
         if desired_dir == current_dir:
             continue
+        if not can_face_any_dir and desired_dir in blocked_dirs:
+            continue
 
         if dist < rotate_dist:
             rotate_dist = dist
             rotate_dir = desired_dir
 
     return rotate_dir
+
+def choose_builder_bot_rotate_dir() -> Direction | None:
+    """Rotates towards adjacent enemy builder bots on allied conveyors."""
+    for d in tuple(Direction):
+        adj_pos = map_info.pos_add(my_pos, d)
+        if not map_info.in_bounds(adj_pos):
+            continue
+
+        bot_id = rc.get_tile_builder_bot_id(adj_pos)
+        if bot_id is None or rc.get_team(bot_id) == my_team:
+            continue
+
+        # Check if on allied conveyor or bridge
+        building_id = rc.get_tile_building_id(adj_pos)
+        if building_id is None:
+            continue
+
+        b_type = rc.get_entity_type(building_id)
+        b_team = rc.get_team(building_id)
+
+        if b_team == my_team and (b_type in {EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.ARMOURED_CONVEYOR}):
+             # Rotate towards them
+             return my_pos.direction_to(adj_pos)
+    
+    return None
 
 # --- Ported and adapted from dragonfruit/units/gunner/run.py ---
 def run():
@@ -244,10 +308,13 @@ def run():
     elif rc.get_global_resources()[0] >= 60:
         rotate_dir = choose_rotate_dir(enemies)
 
+        if rotate_dir is None:
+            rotate_dir = choose_builder_bot_rotate_dir()
+
         if rotate_dir is not None and rc.can_rotate(rotate_dir):
             rc.rotate(rotate_dir)
             skipped_firing_turns = 0
-            log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+            log(f"gunner rotated: {rotate_dir}")
 
     if rc.get_action_cooldown() == 0:
         skipped_firing_turns += 1
@@ -256,5 +323,19 @@ def run():
         if len(enemies) > 0:
             last_fired_round = rc.get_current_round()
             skipped_firing_turns -= 1
-        if (rc.get_scale_percent() > 500 or skipped_firing_turns >= 32):
+        if (rc.get_scale_percent() > 500 or skipped_firing_turns >= 32) and not _should_stay():
             rc.self_destruct()
+
+def _should_stay():
+    my_pos = rc.get_position()
+    my_team = map_info._my_team
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(my_pos.x + dx, my_pos.y + dy)
+        if map_info.in_bounds(p):
+            bid = rc.get_tile_building_id(p)
+            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+                return True
+            bot_id = rc.get_tile_builder_bot_id(p)
+            if bot_id and rc.get_team(bot_id) != my_team:
+                return True
+    return False
