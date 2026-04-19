@@ -37,13 +37,13 @@ SPAWN_TURN = -2
 class Player:
     def __init__(self):
         self.initialized = False
+        self.profiled_turn_count = 0
+        self.timeout_count = 0
         self.me: ModuleType
 
         if ENABLE_PROFILER:
             self.profiler_path = None
             self.accumulated_stats: pstats.Stats | None = None
-            self.profiled_turn_count = 0
-            self.timeout_count = 0
 
     def _prepare_profile_dir(self, c: Controller) -> None:
         if not (ENABLE_PROFILER or ENABLE_COMMS_STATS):
