@@ -55,8 +55,11 @@ def run_gauntlet(
     for opp in opponents:
         h2h[(main_bot, opp)] = HeadToHead(bot_a=main_bot, bot_b=opp)
         for map_path in maps:
-            for seed in seeds:
-                jobs.append((main_bot, opp, map_path, seed))
+            for i, seed in enumerate(seeds):
+                if i % 2 == 0:
+                    jobs.append((main_bot, opp, map_path, seed))
+                else:
+                    jobs.append((opp, main_bot, map_path, seed))
 
     total_matches = len(jobs)
     print(f"Gauntlet: {main_bot} vs {len(opponents)} opponent(s), {len(maps)} maps, {len(seeds)} seed(s)")
