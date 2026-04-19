@@ -106,7 +106,7 @@ class Player:
     def run(self, c: Controller) -> None:
         global SPAWN_TURN
         
-        # if c.get_current_round()  >= 200:
+        # if c.get_current_round()  >= 500:
         #     c.resign()
 
         if not self.initialized:
