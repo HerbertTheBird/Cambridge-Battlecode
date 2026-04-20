@@ -12,7 +12,7 @@ _WEIGHTS = {
     EntityType.BREACH: 60,
     EntityType.SENTINEL: 50,
     EntityType.LAUNCHER: 10,
-    EntityType.HARVESTER: 35,
+    EntityType.HARVESTER: 0,
     EntityType.BUILDER_BOT: 15,
     EntityType.GUNNER: 40,
     EntityType.FOUNDRY: 55,
@@ -136,7 +136,7 @@ def run():
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
         if _no_ammo_turns >= 10 and not _should_stay():
-            rc.self_destruct()
+            # rc.self_destruct()
             return
     else:
         _no_ammo_turns = 0
@@ -163,8 +163,8 @@ def run():
             best_target = tile
 
     if best_target is None:
-        if not _should_stay():
-            rc.self_destruct()
+        # if not _should_stay():
+        #     rc.self_destruct()
         return
 
     rc.fire(best_target)

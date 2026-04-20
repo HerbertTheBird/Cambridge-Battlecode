@@ -21,27 +21,27 @@ def init(c: Controller):
 
 
 def _conv_zone():
-    return units.builder._harvest_zone
-    # """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
-    # my_team_idx = map_info._my_team_idx
-    # my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
-    # my_convs |= map_info._bm_my_core_area
-    # if not my_convs:
-    #     return 0
-    # w = map_info._width
-    # board = (1 << (w * map_info._height)) - 1
-    # avoid = map_info._bm_blocked
-    # passable = ~avoid & board
-    # nlc = map_info._not_left_col
-    # nrc = map_info._not_right_col
-    # visited = my_convs
-    # frontier = my_convs
-    # for _ in range(CONV_CHASE_CHEB):
-    #     h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-    #     expanded = h | (h << w) | (h >> w)
-    #     frontier = expanded & passable & ~visited
-    #     visited |= frontier
-    # return visited
+    # return units.builder._harvest_zone
+    """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
+    my_team_idx = map_info._my_team_idx
+    my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    my_convs |= map_info._bm_my_core_area
+    if not my_convs:
+        return 0
+    w = map_info._width
+    board = (1 << (w * map_info._height)) - 1
+    avoid = map_info._bm_blocked
+    passable = ~avoid & board
+    nlc = map_info._not_left_col
+    nrc = map_info._not_right_col
+    visited = my_convs
+    frontier = my_convs
+    for _ in range(CONV_CHASE_CHEB):
+        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+        expanded = h | (h << w) | (h >> w)
+        frontier = expanded & passable & ~visited
+        visited |= frontier
+    return visited
 
 
 def _claimed_enemy_ids():

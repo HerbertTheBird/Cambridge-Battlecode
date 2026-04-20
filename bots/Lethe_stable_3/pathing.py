@@ -314,8 +314,8 @@ class Pathing:
         if avoid_turret:
             threat |= map_info._bm_enemy_turret_threat
         threat &= ~start_mask
-        builder.draw_mask(target_mask, 0, 255, 255)
-        builder.draw_mask(avoid, 255, 0, 255)
+        # builder.draw_mask(target_mask, 0, 255, 255)
+        # builder.draw_mask(avoid, 255, 0, 255)
 
         # builder.draw_mask(barriers, 0, 0, 255)
 

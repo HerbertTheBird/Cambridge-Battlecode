@@ -170,7 +170,8 @@ _conv_reverse: list[int] = []   # reverse[tn] = bitmask of my conveyors whose ou
 _bm_et: list[int] = []      # one bitmask per EntityType
 _bm_team: list[int] = []    # one bitmask per Team
 _bm_env: list[int] = []     # one bitmask per Environment
-_bm_seen: int = 0           # seen tiles
+_bm_seen: int = 0           # seen tiles (observed OR derived via symmetry)
+_bm_seen_observed: int = 0  # seen tiles (directly observed only)
 _bm_any_building: int = 0   # union of all tracked building bitmasks
 
 # Derived bitmasks
@@ -189,7 +190,12 @@ _bm_conv_refined: int = 0       # conveyors observed containing refined axionite
 _bm_ti_fed: int = 0             # targets of conveyors believed to carry titanium
 _bm_ax_fed: int = 0             # targets of conveyors believed to carry refined axionite
 _bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
-_bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot
+_bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot (soft | hard), kept for back-compat
+_bm_enemy_soft_threat: int = 0    # tiles enemy sentinels can shoot (low dps)
+_bm_enemy_hard_threat: int = 0    # tiles enemy gunners/breaches can shoot (high dps)
+_bm_my_gunner_claims: int = 0     # tiles already covered by one of my gunners' current ray
+_bm_conv_by_dir: list[int] = []   # per facing (0..7): CONVEYOR|ARMOURED_CONVEYOR tiles facing that direction
+_board_mask: int = 0              # (1 << (w*h)) - 1, cached
 _bm_visible: int = 0              # tiles visible this turn
 _nearby_tiles: list = []           # cached rc.get_nearby_tiles() for this round
 _nearby_tiles_pos = None           # position at which _nearby_tiles was computed
@@ -416,23 +422,29 @@ def turret_attack_mask(pos_n: int, dir_idx: int, turret_type: int) -> int:
     return result
 
 
-def _compute_enemy_turret_threat() -> int:
-    """Compute aggregate bitmask of all tiles enemy turrets can attack.
-    Uses bitmask shifting for breach/sentinel (no wall blocking).
-    Uses per-turret ray for gunner (wall blocking)."""
+def _compute_enemy_turret_threat() -> tuple[int, int]:
+    """Compute (soft, hard) threat bitmasks.
+
+    Soft: sentinels (low dps).
+    Hard: gunners + breaches (high dps).
+
+    Sentinel/breach use bitmask shifting (no wall blocking).
+    Gunner uses per-turret ray in current facing only (wall blocking)."""
     w = _width
     h = _height
     enemy_idx = 1 - _my_team_idx
-    threat = 0
+    soft = 0
+    hard = 0
     building_dir = _building_dir
     bm_team_enemy = _bm_team[enemy_idx]
 
-    # Breach + Sentinel: aggregate with bitmask shifting per direction
-    for turret_idx, offsets_table in ((_IDX_BREACH, _BREACH_OFFSETS), (_IDX_SENTINEL, _SENTINEL_OFFSETS)):
+    for turret_idx, offsets_table, is_hard in (
+        (_IDX_SENTINEL, _SENTINEL_OFFSETS, False),
+        (_IDX_BREACH, _BREACH_OFFSETS, True),
+    ):
         turrets = _bm_et[turret_idx] & bm_team_enemy
         if not turrets:
             continue
-        # Split turrets by direction
         dir_masks = [0] * 8
         m = turrets
         while m:
@@ -441,6 +453,7 @@ def _compute_enemy_turret_threat() -> int:
             di = building_dir[n]
             dir_masks[di] |= lsb
             m ^= lsb
+        acc = 0
         for di in range(8):
             dm = dir_masks[di]
             if not dm:
@@ -451,11 +464,14 @@ def _compute_enemy_turret_threat() -> int:
                     continue
                 offset = dx + dy * w
                 if offset > 0:
-                    threat |= (dm & shift_mask) << offset
+                    acc |= (dm & shift_mask) << offset
                 else:
-                    threat |= (dm & shift_mask) >> (-offset)
+                    acc |= (dm & shift_mask) >> (-offset)
+        if is_hard:
+            hard |= acc
+        else:
+            soft |= acc
 
-    # Gunner: per-turret, all 8 rays (wall blocking)
     gunners = _bm_et[_IDX_GUNNER] & bm_team_enemy
     if gunners:
         walls = _bm_env[_IDX_ENV_WALL]
@@ -465,18 +481,63 @@ def _compute_enemy_turret_threat() -> int:
             n = lsb.bit_length() - 1
             px = n % w
             py = n // w
-            for ray_di in range(8):
-                for dx, dy in _GUNNER_RAYS[ray_di]:
-                    nx, ny = px + dx, py + dy
-                    if not (0 <= nx < w and 0 <= ny < h):
-                        break
-                    bit = 1 << (nx + ny * w)
-                    if walls & bit:
-                        break
-                    threat |= bit
+            di = building_dir[n]
+            for dx, dy in _GUNNER_RAYS[di]:
+                nx, ny = px + dx, py + dy
+                if not (0 <= nx < w and 0 <= ny < h):
+                    break
+                bit = 1 << (nx + ny * w)
+                if walls & bit:
+                    break
+                hard |= bit
             m ^= lsb
 
-    return threat
+    return soft, hard
+
+
+def _compute_my_gunner_claims() -> int:
+    """Bitmask of tiles already covered by one of my gunners' current ray."""
+    w = _width
+    h = _height
+    gunners = _bm_et[_IDX_GUNNER] & _bm_team[_my_team_idx]
+    if not gunners:
+        return 0
+    walls = _bm_env[_IDX_ENV_WALL]
+    building_dir = _building_dir
+    claims = 0
+    m = gunners
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        px = n % w
+        py = n // w
+        di = building_dir[n]
+        for dx, dy in _GUNNER_RAYS[di]:
+            nx, ny = px + dx, py + dy
+            if not (0 <= nx < w and 0 <= ny < h):
+                break
+            bit = 1 << (nx + ny * w)
+            if walls & bit:
+                break
+            claims |= bit
+        m ^= lsb
+    return claims
+
+
+def _compute_conv_by_dir() -> list[int]:
+    """Per facing (0..7): CONVEYOR|ARMOURED_CONVEYOR tiles with that output direction."""
+    result = [0] * 8
+    bd = _building_dir
+    convs = _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
+    m = convs
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        d = bd[n]
+        if 0 <= d < 8:
+            result[d] |= lsb
+        m ^= lsb
+    return result
 
 
 def update_at(pos: Position) -> None:
@@ -659,11 +720,11 @@ def init(c: Controller):
     global _rc, _width, _height
     global _my_team, _my_team_idx
     global _building_id, _building_et_idx, _building_hp, _building_dir, _building_conv_target, _conv_reverse
-    global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_any_building
+    global _bm_et, _bm_team, _bm_env, _bm_seen, _bm_seen_observed, _bm_any_building
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
     global _bm_my_core_area, _bm_their_core_area, _bm_enemy_launch_adj
     global _not_left_col, _not_right_col, _not_left_col_2, _not_right_col_2, _not_left_col_3, _not_right_col_3
-    global _MAP_CENTER
+    global _MAP_CENTER, _board_mask, _bm_conv_by_dir
     _rc = c
     _my_team = _rc.get_team()
     _my_team_idx = _TM_INT[_my_team]
@@ -671,6 +732,7 @@ def init(c: Controller):
     _height = _rc.get_map_height()
     _MAP_CENTER = Position(_width // 2, _height // 2)
     tiles = _width * _height
+    _board_mask = (1 << tiles) - 1
     _building_id          = [0] * tiles
     _building_et_idx      = [-1] * tiles
     _building_hp          = [0] * tiles
@@ -682,10 +744,12 @@ def init(c: Controller):
     _bm_team = [0] * _NUM_TEAM
     _bm_env  = [0] * _NUM_ENV
     _bm_seen = 0
+    _bm_seen_observed = 0
     _bm_any_building = 0
     _bm_blocked = 0
     _bm_conveyors = 0
     _bm_conveyor_targets = 0
+    _bm_conv_by_dir = [0] * 8
 
     # Column masks for safe bit-shifting (prevent wrap-around)
     left_col = 0
@@ -951,7 +1015,8 @@ def recompute_derived() -> None:
     """Rebuild derived bitmasks from the current tracked map state."""
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_ti_fed, _bm_ax_fed
     global _bm_enemy_launch_adj, _bm_routable, _bm_route_targets
-    global _bm_enemy_turret_threat, _bm_harv_adj
+    global _bm_enemy_turret_threat, _bm_enemy_soft_threat, _bm_enemy_hard_threat
+    global _bm_my_gunner_claims, _bm_conv_by_dir, _bm_harv_adj
 
     width = _width
     height = _height
@@ -1019,7 +1084,14 @@ def recompute_derived() -> None:
         mask ^= lsb
 
     # Enemy turret threat
-    _bm_enemy_turret_threat = _compute_enemy_turret_threat()
+    _bm_enemy_soft_threat, _bm_enemy_hard_threat = _compute_enemy_turret_threat()
+    _bm_enemy_turret_threat = _bm_enemy_soft_threat | _bm_enemy_hard_threat
+
+    # My gunner coverage (for attack scoring)
+    _bm_my_gunner_claims = _compute_my_gunner_claims()
+
+    # Conveyor masks by facing direction (for attack placement candidates)
+    _bm_conv_by_dir = _compute_conv_by_dir()
 
     # Harvester adjacency (for _is_bad_marker_spot)
     harv = bm_et[_IDX_HARVESTER]
@@ -1030,7 +1102,7 @@ def update(recompute: bool = True) -> None:
     global _hor_sym, _ver_sym, _rot_sym
     global _rush_tiebroken, _predicted_enemy_core
     global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_enemy_launch_adj, _bm_routable, _bm_route_targets, _bm_conv_loaded, _bm_conv_raw_ax, _bm_conv_ti, _bm_conv_refined, _bm_dead_end, _bm_enemy_turret_threat, _bm_damaged, _bm_very_damaged, _conv_reverse, _bm_any_building
-    global _bm_seen, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
+    global _bm_seen, _bm_seen_observed, _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
     global _bm_friendly_bots, _bm_enemy_bots
     global _bm_others_5x5, _bm_others_3x3
     global _max_id_seen
@@ -1046,6 +1118,7 @@ def update(recompute: bool = True) -> None:
     bm_team = _bm_team
     bm_env = _bm_env
     bm_seen = _bm_seen
+    bm_seen_observed = _bm_seen_observed
     bm_conv_loaded = 0
     bm_conv_raw_ax = _bm_conv_raw_ax
     bm_conv_ti = _bm_conv_ti
@@ -1093,6 +1166,7 @@ def update(recompute: bool = True) -> None:
         y = tile.y
         n = x+y*width
         bit = 1 << n
+        bm_seen_observed |= bit
         if not (bm_seen & bit):
             env = rc_get_tile_env(tile)
             env_idx = _ENV_INT[env]
@@ -1286,6 +1360,7 @@ def update(recompute: bool = True) -> None:
 
     # Write back bm_seen to global (int is immutable, local was a copy)
     _bm_seen = bm_seen
+    _bm_seen_observed = bm_seen_observed
 
     possible_syms = int(_hor_sym) + int(_ver_sym) + int(_rot_sym)
     if possible_syms == 1 and not _solved_sym:
@@ -1455,12 +1530,22 @@ def update(recompute: bool = True) -> None:
 
 
 def is_tile_empty(pos: Position):
-    if not in_bounds(pos): 
+    if not in_bounds(pos):
         return False
-    if _rc.is_tile_empty(pos): 
+    if _rc.is_tile_empty(pos):
         return True
     bid = _rc.get_tile_building_id(pos)
     return bid is not None and _rc.get_entity_type(bid) is EntityType.MARKER
+
+
+def has_builder_bot(pos: Position, include_self: bool = False) -> bool:
+    if not in_bounds(pos):
+        return False
+    if include_self and pos == _my_pos:
+        return True
+    n = pos.x + pos.y * _width
+    bit = 1 << n
+    return bool((_bm_friendly_bots | _bm_enemy_bots) & bit)
 
 def can_place_at_restrictive(pos: Position):
     if not in_bounds(pos): 
