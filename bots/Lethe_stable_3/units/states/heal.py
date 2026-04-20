@@ -10,7 +10,7 @@ nav: Pathing = None
 
 comm_flag = 7
 
-CONV_CHASE_CHEB = 8
+CONV_CHASE_CHEB = 4
 ID_MASK = (1 << 12) - 1
 
 
@@ -79,7 +79,7 @@ def _find_chase_target():
             # if (uid & ID_MASK) not in claimed:
             #     filtered |= lsb
             # else:
-            nearby_friendly = map_info.expand_chebyshev(lsb) & other_friendly
+            nearby_friendly = map_info.expand_chebyshev(map_info.expand_chebyshev(lsb)) & other_friendly
             if not nearby_friendly:
                 filtered |= lsb
         mask ^= lsb

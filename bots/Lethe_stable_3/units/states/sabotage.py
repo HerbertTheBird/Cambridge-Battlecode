@@ -92,7 +92,7 @@ def _my_claims():
 
 MAX_SCORE = 5
 def score():
-    return 5 if _my_claims() else 0
+    return 0 if _my_claims() else 0
 
 def run():
     log("SABOTAGE")
