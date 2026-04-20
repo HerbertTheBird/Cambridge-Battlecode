@@ -211,7 +211,6 @@ def run():
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
-        print("PATH", path)
         if path is None:
             unpathable |= best_bit
             return

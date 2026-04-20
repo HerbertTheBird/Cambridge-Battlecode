@@ -139,7 +139,6 @@ def run():
             cant_harvest |= pbit
             continue
         cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
-        print("diagonal ore at", p, "cost", cost)
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
