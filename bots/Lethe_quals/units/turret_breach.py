@@ -1,7 +1,7 @@
 from cambc import Controller, Position, Team
 
 import map_info
-from log import log
+
 
 rc: Controller = None
 my_pos: Position = None

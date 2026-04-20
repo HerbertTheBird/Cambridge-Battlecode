@@ -1,15 +1,9 @@
-from cambc import Controller, Position, Direction, EntityType, Environment, GameError
-
-from enum import Enum
-import random
-import sys
+from cambc import Controller, Position
 
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-import comms_positional
-import comms_stats
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
@@ -19,8 +13,6 @@ import units.states.route    as route
 import units.states.heal     as heal
 import units.states.sabotage as sabotage
 import units.states.attack   as attack
-
-from log import DRAW_DEBUG, log
 
 
 rc: Controller
@@ -33,8 +25,6 @@ def init(c: Controller):
     rc = c
     nav = Pathing(c)
     harvest_radius = (c.get_map_width() + c.get_map_height()) // 3
-    if comms_stats.is_enabled():
-        comms_stats.init(c)
     for s in states:
         s.init(c)
     states.sort(key=lambda s: s.MAX_SCORE, reverse=True)
@@ -134,7 +124,6 @@ def register_active_target(flag: int, target: Position | None):
 
 def handle_comms():
     current_round = rc.get_current_round()
-    comms_positional.start_round_stats()
     w = map_info._width
     for v, sender_pos, _marker_pos, _marker_id, estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
@@ -158,12 +147,6 @@ def handle_comms():
             if idx in _sender_rounds[i] and _sender_rounds[i][idx] + 3 < current_round:
                 del _sender_rounds[i][idx]
                 claimed_senders[i] &= ~(1 << idx)
-    comms_positional.flush_round_stats(current_round)
-def draw_mask(mask, r, g, b):
-    if not DRAW_DEBUG:
-        return
-    for p in map_info.iter_mask(mask):
-        rc.draw_indicator_dot(p, r, g, b)
 
 _harvest_zone_final = False
 

@@ -1,7 +1,7 @@
 from cambc import Controller, Direction, Position, EntityType
 import map_info
-from log import log
-from units.spawn_plan import choose_spawn_plan, draw_spawn_plan, INITIAL_SPAWN_COUNT, INITIAL_EXPLORE_MAX_STEPS
+
+from units.spawn_plan import choose_spawn_plan, INITIAL_SPAWN_COUNT
 
 rc: Controller
 
@@ -73,11 +73,7 @@ def run():
     core_pos = rc.get_position()
     if _spawn_plan is None:
         _spawn_plan = choose_spawn_plan(rc, core_pos, INITIAL_SPAWN_COUNT)
-    if rc.get_current_round() <= INITIAL_SPAWN_COUNT + INITIAL_EXPLORE_MAX_STEPS:
-        draw_spawn_plan(rc, core_pos, _spawn_plan, rc.get_map_width(), rc.get_map_height())
-
-    # if rc.get_current_round() == 400:
-    #     rc.resign()
+        
     titanium = rc.get_global_resources()[0]
     axionite = rc.get_global_resources()[1]
     scaling = rc.get_scale_percent()

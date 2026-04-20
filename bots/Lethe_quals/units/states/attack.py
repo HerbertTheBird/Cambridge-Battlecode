@@ -5,7 +5,7 @@ import pathing
 from pathing import Pathing
 import comms
 import units.builder
-from log import DRAW_DEBUG, log
+
 
 
 rc: Controller = None
@@ -382,16 +382,16 @@ def get_best_direction(pos):
 
     directions = map_info._DIRECTIONS
 
-    log("AT POSITION", pos)
+    pass # log("AT POSITION", pos)
 
     # Sentinel: best valid-placement direction at pos.
     best_s_dir, best_s_score = Direction.NORTH, -1
     for d in range(8):
         if not (sentinel_masks[d] & bit):
-            log("  SENT", directions[d], "not a valid placement")
+            pass # log("  SENT", directions[d], "not a valid placement")
             continue
         s = _read_score(sent_planes_by_dir[d], n)
-        log("  SENT", directions[d], "score", s)
+        pass # log("  SENT", directions[d], "score", s)
         if s > best_s_score:
             best_s_score = s
             best_s_dir = directions[d]
@@ -402,7 +402,7 @@ def get_best_direction(pos):
     for d in range(8):
         gunner_any |= gunner_masks[d]
     gunner_placeable = bool(gunner_any & bit)
-    log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
+    pass # log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
 
     if not gunner_placeable or best_s_score >= gun_sum:
         return best_s_dir, EntityType.SENTINEL, best_s_score
@@ -411,10 +411,10 @@ def get_best_direction(pos):
     best_g_dir, best_g_score = Direction.NORTH, -1
     for d in range(8):
         if not (gunner_masks[d] & bit):
-            log("  GUN", directions[d], "not a valid placement")
+            pass # log("  GUN", directions[d], "not a valid placement")
             continue
         g = _read_score(gun_planes_by_dir[d], n)
-        log("  GUN", directions[d], "score", g)
+        pass # log("  GUN", directions[d], "score", g)
         if g > best_g_score:
             best_g_score = g
             best_g_dir = directions[d]
@@ -674,10 +674,6 @@ def _ensure_round_cache():
     _round_cache_gunner_planes = None
     _round_cache_gunner_sum = None
     _round_cache_attack_candidates = _get_attack_candidates()
-    if DRAW_DEBUG:
-        preferred, fallback = _round_cache_attack_candidates
-        if preferred | fallback:
-            _draw_attack_candidates(preferred | fallback)
 
 
 def _ensure_score_planes():
@@ -698,38 +694,6 @@ def _ensure_score_planes():
         enemy_team_bm, threat, gunner_masks
     )
 
-
-# ---------------------------------------------------------------------------
-# Debug drawing
-# ---------------------------------------------------------------------------
-
-def _draw_attack_candidates(filtered):
-    """Debug: for each filtered attack candidate tile, draw what run() would
-    pick. Sentinel wins → white length-1 line in its facing direction. Gunner
-    wins → red dot."""
-    w = map_info._width
-    h = map_info._height
-    dir_deltas = map_info._DIRECTION_DELTAS
-    m = filtered
-    while m:
-        lsb = m & -m
-        n = lsb.bit_length() - 1
-        x, y = n % w, n // w
-        direction, turret_type, score = get_best_direction(Position(x, y))
-        print(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
-        dx, dy = dir_deltas[direction]
-        ex, ey = x + dx, y + dy
-        if turret_type == EntityType.GUNNER:
-            r = 255
-            g = 0
-            b = 0
-        else:
-            r = 0
-            g = 0
-            b = 255
-        if 0 <= ex < w and 0 <= ey < h:
-            rc.draw_indicator_line(Position(x, y), Position(ex, ey), r, g, b)
-        m ^= lsb
 
 # ---------------------------------------------------------------------------
 # Claims + state hooks
@@ -760,7 +724,7 @@ def score():
 
 def run():
     global cant_attack
-    log("ATTACK")
+    pass # log("ATTACK")
     preferred, fallback = _cached_claims
 
     if not preferred and not fallback:
@@ -784,7 +748,7 @@ def run():
     best_id = map_info._building_id[best_n]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
 
-    log(f"Attack: best={best}, dir={direction}, type={turret_type}, fallback={is_fallback}")
+    pass # log(f"Attack: best={best}, dir={direction}, type={turret_type}, fallback={is_fallback}")
 
     zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * width)
     zone = map_info.expand_chebyshev(zone)
@@ -808,7 +772,7 @@ def run():
         nav.move_adjacent(best)
         if best_id and is_mine:
             if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
-                log(f"Attack destroy own building at {best}")
+                pass # log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)
 

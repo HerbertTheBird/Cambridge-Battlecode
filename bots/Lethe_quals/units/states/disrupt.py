@@ -4,7 +4,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -40,7 +40,7 @@ def score():
     return 2 if _my_claims() else 0
 
 def run():
-    log("DISRUPT")
+    pass # log("DISRUPT")
     available = _my_claims()
     if not available:
         return

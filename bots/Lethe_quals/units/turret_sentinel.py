@@ -1,6 +1,6 @@
 from cambc import Controller, Position, EntityType, Direction
 import map_info
-from log import log
+
 
 rc = None
 _no_ammo_turns = 0
@@ -117,7 +117,6 @@ def _prune_conveyor_targets(target_positions):
                 if conv_pos not in invalid_sabotage_locations:
                     front_positions.append(conv_pos)
                     invalid_sabotage_locations.add(conv_pos)
-                    # rc.draw_indicator_dot(conv, 0, 0, 255)
 
             # Propagate up conveyor chain
             for _ in range(4):
@@ -130,7 +129,6 @@ def _prune_conveyor_targets(target_positions):
                         if conv_pos not in invalid_sabotage_locations:
                             new_front.append(conv_pos)
                             invalid_sabotage_locations.add(conv_pos)
-                            # rc.draw_indicator_dot(conv, 0, 0, 255)
                 front_positions = new_front
 
     # Prune targets that are in invalid_sabotage_locations

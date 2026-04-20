@@ -4,7 +4,6 @@ from itertools import combinations
 from cambc import Controller, Direction, Environment, Position
 
 import map_info
-from log import DRAW_DEBUG
 
 # Number of initial builder bots that follow the core's spawn plan.
 INITIAL_SPAWN_COUNT = 4
@@ -114,16 +113,6 @@ def pick_n_directions(width: int, height: int, pool, n: int):
             best = combo
 
     return [pool[k] for k in best]
-
-
-def draw_spawn_plan(rc: Controller, core_pos: Position, spawn_plan, width: int, height: int) -> None:
-    if not DRAW_DEBUG:
-        return
-    # +1 because the builder starts one step out from the core along the direction
-    for d in spawn_plan:
-        endpoint = get_ray_endpoint(core_pos, d, width, height, max_steps=INITIAL_EXPLORE_MAX_STEPS + 1)
-        rc.draw_indicator_line(core_pos, endpoint, 0, 255, 0)
-
 
 def choose_spawn_plan(rc: Controller, core_pos: Position, n: int):
     width = rc.get_map_width()

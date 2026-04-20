@@ -5,7 +5,7 @@ import comms
 import units.builder
 import units.states.attack as attack
 from cambc import *
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -70,7 +70,7 @@ def score():
     return 5 if _my_claims() else 0
 
 def run():
-    log("SABOTAGE")
+    pass # log("SABOTAGE")
     targets = _my_claims()
 
     if not targets:

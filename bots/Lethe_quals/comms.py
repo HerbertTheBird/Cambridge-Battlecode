@@ -1,7 +1,6 @@
 from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
-from log import DRAW_DEBUG, log
-import comms_positional
+
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
 SYM_BITS = 3
@@ -132,10 +131,6 @@ def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
 def mark(target_idx, type):
-    if DRAW_DEBUG and type != 7:
-        rc.draw_indicator_line(map_info._my_pos, Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
-    log("mark", target_idx, type)
-
     adjacent_tiles = rc.get_nearby_tiles(2)
 
     best = None # (priority, pos, tile_id)
@@ -176,7 +171,6 @@ def mark(target_idx, type):
         priority, pos, tile_id = best
         sym = get_sym_bits()
         sample_bits = 0
-        # sample_bits = comms_positional.encode_sample_bits(pos, sym)
         sender_dir = pos.direction_to(map_info._my_pos)
         sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
         val = encode(target_idx, type, sym, sample_bits, sender_loc)
