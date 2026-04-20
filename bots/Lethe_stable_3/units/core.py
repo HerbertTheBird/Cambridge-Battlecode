@@ -91,8 +91,8 @@ def run():
             continue
         p = rc.get_position(uid)
         if rc.get_team(uid) == my_team:
-            ally_builder_count += 1
             if p.distance_squared(core_pos) <= DEFENSE_FRIENDLY_RADIUS_SQ:
+                ally_builder_count += 1
                 has_close_ally = True
         else:
             d = p.distance_squared(core_pos)
