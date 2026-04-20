@@ -55,11 +55,9 @@ def run_gauntlet(
     for opp in opponents:
         h2h[(main_bot, opp)] = HeadToHead(bot_a=main_bot, bot_b=opp)
         for map_path in maps:
-            for i, seed in enumerate(seeds):
-                if i % 2 == 0:
-                    jobs.append((main_bot, opp, map_path, seed))
-                else:
-                    jobs.append((opp, main_bot, map_path, seed))
+            for seed in seeds:
+                jobs.append((main_bot, opp, map_path, seed))
+                jobs.append((opp, main_bot, map_path, seed))
 
     total_matches = len(jobs)
     print(f"Gauntlet: {main_bot} vs {len(opponents)} opponent(s), {len(maps)} maps, {len(seeds)} seed(s)")
@@ -76,10 +74,14 @@ def run_gauntlet(
 
         results.append(mr)
         a_name, b_name = mr.bot_a, mr.bot_b
+        main_side = "GOLD" if a_name == main_bot else "SILVER"
+        opp = b_name if a_name == main_bot else a_name
 
         if mr.error:
             stats[a_name].errors += 1
             stats[b_name].errors += 1
+            print(f"  [{completed}/{total_matches}] {mr.map_name} (seed {mr.seed}) | "
+                  f"{main_bot} as {main_side}: ERROR [{mr.elapsed_s:.1f}s]")
             return
 
         stats[a_name].match_count += 1
@@ -122,19 +124,22 @@ def run_gauntlet(
         stats[a_name].elo = elo_update(stats[a_name].elo, exp_a, actual_a)
         stats[b_name].elo = elo_update(stats[b_name].elo, exp_b, actual_b)
 
-        if verbose:
-            print(f"  [{completed}/{total_matches}] {mr.map_name}: {a_name} vs {b_name} -> "
-                  f"{mr.winner or 'draw'} (T{mr.turn or '?'}) [{mr.elapsed_s:.1f}s]")
+        if mr.winner == main_bot:
+            outcome = "W"
+        elif mr.winner is None:
+            outcome = "D"
+        else:
+            outcome = "L"
+        ms = stats[main_bot]
+        print(f"  [{completed}/{total_matches}] {mr.map_name} (seed {mr.seed}) | "
+              f"{main_bot} as {main_side} vs {opp}: {outcome} -> {mr.winner or 'draw'} "
+              f"(T{mr.turn or '?'}) [{mr.elapsed_s:.1f}s] "
+              f"| total: {ms.wins}W-{ms.losses}L-{ms.draws}D")
 
     if threads == 1:
         for bot_a, bot_b, map_path, seed in jobs:
             mr = run_match(bot_a, bot_b, map_path, seed)
             process_result(mr)
-            if not verbose:
-                pct = completed / total_matches * 100
-                print(f"\r  Progress: {completed}/{total_matches} ({pct:.0f}%)", end="", flush=True)
-        if not verbose:
-            print()
     else:
         futures: dict[Future[MatchResult], None] = {}
         with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -145,13 +150,6 @@ def run_gauntlet(
             for f in as_completed(futures):
                 mr = f.result()
                 process_result(mr)
-                if not verbose:
-                    pct = completed / total_matches * 100
-                    print(f"\r  Progress: {completed}/{total_matches} ({pct:.0f}%)", end="", flush=True)
-                    main_stats = stats[main_bot]
-                    print(f" | {main_bot}: {main_stats.wins}W-{main_stats.losses}L-{main_stats.draws}D", end="", flush=True)
-        if not verbose:
-            print()
 
     elapsed = time.perf_counter() - match_started
     print(f"Completed in {elapsed:.1f}s")
@@ -192,6 +190,43 @@ def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead]) -> None:
 
     for e in entries:
         print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}")
+
+
+def print_side_breakdown(results: list[MatchResult], main_bot: str) -> None:
+    """Print how many games main_bot won as GOLD (Team A) vs SILVER (Team B)."""
+    gold_w = gold_l = gold_d = 0
+    silver_w = silver_l = silver_d = 0
+
+    for mr in results:
+        if mr.error:
+            continue
+        if mr.bot_a == main_bot:
+            if mr.winner == main_bot:
+                gold_w += 1
+            elif mr.winner is None:
+                gold_d += 1
+            else:
+                gold_l += 1
+        elif mr.bot_b == main_bot:
+            if mr.winner == main_bot:
+                silver_w += 1
+            elif mr.winner is None:
+                silver_d += 1
+            else:
+                silver_l += 1
+
+    gold_total = gold_w + gold_l + gold_d
+    silver_total = silver_w + silver_l + silver_d
+    gold_wr = 100.0 * gold_w / gold_total if gold_total else 0.0
+    silver_wr = 100.0 * silver_w / silver_total if silver_total else 0.0
+
+    print(f"\n{'=' * 60}")
+    print(f"  SIDE BREAKDOWN for {main_bot}")
+    print(f"{'=' * 60}")
+    print(f"  {'Side':<10}  {'W':>4}  {'L':>4}  {'D':>4}  {'Total':>6}  {'WR':>6}")
+    print(f"  {'-' * 10}  {'--':>4}  {'--':>4}  {'--':>4}  {'-----':>6}  {'----':>6}")
+    print(f"  {'GOLD (A)':<10}  {gold_w:>4}  {gold_l:>4}  {gold_d:>4}  {gold_total:>6}  {gold_wr:>5.1f}%")
+    print(f"  {'SILVER (B)':<10}  {silver_w:>4}  {silver_l:>4}  {silver_d:>4}  {silver_total:>6}  {silver_wr:>5.1f}%")
 
 
 def print_map_breakdown(results: list[MatchResult], bots: list[str]) -> None:
@@ -274,6 +309,7 @@ def main() -> int:
 
     print_leaderboard(stats)
     print_head_to_head(h2h)
+    print_side_breakdown(results, bot)
 
     if args.map_breakdown:
         print_map_breakdown(results, [bot] + opponents)
