@@ -13,6 +13,26 @@ _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
 
 unpathable = 0
 
+
+def _prefer_armoured_conveyor() -> bool:
+    ti, ax = rc.get_global_resources()
+    armoured_ti, armoured_ax = rc.get_armoured_conveyor_cost()
+    return ti >= armoured_ti * 5 and ax >= armoured_ax
+
+
+def _can_build_preferred_conveyor(pos: Position, direction: Direction) -> bool:
+    if _prefer_armoured_conveyor():
+        return rc.can_build_armoured_conveyor(pos, direction)
+    return rc.can_build_conveyor(pos, direction)
+
+
+def _build_preferred_conveyor(pos: Position, direction: Direction) -> EntityType:
+    if _prefer_armoured_conveyor():
+        rc.build_armoured_conveyor(pos, direction)
+        return EntityType.ARMOURED_CONVEYOR
+    rc.build_conveyor(pos, direction)
+    return EntityType.CONVEYOR
+
 def _trace_resource(start_n: int) -> str:
     """Follow _conv_reverse back from start_n until we see a loaded conveyor.
     Returns 'raw', 'ti', or 'refined'. Defaults to 'ti' if nothing found."""
@@ -267,10 +287,12 @@ def run():
             rc.build_bridge(destroy, next)
             map_info.update_at(destroy)
             built = True
-        elif not bridge and rc.can_build_conveyor(destroy, destroy.direction_to(next)):
-            rc.build_conveyor(destroy, destroy.direction_to(next))
-            map_info.update_at(destroy)
-            built = True
+        elif not bridge:
+            direction = destroy.direction_to(next)
+            if _can_build_preferred_conveyor(destroy, direction):
+                _build_preferred_conveyor(destroy, direction)
+                map_info.update_at(destroy)
+                built = True
     if built:
         # Trace downstream from best, mark the furthest unloaded conveyor as loaded
         conv_target = map_info._building_conv_target
