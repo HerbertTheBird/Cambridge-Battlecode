@@ -14,7 +14,7 @@ comm_flag = 5
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 def _sabotage_targets():
     """Bitmask of enemy conveyors/splitters/bridges (not armoured) that are

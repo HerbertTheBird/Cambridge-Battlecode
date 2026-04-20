@@ -63,7 +63,7 @@ def _trace_resource(start_n: int) -> str:
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -267,7 +267,15 @@ def run():
     if near_enemy:
         nav.move_to(target_conveyor[1])
         if map_info._my_pos == target_conveyor[1]:
-            can_build = True
+            if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) != map_info._my_team and rc.can_fire(target_conveyor[1]):
+                rc.fire(target_conveyor[1])
+                map_info.update_at(target_conveyor[0])
+            else:
+                if rc.can_build_road(target_conveyor[0]):
+                    rc.build_road(target_conveyor[0])
+                    map_info.update_at(target_conveyor[0])
+                if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == map_info._my_team:
+                    can_build = True
     else:
         nav.move_adjacent(target_conveyor[0])
         can_build = True

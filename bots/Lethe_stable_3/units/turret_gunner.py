@@ -13,6 +13,34 @@ TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
 
 INF = 999999
 
+CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+
+
+def _should_stay():
+    """Block self-destruct when a harvester is adjacent, no bots are nearby,
+    or the closest visible builder bot is an enemy."""
+    pos = rc.get_position()
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(pos.x + dx, pos.y + dy)
+        if map_info.in_bounds(p):
+            bid = rc.get_tile_building_id(p)
+            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+                return True
+    best_d = 8
+    closest_is_friendly = False
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        p = rc.get_position(uid)
+        d = pos.distance_squared(p)
+        if best_d is None or d < best_d:
+            best_d = d
+            closest_is_friendly = (rc.get_team(uid) == my_team)
+    if best_d is None:
+        return True
+    return not closest_is_friendly
+
+
 def init(c: Controller):
     global rc, my_pos, my_team, last_fired_round, skipped_firing_turns
     rc = c
@@ -294,4 +322,5 @@ def run():
             last_fired_round = rc.get_current_round()
             skipped_firing_turns -= 1
         if (rc.get_scale_percent() > 500 or skipped_firing_turns >= 32):
-            rc.self_destruct()
+            if not _should_stay():
+                rc.self_destruct()

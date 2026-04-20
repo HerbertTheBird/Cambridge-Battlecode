@@ -19,11 +19,11 @@ MAX_SCORE = 8
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 
 SENTINEL_BUILDING_SCORE = [0] * map_info._NUM_ET
-SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 32
+SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 0
 SENTINEL_BUILDING_SCORE[map_info._IDX_HARVESTER] = 12
 SENTINEL_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 16
 SENTINEL_BUILDING_SCORE[map_info._IDX_GUNNER] = 20
@@ -48,7 +48,7 @@ GUNNER_BUILDING_SCORE[map_info._IDX_BREACH] = 120
 GUNNER_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 16
 GUNNER_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 8
-GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 4
+GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 16
 GUNNER_BUILDING_SCORE[map_info._IDX_BRIDGE] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_SPLITTER] = 4
 
@@ -382,16 +382,16 @@ def get_best_direction(pos):
 
     directions = map_info._DIRECTIONS
 
-    log("AT POSITION", pos)
+    # log("AT POSITION", pos)
 
     # Sentinel: best valid-placement direction at pos.
     best_s_dir, best_s_score = Direction.NORTH, -1
     for d in range(8):
         if not (sentinel_masks[d] & bit):
-            log("  SENT", directions[d], "not a valid placement")
+            # log("  SENT", directions[d], "not a valid placement")
             continue
         s = _read_score(sent_planes_by_dir[d], n)
-        log("  SENT", directions[d], "score", s)
+        # log("  SENT", directions[d], "score", s)
         if s > best_s_score:
             best_s_score = s
             best_s_dir = directions[d]
@@ -402,7 +402,7 @@ def get_best_direction(pos):
     for d in range(8):
         gunner_any |= gunner_masks[d]
     gunner_placeable = bool(gunner_any & bit)
-    log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
+    # log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
 
     if not gunner_placeable or best_s_score >= gun_sum:
         return best_s_dir, EntityType.SENTINEL, best_s_score
@@ -411,10 +411,10 @@ def get_best_direction(pos):
     best_g_dir, best_g_score = Direction.NORTH, -1
     for d in range(8):
         if not (gunner_masks[d] & bit):
-            log("  GUN", directions[d], "not a valid placement")
+            # log("  GUN", directions[d], "not a valid placement")
             continue
         g = _read_score(gun_planes_by_dir[d], n)
-        log("  GUN", directions[d], "score", g)
+        # log("  GUN", directions[d], "score", g)
         if g > best_g_score:
             best_g_score = g
             best_g_dir = directions[d]
@@ -456,9 +456,9 @@ def _placement_candidates():
     my_clearable = (
         map_info._bm_et[map_info._IDX_BARRIER]
         | map_info._bm_et[map_info._IDX_ROAD]
-        | map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
+        # | map_info._bm_et[map_info._IDX_CONVEYOR]
+        # | map_info._bm_et[map_info._IDX_SPLITTER]
+        # | map_info._bm_et[map_info._IDX_BRIDGE]
     ) & my_team
 
     enemy_clearable = (
@@ -694,7 +694,7 @@ def score():
     _cached_claims = _my_claims()
     preferred, fallback = _cached_claims
     if preferred:
-        return 8
+        return 6
     if fallback:
         return 6
     return 0

@@ -15,7 +15,7 @@ comm_flag = 1
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 MAX_SCORE = 1
 def score():

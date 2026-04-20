@@ -21,7 +21,7 @@ def _my_claims():
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
@@ -217,7 +217,7 @@ def run():
         # Empty, marker, enemy marker, or my road — needs barrier
         all_secured = False
         nav.move_to(best_ore)
-        if pid and is_mine and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
+        if pid and is_mine and rc.can_destroy(p) and rc.get_action_cooldown() == 0 and rc.get_position() != p:
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_barrier(p):

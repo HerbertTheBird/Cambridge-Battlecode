@@ -40,10 +40,22 @@ def _should_stay():
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
                 return True
-            bot_id = rc.get_tile_builder_bot_id(p)
-            if bot_id and rc.get_team(bot_id) != my_team:
-                return True
-    return False
+    # Only allow self-destruct when the closest builder bot in vision is a
+    # friendly one (likely able to reclaim). Stay if no bots are nearby, or if
+    # the closest bot is an enemy (giving them a free kill is worse than idling).
+    best_d = 8
+    closest_is_friendly = False
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        p = rc.get_position(uid)
+        d = my_pos.distance_squared(p)
+        if best_d is None or d < best_d:
+            best_d = d
+            closest_is_friendly = (rc.get_team(uid) == my_team)
+    if best_d is None:
+        return True
+    return not closest_is_friendly
 
 
 def _get_feeder_positions():
@@ -136,7 +148,7 @@ def run():
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
         if _no_ammo_turns >= 10 and not _should_stay():
-            # rc.self_destruct()
+            rc.self_destruct()
             return
     else:
         _no_ammo_turns = 0
@@ -163,8 +175,8 @@ def run():
             best_target = tile
 
     if best_target is None:
-        # if not _should_stay():
-        #     rc.self_destruct()
+        if not _should_stay():
+            rc.self_destruct()
         return
 
     rc.fire(best_target)

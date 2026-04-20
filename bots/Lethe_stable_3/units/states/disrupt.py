@@ -14,7 +14,7 @@ comm_flag = 2
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 def _disruptable_ore():
     all_ore = (map_info._bm_env[map_info._IDX_ENV_ORE_TI]

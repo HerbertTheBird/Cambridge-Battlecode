@@ -17,7 +17,7 @@ ID_MASK = (1 << 12) - 1
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 
 def _conv_zone():
@@ -61,6 +61,7 @@ def _find_chase_target():
     claimed = _claimed_enemy_ids()
     # Filter enemy bots in zone, unclaimed
     enemy_bots = map_info._bm_enemy_bots
+    
     if not enemy_bots:
         return None
 
@@ -75,13 +76,16 @@ def _find_chase_target():
         n = lsb.bit_length() - 1
         uid = map_info._bot_at.get(n)
         if uid is not None:
-            if (uid & ID_MASK) not in claimed:
+            # if (uid & ID_MASK) not in claimed:
+            #     filtered |= lsb
+            # else:
+            nearby_friendly = map_info.expand_chebyshev(lsb) & other_friendly
+            if not nearby_friendly:
                 filtered |= lsb
-            else:
-                nearby_friendly = map_info.expand_chebyshev(lsb) & other_friendly
-                if not nearby_friendly:
-                    filtered |= lsb
         mask ^= lsb
+    print(map_info._bot_pos)
+    units.builder.draw_mask(enemy_bots, 255, 0, 0)
+    units.builder.draw_mask(friendly_bots, 0, 255, 0)
 
     if not filtered:
         return None
@@ -92,6 +96,8 @@ def _find_chase_target():
     n = closest_pos.x + closest_pos.y * w
     uid = map_info._bot_at.get(n)
     if uid is None:
+        return None
+    if closest_pos.distance_squared(map_info._my_pos) <= 5:
         return None
     return (uid, closest_pos)
 
@@ -117,10 +123,10 @@ _cached_chase_target = None  # set by score(), reused by run()
 MAX_SCORE = 7
 def score():
     global _cached_chase_target
-    if _very_damaged_targets():
-        _cached_chase_target = None
-        return 7
     _cached_chase_target = _find_chase_target()
+
+    if _very_damaged_targets():
+        return 7
     target = _cached_chase_target
     if target is not None:
         if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
@@ -216,7 +222,7 @@ def run():
         log("target is",target)
         uid, ep = target
         _try_barrier_dead_ends()
-        nav.move_to(ep)
+        nav.move_adjacent(ep)
         comms.mark(uid & ID_MASK, comm_flag)
         _do_best_heal()
         return

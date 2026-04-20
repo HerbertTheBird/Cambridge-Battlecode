@@ -6,6 +6,7 @@ import sys
 
 import map_info
 import pathing
+from pathing import Pathing
 import comms
 import comms_positional
 import comms_stats
@@ -22,12 +23,14 @@ from log import DRAW_DEBUG, log
 
 
 rc: Controller
+nav: Pathing = None
 harvest_radius = 0
 _harvest_zone = 0
 states = [explore, disrupt, harvest, route, heal, sabotage, attack]
 def init(c: Controller):
-    global rc, harvest_radius
+    global rc, harvest_radius, nav
     rc = c
+    nav = Pathing(c)
     harvest_radius = (c.get_map_width() + c.get_map_height()) // 3
     if comms_stats.is_enabled():
         comms_stats.init(c)

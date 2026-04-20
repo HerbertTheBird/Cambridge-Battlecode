@@ -1,11 +1,12 @@
-from cambc import Controller, Position
+from cambc import Controller, Position, EntityType
 import map_info
 from log import log
 
 rc: Controller
 
 # --- Configurable ---
-SCALE_MULT = 0.5
+SCALE_MULT = 1
+DEFENSE_FRIENDLY_RADIUS_SQ = 20
 
 
 def _spawn_toward_center():
@@ -26,14 +27,53 @@ def _spawn_toward_center():
         rc.spawn_builder(best)
 
 
+def _spawn_toward_enemy_if_undefended():
+    """If an enemy builder bot is in vision and no friendly builder bot sits
+    within dist² DEFENSE_FRIENDLY_RADIUS_SQ of the core, spawn a defender on
+    the core tile closest to the nearest enemy bot. Returns True if spawned."""
+    core_pos = rc.get_position()
+    my_team = map_info._my_team
+    closest_enemy = None
+    closest_enemy_d = None
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        p = rc.get_position(uid)
+        if rc.get_team(uid) == my_team:
+            if p.distance_squared(core_pos) <= DEFENSE_FRIENDLY_RADIUS_SQ:
+                return False
+        else:
+            d = p.distance_squared(core_pos)
+            if closest_enemy_d is None or d < closest_enemy_d:
+                closest_enemy_d = d
+                closest_enemy = p
+    if closest_enemy is None:
+        return False
+    best = None
+    best_d = None
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            p = Position(core_pos.x + dx, core_pos.y + dy)
+            if rc.can_spawn(p):
+                d = p.distance_squared(closest_enemy)
+                if best_d is None or d < best_d:
+                    best_d = d
+                    best = p
+    if best is None:
+        return False
+    rc.spawn_builder(best)
+    return True
+
+
 def run():
-    # if rc.get_current_round() == 100:
+    # if rc.get_current_round() == 400:
     #     rc.resign()
     titanium = rc.get_global_resources()[0]
     axionite = rc.get_global_resources()[1]
     scaling = rc.get_scale_percent()
-    if scaling * SCALE_MULT + 300 < titanium:
-        _spawn_toward_center()
+    if not _spawn_toward_enemy_if_undefended():
+        if scaling * SCALE_MULT + 200 < titanium:
+            _spawn_toward_center()
     if rc.get_current_round() < 1500 and titanium < 4 * rc.get_harvester_cost()[0]:
         rc.convert(min(max(axionite - 1, 0), max((3 * rc.get_harvester_cost()[0] - titanium) // 4, 0)))
 
