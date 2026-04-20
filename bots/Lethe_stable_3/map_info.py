@@ -189,9 +189,7 @@ _bm_conv_ti: int = 0            # conveyors observed containing titanium
 _bm_conv_refined: int = 0       # conveyors observed containing refined axionite
 _bm_ti_fed: int = 0             # targets of conveyors believed to carry titanium
 _bm_ax_fed: int = 0             # targets of conveyors believed to carry refined axionite
-_bm_dead_end: int = 0           # tiles that dead-end conveyors point into (output tiles),
-                                # except when my conveyor points into an enemy hard building
-                                # (then the conveyor itself is flagged for redirection)
+_bm_dead_end: int = 0           # routable conveyors whose output is not connected to ore-accepting network
 _bm_enemy_turret_threat: int = 0  # tiles enemy turrets can shoot (soft | hard), kept for back-compat
 _bm_enemy_soft_threat: int = 0    # tiles enemy sentinels can shoot (low dps)
 _bm_enemy_hard_threat: int = 0    # tiles enemy gunners/breaches can shoot (high dps)
@@ -918,10 +916,6 @@ def _compute_route_targets() -> int:
     ti_harv_adj = expand_manhattan(ti_harvesters) if ti_harvesters else 0
 
     dead_ends = 0
-    conv_loaded = _bm_conv_ti | _bm_conv_refined | _bm_conv_raw_ax
-    enemy_hard_non_road = bm_enemy & ~_bm_et[_IDX_MARKER] & ~_bm_et[_IDX_ROAD]
-    marker_mask = _bm_et[_IDX_MARKER]
-    seen_mask = _bm_seen
 
     mask = all_convs
     while mask:
@@ -929,30 +923,17 @@ def _compute_route_targets() -> int:
         n = lsb.bit_length() - 1
         tn = conv_target[n]
         is_my_conv = bool(bm_my & lsb)
-        is_loaded = bool(conv_loaded & lsb)
 
         # Dead-end: output not pointing into an ore-accepting building
         if 0 <= tn < tiles:
             tbit = 1 << tn
-            # My conveyor pointing into enemy non-marker, non-road building:
-            # mark THIS conveyor so route rebuilds it in a different direction.
-            if is_my_conv and (enemy_hard_non_road & tbit):
-                dead_ends |= lsb
             # Enemy conveyors: NOT dead-end if pointing into enemy non-marker building
-            elif not is_my_conv and (enemy_hard & tbit):
-                pass
-            # Output is a marker: ignore (markers should not trigger routing)
-            elif marker_mask & tbit:
-                pass
-            # Output is unseen territory: not a dead end (we don't know what's there)
-            elif not (seen_mask & tbit):
+            if not is_my_conv and (enemy_hard & tbit):
                 pass
             elif not (ore_accepting & tbit):
-                if is_loaded:
-                    dead_ends |= tbit
+                dead_ends |= lsb
             elif (_bm_conv_raw_ax & lsb) and not (_bm_et[_IDX_FOUNDRY] & tbit) and (((_bm_conv_ti | _bm_conv_refined) & tbit) or (ti_harv_adj & tbit)):
-                if is_loaded:
-                    dead_ends |= tbit
+                dead_ends |= lsb
         else:
             dead_ends |= lsb
         mask ^= lsb
@@ -1596,13 +1577,12 @@ def get_avoid(
     avoid_conveyors: bool,
     avoid_builders: bool,
     avoid_ore: bool,
-    routing_conv: int|None = None,
 ) -> int:
     """Return a bitmask of tiles to avoid during pathfinding."""
     # avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
     mask = _bm_blocked
     if avoid_conveyors:
-        mask |= _bm_conveyors | _bm_conveyor_targets&~((1<<routing_conv) if routing_conv else 0) | _bm_my_core_area
+        mask |= _bm_conveyors | _bm_conveyor_targets | _bm_my_core_area
     if avoid_ore:
         ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
         w = _width

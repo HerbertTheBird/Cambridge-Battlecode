@@ -23,7 +23,7 @@ def init(c: Controller):
 
 
 SENTINEL_BUILDING_SCORE = [0] * map_info._NUM_ET
-SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 20
+SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 0
 SENTINEL_BUILDING_SCORE[map_info._IDX_HARVESTER] = 12
 SENTINEL_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 16
 SENTINEL_BUILDING_SCORE[map_info._IDX_GUNNER] = 20
@@ -425,40 +425,6 @@ def get_best_direction(pos):
 # Candidate generation
 # ---------------------------------------------------------------------------
 
-def _turret_feed_chains(max_steps: int = 8) -> int:
-    """Bitmask of my conveyor-like tiles that feed into my gunners/sentinels,
-    walking upstream via _conv_reverse up to max_steps hops. Stops at any tile
-    that isn't a conveyor/armoured/bridge/splitter."""
-    my_team = map_info._bm_team[map_info._my_team_idx]
-    turrets = (map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & my_team
-    if not turrets:
-        return 0
-    conv_types = (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-    ) & my_team
-    reverse = map_info._conv_reverse
-
-    frontier = turrets
-    result = 0
-    for _ in range(max_steps):
-        next_frontier = 0
-        m = frontier
-        while m:
-            lsb = m & -m
-            n = lsb.bit_length() - 1
-            next_frontier |= reverse[n]
-            m ^= lsb
-        next_frontier &= conv_types & ~result
-        if not next_frontier:
-            break
-        result |= next_frontier
-        frontier = next_frontier
-    return result
-
-
 def _placement_candidates():
     """Returns (sentinel_masks, gunner_masks): two lists of 8 bitmasks, one per
     facing direction. Loader blockers are baked in:
@@ -521,7 +487,6 @@ def _placement_candidates():
     candidates &= ~(danger_for_clearable & enemy_clearable)
 
     candidates &= ~cant_attack
-    candidates &= ~_turret_feed_chains()
 
     # Facing blockers: block direction D at tile P if P+delta_D has a friendly
     # harvester/foundry (always blocks), or a conveyor whose output points back

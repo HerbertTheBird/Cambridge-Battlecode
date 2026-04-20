@@ -66,7 +66,7 @@ def _spawn_toward_enemy_if_undefended():
 
 
 def run():
-    # if rc.get_current_round() == 1100:
+    # if rc.get_current_round() == 400:
     #     rc.resign()
     titanium = rc.get_global_resources()[0]
     axionite = rc.get_global_resources()[1]
