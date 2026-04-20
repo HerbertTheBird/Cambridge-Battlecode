@@ -110,5 +110,6 @@ def run():
     nav.move_to({best})
     if rc.can_fire(best):
         rc.fire(best)
+        map_info.update_at(best)
 
     comms.mark(best.x + best.y * map_info._width, comm_flag)

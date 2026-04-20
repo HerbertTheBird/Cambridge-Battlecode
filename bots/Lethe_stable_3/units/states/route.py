@@ -236,6 +236,7 @@ def run():
         nav.move_to(target)
         if rc.can_fire(target):
             rc.fire(target)
+            map_info.update_at(target)
         comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0

@@ -349,13 +349,13 @@ def expand_chebyshev(mask: int) -> int:
     """Expand a bitmask by 1 Chebyshev step (king-move flood)."""
     w = _width
     h = mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1)
-    return h | (h << w) | (h >> w)
+    return (h | (h << w) | (h >> w)) & _board_mask
 
 
 def expand_manhattan(mask: int) -> int:
     """Expand a bitmask by 1 Manhattan step (4-directional flood)."""
     w = _width
-    return mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1) | (mask << w) | (mask >> w)
+    return (mask | ((mask & _not_right_col) << 1) | ((mask & _not_left_col) >> 1) | (mask << w) | (mask >> w)) & _board_mask
 
 
 # Shift masks for turret aggregate computation (initialized in init())

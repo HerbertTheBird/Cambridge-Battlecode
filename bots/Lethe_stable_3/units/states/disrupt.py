@@ -68,6 +68,7 @@ def run():
         nav.move_to({best})
         if rc.can_fire(best):
             rc.fire(best)
+            map_info.update_at(best)
     else:
         # Empty tile — move adjacent and build barrier
         nav.move_adjacent(best)

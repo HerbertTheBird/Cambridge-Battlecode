@@ -206,6 +206,7 @@ def run():
             nav.move_to(p)
             if rc.can_fire(p):
                 rc.fire(p)
+                map_info.update_at(p)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
 
@@ -256,6 +257,7 @@ def run():
             nav.move_to(best_ore)
             if rc.can_fire(map_info._my_pos):
                 rc.fire(map_info._my_pos)
+                map_info.update_at(best_ore)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
         if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:

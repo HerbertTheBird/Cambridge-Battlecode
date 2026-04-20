@@ -364,7 +364,7 @@ class Pathing:
         while True:
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
-            builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
+            # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             visited |= cur_frontier
             if cur_frontier == 0:
                 stuck_turns += 1
