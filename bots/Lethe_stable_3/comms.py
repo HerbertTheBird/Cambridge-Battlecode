@@ -93,7 +93,7 @@ def decode_visible_marker(id: int, pos: Position):
     sender_dir = _DIRS_8[sender_dir_idx]
     dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
     sender_pos = Position(pos.x + dx, pos.y + dy)
-    return (val, sender_pos)
+    return (val, sender_pos, pos, id)
 
 
 def get_new_messages():

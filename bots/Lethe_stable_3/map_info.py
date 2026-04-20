@@ -205,7 +205,7 @@ _bot_at: dict[int, int] = {}    # tile index -> uid
 
 _max_id_by_round: list[int] = []  # max_id_by_round[round] = max entity id seen up to that round
 _max_id_seen: int = 0
-_new_marker_messages: list[tuple[int, Position, int]] = []
+_new_marker_messages: list[tuple[int, Position, Position, int, int]] = []
 
 # Per-turn cached derived masks (rebuilt in update())
 _bm_others_5x5: int = 0          # union of other friendly bots' 2-Chebyshev zones
