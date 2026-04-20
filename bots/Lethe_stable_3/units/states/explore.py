@@ -17,6 +17,7 @@ def init(c: Controller):
     rc = c
     nav = Pathing(rc)
 
+MAX_SCORE = 1
 def score():
     return 1
 

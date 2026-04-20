@@ -116,6 +116,7 @@ def _heal_targets():
 
 _cached_chase_target = None  # set by score(), reused by run()
 
+MAX_SCORE = 7
 def score():
     global _cached_chase_target
     if _very_damaged_targets():

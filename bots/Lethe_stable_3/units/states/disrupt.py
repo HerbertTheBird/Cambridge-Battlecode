@@ -32,6 +32,7 @@ def _my_claims():
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _disruptable_ore())
 
+MAX_SCORE = 2
 def score():
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
         return 0

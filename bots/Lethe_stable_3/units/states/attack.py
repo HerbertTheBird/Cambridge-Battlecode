@@ -367,6 +367,7 @@ def _my_claims():
 
 _cached_claims = (0, 0)  # set by score(), reused by run()
 
+MAX_SCORE = 6
 def score():
     global _cached_claims
     if rc.get_global_resources()[0] < rc.get_sentinel_cost()[0]:

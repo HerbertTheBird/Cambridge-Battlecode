@@ -129,6 +129,7 @@ def _my_claims():
 
 _cached_claims = 0  # set by score(), reused by run()
 
+MAX_SCORE = 4
 def score():
     global _cached_claims
     _cached_claims = _my_claims()

@@ -33,6 +33,7 @@ def init(c: Controller):
         comms_stats.init(c)
     for s in states:
         s.init(c)
+    states.sort(key=lambda s: s.MAX_SCORE, reverse=True)
 
 claimed_targets = [0] * (len(states) + 1)   # target bitmask per comm flag
 claimed_senders = [0] * (len(states) + 1)   # sender position bitmask per comm flag
@@ -128,6 +129,8 @@ def run():
     best_state = None
     best_score = 0
     for i in states:
+        if best_score >= i.MAX_SCORE:
+            break
         score = i.score()
         if score > best_score:
             best_score = score
