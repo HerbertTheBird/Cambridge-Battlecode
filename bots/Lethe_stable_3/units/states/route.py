@@ -133,10 +133,7 @@ def cant_claim():
 
     # 5x5 rule: blocked unless in my 5x5
     cant_5x5 = map_info._bm_others_5x5 & ~my_zone
-    # 3x3 rule: in someone else's 3x3 but not my 3x3 — blocked regardless
-    cant_3x3 = map_info._bm_others_3x3 & ~my_small
-
-    return cant_5x5 | cant_3x3
+    return cant_5x5
 def avoid_mask():
     return _too_expensive() | cant_claim() | unpathable
 

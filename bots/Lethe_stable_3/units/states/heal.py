@@ -78,15 +78,13 @@ def _find_chase_target():
             if (uid & ID_MASK) not in claimed:
                 filtered |= lsb
             else:
-                nearby_friendly = map_info.expand_chebyshev(map_info.expand_chebyshev(lsb)) & other_friendly
+                nearby_friendly = map_info.expand_chebyshev(lsb) & other_friendly
                 if not nearby_friendly:
                     filtered |= lsb
         mask ^= lsb
-    # units.builder.draw_mask(enemy_bots, 255, 0, 0)
 
     if not filtered:
         return None
-    # units.builder.draw_mask(filtered, 0, 255, 0)
 
     closest_pos, dist = nav.closest(filtered)
     if closest_pos is None or dist > 6:

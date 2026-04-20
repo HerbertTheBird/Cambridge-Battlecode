@@ -70,7 +70,7 @@ def _build_scored_non_core(score_table):
 _SCORED_NON_CORE_TYPES_SENTINEL = _build_scored_non_core(SENTINEL_BUILDING_SCORE)
 _SCORED_NON_CORE_TYPES_GUNNER = _build_scored_non_core(GUNNER_BUILDING_SCORE)
 
-_NUM_PLANES = 13  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
+_NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
 
 SCORE_THRESHOLD_FACTOR = 0.25
 MIN_ATTACK_SCORE = 16
