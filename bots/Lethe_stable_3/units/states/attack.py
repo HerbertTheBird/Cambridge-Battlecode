@@ -40,7 +40,7 @@ SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 2
 # smaller gain on clustered infra (sentinels already out-damage them there).
 GUNNER_BUILDING_SCORE = [0] * map_info._NUM_ET
 GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 128
-GUNNER_BUILDING_SCORE[map_info._IDX_HARVESTER] = 36
+GUNNER_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 GUNNER_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 56
 GUNNER_BUILDING_SCORE[map_info._IDX_GUNNER] = 100
 GUNNER_BUILDING_SCORE[map_info._IDX_SENTINEL] = 100
@@ -382,16 +382,16 @@ def get_best_direction(pos):
 
     directions = map_info._DIRECTIONS
 
-    # log("AT POSITION", pos)
+    log("AT POSITION", pos)
 
     # Sentinel: best valid-placement direction at pos.
     best_s_dir, best_s_score = Direction.NORTH, -1
     for d in range(8):
         if not (sentinel_masks[d] & bit):
-            # log("  SENT", directions[d], "not a valid placement")
+            log("  SENT", directions[d], "not a valid placement")
             continue
         s = _read_score(sent_planes_by_dir[d], n)
-        # log("  SENT", directions[d], "score", s)
+        log("  SENT", directions[d], "score", s)
         if s > best_s_score:
             best_s_score = s
             best_s_dir = directions[d]
@@ -402,7 +402,7 @@ def get_best_direction(pos):
     for d in range(8):
         gunner_any |= gunner_masks[d]
     gunner_placeable = bool(gunner_any & bit)
-    # log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
+    log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
 
     if not gunner_placeable or best_s_score >= gun_sum:
         return best_s_dir, EntityType.SENTINEL, best_s_score
@@ -411,10 +411,10 @@ def get_best_direction(pos):
     best_g_dir, best_g_score = Direction.NORTH, -1
     for d in range(8):
         if not (gunner_masks[d] & bit):
-            # log("  GUN", directions[d], "not a valid placement")
+            log("  GUN", directions[d], "not a valid placement")
             continue
         g = _read_score(gun_planes_by_dir[d], n)
-        # log("  GUN", directions[d], "score", g)
+        log("  GUN", directions[d], "score", g)
         if g > best_g_score:
             best_g_score = g
             best_g_dir = directions[d]
@@ -424,6 +424,63 @@ def get_best_direction(pos):
 # ---------------------------------------------------------------------------
 # Candidate generation
 # ---------------------------------------------------------------------------
+
+def _turret_feed_chains(max_steps: int = 8) -> int:
+    """Bitmask of my conveyor-like tiles that feed into my gunners/sentinels,
+    walking upstream up to max_steps hops. First hop: cardinal conveyors
+    pointing into each turret (turrets don't have a _conv_reverse entry).
+    Subsequent hops: upstream via _conv_reverse on the conveyor tiles.
+    Stops when the next hop yields no tile that's a conveyor-like type."""
+    my_team = map_info._bm_team[map_info._my_team_idx]
+    turrets = (map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & my_team
+    if not turrets:
+        return 0
+    w = map_info._width
+    conv_types = (
+        map_info._bm_et[map_info._IDX_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_BRIDGE]
+        | map_info._bm_et[map_info._IDX_SPLITTER]
+    )
+    nlc = map_info._not_left_col
+    nrc = map_info._not_right_col
+    board = map_info._board_mask
+    conv_by_dir = map_info._bm_conv_by_dir
+
+    # First hop: for each cardinal direction d, a conveyor facing d sits
+    # opposite-of-d from the turret. Shift turrets to the source tile and
+    # intersect with conv_by_dir[d].
+    # d=0 NORTH (delta 0,-1): source is south of turret  -> turrets << w
+    # d=2 EAST  (delta 1, 0): source is west of turret   -> (turrets & nlc) >> 1
+    # d=4 SOUTH (delta 0, 1): source is north of turret  -> turrets >> w
+    # d=6 WEST  (delta -1,0): source is east of turret   -> (turrets & nrc) << 1
+    frontier = (
+        ((turrets << w) & board & conv_by_dir[0])
+        | (((turrets & nlc) >> 1) & conv_by_dir[2])
+        | ((turrets >> w) & conv_by_dir[4])
+        | (((turrets & nrc) << 1) & board & conv_by_dir[6])
+    )
+    frontier &= conv_types
+    if not frontier:
+        return 0
+
+    reverse = map_info._conv_reverse
+    result = frontier
+    for _ in range(max_steps - 1):
+        next_frontier = 0
+        m = frontier
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            next_frontier |= reverse[n]
+            m ^= lsb
+        next_frontier &= conv_types & ~result
+        if not next_frontier:
+            break
+        result |= next_frontier
+        frontier = next_frontier
+    return result
+
 
 def _placement_candidates():
     """Returns (sentinel_masks, gunner_masks): two lists of 8 bitmasks, one per
@@ -487,6 +544,7 @@ def _placement_candidates():
     candidates &= ~(danger_for_clearable & enemy_clearable)
 
     candidates &= ~cant_attack
+    candidates &= ~_turret_feed_chains()
 
     # Facing blockers: block direction D at tile P if P+delta_D has a friendly
     # harvester/foundry (always blocks), or a conveyor whose output points back

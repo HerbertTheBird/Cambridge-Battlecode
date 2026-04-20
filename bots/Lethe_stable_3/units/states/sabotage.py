@@ -3,6 +3,7 @@ import pathing
 from pathing import Pathing
 import comms
 import units.builder
+import units.states.attack as attack
 from cambc import *
 from log import log
 
@@ -53,36 +54,10 @@ def _sabotage_targets():
             frontier = expanded & passable & ~danger_zone
             danger_zone |= frontier
         targets &= ~danger_zone
-    
-    # expensive calculations - nonbitmasked, leave at end. calculates conveyors that go into a turret.
-    pruned_targets = 0
-    invalid_sabotage_locations = set()
-    my_pos = map_info._my_pos
-    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
-        front_positions = []
-        
-        if p.distance_squared(my_pos) <= 100:
-            for conv in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
-                if conv not in invalid_sabotage_locations:
-                    front_positions.append(conv)
-                    invalid_sabotage_locations.add(conv)
-                    # rc.draw_indicator_dot(conv, 0, 0, 255)
-                        
-            for _ in range(4):
-                new_front = []
-                for front_p in front_positions:
-                    for conv in map_info.iter_mask(map_info._conv_reverse[front_p.x + front_p.y * map_info._width]):
-                        if conv not in invalid_sabotage_locations:
-                            new_front.append(conv)
-                            invalid_sabotage_locations.add(conv)
-                            # rc.draw_indicator_dot(conv, 0, 0, 255)
-                front_positions = new_front
-    
-    for target in map_info.iter_mask(targets):
-        if target not in invalid_sabotage_locations:
-            pruned_targets |= (1 << (target.x + target.y * map_info._width))
 
-    return pruned_targets
+    targets &= ~attack._turret_feed_chains()
+
+    return targets
 
 def _my_claims():
     w = map_info._width
