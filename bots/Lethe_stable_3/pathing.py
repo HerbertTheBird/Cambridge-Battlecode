@@ -322,7 +322,8 @@ class Pathing:
 
         walkable = (map_info._bm_et[map_info._IDX_ROAD]
                     | map_info._bm_conveyors
-                    | map_info._bm_my_core_area)
+                    | map_info._bm_my_core_area
+                    | start_mask)
 
         start_time = time.perf_counter_ns()
 
@@ -332,30 +333,50 @@ class Pathing:
         board = (1 << (w * height)) - 1
         not_avoid = board & ~avoid
 
-        # 4 combo masks: barrier/no-barrier × threat/no-threat
-        nb_nt = not_avoid & ~barriers & ~threat
-        b_nt  = not_avoid & barriers & ~threat
-        nb_t  = not_avoid & ~barriers & threat
-        b_t   = not_avoid & barriers & threat
+        nw_cost = 1
+        not_walkable = ~walkable
 
-        max_c = 1 + barrier_cost + threat_cost
-        max_seed = barrier_cost + threat_cost
+        # 8 combo masks: barrier/no-barrier × threat/no-threat × walkable/non-walkable
+        nb_nt_w  = not_avoid & ~barriers & ~threat & walkable
+        nb_nt_nw = not_avoid & ~barriers & ~threat & not_walkable
+        b_nt_w   = not_avoid & barriers  & ~threat & walkable
+        b_nt_nw  = not_avoid & barriers  & ~threat & not_walkable
+        nb_t_w   = not_avoid & ~barriers & threat  & walkable
+        nb_t_nw  = not_avoid & ~barriers & threat  & not_walkable
+        b_t_w    = not_avoid & barriers  & threat  & walkable
+        b_t_nw   = not_avoid & barriers  & threat  & not_walkable
+
+        max_c = 1 + barrier_cost + threat_cost + nw_cost
+        max_seed = barrier_cost + threat_cost + nw_cost
         cycle_len = max(max_c, max_seed) + 1
         frontier = [0] * cycle_len
-        frontier[0]                           = target_mask & nb_nt
-        frontier[barrier_cost]               |= target_mask & b_nt
-        frontier[threat_cost]                |= target_mask & nb_t
-        frontier[barrier_cost + threat_cost] |= target_mask & b_t
+        frontier[0]                                      = target_mask & nb_nt_w
+        frontier[nw_cost]                               |= target_mask & nb_nt_nw
+        frontier[barrier_cost]                          |= target_mask & b_nt_w
+        frontier[barrier_cost + nw_cost]                |= target_mask & b_nt_nw
+        frontier[threat_cost]                           |= target_mask & nb_t_w
+        frontier[threat_cost + nw_cost]                 |= target_mask & nb_t_nw
+        frontier[barrier_cost + threat_cost]            |= target_mask & b_t_w
+        frontier[barrier_cost + threat_cost + nw_cost]  |= target_mask & b_t_nw
 
         visited = 0
         i = 0
         last_frontier = 0
+        stuck_turns = 0
         while True:
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             visited |= cur_frontier
-
+            if cur_frontier == 0:
+                stuck_turns += 1
+                i += 1
+                if stuck_turns >= cycle_len:
+                    log("bfs move miss")
+                    return None
+                continue
+            else:
+                stuck_turns = 0
             hit = cur_frontier & start_mask
             if hit:
                 end_time = time.perf_counter_ns()
@@ -368,13 +389,9 @@ class Pathing:
                 from_mask = last_frontier & can_move_to
                 from_mask &= ~builders_mask
                 if not from_mask:
-                    from_mask = cur_frontier & ~builders_mask & can_move_to & ~start_n
+                    from_mask = cur_frontier & ~builders_mask & can_move_to & ~start_mask
                     if not from_mask:
                         return None
-                walkable_from_mask = from_mask & walkable
-                if walkable_from_mask:
-                    from_mask = walkable_from_mask
-                    
                 border = ~nlc | ~nrc | ((1 << width) - 1) | (((1 << width) - 1)<<(w*(height-1)))
                 last_working_mask = from_mask
                 c = 0
@@ -406,24 +423,20 @@ class Pathing:
                         best_dir = dir
                 
                 return start_pos, Position(cx+best_dir[0], cy+best_dir[1]), i
-
-            if cur_frontier == 0:
-                i += 1
-                if i >= cycle_len:
-                    log("bfs move miss")
-                    return None
-                continue
-
             # 3x3 Chebyshev expansion via 4 shifts
             f = cur_frontier
             h = f | ((f & nrc) << 1) | ((f & nlc) >> 1)
             expanded = h | (h << w) | (h >> w)
             new = expanded & ~visited
 
-            frontier[(i + 1) % cycle_len]                                     |= new & nb_nt
-            frontier[(i + 1 + barrier_cost) % cycle_len]                       |= new & b_nt
-            frontier[(i + 1 + threat_cost) % cycle_len]                        |= new & nb_t
-            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]         |= new & b_t
+            frontier[(i + 1) % cycle_len]                                        |= new & nb_nt_w
+            frontier[(i + 1 + nw_cost) % cycle_len]                              |= new & nb_nt_nw
+            frontier[(i + 1 + barrier_cost) % cycle_len]                         |= new & b_nt_w
+            frontier[(i + 1 + barrier_cost + nw_cost) % cycle_len]               |= new & b_nt_nw
+            frontier[(i + 1 + threat_cost) % cycle_len]                          |= new & nb_t_w
+            frontier[(i + 1 + threat_cost + nw_cost) % cycle_len]                |= new & nb_t_nw
+            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]           |= new & b_t_w
+            frontier[(i + 1 + barrier_cost + threat_cost + nw_cost) % cycle_len] |= new & b_t_nw
             i += 1
             last_frontier = cur_frontier
             frontier[slot] = 0
@@ -576,9 +589,9 @@ class Pathing:
             target_set = target
         if target_set != self.target_p:
             self.forget_launcher.clear()
-        avoid = map_info.get_avoid(False, True, False)
-        if avoid_empty:
-            avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+        avoid = map_info.get_avoid(False, False, False)
+        # if avoid_empty:
+        #     avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = map_info._my_pos
         if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
