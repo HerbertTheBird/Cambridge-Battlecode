@@ -87,7 +87,8 @@ def _sabotage_targets():
 def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _sabotage_targets())
+    targets = units.builder.exclude_crowded_claims(comm_flag, _sabotage_targets())
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets)
 
 MAX_SCORE = 5
 def score():
@@ -103,6 +104,7 @@ def run():
     best, _ = nav.closest(targets)
     if best is None:
         return
+    units.builder.register_active_target(comm_flag, best)
 
     # Move onto the tile and fire
     nav.move_to({best})

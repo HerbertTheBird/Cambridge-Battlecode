@@ -15,7 +15,7 @@ def _my_claims():
     my_pos = map_info._my_pos
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
-    available = harvestable_ore() & ~_too_expensive()
+    available = units.builder.exclude_crowded_claims(comm_flag, harvestable_ore() & ~_too_expensive())
     return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available)
 
 def init(c: Controller):
@@ -143,6 +143,7 @@ def run():
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
+        units.builder.register_active_target(comm_flag, p)
         if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not ((map_info._bm_friendly_bots | map_info._bm_enemy_bots) & pbit):
             rc.destroy(p)
             map_info.update_at(p)
@@ -160,6 +161,7 @@ def run():
     if best_ore is None:
         cant_harvest |= available
         return
+    units.builder.register_active_target(comm_flag, best_ore)
 
     w = map_info._width
     my_team_idx = map_info._my_team_idx
