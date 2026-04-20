@@ -46,27 +46,11 @@ def _spawn_toward_center():
         rc.spawn_builder(best)
 
 
-def _spawn_toward_enemy_if_undefended():
+def _spawn_toward_enemy_if_undefended(core_pos: Position, has_close_ally: bool, closest_enemy: Position | None) -> bool:
     """If an enemy builder bot is in vision and no friendly builder bot sits
     within dist² DEFENSE_FRIENDLY_RADIUS_SQ of the core, spawn a defender on
     the core tile closest to the nearest enemy bot. Returns True if spawned."""
-    core_pos = rc.get_position()
-    my_team = map_info._my_team
-    closest_enemy = None
-    closest_enemy_d = None
-    for uid in rc.get_nearby_units():
-        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
-            continue
-        p = rc.get_position(uid)
-        if rc.get_team(uid) == my_team:
-            if p.distance_squared(core_pos) <= DEFENSE_FRIENDLY_RADIUS_SQ:
-                return False
-        else:
-            d = p.distance_squared(core_pos)
-            if closest_enemy_d is None or d < closest_enemy_d:
-                closest_enemy_d = d
-                closest_enemy = p
-    if closest_enemy is None:
+    if has_close_ally or closest_enemy is None:
         return False
     best = None
     best_d = None
@@ -97,8 +81,28 @@ def run():
     titanium = rc.get_global_resources()[0]
     axionite = rc.get_global_resources()[1]
     scaling = rc.get_scale_percent()
-    if not _spawn_toward_enemy_if_undefended():
-        if scaling * SCALE_MULT + 200 < titanium:
+    my_team = map_info._my_team
+    ally_builder_count = 0
+    has_close_ally = False
+    closest_enemy = None
+    closest_enemy_d = None
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        p = rc.get_position(uid)
+        if rc.get_team(uid) == my_team:
+            ally_builder_count += 1
+            if p.distance_squared(core_pos) <= DEFENSE_FRIENDLY_RADIUS_SQ:
+                has_close_ally = True
+        else:
+            d = p.distance_squared(core_pos)
+            if closest_enemy_d is None or d < closest_enemy_d:
+                closest_enemy_d = d
+                closest_enemy = p
+
+    if not _spawn_toward_enemy_if_undefended(core_pos, has_close_ally, closest_enemy):
+        threshold = 400 if ally_builder_count >= 12 else 200
+        if scaling * SCALE_MULT + threshold < titanium:
             if not _try_spawn_planned(core_pos):
                 _spawn_toward_center()
     if rc.get_current_round() < 1500 and titanium < 4 * rc.get_harvester_cost()[0]:
