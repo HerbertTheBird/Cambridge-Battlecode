@@ -9,7 +9,6 @@ import pathing
 import comms
 import comms_positional
 import comms_stats
-from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
 import units.states.disrupt  as disrupt
@@ -164,13 +163,6 @@ def draw_mask(mask, r, g, b):
 
 _harvest_zone_final = False
 
-# First-tick ray explore target (derived from spawn tile relative to core).
-# Cleared by explore state once reached.
-_initial_explore_target: Position | None = None
-_initial_explore_done = False
-_initial_explore_round = -1  # round the target was set; used for timeout
-INITIAL_EXPLORE_TIMEOUT = 30
-
 def _compute_voronoi_harvest_zone():
     """Flood-fill Manhattan from both cores simultaneously.
     Tiles reached by my core first are my harvest zone."""
@@ -206,25 +198,7 @@ def _compute_voronoi_harvest_zone():
 
 def run():
     global _harvest_zone, _harvest_zone_final, _active_target_flag, _active_target_idx
-    global _initial_explore_target, _initial_explore_done, _initial_explore_round
     map_info.update(recompute=False)
-    if not _initial_explore_done:
-        if rc.get_current_round() > INITIAL_SPAWN_COUNT + 1:
-            _initial_explore_done = True
-        elif map_info._my_core is not None:
-            spawn_dir = map_info._my_core.direction_to(map_info._my_pos)
-            _initial_explore_target = get_ray_endpoint(
-                map_info._my_pos, spawn_dir, map_info._width, map_info._height,
-                max_steps=INITIAL_EXPLORE_MAX_STEPS,
-            )
-            _initial_explore_round = rc.get_current_round()
-            _initial_explore_done = True
-    # Auto-clear stale initial target if we couldn't reach it in time
-    if (
-        _initial_explore_target is not None
-        and rc.get_current_round() - _initial_explore_round >= INITIAL_EXPLORE_TIMEOUT
-    ):
-        _initial_explore_target = None
     handle_comms()
     _update_crowded_claims()
     _active_target_flag = 0

@@ -10,7 +10,6 @@ rc: Controller = None
 nav: Pathing = None
 
 explore_target = None
-_explore_target_from_initial = False
 comm_flag = 1
 
 def init(c: Controller):
@@ -90,21 +89,9 @@ def generate_explore_target():
     explore_target = Position(n % w, n // w)
 
 def run():
-    global explore_target, _explore_target_from_initial
     log("EXPLORE")
-    if units.builder._initial_explore_target is not None:
-        if map_info._my_pos.distance_squared(units.builder._initial_explore_target) <= 18:
-            units.builder._initial_explore_target = None
-        else:
-            explore_target = units.builder._initial_explore_target
-            _explore_target_from_initial = True
-    elif _explore_target_from_initial:
-        # initial target was cleared externally (e.g. timeout); don't trust the stale copy
-        explore_target = None
-        _explore_target_from_initial = False
     if explore_target is None or map_info._my_pos.distance_squared(explore_target) <= 18:
         generate_explore_target()
-        _explore_target_from_initial = False
 
     attempts = 0
     while attempts < 1:
