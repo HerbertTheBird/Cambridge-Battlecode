@@ -341,7 +341,7 @@ def _get_attack_candidates():
 
     # Filter to candidates that can hit at least one target in some direction
     reachable = _sentinel_all_reach(targets)
-    filtered = candidates & reachable
+    filtered = units.builder.exclude_crowded_claims(comm_flag, candidates & reachable)
 
     if not filtered:
         return 0, 0
@@ -434,6 +434,7 @@ def run():
     best_bit = 1 << best_n
     best_id = map_info._building_id[best_n]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
+    units.builder.register_active_target(comm_flag, best)
 
     direction = best_direction
     turret_type = best_turret_type

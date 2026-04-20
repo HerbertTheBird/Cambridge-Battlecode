@@ -30,7 +30,8 @@ def _disruptable_ore():
 def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], _disruptable_ore())
+    targets = units.builder.exclude_crowded_claims(comm_flag, _disruptable_ore())
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets)
 
 MAX_SCORE = 2
 def score():
@@ -47,6 +48,7 @@ def run():
     best, _ = nav.closest(available)
     if best is None:
         return
+    units.builder.register_active_target(comm_flag, best)
 
     width = map_info._width
 

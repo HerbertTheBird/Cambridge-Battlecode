@@ -39,12 +39,100 @@ claimed_targets = [0] * (len(states) + 1)   # target bitmask per comm flag
 claimed_senders = [0] * (len(states) + 1)   # sender position bitmask per comm flag
 _target_rounds = [dict() for _ in range(len(states) + 1)]
 _sender_rounds = [dict() for _ in range(len(states) + 1)]
+USE_CLAIM_VISION = True
+crowded_claims = [0] * (len(states) + 1)    # locally observed crowded targets per comm flag
+_crowded_seen_rounds = [dict() for _ in range(len(states) + 1)]
+_crowded_claim_rounds = [dict() for _ in range(len(states) + 1)]
+_active_target_flag = 0
+_active_target_idx = -1
+
+
+def _clear_crowded_claim(flag: int, idx: int):
+    if not USE_CLAIM_VISION:
+        return
+    crowded_claims[flag] &= ~(1 << idx)
+    _crowded_seen_rounds[flag].pop(idx, None)
+    _crowded_claim_rounds[flag].pop(idx, None)
+
+
+def _adjacent_friendly_builder_count(target_idx: int) -> int:
+    w = map_info._width
+    h = map_info._height
+    tx = target_idx % w
+    ty = target_idx // w
+    count = 0
+
+    my_pos = map_info._my_pos
+    if max(abs(my_pos.x - tx), abs(my_pos.y - ty)) <= 1:
+        count += 1
+
+    friendly = map_info._bm_friendly_bots
+    for dy in (-1, 0, 1):
+        ny = ty + dy
+        if ny < 0 or ny >= h:
+            continue
+        for dx in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            nx = tx + dx
+            if nx < 0 or nx >= w:
+                continue
+            if friendly & (1 << (nx + ny * w)):
+                count += 1
+                if count >= 2:
+                    return count
+    return count
+
+
+def _update_crowded_claims():
+    if not USE_CLAIM_VISION:
+        return
+    current_round = rc.get_current_round()
+
+    for flag in range(len(crowded_claims)):
+        stale = [idx for idx, seen_round in _crowded_claim_rounds[flag].items() if seen_round + 2 < current_round]
+        for idx in stale:
+            _clear_crowded_claim(flag, idx)
+
+    if _active_target_flag == 0 or _active_target_idx < 0 or _active_target_flag == heal.comm_flag:
+        return
+
+    bit = 1 << _active_target_idx
+    if not (map_info._bm_visible & bit):
+        return
+
+    flag = _active_target_flag
+    idx = _active_target_idx
+    if _adjacent_friendly_builder_count(idx) >= 2:
+        prev_round = _crowded_seen_rounds[flag].get(idx)
+        _crowded_seen_rounds[flag][idx] = current_round
+        if prev_round == current_round - 1 or (crowded_claims[flag] & bit):
+            crowded_claims[flag] |= bit
+            _crowded_claim_rounds[flag][idx] = current_round
+    else:
+        _clear_crowded_claim(flag, idx)
+
+
+def exclude_crowded_claims(flag: int, mask: int) -> int:
+    if not USE_CLAIM_VISION:
+        return mask
+    return mask & ~crowded_claims[flag]
+
+
+def register_active_target(flag: int, target: Position | None):
+    global _active_target_flag, _active_target_idx
+    if not USE_CLAIM_VISION:
+        return
+    if target is None or flag == heal.comm_flag:
+        return
+    _active_target_flag = flag
+    _active_target_idx = target.x + target.y * map_info._width
 
 def handle_comms():
     current_round = rc.get_current_round()
     comms_positional.start_round_stats()
     w = map_info._width
-    for v, sender_pos, estimated_turn in comms.get_new_messages():
+    for v, sender_pos, _marker_pos, _marker_id, estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
         if estimated_turn + 3 < current_round:
@@ -109,9 +197,12 @@ def _compute_voronoi_harvest_zone():
     return my_claimed
 
 def run():
-    global _harvest_zone, _harvest_zone_final
+    global _harvest_zone, _harvest_zone_final, _active_target_flag, _active_target_idx
     map_info.update(recompute=False)
     handle_comms()
+    _update_crowded_claims()
+    _active_target_flag = 0
+    _active_target_idx = -1
     map_info.recompute_derived()
     pathing.rebuild_broken_barriers(rc)
     if map_info._my_core and not _harvest_zone_final:
