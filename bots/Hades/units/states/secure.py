@@ -125,7 +125,6 @@ def run():
     if best_ore is None:
         cant_secure |= available
         return
-    units.builder.register_active_target(comm_flag, best_ore)
 
     best_n = best_ore.x + best_ore.y * w
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
@@ -150,7 +149,7 @@ def run():
         is_mine = bool(map_info._bm_team[my_team_idx] & pbit) if map_info._building_id[pn] else False
         is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & pbit)
         is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
-        if is_mine and (map_info._bm_et[map_info._IDX_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]&pbit) and map_info._building_dir[pn] != map_info._DIR_INT[d.opposite()]:
+        if is_mine and (map_info._bm_et[map_info._IDX_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_BRIDGE]&pbit) and map_info._building_dir[pn] != map_info._DIR_INT[d.opposite()]:
             done_conveyor = p
         if is_mine and map_info._bm_et[map_info._IDX_BRIDGE]&pbit:
             done_conveyor = p
@@ -185,6 +184,7 @@ def run():
             scale_estimate += 0.01
         _cost_map[best_n] = cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate)
     else:
+        print("CANT SECURE", best_ore, done_conveyor)
         cant_secure |= 1 << (best_ore.x + best_ore.y * w)
         return
     if _cost_map[best_n] > rc.get_global_resources()[0]:

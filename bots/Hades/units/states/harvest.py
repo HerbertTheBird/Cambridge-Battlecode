@@ -95,6 +95,7 @@ MAX_SCORE = 4
 _cached_claims = 0
 def score():
     global _cached_claims
+    units.builder.draw_mask(cant_harvest, 0, 0, 255)
     _cached_claims = _my_claims()
     return 4 if _cached_claims else 0
 
@@ -125,7 +126,7 @@ def run():
         if not map_info.in_bounds(pos):
             continue
         conv_dir = map_info._INT_DIR[map_info._building_dir[pos.x+pos.y*w]]
-        if (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&(1<<(pos.x+pos.y*w)) and conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & (1<<(pos.x+pos.y*w))):
+        if (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]|map_info._bm_et[map_info._IDX_BRIDGE])&(1<<(pos.x+pos.y*w)) and conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & (1<<(pos.x+pos.y*w))):
             path = nav.calculate_conveyor_path(pos.add(conv_dir), is_raw_ax, True)
     if not path:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)

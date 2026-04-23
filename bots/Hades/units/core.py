@@ -76,6 +76,8 @@ def run():
     if rc.get_current_round() <= INITIAL_SPAWN_COUNT + INITIAL_EXPLORE_MAX_STEPS:
         draw_spawn_plan(rc, core_pos, _spawn_plan, rc.get_map_width(), rc.get_map_height())
 
+    # if rc.get_current_round() == 400:
+    #     rc.resign()
     titanium = rc.get_global_resources()[0]
     axionite = rc.get_global_resources()[1]
     scaling = rc.get_scale_percent()
