@@ -24,7 +24,7 @@ from typing import TypeAlias
 Step: TypeAlias = tuple[int, int, int, int]
 # (dx, dy, cost, valid_from_mask)
 
-bridge_cost = 6
+bridge_cost = 10
 barrier_cost = 15
 threat_cost = 20
 conveyor_end_cost = 10
@@ -32,6 +32,30 @@ conveyor_end_cost = 10
 
 
 destroyed_barriers = dict()
+
+# Column masks for shifting by 2/3 — precomputed once from map dimensions.
+_col_masks_initialized = False
+_nlc2 = 0
+_nlc3 = 0
+_nrc3 = 0
+
+def _init_col_masks(width: int, height: int) -> None:
+    global _col_masks_initialized, _nlc2, _nlc3, _nrc3
+    if _col_masks_initialized:
+        return
+    left_col = 0
+    right_col = 0
+    for y in range(height):
+        left_col |= 1 << (y * width)
+        right_col |= 1 << ((width - 1) + y * width)
+    left_col_2 = left_col | (left_col << 1)
+    left_col_3 = left_col_2 | (left_col << 2)
+    right_col_2 = right_col | (right_col >> 1)
+    right_col_3 = right_col_2 | (right_col >> 2)
+    _nlc2 = ~left_col_2
+    _nlc3 = ~left_col_3
+    _nrc3 = ~right_col_3
+    _col_masks_initialized = True
 def rebuild_broken_barriers(rc: Controller):
     if  rc.get_global_resources()[0] < rc.get_barrier_cost()[0]:
         return
@@ -134,6 +158,7 @@ class Pathing:
         dist = 0
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
+        # builder.draw_mask(targets, 255, 0, 0)
         while frontier:
             hit = frontier & targets
             if hit:
@@ -155,6 +180,7 @@ class Pathing:
 
         w = self.width
         h = self.height
+        _init_col_masks(w, h)
 
         # --- movement definitions (make these class-level if truly constant) ---
         raw_card: list[tuple[int, int, int]] = [
@@ -332,32 +358,20 @@ class Pathing:
         board = (1 << (w * height)) - 1
         not_avoid = board & ~avoid
 
-        nw_cost = 1
-        not_walkable = ~walkable
 
-        # 8 combo masks: barrier/no-barrier × threat/no-threat × walkable/non-walkable
-        nb_nt_w  = board & ~barriers & ~threat & walkable
-        nb_nt_nw = board & ~barriers & ~threat & not_walkable
-        b_nt_w   = board & barriers  & ~threat & walkable
-        b_nt_nw  = board & barriers  & ~threat & not_walkable
-        nb_t_w   = board & ~barriers & threat  & walkable
-        nb_t_nw  = board & ~barriers & threat  & not_walkable
-        b_t_w    = board & barriers  & threat  & walkable
-        b_t_nw   = board & barriers  & threat  & not_walkable
+        nb_nt  = board & ~barriers & ~threat
+        b_nt   = board & barriers  & ~threat
+        nb_t   = board & ~barriers & threat
+        b_t    = board & barriers  & threat
 
-        max_c = 1 + barrier_cost + threat_cost + nw_cost
-        max_seed = barrier_cost + threat_cost + nw_cost
+        max_c = 1 + barrier_cost + threat_cost
+        max_seed = barrier_cost + threat_cost
         cycle_len = max(max_c, max_seed) + 1
         frontier = [0] * cycle_len
-        frontier[0]                                      = target_mask & nb_nt_w
-        frontier[nw_cost]                               |= target_mask & nb_nt_nw
-        frontier[barrier_cost]                          |= target_mask & b_nt_w
-        frontier[barrier_cost + nw_cost]                |= target_mask & b_nt_nw
-        frontier[threat_cost]                           |= target_mask & nb_t_w
-        frontier[threat_cost + nw_cost]                 |= target_mask & nb_t_nw
-        frontier[barrier_cost + threat_cost]            |= target_mask & b_t_w
-        frontier[barrier_cost + threat_cost + nw_cost]  |= target_mask & b_t_nw
-
+        frontier[0]                                      = target_mask & nb_nt
+        frontier[barrier_cost]                          |= target_mask & b_nt
+        frontier[threat_cost]                           |= target_mask & nb_t
+        frontier[barrier_cost + threat_cost]            |= target_mask & b_t
         visited = 0
         i = 0
         stuck_turns = 0
@@ -385,7 +399,10 @@ class Pathing:
                 cy = start_n // width
                 start_pos = Position(cx, cy)
                 from_mask = hit
+                if from_mask & walkable:
+                    from_mask &= walkable
                 border = (~nlc | ~nrc | ((1 << width) - 1) | (((1 << width) - 1)<<(w*(height-1)))) & board
+                border |= map_info._bm_friendly_bots
                 last_working_mask = from_mask
                 c = 0
                 while from_mask and c <= 4:
@@ -422,14 +439,10 @@ class Pathing:
             expanded = h | (h << w) | (h >> w)
             new = expanded & ~visited & not_avoid
 
-            frontier[(i + 1) % cycle_len]                                        |= new & nb_nt_w
-            frontier[(i + 1 + nw_cost) % cycle_len]                              |= new & nb_nt_nw
-            frontier[(i + 1 + barrier_cost) % cycle_len]                         |= new & b_nt_w
-            frontier[(i + 1 + barrier_cost + nw_cost) % cycle_len]               |= new & b_nt_nw
-            frontier[(i + 1 + threat_cost) % cycle_len]                          |= new & nb_t_w
-            frontier[(i + 1 + threat_cost + nw_cost) % cycle_len]                |= new & nb_t_nw
-            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]           |= new & b_t_w
-            frontier[(i + 1 + barrier_cost + threat_cost + nw_cost) % cycle_len] |= new & b_t_nw
+            frontier[(i + 1) % cycle_len]                                        |= new & nb_nt
+            frontier[(i + 1 + barrier_cost) % cycle_len]                         |= new & b_nt
+            frontier[(i + 1 + threat_cost) % cycle_len]                          |= new & nb_t
+            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]           |= new & b_t
             i += 1
             frontier[slot] = 0
 
@@ -465,9 +478,9 @@ class Pathing:
 
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
-        nlc2 = map_info._not_left_col_2
-        nlc3 = map_info._not_left_col_3
-        nrc3 = map_info._not_right_col_3
+        nlc2 = _nlc2
+        nlc3 = _nlc3
+        nrc3 = _nrc3
         w = width
         board = (1 << (w * height)) - 1
         not_avoid = board & ~avoid
@@ -632,7 +645,7 @@ class Pathing:
             if start_mask == 0:
                 return None
         else:
-            start_mask = 1 << (map_info._building_conv_target[start.x + start.y * w])
+            start_mask = 1 << (start.x + start.y * w)
         end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
         result = self.bfs_route(start_mask, target, avoid, end_cost_mask=end_cost_mask)
         if result is None:
@@ -694,7 +707,6 @@ class Pathing:
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
             if conveyor:
-                avoid &= ~(1<<map_info._building_conv_target[conveyor])
                 target &= ~(1<<conveyor)
             return target, avoid
         else:
@@ -705,6 +717,5 @@ class Pathing:
             if not target:
                 return 0, 0
             if conveyor:
-                avoid &= ~(1<<map_info._building_conv_target[conveyor])
                 target &= ~(1<<conveyor)
             return target, avoid
