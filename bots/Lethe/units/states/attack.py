@@ -81,21 +81,6 @@ _NON_CORE_TYPE_INDICES = (
     map_info._IDX_SPLITTER,
 )
 
-def _build_score_groups(score_table):
-    """Group non-core type indices by equal score. Returns
-    [(score, (t_idx, t_idx, ...)), ...]. Zero-score types are dropped.
-    Masks for types in a group are OR-disjoint (one building per tile), so
-    a single bit-sliced add per group is exact."""
-    groups: dict[int, list[int]] = {}
-    for t_idx in _NON_CORE_TYPE_INDICES:
-        s = score_table[t_idx]
-        if s:
-            groups.setdefault(s, []).append(t_idx)
-    return [(s, tuple(idxs)) for s, idxs in groups.items()]
-
-_SENTINEL_SCORE_GROUPS = _build_score_groups(SENTINEL_BUILDING_SCORE)
-_GUNNER_SCORE_GROUPS = _build_score_groups(GUNNER_BUILDING_SCORE)
-
 _NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
 
 SCORE_THRESHOLD_FACTOR = 0.25
@@ -109,20 +94,39 @@ cant_attack = 0
 # Bit-sliced score plane helpers
 # ---------------------------------------------------------------------------
 
-_SCORE_BITS_CACHE: dict = {}
+def _bits_of(c):
+    """Tuple of bit positions set in c. Pure function; cache at module load."""
+    result = []
+    x, i = c, 0
+    while x:
+        if x & 1:
+            result.append(i)
+        x >>= 1
+        i += 1
+    return tuple(result)
 
-def _bits_of_score(c):
-    b = _SCORE_BITS_CACHE.get(c)
-    if b is None:
-        b = []
-        x, i = c, 0
-        while x:
-            if x & 1:
-                b.append(i)
-            x >>= 1
-            i += 1
-        _SCORE_BITS_CACHE[c] = b
-    return b
+
+def _build_score_groups(score_table):
+    """Group non-core type indices by equal score. Returns
+    [(score, bits, (t_idx, ...)), ...]. Zero-score types are dropped. `bits`
+    is the precomputed bit-positions tuple for `score`, baked in so hot-path
+    callers don't need to look it up. Masks for types in a group are
+    OR-disjoint (one building per tile), so a single bit-sliced add per group
+    is exact."""
+    groups: dict[int, list[int]] = {}
+    for t_idx in _NON_CORE_TYPE_INDICES:
+        s = score_table[t_idx]
+        if s:
+            groups.setdefault(s, []).append(t_idx)
+    return [(s, _bits_of(s), tuple(idxs)) for s, idxs in groups.items()]
+
+_SENTINEL_SCORE_GROUPS = _build_score_groups(SENTINEL_BUILDING_SCORE)
+_GUNNER_SCORE_GROUPS = _build_score_groups(GUNNER_BUILDING_SCORE)
+
+# Bits tuples for constants baked into the hot scoring paths.
+_THREAT_PENALTY_BITS = _bits_of(THREAT_PENALTY)
+_SENT_CORE_BITS = _bits_of(SENTINEL_BUILDING_SCORE[map_info._IDX_CORE])
+_GUN_CORE_BITS = _bits_of(GUNNER_BUILDING_SCORE[map_info._IDX_CORE])
 
 
 def _ensure_attack_shift_plans():
@@ -170,7 +174,9 @@ def _ensure_attack_shift_plans():
 
 
 def _enemy_score_group_masks(enemy_team_bm):
-    """Grouped enemy masks shared by sentinel/gunner scoring for this layout."""
+    """Grouped enemy masks shared by sentinel/gunner scoring for this layout.
+    Each returned entry is (score, bits_tuple, bitmask) — bits baked in so the
+    hot inner loops don't hit the bits cache per call."""
     global _GROUP_MASK_CACHE_VERSION, _GROUP_MASK_CACHE_ENEMY
     global _SENTINEL_GROUP_MASKS, _GUNNER_GROUP_MASKS
 
@@ -181,22 +187,22 @@ def _enemy_score_group_masks(enemy_team_bm):
     bm_et = map_info._bm_et
 
     sentinel_groups = []
-    for s, idxs in _SENTINEL_SCORE_GROUPS:
+    for s, bits, idxs in _SENTINEL_SCORE_GROUPS:
         bm_group = 0
         for t_idx in idxs:
             bm_group |= bm_et[t_idx]
         bm_group &= enemy_team_bm
         if bm_group:
-            sentinel_groups.append((s, bm_group))
+            sentinel_groups.append((s, bits, bm_group))
 
     gunner_groups = []
-    for s, idxs in _GUNNER_SCORE_GROUPS:
+    for s, bits, idxs in _GUNNER_SCORE_GROUPS:
         bm_group = 0
         for t_idx in idxs:
             bm_group |= bm_et[t_idx]
         bm_group &= enemy_team_bm
         if bm_group:
-            gunner_groups.append((s, bm_group))
+            gunner_groups.append((s, bits, bm_group))
 
     _GROUP_MASK_CACHE_VERSION = sv
     _GROUP_MASK_CACHE_ENEMY = enemy_team_bm
@@ -205,19 +211,18 @@ def _enemy_score_group_masks(enemy_team_bm):
     return _SENTINEL_GROUP_MASKS, _GUNNER_GROUP_MASKS
 
 
-def _add_const_to_planes(planes, c, mask):
-    """Bit-sliced: add constant `c` to counters at every set bit of `mask`."""
-    if not mask or not c:
-        return
-    planes_local = planes
+def _add_bits_to_planes(planes, bits, mask):
+    """Bit-sliced: add the constant whose set bits are `bits` (tuple of bit
+    positions) to counters at every set bit of `mask`. Caller must ensure
+    `bits` is non-empty and `mask` is truthy."""
     num_planes = _NUM_PLANES
-    for i in _bits_of_score(c):
-        carry = planes_local[i] & mask
-        planes_local[i] ^= mask
+    for i in bits:
+        carry = planes[i] & mask
+        planes[i] ^= mask
         j = i + 1
         while carry and j < num_planes:
-            new_carry = planes_local[j] & carry
-            planes_local[j] ^= carry
+            new_carry = planes[j] & carry
+            planes[j] ^= carry
             carry = new_carry
             j += 1
 
@@ -293,13 +298,21 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
     bm_et = map_info._bm_et
 
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
-    core_score = SENTINEL_BUILDING_SCORE[map_info._IDX_CORE]
     type_contribs, _ = _enemy_score_group_masks(enemy_team_bm)
+    sent_core_bits = _SENT_CORE_BITS  # () when core score is 0
 
     non_threat = map_info._board_mask & ~threat
     non_zero = 0
     all_planes = []
     for d in range(8):
+        mask_d = sentinel_masks[d]
+        if not mask_d:
+            # No valid placement: skip all shift/add work. A tile reached only
+            # through this direction wouldn't survive the downstream threshold
+            # (bare THREAT_PENALTY=4 < MIN_ATTACK_SCORE+THREAT_PENALTY=20), so
+            # dropping its non_zero contribution is output-equivalent.
+            all_planes.append([0] * _NUM_PLANES)
+            continue
         planes = [0] * _NUM_PLANES
         core_reach = 0
         for sm, rev_off in _SENTINEL_REACH_SHIFTS[d]:
@@ -310,7 +323,7 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
                         core_reach |= masked << rev_off
                     else:
                         core_reach |= masked >> (-rev_off)
-            for s, bm_t in type_contribs:
+            for _s, bits, bm_t in type_contribs:
                 masked = bm_t & sm
                 if not masked:
                     continue
@@ -319,21 +332,23 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
                 else:
                     contrib = masked >> (-rev_off)
                 non_zero |= contrib
-                _add_const_to_planes(planes, s, contrib)
+                restricted = contrib & mask_d
+                if restricted:
+                    _add_bits_to_planes(planes, bits, restricted)
         non_zero |= core_reach
-        if core_reach:
-            _add_const_to_planes(planes, core_score, core_reach)
-        # Restrict every plane to placement-candidate tiles for this direction.
-        # THREAT_PENALTY is baked after the loop using final non_zero.
-        mask_d = sentinel_masks[d]
-        for i in range(_NUM_PLANES):
-            planes[i] &= mask_d
+        if core_reach and sent_core_bits:
+            core_restricted = core_reach & mask_d
+            if core_restricted:
+                _add_bits_to_planes(planes, sent_core_bits, core_restricted)
+        # No final `planes[i] &= mask_d` loop: every add was pre-restricted to
+        # mask_d, so by induction every plane bit is already inside mask_d.
         all_planes.append(planes)
 
-    if THREAT_PENALTY:
+    if _THREAT_PENALTY_BITS:
         for d in range(8):
-            _add_const_to_planes(all_planes[d], THREAT_PENALTY,
-                                 non_threat & non_zero & sentinel_masks[d])
+            baked = non_threat & non_zero & sentinel_masks[d]
+            if baked:
+                _add_bits_to_planes(all_planes[d], _THREAT_PENALTY_BITS, baked)
     return all_planes
 
 
@@ -382,66 +397,93 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
     not_blocked = map_info._board_mask & ~_gunner_ray_blocked_mask()
 
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
-    core_score = GUNNER_BUILDING_SCORE[map_info._IDX_CORE]
+    gun_core_bits = _GUN_CORE_BITS
     _, type_initial = _enemy_score_group_masks(enemy_team_bm)
 
     non_threat = map_info._board_mask & ~threat
     non_zero = 0
     summed = [0] * _NUM_PLANES
-    all_planes = [] if include_per_dir else None
+    all_planes: list = []  # always allocate; caller gets None when not wanted
     any_placeable = 0
     for d in range(8):
         planes = [0] * _NUM_PLANES
         mask_d = gunner_masks[d]
         any_placeable |= mask_d
         sm, soff, max_step = _GUNNER_STEP_SHIFTS[d]
-        if not sm or max_step == 0:
+        if not sm or max_step == 0 or not mask_d:
+            # Skip: either direction has no valid shift OR no placement tile.
+            # A tile reached only through this direction would score at most
+            # THREAT_PENALTY=4 < MIN_ATTACK_SCORE+THREAT_PENALTY=20, so
+            # dropping its non_zero contribution is output-equivalent.
             if include_per_dir:
                 all_planes.append(planes)
             continue
+        combined_sm = sm & not_blocked  # shift mask is step-invariant
         core_cur = core_mask
         type_cur = list(type_initial)
         core_reach = 0
-        def _shift_one(m, _sm=sm, _soff=soff, _nb=not_blocked):
-            masked = m & _sm & _nb
-            return (masked << _soff if _soff >= 0 else masked >> (-_soff))
-        for _ in range(max_step):
-            if core_cur:
-                core_cur = _shift_one(core_cur)
+        # Hoist the shift-direction dispatch out of the step loop. The closure
+        # was hot (≥ max_step*(1+len(type_cur)) calls per direction).
+        if soff >= 0:
+            for _ in range(max_step):
                 if core_cur:
-                    core_reach |= core_cur
-            new_type_cur = []
-            for s, bm_t in type_cur:
-                shifted = _shift_one(bm_t)
-                if shifted:
-                    new_type_cur.append((s, shifted))
-                    non_zero |= shifted
-                    _add_const_to_planes(planes, s, shifted)
-            type_cur = new_type_cur
-            if not core_cur and not type_cur:
-                break
+                    core_cur = (core_cur & combined_sm) << soff
+                    if core_cur:
+                        core_reach |= core_cur
+                new_type_cur: list = []
+                for _s, bits, bm_t in type_cur:
+                    shifted = (bm_t & combined_sm) << soff
+                    if shifted:
+                        new_type_cur.append((_s, bits, shifted))
+                        non_zero |= shifted
+                        restricted = shifted & mask_d
+                        if restricted:
+                            _add_bits_to_planes(planes, bits, restricted)
+                type_cur = new_type_cur
+                if not core_cur and not type_cur:
+                    break
+        else:
+            nsoff = -soff
+            for _ in range(max_step):
+                if core_cur:
+                    core_cur = (core_cur & combined_sm) >> nsoff
+                    if core_cur:
+                        core_reach |= core_cur
+                new_type_cur: list = []
+                for _s, bits, bm_t in type_cur:
+                    shifted = (bm_t & combined_sm) >> nsoff
+                    if shifted:
+                        new_type_cur.append((_s, bits, shifted))
+                        non_zero |= shifted
+                        restricted = shifted & mask_d
+                        if restricted:
+                            _add_bits_to_planes(planes, bits, restricted)
+                type_cur = new_type_cur
+                if not core_cur and not type_cur:
+                    break
         non_zero |= core_reach
-        if core_reach:
-            _add_const_to_planes(planes, core_score, core_reach)
-        # Restrict every plane to placement-candidate tiles for this direction.
-        # THREAT_PENALTY is baked after the loop so every plane gets it exactly
-        # once, using the final non_zero union.
-        for i in range(_NUM_PLANES):
-            planes[i] &= mask_d
+        if core_reach and gun_core_bits:
+            core_restricted = core_reach & mask_d
+            if core_restricted:
+                _add_bits_to_planes(planes, gun_core_bits, core_restricted)
+        # No final `planes[i] &= mask_d` loop: every add was pre-restricted to
+        # mask_d, so by induction every plane bit is already inside mask_d.
         _add_planes_into(summed, planes)
         if include_per_dir:
             all_planes.append(planes)
 
     # Bake THREAT_PENALTY once on the summed plane and, when requested, once
     # on each per-direction plane.
-    if THREAT_PENALTY:
-        _add_const_to_planes(summed, THREAT_PENALTY,
-                             non_threat & non_zero & any_placeable)
+    if _THREAT_PENALTY_BITS:
+        baked_sum = non_threat & non_zero & any_placeable
+        if baked_sum:
+            _add_bits_to_planes(summed, _THREAT_PENALTY_BITS, baked_sum)
         if include_per_dir:
             for d in range(8):
-                _add_const_to_planes(all_planes[d], THREAT_PENALTY,
-                                     non_threat & non_zero & gunner_masks[d])
-    return all_planes, summed
+                baked = non_threat & non_zero & gunner_masks[d]
+                if baked:
+                    _add_bits_to_planes(all_planes[d], _THREAT_PENALTY_BITS, baked)
+    return (all_planes if include_per_dir else None), summed
 
 
 # ---------------------------------------------------------------------------
@@ -674,16 +716,32 @@ def _get_attack_candidates():
         _round_cache_placement_masks[1] = [0] * 8
         return 0, 0
 
+    # Cheap early-out: if the enemy has no scorable structure visible, every
+    # plane is zero and the threshold gate below would filter everything out.
+    # Skip placement-candidate + plane work entirely. Road/marker tiles score
+    # zero in both building-score tables, so we exclude them from the check.
+    enemy_idx = 1 - map_info._my_team_idx
+    enemy_scorable = (
+        map_info._bm_team[enemy_idx]
+        & ~map_info._bm_et[map_info._IDX_ROAD]
+        & ~map_info._bm_et[map_info._IDX_MARKER]
+    )
+    if not enemy_scorable:
+        _round_cache_placement_masks[0] = [0] * 8
+        _round_cache_placement_masks[1] = [0] * 8
+        return 0, 0
+
     sentinel_masks, gunner_masks = _placement_candidates()
     _round_cache_placement_masks[0] = sentinel_masks
     _round_cache_placement_masks[1] = gunner_masks
 
+    # Fold the two direction-unions into a single pass.
     gunner_any = 0
+    sent_any = 0
     for d in range(8):
         gunner_any |= gunner_masks[d]
-    filtered = gunner_any
-    for d in range(8):
-        filtered |= sentinel_masks[d]
+        sent_any |= sentinel_masks[d]
+    filtered = gunner_any | sent_any
     if not filtered:
         return 0, 0
 
