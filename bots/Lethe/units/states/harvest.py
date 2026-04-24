@@ -16,7 +16,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = units.builder.exclude_crowded_claims(comm_flag, harvestable_ore() & ~_too_expensive())
-    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available)
+    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available, map_info._bm_passable_FFF)
 
 def init(c: Controller):
     global rc, nav
