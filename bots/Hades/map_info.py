@@ -1,44 +1,44 @@
 from __future__ import annotations
-from typing import Optional, Set, Tuple
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError, GameConstants
-from collections import deque
 import pathing
 import units.builder as builder
 import comms
 from log import log
 
-_HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
-_CONVEYOR_TYPES = frozenset(
-    e for e in (
-        EntityType.CONVEYOR, 
-        EntityType.ARMOURED_CONVEYOR,
-        EntityType.BRIDGE, 
-        EntityType.SPLITTER
-    )
-)
+_HAS_DIRECTION = frozenset({
+    EntityType.ARMOURED_CONVEYOR,
+    EntityType.BREACH,
+    EntityType.CONVEYOR,
+    EntityType.GUNNER,
+    EntityType.SENTINEL,
+    EntityType.SPLITTER,
+})
 
-_ACCEPT_ORE = frozenset(
-    e for e in (
-        EntityType.CONVEYOR, 
-        EntityType.ARMOURED_CONVEYOR,
-        EntityType.BRIDGE, 
-        EntityType.SPLITTER, 
-        EntityType.BREACH, 
-        EntityType.CORE, 
-        EntityType.FOUNDRY, 
-        EntityType.GUNNER, 
-        EntityType.SENTINEL
-    )
-)
+_CONVEYOR_TYPES = frozenset({
+    EntityType.CONVEYOR,
+    EntityType.ARMOURED_CONVEYOR,
+    EntityType.BRIDGE,
+    EntityType.SPLITTER,
+})
 
-_TURRET_TYPES = frozenset(
-    e for e in (
-        EntityType.LAUNCHER, 
-        EntityType.GUNNER,
-        EntityType.SENTINEL, 
-        EntityType.BREACH
-    )
-)
+_ACCEPT_ORE = frozenset({
+    EntityType.CONVEYOR,
+    EntityType.ARMOURED_CONVEYOR,
+    EntityType.BRIDGE,
+    EntityType.SPLITTER,
+    EntityType.BREACH,
+    EntityType.CORE,
+    EntityType.FOUNDRY,
+    EntityType.GUNNER,
+    EntityType.SENTINEL,
+})
+
+_TURRET_TYPES = frozenset({
+    EntityType.LAUNCHER,
+    EntityType.GUNNER,
+    EntityType.SENTINEL,
+    EntityType.BREACH,
+})
 
 _ET_ROAD              = EntityType.ROAD
 _ET_MARKER            = EntityType.MARKER
