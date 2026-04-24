@@ -500,9 +500,9 @@ class Pathing:
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
-            rc, gc, bc = colorsys.hsv_to_rgb((i%8)/8, 1, 1)
+            # rc, gc, bc = colorsys.hsv_to_rgb((i%8)/8, 1, 1)
 
-            builder.draw_mask(cur_frontier, int(rc*255), int(gc*255), int(bc*255))
+            # builder.draw_mask(cur_frontier, int(rc*255), int(gc*255), int(bc*255))
 
             hit = cur_frontier & start_mask
             if hit:
