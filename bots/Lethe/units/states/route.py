@@ -294,7 +294,7 @@ def run():
             map_info.update_at(destroy)
             built = True
         elif not bridge:
-            direction = destroy.direction_to(next)
+            direction = map_info.direction_to(destroy, next)
             if _can_build_preferred_conveyor(destroy, direction):
                 _build_preferred_conveyor(destroy, direction)
                 map_info.update_at(destroy)

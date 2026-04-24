@@ -150,6 +150,25 @@ def pos_add(pos: Position, d: Direction) -> Position:
     dx, dy = _DIRECTION_DELTAS[d]
     return Position(pos.x + dx, pos.y + dy)
 
+def direction_to(src: Position, dst: Position) -> Direction:
+    """Fast nearest-octant replacement for Position.direction_to()."""
+    dx = dst.x - src.x
+    dy = dst.y - src.y
+    if dx == 0 and dy == 0:
+        return Direction.CENTRE
+
+    ax = dx if dx >= 0 else -dx
+    ay = dy if dy >= 0 else -dy
+
+    # tan(22.5 deg) ~= 0.41421356, using integer math to avoid trig.
+    if ay * 100000 <= ax * 41422:
+        return Direction.EAST if dx > 0 else Direction.WEST
+    if ax * 100000 <= ay * 41422:
+        return Direction.SOUTH if dy > 0 else Direction.NORTH
+    if dx > 0:
+        return Direction.SOUTHEAST if dy > 0 else Direction.NORTHEAST
+    return Direction.SOUTHWEST if dy > 0 else Direction.NORTHWEST
+
 _rc: Controller
 _width = _height = 0
 _MAP_CENTER = None

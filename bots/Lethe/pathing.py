@@ -609,7 +609,7 @@ class Pathing:
             return False
         if DRAW_DEBUG:
             self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
-        return self.move(s_pos.direction_to(p_pos))
+        return self.move(map_info.direction_to(s_pos, p_pos))
 
 
 
