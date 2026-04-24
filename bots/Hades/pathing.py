@@ -9,6 +9,7 @@ import units.builder as builder
 import sys
 from functools import lru_cache
 from log import DRAW_DEBUG, log
+import colorsys
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -24,7 +25,7 @@ from typing import TypeAlias
 Step: TypeAlias = tuple[int, int, int, int]
 # (dx, dy, cost, valid_from_mask)
 
-bridge_cost = 10
+bridge_cost = 6
 barrier_cost = 15
 threat_cost = 20
 conveyor_end_cost = 10
@@ -489,13 +490,19 @@ class Pathing:
         visited = 0
         visited_layers: list[int] = []
         i = 0
+        foundries = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_FOUNDRY])
         while True:
             # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
+            if i > 1:
+                cur_frontier &= ~foundries
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
+            # rc, gc, bc = colorsys.hsv_to_rgb((i%8)/8, 1, 1)
+
+            # builder.draw_mask(cur_frontier, int(rc*255), int(gc*255), int(bc*255))
 
             hit = cur_frontier & start_mask
             if hit:
@@ -695,6 +702,7 @@ class Pathing:
         at_least_two = ((n1 & n2) | (n1 & n3) | (n1 & n4)
                         | (n2 & n3) | (n2 & n4) | (n3 & n4))
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
+        return (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_ti_carrying & ~map_info.expand_chebyshev(map_info._bm_et[map_info._IDX_FOUNDRY]))
         return ((adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti))&builder._harvest_zone
 
     def _get_conveyor_targets_and_avoid(
@@ -702,13 +710,13 @@ class Pathing:
     ):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
-            ti_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI])
+            ti_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
             return target, avoid
         else:
-            ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
+            ax_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_AX])
             target = (map_info._bm_route_targets & ~map_info._bm_conv_raw_ax) | map_info._bm_my_core_area
             target &= ~ax_harvesters
             avoid |= ax_harvesters

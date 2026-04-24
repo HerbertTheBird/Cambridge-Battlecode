@@ -24,7 +24,8 @@ def init(c: Controller):
     nav = units.builder.nav
 
 cant_secure = 0
-_cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
+_cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
+COST_MAP_TTL = 100
 def securable_ore():
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
 
@@ -36,17 +37,24 @@ def securable_ore():
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
     ti = rc.get_global_resources()[0]
+    current = rc.get_current_round()
     result = 0
-    for n, cost in _cost_map.items():
-        # log(n%map_info._width, n//map_info._width, cost)
+    stale = []
+    for n, (cost, turn) in _cost_map.items():
+        if turn + COST_MAP_TTL < current:
+            stale.append(n)
+            continue
         if cost > ti:
             result |= 1 << n
+    for n in stale:
+        del _cost_map[n]
     return result
 
 MAX_SCORE = 3
 _cached_claims = 0
 def score():
     global _cached_claims
+    units.builder.draw_mask(_too_expensive(), 255, 0, 0)
     _cached_claims = _my_claims()
     return 3 if _cached_claims else 0
 
@@ -182,12 +190,12 @@ def run():
         else:
             cost_estimate += rc.get_conveyor_cost()[0]
             scale_estimate += 0.01
-        _cost_map[best_n] = cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate)
+        _cost_map[best_n] = (cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate), rc.get_current_round())
     else:
         print("CANT SECURE", best_ore, done_conveyor)
         cant_secure |= 1 << (best_ore.x + best_ore.y * w)
         return
-    if _cost_map[best_n] > rc.get_global_resources()[0]:
+    if _cost_map[best_n][0] > rc.get_global_resources()[0]:
         return
     tn = path[1].x + path[1].y * w
     if not done_conveyor and is_conveyor and path[0] == closest and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):

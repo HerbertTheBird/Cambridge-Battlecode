@@ -1174,6 +1174,21 @@ def _compute_route_targets() -> int:
     # builder.draw_mask(my_convs & ~reaches_core, 255, 128, 0)
     # builder.draw_mask(_bm_guard_conveyor & my_convs, 255, 0, 255)
 
+    # --- Extra dead-ends: raw-ax foundry sites (no foundry placed yet) whose
+    # inbound conveyors are inferred to be carrying raw axionite.
+    if builder.nav is not None:
+        sites = builder.nav.raw_ax_foundry_sites()
+        if sites and _bm_raw_ax_carrying:
+            carrying = _bm_raw_ax_carrying
+            rev = reverse
+            m = sites
+            while m:
+                lsb = m & -m
+                n = lsb.bit_length() - 1
+                if rev[n] & carrying:
+                    _bm_dead_end |= lsb
+                m ^= lsb
+
     return _bm_my_core_area | (reaches_core & ~unroutable & ~_bm_guard_conveyor)
 
 def recompute_derived() -> None:

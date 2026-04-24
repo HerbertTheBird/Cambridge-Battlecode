@@ -9,7 +9,8 @@ from log import log
 rc: Controller = None
 nav: Pathing = None
 comm_flag = 5
-_cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
+_cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
+COST_MAP_TTL = 100
 
 unpathable = 0
 
@@ -41,10 +42,17 @@ def init(c: Controller):
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
     ti = rc.get_global_resources()[0]
+    current = rc.get_current_round()
     result = 0
-    for n, cost in _cost_map.items():
+    stale = []
+    for n, (cost, turn) in _cost_map.items():
+        if turn + COST_MAP_TTL < current:
+            stale.append(n)
+            continue
         if cost > ti:
             result |= 1 << n
+    for n in stale:
+        del _cost_map[n]
     return result
 
 def _dead_end_conveyors():
@@ -156,8 +164,8 @@ def run():
         target_conveyor = [path[0], path[1]]
     else:
         prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
-        is_raw_ax = bool(map_info._bm_conv_raw_ax & prev_bit) or bool(map_info._bm_conv_raw_ax & best_bit)
-        is_refined = bool(map_info._bm_conv_refined & prev_bit) or bool(map_info._bm_conv_refined & best_bit)
+        is_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & best_bit)
+        is_refined = bool(map_info._bm_refined_carrying & prev_bit) or bool(map_info._bm_refined_carrying & best_bit)
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
         print("PATH", path, bool(is_raw_ax))
         if path is None:
@@ -167,7 +175,7 @@ def run():
     cost = nav.conveyor_cost(path[2])
     best_n = best.x + best.y * width
     if not is_refined:
-        _cost_map[best_n] = cost
+        _cost_map[best_n] = (cost, rc.get_current_round())
         if rc.get_global_resources()[0] < cost:
             log("can't afford", cost)
             comms.mark(best.x + best.y * map_info._width, comm_flag)
