@@ -25,6 +25,7 @@ def init(c: Controller):
 
 cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
+_cached_claims = 0
 def possible_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
@@ -88,7 +89,9 @@ def _too_expensive():
 
 MAX_SCORE = 3
 def score():
-    return 3 if _my_claims() else 0
+    global _cached_claims
+    _cached_claims = _my_claims()
+    return 3 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
@@ -99,11 +102,9 @@ def run():
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
     my_team_idx = map_info._my_team_idx
-    ore_mask = possible_ore()
     wall_mask = map_info._bm_env[map_info._IDX_ENV_WALL]
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
     marker_mask = map_info._bm_et[map_info._IDX_MARKER]
-    harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
     has_building = map_info._bm_any_building
 
     my_pos = map_info._my_pos
@@ -139,7 +140,7 @@ def run():
             cant_harvest |= pbit
             continue
         cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
-        print("diagonal ore at", p, "cost", cost)
+        log("diagonal ore at", p, "cost", cost)
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
@@ -153,7 +154,7 @@ def run():
         comms.mark(pn, comm_flag)
         return
 
-    available = _my_claims()
+    available = _cached_claims
     if not available:
         return
 

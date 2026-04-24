@@ -665,11 +665,10 @@ def _placement_candidates():
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
-        danger = enemy_bots
-        for _ in range(2):
-            danger = map_info.expand_chebyshev(danger)
+        tracked_zone = map_info.expand_chebyshev(enemy_bots)
+        danger = map_info.expand_chebyshev(tracked_zone)
         danger_for_clearable |= danger
-        if map_info.expand_chebyshev(enemy_bots) & (1<<(map_info._my_pos.x + map_info._my_pos.y * map_info._width)):
+        if tracked_zone & (1<<(map_info._my_pos.x + map_info._my_pos.y * map_info._width)):
             danger_for_clearable = map_info._board_mask #am being tracked
     candidates &= ~(danger_for_clearable & enemy_clearable)
 
@@ -896,7 +895,7 @@ def _draw_attack_candidates(filtered):
         n = lsb.bit_length() - 1
         x, y = n % w, n // w
         direction, turret_type, score = get_best_direction(Position(x, y))
-        print(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
+        log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
         dx, dy = dir_deltas[direction]
         ex, ey = x + dx, y + dy
         if turret_type == EntityType.GUNNER:

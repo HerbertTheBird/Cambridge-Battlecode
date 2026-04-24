@@ -122,9 +122,7 @@ class Pathing:
         if pos is None:
             pos = map_info._my_pos
         w = map_info._width
-        board = (1 << (w * map_info._height)) - 1
-        avoid = map_info.get_avoid(False, False, False)
-        passable = (~avoid & board) |  targets
+        passable = map_info._bm_passable_FFF | targets
         start = 1 << (pos.x + pos.y * w)
         if start & targets:
             return pos, 0
