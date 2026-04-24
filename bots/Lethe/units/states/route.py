@@ -143,7 +143,7 @@ def _my_claims():
     avoid = avoid_mask()
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     candidates = units.builder.exclude_crowded_claims(comm_flag, candidates)
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates, map_info._bm_passable_FFF)
 
 _cached_claims = 0  # set by score(), reused by run()
 
@@ -294,7 +294,7 @@ def run():
             map_info.update_at(destroy)
             built = True
         elif not bridge:
-            direction = destroy.direction_to(next)
+            direction = map_info.direction_to(destroy, next)
             if _can_build_preferred_conveyor(destroy, direction):
                 _build_preferred_conveyor(destroy, direction)
                 map_info.update_at(destroy)

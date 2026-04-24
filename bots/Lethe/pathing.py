@@ -62,15 +62,14 @@ def rebuild_broken_barriers(rc: Controller):
             break
     if rebuilt_pos is not None:
         destroyed_barriers.pop(rebuilt_pos, None)
-def voronoi_claim(my_mask, others_mask, claims):
+def voronoi_claim(my_mask, others_mask, claims, passable=None):
     if not claims:
         return 0
     if not others_mask:
         return claims
-    w = map_info._width
-    board = (1 << (w * map_info._height)) - 1
-    avoid = map_info.get_avoid(False, False, False)
-    passable = (~avoid & board) | claims
+    if passable is None:
+        passable = map_info._bm_passable_FFF
+    passable |= claims
 
     my_front = my_mask & passable
     other_front = others_mask & passable
@@ -610,7 +609,7 @@ class Pathing:
             return False
         if DRAW_DEBUG:
             self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
-        return self.move(s_pos.direction_to(p_pos))
+        return self.move(map_info.direction_to(s_pos, p_pos))
 
 
 

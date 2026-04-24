@@ -137,7 +137,7 @@ def choose_spawn_plan(rc: Controller, core_pos: Position, n: int):
 
     # Spawn directions that point closer to map center first
     center = Position(width // 2, height // 2)
-    center_dir = core_pos.direction_to(center)
+    center_dir = map_info.direction_to(core_pos, center)
     chosen.sort(key=lambda de: (dir_distance(de[0], center_dir), de[1].distance_squared(center)))
 
     return [d for (d, _) in chosen]

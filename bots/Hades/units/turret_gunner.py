@@ -279,7 +279,7 @@ def choose_rotate_dir(enemies) -> Direction | None:
             continue
 
         dist = my_pos.distance_squared(tpos)
-        desired_dir = my_pos.direction_to(tpos)
+        desired_dir = map_info.direction_to(my_pos, tpos)
 
         if desired_dir == current_dir:
             continue
