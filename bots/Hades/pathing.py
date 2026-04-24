@@ -466,7 +466,7 @@ class Pathing:
             t_end = target_mask & end_cost_mask
             t_core = target_mask & ~t_end
         else:
-            convs = map_info._bm_conveyors & ~map_info._bm_my_core_area
+            convs = map_info._bm_conveyors & ~map_info._bm_my_core_area & (map_info._bm_ti_carrying | map_info._bm_raw_ax_carrying |  map_info._bm_refined_carrying)
             t_end = target_mask & convs
             t_core = target_mask & ~convs
 

@@ -56,6 +56,8 @@ def score():
     global _cached_claims
     units.builder.draw_mask(_too_expensive(), 255, 0, 0)
     _cached_claims = _my_claims()
+    if _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]:
+        return 6
     return 3 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
@@ -75,6 +77,8 @@ def run():
     global cant_secure
     log("SECURE")
     available = _cached_claims
+    if _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]:
+        available = _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]
     # units.builder.draw_mask(available, 255, 255, 255)
     if not available:
         return

@@ -65,9 +65,9 @@ def _my_claims():
     targets = units.builder.exclude_crowded_claims(comm_flag, _sabotage_targets())
     return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets)
 
-MAX_SCORE = 5
+MAX_SCORE = 0
 def score():
-    return 5 if _my_claims() else 0
+    return 0 if _my_claims() else 0
 
 def run():
     log("SABOTAGE")
