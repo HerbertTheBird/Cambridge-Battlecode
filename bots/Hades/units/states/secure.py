@@ -14,7 +14,7 @@ def _my_claims():
     my_pos = map_info._my_pos
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
-    available = securable_ore() & ~_too_expensive()
+    available = securable_ore() & ~(_too_expensive() & ~map_info._bm_et[map_info._IDX_HARVESTER])
     return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available) & ~map_info._bm_friendly_bots
 
 
@@ -50,14 +50,15 @@ def _too_expensive():
         del _cost_map[n]
     return result
 
-MAX_SCORE = 3
+MAX_SCORE = 7.5
 _cached_claims = 0
 def score():
     global _cached_claims
-    units.builder.draw_mask(_too_expensive(), 255, 0, 0)
+    # units.builder.draw_mask(securable_ore(), 255, 0, 0)
     _cached_claims = _my_claims()
     if _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]:
-        return 6
+        units.builder.draw_mask(_cached_claims & map_info._bm_et[map_info._IDX_HARVESTER], 0, 255, 0)
+        return 7.5
     return 3 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
@@ -77,8 +78,10 @@ def run():
     global cant_secure
     log("SECURE")
     available = _cached_claims
+    secure_now = False
     if _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]:
         available = _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]
+        secure_now = True
     # units.builder.draw_mask(available, 255, 255, 255)
     if not available:
         return
@@ -199,7 +202,7 @@ def run():
         print("CANT SECURE", best_ore, done_conveyor)
         cant_secure |= 1 << (best_ore.x + best_ore.y * w)
         return
-    if _cost_map[best_n][0] > rc.get_global_resources()[0]:
+    if _cost_map[best_n][0] > rc.get_global_resources()[0] and not secure_now:
         return
     tn = path[1].x + path[1].y * w
     if not done_conveyor and is_conveyor and path[0] == closest and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
@@ -209,7 +212,7 @@ def run():
             map_info.update_at(path[1])
             return
     def build_stuff():
-        if rc.can_destroy(closest) and rc.get_action_cooldown() == 0 and not rc.get_tile_builder_bot_id(closest):
+        if rc.can_destroy(closest) and rc.get_action_cooldown() == 0:
             rc.destroy(closest)
             map_info.update_at(closest)
         if not done_conveyor and closest == path[0]:
@@ -238,6 +241,9 @@ def run():
             log("move to next")
             nav.move_to(next_closest)
     else:
-        nav.move_to(best_ore)
+        if secure_now:
+            nav.move_to(closest)
+        else:
+            nav.move_to(best_ore)
         build_stuff()
     comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
