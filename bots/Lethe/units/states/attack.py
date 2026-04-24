@@ -15,11 +15,26 @@ comm_flag = 6
 
 MAX_SCORE = 8
 
+_SHIFT_PLAN_WIDTH = -1
+_SHIFT_PLAN_HEIGHT = -1
+_SENTINEL_REACH_SHIFTS = ()
+_GUNNER_STEP_SHIFTS = ()
+_CARDINAL_BLOCKER_SHIFTS = ()
+
+_GROUP_MASK_CACHE_VERSION = -1
+_GROUP_MASK_CACHE_ENEMY = -1
+_SENTINEL_GROUP_MASKS = ()
+_GUNNER_GROUP_MASKS = ()
+
+_GUNNER_BLOCKED_CACHE_VERSION = -1
+_GUNNER_BLOCKED_MASK = 0
+
 
 def init(c: Controller):
     global rc, nav
     rc = c
     nav = units.builder.nav
+    _ensure_attack_shift_plans()
 
 
 SENTINEL_BUILDING_SCORE = [0] * map_info._NUM_ET
@@ -110,17 +125,99 @@ def _bits_of_score(c):
     return b
 
 
+def _ensure_attack_shift_plans():
+    """Precompute static shift plans used by the hot attack scorers."""
+    global _SHIFT_PLAN_WIDTH, _SHIFT_PLAN_HEIGHT
+    global _SENTINEL_REACH_SHIFTS, _GUNNER_STEP_SHIFTS, _CARDINAL_BLOCKER_SHIFTS
+
+    w = map_info._width
+    h = map_info._height
+    if _SHIFT_PLAN_WIDTH == w and _SHIFT_PLAN_HEIGHT == h:
+        return
+
+    shift_masks = map_info._turret_shift_masks
+
+    sentinel_plans = []
+    for d in range(8):
+        steps = []
+        for dx, dy in map_info._SENTINEL_OFFSETS[d]:
+            sdx = -dx
+            sdy = -dy
+            sm = shift_masks.get((sdx, sdy))
+            if sm is None:
+                continue
+            steps.append((sm, sdx + sdy * w))
+        sentinel_plans.append(tuple(steps))
+
+    gunner_plans = []
+    blocker_plans = [None] * 8
+    for d, (dx, dy) in enumerate(map_info._DIR_VECS):
+        sdx = -dx
+        sdy = -dy
+        sm = shift_masks.get((sdx, sdy))
+        if sm is None:
+            gunner_plans.append((0, 0, 0))
+        else:
+            gunner_plans.append((sm, sdx + sdy * w, len(map_info._GUNNER_RAYS[d])))
+        if (d & 1) == 0 and sm is not None:
+            blocker_plans[d] = (sm, sdx + sdy * w)
+
+    _SENTINEL_REACH_SHIFTS = tuple(sentinel_plans)
+    _GUNNER_STEP_SHIFTS = tuple(gunner_plans)
+    _CARDINAL_BLOCKER_SHIFTS = tuple(blocker_plans)
+    _SHIFT_PLAN_WIDTH = w
+    _SHIFT_PLAN_HEIGHT = h
+
+
+def _enemy_score_group_masks(enemy_team_bm):
+    """Grouped enemy masks shared by sentinel/gunner scoring for this layout."""
+    global _GROUP_MASK_CACHE_VERSION, _GROUP_MASK_CACHE_ENEMY
+    global _SENTINEL_GROUP_MASKS, _GUNNER_GROUP_MASKS
+
+    sv = map_info._struct_version
+    if _GROUP_MASK_CACHE_VERSION == sv and _GROUP_MASK_CACHE_ENEMY == enemy_team_bm:
+        return _SENTINEL_GROUP_MASKS, _GUNNER_GROUP_MASKS
+
+    bm_et = map_info._bm_et
+
+    sentinel_groups = []
+    for s, idxs in _SENTINEL_SCORE_GROUPS:
+        bm_group = 0
+        for t_idx in idxs:
+            bm_group |= bm_et[t_idx]
+        bm_group &= enemy_team_bm
+        if bm_group:
+            sentinel_groups.append((s, bm_group))
+
+    gunner_groups = []
+    for s, idxs in _GUNNER_SCORE_GROUPS:
+        bm_group = 0
+        for t_idx in idxs:
+            bm_group |= bm_et[t_idx]
+        bm_group &= enemy_team_bm
+        if bm_group:
+            gunner_groups.append((s, bm_group))
+
+    _GROUP_MASK_CACHE_VERSION = sv
+    _GROUP_MASK_CACHE_ENEMY = enemy_team_bm
+    _SENTINEL_GROUP_MASKS = tuple(sentinel_groups)
+    _GUNNER_GROUP_MASKS = tuple(gunner_groups)
+    return _SENTINEL_GROUP_MASKS, _GUNNER_GROUP_MASKS
+
+
 def _add_const_to_planes(planes, c, mask):
     """Bit-sliced: add constant `c` to counters at every set bit of `mask`."""
     if not mask or not c:
         return
+    planes_local = planes
+    num_planes = _NUM_PLANES
     for i in _bits_of_score(c):
-        carry = planes[i] & mask
-        planes[i] ^= mask
+        carry = planes_local[i] & mask
+        planes_local[i] ^= mask
         j = i + 1
-        while carry and j < _NUM_PLANES:
-            new_carry = planes[j] & carry
-            planes[j] ^= carry
+        while carry and j < num_planes:
+            new_carry = planes_local[j] & carry
+            planes_local[j] ^= carry
             carry = new_carry
             j += 1
 
@@ -192,25 +289,12 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
     plane at the end — applied to non-threat reached placeable tiles using the
     FINAL non_zero union, so the bake count doesn't depend on direction
     iteration order."""
-    w = map_info._width
-    shift_masks = map_info._turret_shift_masks
+    _ensure_attack_shift_plans()
     bm_et = map_info._bm_et
-    offsets_table = map_info._SENTINEL_OFFSETS
 
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
     core_score = SENTINEL_BUILDING_SCORE[map_info._IDX_CORE]
-
-    # Per-score-group (score, union-of-type-masks) list. Types sharing a score
-    # have disjoint masks (one building per tile), so ORing them keeps the
-    # bit-sliced add exact while cutting the inner loop count.
-    type_contribs = []
-    for s, idxs in _SENTINEL_SCORE_GROUPS:
-        bm_group = 0
-        for t_idx in idxs:
-            bm_group |= bm_et[t_idx]
-        bm_group &= enemy_team_bm
-        if bm_group:
-            type_contribs.append((s, bm_group))
+    type_contribs, _ = _enemy_score_group_masks(enemy_team_bm)
 
     non_threat = map_info._board_mask & ~threat
     non_zero = 0
@@ -218,11 +302,7 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
     for d in range(8):
         planes = [0] * _NUM_PLANES
         core_reach = 0
-        for dx, dy in offsets_table[d]:
-            sm = shift_masks.get((-dx, -dy))
-            if sm is None:
-                continue
-            rev_off = -dx + (-dy) * w
+        for sm, rev_off in _SENTINEL_REACH_SHIFTS[d]:
             if core_mask:
                 masked = core_mask & sm
                 if masked:
@@ -264,12 +344,22 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
 def _gunner_ray_blocked_mask():
     """Tiles that block a gunner ray: walls + allied non-road, non-marker
     buildings. A gunner can't shoot through its own infrastructure."""
+    global _GUNNER_BLOCKED_CACHE_VERSION, _GUNNER_BLOCKED_MASK
+
+    sv = map_info._struct_version
+    if _GUNNER_BLOCKED_CACHE_VERSION == sv:
+        return _GUNNER_BLOCKED_MASK
+
     walls = map_info._bm_env[map_info._IDX_ENV_WALL]
     my_team = map_info._bm_team[map_info._my_team_idx]
-    my_solid = (my_team
-                & ~map_info._bm_et[map_info._IDX_ROAD]
-                & ~map_info._bm_et[map_info._IDX_MARKER])
-    return walls | my_solid
+    my_solid = (
+        my_team
+        & ~map_info._bm_et[map_info._IDX_ROAD]
+        & ~map_info._bm_et[map_info._IDX_MARKER]
+    )
+    _GUNNER_BLOCKED_MASK = walls | my_solid
+    _GUNNER_BLOCKED_CACHE_VERSION = sv
+    return _GUNNER_BLOCKED_MASK
 
 
 def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_dir=True):
@@ -287,27 +377,13 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
     per-direction plane — using the final non_zero union. This gives every
     reached, placeable, non-threat tile a single-PEN gap on each plane
     regardless of direction iteration order."""
-    w = map_info._width
-    shift_masks = map_info._turret_shift_masks
+    _ensure_attack_shift_plans()
     bm_et = map_info._bm_et
-    dir_vecs = map_info._DIR_VECS
-    gunner_rays = map_info._GUNNER_RAYS
     not_blocked = map_info._board_mask & ~_gunner_ray_blocked_mask()
 
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
     core_score = GUNNER_BUILDING_SCORE[map_info._IDX_CORE]
-
-    # Per-score-group (score, union-of-type-masks) list. Types sharing a score
-    # have disjoint masks (one building per tile), so ORing them keeps the
-    # bit-sliced add exact while cutting the per-step loop count.
-    type_initial = []
-    for s, idxs in _GUNNER_SCORE_GROUPS:
-        bm_group = 0
-        for t_idx in idxs:
-            bm_group |= bm_et[t_idx]
-        bm_group &= enemy_team_bm
-        if bm_group:
-            type_initial.append((s, bm_group))
+    _, type_initial = _enemy_score_group_masks(enemy_team_bm)
 
     non_threat = map_info._board_mask & ~threat
     non_zero = 0
@@ -318,15 +394,11 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
         planes = [0] * _NUM_PLANES
         mask_d = gunner_masks[d]
         any_placeable |= mask_d
-        dx, dy = dir_vecs[d]
-        max_step = len(gunner_rays[d])
-        sdx, sdy = -dx, -dy
-        sm = shift_masks.get((sdx, sdy))
-        if sm is None or max_step == 0:
+        sm, soff, max_step = _GUNNER_STEP_SHIFTS[d]
+        if not sm or max_step == 0:
             if include_per_dir:
                 all_planes.append(planes)
             continue
-        soff = sdx + sdy * w
         core_cur = core_mask
         type_cur = list(type_initial)
         core_reach = 0
@@ -510,10 +582,9 @@ def _placement_candidates():
     my_team = map_info._bm_team[my_team_idx]
     enemy_team = map_info._bm_team[enemy_idx]
 
+    _ensure_attack_shift_plans()
     w = map_info._width
     bm_et = map_info._bm_et
-    shift_masks = map_info._turret_shift_masks
-    dir_vecs = map_info._DIR_VECS
 
     my_sentinels = bm_et[map_info._IDX_SENTINEL] & my_team
     if my_sentinels:
@@ -570,15 +641,14 @@ def _placement_candidates():
 
     blockers = [0] * 8
     for d in range(0, 8, 2):
-        dx, dy = dir_vecs[d]
-        sm = shift_masks.get((-dx, -dy))
-        if sm is None:
+        plan = _CARDINAL_BLOCKER_SHIFTS[d]
+        if plan is None:
             continue
+        sm, soff = plan
         incoming_conv = map_info._bm_conv_by_dir[(d + 4) & 7]
         src = (base_block | incoming_conv) & sm
         if not src:
             continue
-        soff = -dx + (-dy) * w
         blockers[d] = (src << soff) if soff >= 0 else (src >> (-soff))
 
     # Sentinels have low dps and shouldn't sit in gunner/breach fire. Gunners
