@@ -582,7 +582,17 @@ class Pathing:
         # if avoid_empty:
         #     avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = map_info._my_pos
-        if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
+        targets_not_adjacent = True
+        if my_pos in target_set:
+            targets_not_adjacent = False
+        else:
+            my_x = my_pos.x
+            my_y = my_pos.y
+            for t in target_set:
+                if max(abs(my_x - t.x), abs(my_y - t.y)) <= 1:
+                    targets_not_adjacent = False
+                    break
+        if target_set == self.target_p and my_pos == self.prev_pos and targets_not_adjacent:
             self.stuck_turns += 1
         else:
             self.prev_pos = my_pos
@@ -645,11 +655,9 @@ class Pathing:
             scaling = self.rc.get_scale_percent() / 100
         if dist is None or dist < 0:
             return None
-        cost = 0
-        for _ in range(dist):
-            cost += 3 * scaling
-            scaling += 0.01
-        return cost
+        # Arithmetic-series equivalent of:
+        #   sum(3 * (scaling + 0.01 * k) for k in range(dist))
+        return 3 * dist * scaling + 0.015 * dist * (dist - 1)
     def raw_ax_foundry_sites(self):
         w = map_info._width
         my_idx = map_info._my_team_idx
