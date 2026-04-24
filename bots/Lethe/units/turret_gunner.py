@@ -7,6 +7,7 @@ my_pos: Position = None
 my_team: Team = None
 last_fired_round: int = 0
 skipped_firing_turns: int = 0
+adjacent_tiles: tuple[Position, ...] = ()
 
 # --- Ported from dragonfruit/globals.py ---
 TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
@@ -16,12 +17,14 @@ INF = 999999
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
 
+def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
+    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
+
+
 def _should_stay():
     """Block self-destruct when a harvester is adjacent, no bots are nearby,
     or the closest visible builder bot is an enemy."""
-    pos = rc.get_position()
-    for dx, dy in CARDINAL_OFFSETS:
-        p = Position(pos.x + dx, pos.y + dy)
+    for p in adjacent_tiles:
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
@@ -32,7 +35,7 @@ def _should_stay():
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
             continue
         p = rc.get_position(uid)
-        d = pos.distance_squared(p)
+        d = my_pos.distance_squared(p)
         if best_d is None or d < best_d:
             best_d = d
             closest_is_friendly = (rc.get_team(uid) == my_team)
@@ -42,9 +45,10 @@ def _should_stay():
 
 
 def init(c: Controller):
-    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns
+    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns, adjacent_tiles
     rc = c
     my_pos = rc.get_position()
+    adjacent_tiles = _adjacent_cardinals(my_pos)
     last_fired_round = rc.get_current_round()
     skipped_firing_turns = 0
     my_team = map_info._my_team

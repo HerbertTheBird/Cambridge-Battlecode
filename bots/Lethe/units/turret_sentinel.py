@@ -2,8 +2,10 @@ from cambc import Controller, Position, EntityType, Direction
 import map_info
 from log import log
 
-rc = None
+rc: Controller = None
 _no_ammo_turns = 0
+_my_pos: Position | None = None
+_adjacent_tiles: tuple[Position, ...] = ()
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
@@ -27,15 +29,19 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc
+    global rc, _my_pos, _adjacent_tiles
     rc = c
+    _my_pos = rc.get_position()
+    _adjacent_tiles = _adjacent_cardinals(_my_pos)
 
 
-def _should_stay():
-    my_pos = rc.get_position()
+def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
+    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
+
+
+def _should_stay(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
     my_team = map_info._my_team
-    for dx, dy in CARDINAL_OFFSETS:
-        p = Position(my_pos.x + dx, my_pos.y + dy)
+    for p in adjacent_tiles:
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
@@ -58,12 +64,10 @@ def _should_stay():
     return not closest_is_friendly
 
 
-def _get_feeder_positions():
+def _get_feeder_positions(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
     """Return set of positions that feed this sentinel (don't shoot these)."""
-    my_pos = rc.get_position()
     feeders = set()
-    for dx, dy in CARDINAL_OFFSETS:
-        p = Position(my_pos.x + dx, my_pos.y + dy)
+    for p in adjacent_tiles:
         if not map_info.in_bounds(p):
             continue
         bid = rc.get_tile_building_id(p)
@@ -147,7 +151,7 @@ def run():
 
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _should_stay():
+        if _no_ammo_turns >= 10 and not _should_stay(_my_pos, _adjacent_tiles):
             rc.self_destruct()
             return
     else:
@@ -158,7 +162,7 @@ def run():
     if rc.get_ammo_amount() < 5:
         return
 
-    feeders = _get_feeder_positions()
+    feeders = _get_feeder_positions(_my_pos, _adjacent_tiles)
     best_target = None
     best_score = 0
 
@@ -175,7 +179,7 @@ def run():
             best_target = tile
 
     if best_target is None:
-        if not _should_stay():
+        if not _should_stay(_my_pos, _adjacent_tiles):
             rc.self_destruct()
         return
 
