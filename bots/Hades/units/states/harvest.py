@@ -38,6 +38,7 @@ def possible_ore():
     # Enemy buildings that block harvesting (not road/conveyor/bridge/splitter/marker)
     enemy_blocking = (
         map_info._bm_team[enemy_idx]
+        & ~map_info._bm_et[map_info._IDX_HARVESTER]
         & ~map_info._bm_et[map_info._IDX_ROAD]
         & ~map_info._bm_et[map_info._IDX_MARKER]
     )
@@ -164,8 +165,8 @@ def run():
         is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
         if not is_mine and is_road:
             nav.move_to(best_ore)
-            if rc.can_fire(map_info._my_pos):
-                rc.fire(map_info._my_pos)
+            if rc.can_fire(best_ore):
+                rc.fire(best_ore)
                 map_info.update_at(best_ore)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             log("firing")

@@ -90,8 +90,12 @@ def _find_chase_target():
         return None
 
     closest_pos, dist = nav.closest(filtered)
-    if closest_pos is None or dist > 6:
+    if closest_pos is None:
         return None
+    if dist > 4:
+        return None
+    # if dist < 6:
+    #     return None
     n = closest_pos.x + closest_pos.y * w
     uid = map_info._bot_at.get(n)
     if uid is None:
@@ -166,7 +170,7 @@ def _try_barrier_dead_ends():
     if not targets:
         return
     my_pos = map_info._my_pos
-    for d in map_info._ALL_DIRECTIONS:
+    for d in map_info._DIRECTIONS:
         dx, dy = map_info._DIRECTION_DELTAS[d]
         p = Position(my_pos.x + dx, my_pos.y + dy)
         if not map_info.in_bounds(p):

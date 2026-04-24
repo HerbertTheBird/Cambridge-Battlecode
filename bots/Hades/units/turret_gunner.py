@@ -252,7 +252,7 @@ def _get_loaders(pos):
 
     # Any neighbor conveyor whose output targets this tile
     for di in range(8):
-        dx, dy = map_info._DIR_VECS[di]
+        dx, dy = map_info._DIRECTION_DELTAS_I[di]
         nx, ny = px + dx, py + dy
         if 0 <= nx < w and 0 <= ny < h:
             nn = nx + ny * w

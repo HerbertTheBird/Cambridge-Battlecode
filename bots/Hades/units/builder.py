@@ -28,8 +28,7 @@ rc: Controller
 nav: Pathing = None
 harvest_radius = 0
 _harvest_zone = 0
-# states = [explore, disrupt, harvest, route, heal, sabotage, attack]
-states = [explore, secure, harvest, disrupt, route]
+states = [explore, disrupt, harvest, route, heal, sabotage, attack, secure]
 def init(c: Controller):
     global rc, harvest_radius, nav
     rc = c

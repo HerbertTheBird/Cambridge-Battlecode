@@ -276,7 +276,7 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks):
     w = map_info._width
     shift_masks = map_info._turret_shift_masks
     bm_et = map_info._bm_et
-    dir_vecs = map_info._DIR_VECS
+    dir_vecs = map_info._DIRECTION_DELTAS_I
     gunner_rays = map_info._GUNNER_RAYS
     not_blocked = map_info._board_mask & ~_gunner_ray_blocked_mask()
 
@@ -495,7 +495,7 @@ def _placement_candidates():
     w = map_info._width
     bm_et = map_info._bm_et
     shift_masks = map_info._turret_shift_masks
-    dir_vecs = map_info._DIR_VECS
+    dir_vecs = map_info._DIRECTION_DELTAS_I
 
     my_sentinels = bm_et[map_info._IDX_SENTINEL] & my_team
     if my_sentinels:
@@ -512,9 +512,9 @@ def _placement_candidates():
     my_clearable = (
         map_info._bm_et[map_info._IDX_BARRIER]
         | map_info._bm_et[map_info._IDX_ROAD]
-        # | map_info._bm_et[map_info._IDX_CONVEYOR]
-        # | map_info._bm_et[map_info._IDX_SPLITTER]
-        # | map_info._bm_et[map_info._IDX_BRIDGE]
+        | map_info._bm_et[map_info._IDX_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_SPLITTER]
+        | map_info._bm_et[map_info._IDX_BRIDGE]
     ) & my_team
 
     enemy_clearable = (
@@ -789,7 +789,6 @@ def run():
     zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * width)
     zone = map_info.expand_chebyshev(zone)
     enemy_bot_nearby = bool(map_info._bm_enemy_bots & zone)
-
     if is_fallback:
         nav.move_to(best)
         if rc.can_fire(best):
@@ -797,7 +796,7 @@ def run():
                 rc.fire(best)
                 map_info.update_at(best)
         if rc.get_position() == best and map_info._building_id[best_n] != best_id:
-            for d in map_info._ALL_DIRECTIONS:
+            for d in map_info._DIRECTIONS:
                 if d == Direction.CENTRE:
                     continue
                 if rc.can_move(d):
