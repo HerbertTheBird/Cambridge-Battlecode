@@ -63,7 +63,7 @@ def not_blocked():
         | map_info._bm_et[map_info._IDX_CORE]
     ) & map_info._bm_team[my_team_idx]
     w = map_info._width
-    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&map_info._bm_team[my_team_idx]
+    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&map_info._bm_team[my_team_idx] & ~map_info._bm_guard_conveyor
     left_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.EAST]])&map_info._not_right_col)<<1
     right_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.WEST]])&map_info._not_left_col)>>1
     up_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.SOUTH]]))<<w
@@ -111,7 +111,7 @@ _cached_claims = 0
 MAX_SCORE = 5
 def score():
     global _cached_claims
-    # units.builder.draw_mask(map_info._bm_guard_conveyor, 255, 0, 0)
+    units.builder.draw_mask(_dead_end_conveyors(), 255, 0, 0)
     _cached_claims = _my_claims()
     return 5 if _cached_claims else 0
 
@@ -156,10 +156,10 @@ def run():
         target_conveyor = [path[0], path[1]]
     else:
         prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
-        is_raw_ax = map_info._bm_conv_raw_ax & prev_bit
-        is_refined = map_info._bm_conv_refined & prev_bit
+        is_raw_ax = bool(map_info._bm_conv_raw_ax & prev_bit) or bool(map_info._bm_conv_raw_ax & best_bit)
+        is_refined = bool(map_info._bm_conv_refined & prev_bit) or bool(map_info._bm_conv_refined & best_bit)
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
-        print("PATH", path)
+        print("PATH", path, bool(is_raw_ax))
         if path is None:
             unpathable |= best_bit
             return
@@ -222,13 +222,11 @@ def run():
         if bridge and rc.can_build_bridge(destroy, next):
             rc.build_bridge(destroy, next)
             map_info.update_at(destroy)
-            built = True
         elif not bridge:
             direction = destroy.direction_to(next)
             if _can_build_preferred_conveyor(destroy, direction):
                 _build_preferred_conveyor(destroy, direction)
                 map_info.update_at(destroy)
-                built = True
     attempt_build()
     nav.move_to(target_conveyor[0])
     attempt_build()

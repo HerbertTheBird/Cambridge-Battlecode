@@ -681,7 +681,7 @@ def update_at(pos: Position) -> None:
             _building_id[n] = 0
             _building_et_idx[n] = -1
             _building_hp[n] = 0
-            _building_dir[n] = 0
+            _building_dir[n] = -1
             _building_conv_target[n] = -1
         _bm_damaged &= nbit
         _bm_very_damaged &= nbit
@@ -752,7 +752,7 @@ def update_at(pos: Position) -> None:
             _building_id[n] = 0
             _building_et_idx[n] = -1
             _building_hp[n] = 0
-            _building_dir[n] = 0
+            _building_dir[n] = -1
             _building_conv_target[n] = -1
         _bm_damaged &= nbit
         _bm_very_damaged &= nbit
@@ -791,7 +791,7 @@ def update_at(pos: Position) -> None:
     _building_et_idx[n] = et_idx
     hp = rc.get_hp(entity_id)
     _building_hp[n] = hp
-    new_dir_idx = _DIR_INT[direction] if direction is not None else 0
+    new_dir_idx = _DIR_INT[direction] if direction is not None else -1
     _building_dir[n] = new_dir_idx
     new_tn = (target.x + target.y * width) if target is not None else -1
     _building_conv_target[n] = new_tn
@@ -904,7 +904,7 @@ def init(c: Controller):
     _building_id          = [0] * tiles
     _building_et_idx      = [-1] * tiles
     _building_hp          = [-1] * tiles
-    _building_dir         = [0] * tiles
+    _building_dir         = [-1] * tiles
     _building_conv_target = [-1] * tiles
     _conv_reverse         = [0] * tiles
 
@@ -1035,12 +1035,13 @@ def _compute_route_targets() -> int:
     all_convs = _bm_conveyors
 
     # Accepting set: any conveyor type (any team) plus my core, sentinel,
-    # gunner, breach.
+    # gunner, breach, foundry.
     accepting = (
         _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
         | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
         | ((_bm_et[_IDX_CORE] | _bm_et[_IDX_SENTINEL]
-            | _bm_et[_IDX_GUNNER] | _bm_et[_IDX_BREACH]) & bm_my)
+            | _bm_et[_IDX_GUNNER] | _bm_et[_IDX_BREACH]
+            | _bm_et[_IDX_FOUNDRY]) & bm_my)
     )
     enemy_hard = _bm_team[1 - my_team_idx] & ~_bm_et[_IDX_MARKER] & ~_bm_et[_IDX_ROAD]
 
@@ -1060,7 +1061,7 @@ def _compute_route_targets() -> int:
         tn = conv_target[n]
         tbit = 1 << tn
         if guard & lsb:
-            dead_ends |= lsb
+            pass
         elif guard & tbit:
             dead_ends |= tbit
         elif not (accepting & tbit):
