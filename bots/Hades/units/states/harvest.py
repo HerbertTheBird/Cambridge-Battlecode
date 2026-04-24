@@ -28,7 +28,7 @@ _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
 def possible_ore():
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
-    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 0:
+    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
         ore |= map_info._bm_env[map_info._IDX_ENV_ORE_AX]
 
     my_team_idx = map_info._my_team_idx

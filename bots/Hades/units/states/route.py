@@ -156,8 +156,8 @@ def run():
         target_conveyor = [path[0], path[1]]
     else:
         prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
-        is_raw_ax = bool(map_info._bm_conv_raw_ax & prev_bit) or bool(map_info._bm_conv_raw_ax & best_bit)
-        is_refined = bool(map_info._bm_conv_refined & prev_bit) or bool(map_info._bm_conv_refined & best_bit)
+        is_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & best_bit)
+        is_refined = bool(map_info._bm_refined_carrying & prev_bit) or bool(map_info._bm_refined_carrying & best_bit)
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
         print("PATH", path, bool(is_raw_ax))
         if path is None:

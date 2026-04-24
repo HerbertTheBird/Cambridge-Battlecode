@@ -695,6 +695,7 @@ class Pathing:
         at_least_two = ((n1 & n2) | (n1 & n3) | (n1 & n4)
                         | (n2 & n3) | (n2 & n4) | (n3 & n4))
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
+        return (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_ti_carrying)
         return ((adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti))&builder._harvest_zone
 
     def _get_conveyor_targets_and_avoid(
@@ -702,13 +703,13 @@ class Pathing:
     ):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
-            ti_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI])
+            ti_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
             return target, avoid
         else:
-            ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
+            ax_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_AX])
             target = (map_info._bm_route_targets & ~map_info._bm_conv_raw_ax) | map_info._bm_my_core_area
             target &= ~ax_harvesters
             avoid |= ax_harvesters
