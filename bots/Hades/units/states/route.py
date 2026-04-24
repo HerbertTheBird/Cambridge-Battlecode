@@ -9,7 +9,8 @@ from log import log
 rc: Controller = None
 nav: Pathing = None
 comm_flag = 5
-_cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
+_cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
+COST_MAP_TTL = 100
 
 unpathable = 0
 
@@ -41,10 +42,17 @@ def init(c: Controller):
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
     ti = rc.get_global_resources()[0]
+    current = rc.get_current_round()
     result = 0
-    for n, cost in _cost_map.items():
+    stale = []
+    for n, (cost, turn) in _cost_map.items():
+        if turn + COST_MAP_TTL < current:
+            stale.append(n)
+            continue
         if cost > ti:
             result |= 1 << n
+    for n in stale:
+        del _cost_map[n]
     return result
 
 def _dead_end_conveyors():
@@ -167,7 +175,7 @@ def run():
     cost = nav.conveyor_cost(path[2])
     best_n = best.x + best.y * width
     if not is_refined:
-        _cost_map[best_n] = cost
+        _cost_map[best_n] = (cost, rc.get_current_round())
         if rc.get_global_resources()[0] < cost:
             log("can't afford", cost)
             comms.mark(best.x + best.y * map_info._width, comm_flag)

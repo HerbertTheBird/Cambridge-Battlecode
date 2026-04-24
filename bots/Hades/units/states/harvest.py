@@ -24,7 +24,8 @@ def init(c: Controller):
     nav = units.builder.nav
 
 cant_harvest = 0
-_cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
+_cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
+COST_MAP_TTL = 100
 def possible_ore():
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
@@ -85,10 +86,17 @@ def harvestable_ore():
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
     ti = rc.get_global_resources()[0]
+    current = rc.get_current_round()
     result = 0
-    for n, cost in _cost_map.items():
+    stale = []
+    for n, (cost, turn) in _cost_map.items():
+        if turn + COST_MAP_TTL < current:
+            stale.append(n)
+            continue
         if cost > ti:
             result |= 1 << n
+    for n in stale:
+        del _cost_map[n]
     return result
 
 MAX_SCORE = 4
@@ -138,12 +146,12 @@ def run():
     if not path:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
     if path is not None:
-        _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
+        _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
         log("cant route")
         return
-    if _cost_map[best_n] > rc.get_global_resources()[0]:
+    if _cost_map[best_n][0] > rc.get_global_resources()[0]:
         log("too expensive")
         return
         
