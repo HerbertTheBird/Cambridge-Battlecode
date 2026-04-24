@@ -219,7 +219,7 @@ def run():
         if rc.get_current_round() > INITIAL_SPAWN_COUNT + 1:
             _initial_explore_done = True
         elif map_info._my_core is not None:
-            spawn_dir = map_info._my_core.direction_to(map_info._my_pos)
+            spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
             _initial_explore_target = get_ray_endpoint(
                 map_info._my_pos, spawn_dir, map_info._width, map_info._height,
                 max_steps=INITIAL_EXPLORE_MAX_STEPS,

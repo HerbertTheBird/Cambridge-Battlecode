@@ -210,7 +210,7 @@ def run():
             map_info.update_at(closest)
         if not done_conveyor and closest == path[0]:
             if is_conveyor:
-                dir = path[0].direction_to(path[1])
+                dir = map_info.direction_to(path[0], path[1])
                 if rc.can_build_conveyor(path[0], dir):
                     rc.build_conveyor(path[0], dir)
                     map_info.update_at(path[0])
@@ -221,7 +221,7 @@ def run():
                     map_info.update_at(path[0])
                     return True
         else:
-            dir = closest.direction_to(best_ore)
+            dir = map_info.direction_to(closest, best_ore)
             if rc.can_build_conveyor(closest, dir):
                 rc.build_conveyor(closest, dir)
                 map_info.update_at(closest)
