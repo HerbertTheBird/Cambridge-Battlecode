@@ -630,10 +630,7 @@ class Pathing:
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
         log("conveyors from ", start, raw_axionite)
         w = self.width
-        if update:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
-        else:
-            target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
+        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
             return None
         if not update:
@@ -683,8 +680,11 @@ class Pathing:
         friendly_block = (
             (map_info._bm_et[map_info._IDX_HARVESTER]
              | map_info._bm_et[map_info._IDX_FOUNDRY]
-             | map_info._bm_et[map_info._IDX_CORE])
-            & map_info._bm_team[my_idx]
+             | map_info._bm_et[map_info._IDX_CORE]
+             | map_info._bm_et[map_info._IDX_CONVEYOR]
+             | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+             | map_info._bm_et[map_info._IDX_BRIDGE])
+            & map_info._bm_team[my_idx] & ~map_info._bm_guard_conveyor
         )
         blocked = enemy_block | friendly_block | map_info._bm_env[map_info._IDX_ENV_WALL]
         open_mask = ~blocked
@@ -695,10 +695,10 @@ class Pathing:
         at_least_two = ((n1 & n2) | (n1 & n3) | (n1 & n4)
                         | (n2 & n3) | (n2 & n4) | (n3 & n4))
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
-        return (adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti)
+        return ((adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti))&builder._harvest_zone
 
     def _get_conveyor_targets_and_avoid(
-        self, raw_axionite: bool, conveyor = None
+        self, raw_axionite: bool
     ):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
@@ -706,8 +706,6 @@ class Pathing:
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
-            if conveyor:
-                target &= ~(1<<conveyor)
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_AX])
@@ -716,6 +714,4 @@ class Pathing:
             avoid |= ax_harvesters
             if not target:
                 return 0, 0
-            if conveyor:
-                target &= ~(1<<conveyor)
             return target, avoid

@@ -5,7 +5,7 @@ import comms
 from cambc import *
 import units.builder
 from log import log
-
+import sys
 rc: Controller = None
 nav: Pathing = None
 
@@ -28,7 +28,7 @@ _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
 def possible_ore():
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
-    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
+    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 0:
         ore |= map_info._bm_env[map_info._IDX_ENV_ORE_AX]
 
     my_team_idx = map_info._my_team_idx
@@ -125,8 +125,15 @@ def run():
         pos = best_ore.add(dir)
         if not map_info.in_bounds(pos):
             continue
-        conv_dir = map_info._INT_DIR[map_info._building_dir[pos.x+pos.y*w]]
-        if (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]|map_info._bm_et[map_info._IDX_BRIDGE])&(1<<(pos.x+pos.y*w)) and conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & (1<<(pos.x+pos.y*w))):
+        pn = pos.x + pos.y * w
+        pbit = 1 << pn
+        if not ((map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&pbit):
+            continue
+        d_idx = map_info._building_dir[pn]
+        if d_idx < 0:
+            continue
+        conv_dir = map_info._INT_DIR[d_idx]
+        if conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & pbit):
             path = nav.calculate_conveyor_path(pos.add(conv_dir), is_raw_ax, True)
     if not path:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
