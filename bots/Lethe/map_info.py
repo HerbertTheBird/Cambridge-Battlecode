@@ -1234,17 +1234,22 @@ def recompute_derived() -> None:
     _bm_route_targets = _compute_route_targets()
 
     # Blocked = walls + non-passable buildings + enemy core area
-    _bm_blocked = bm_env[_IDX_ENV_WALL]
-    _bm_blocked |= bm_et[_IDX_HARVESTER] | bm_et[_IDX_FOUNDRY]
-    _bm_blocked |= bm_et[_IDX_GUNNER] | bm_et[_IDX_SENTINEL]
-    _bm_blocked |= bm_et[_IDX_BREACH] | bm_et[_IDX_LAUNCHER]
-    _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
-    _bm_blocked |= _bm_their_core_area
+    _bm_blocked = (
+        bm_env[_IDX_ENV_WALL]
+        | bm_et[_IDX_HARVESTER]
+        | bm_et[_IDX_FOUNDRY]
+        | bm_et[_IDX_GUNNER]
+        | bm_et[_IDX_SENTINEL]
+        | bm_et[_IDX_BREACH]
+        | bm_et[_IDX_LAUNCHER]
+        | (bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx])
+        | _bm_their_core_area
+    )
 
     # Conveyor targets + fed bitmasks
-    _bm_conveyor_targets = 0
-    _bm_ti_fed = 0
-    _bm_ax_fed = 0
+    bm_conveyor_targets_l = 0
+    bm_ti_fed_l = 0
+    bm_ax_fed_l = 0
     bm_conv_ti_local = _bm_conv_ti
     bm_conv_refined_local = _bm_conv_refined
     mask = _bm_conveyors
@@ -1254,28 +1259,20 @@ def recompute_derived() -> None:
         tn = building_conv_target[cn]
         if tn >= 0:
             tbit = 1 << tn
-            _bm_conveyor_targets |= tbit
+            bm_conveyor_targets_l |= tbit
             if bm_conv_ti_local & lsb:
-                _bm_ti_fed |= tbit
+                bm_ti_fed_l |= tbit
             if bm_conv_refined_local & lsb:
-                _bm_ax_fed |= tbit
+                bm_ax_fed_l |= tbit
         mask ^= lsb
+    _bm_conveyor_targets = bm_conveyor_targets_l
+    _bm_ti_fed = bm_ti_fed_l
+    _bm_ax_fed = bm_ax_fed_l
 
-    # Enemy launcher adjacency
+    # Enemy launcher adjacency (Chebyshev expand-by-1 plus the launcher
+    # tiles themselves; expand_chebyshev preserves the input.)
     enemy_launchers = bm_et[_IDX_LAUNCHER] & ~bm_team[my_team_idx]
-    _bm_enemy_launch_adj = 0
-    mask = enemy_launchers
-    while mask:
-        lsb = mask & -mask
-        ln = lsb.bit_length() - 1
-        lx = ln % width
-        ly = ln // width
-        for dx, dy in _DIRECTION_DELTAS.values():
-            nx = lx + dx
-            ny = ly + dy
-            if 0 <= nx < width and 0 <= ny < height:
-                _bm_enemy_launch_adj |= 1 << (nx + ny * width)
-        mask ^= lsb
+    _bm_enemy_launch_adj = expand_chebyshev(enemy_launchers) if enemy_launchers else 0
 
     # Enemy turret threat
     _bm_enemy_soft_threat, _bm_enemy_hard_threat = _compute_enemy_turret_threat()
@@ -1357,15 +1354,24 @@ def update(recompute: bool = True) -> None:
     rc_get_bridge_target      = rc.get_bridge_target
     rc_get_tile_env           = rc.get_tile_env
     freshly_loaded = 0
-    _new_marker_messages = []
+    new_marker_messages = []
     structural_changed = False
+
+    # Hoist hot globals into locals to avoid per-tile global lookups.
+    bm_damaged = _bm_damaged
+    bm_very_damaged = _bm_very_damaged
+    max_id_seen = _max_id_seen
+    marker_id_at_local = comms._marker_id_at
+    max_hp_by_idx = _MAX_HP_BY_IDX
+
+    # All visible tiles count as observed this turn — batch into one OR.
+    bm_seen_observed |= bm_visible
 
     for tile in visible_tiles:
         x = tile.x
         y = tile.y
         n = x+y*width
         bit = 1 << n
-        bm_seen_observed |= bit
         if not (bm_seen & bit):
             env = rc_get_tile_env(tile)
             env_idx = _ENV_INT[env]
@@ -1402,27 +1408,26 @@ def update(recompute: bool = True) -> None:
                     if (bm_seen & fbit) and not (bm_env[env_idx] & fbit):
                         _rot_sym = False
         entity_id = rc_get_tile_building_id(tile)
-        if entity_id is not None and entity_id > _max_id_seen:
-            _max_id_seen = entity_id
         if entity_id is None:
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
                 structural_changed = True
+                not_bit = ~bit
                 old_tn = building_conv_target[n]
                 if old_tn >= 0 and (conv_reverse[old_tn] & bit):
-                    conv_reverse[old_tn] &= ~bit
+                    conv_reverse[old_tn] &= not_bit
                 building_conv_target[n] = 0
-                bm_et[old_et_idx] &= ~bit
-                _bm_any_building &= ~bit
-                for i in range(num_team):
-                    if bm_team[i] & bit:
-                        bm_team[i] &= ~bit
-                        break
+                bm_et[old_et_idx] &= not_bit
+                _bm_any_building &= not_bit
+                bm_team[0] &= not_bit
+                bm_team[1] &= not_bit
                 building_id[n] = 0
                 building_et_idx[n] = -1
-            _bm_damaged &= ~bit
-            _bm_very_damaged &= ~bit
+                bm_damaged &= not_bit
+                bm_very_damaged &= not_bit
             continue
+        if entity_id > max_id_seen:
+            max_id_seen = entity_id
         # Fast path: same building as before — skip get_entity_type/get_team/get_direction
         if building_id[n] == entity_id:
             et_idx = building_et_idx[n]
@@ -1432,34 +1437,40 @@ def update(recompute: bool = True) -> None:
                     building_dir[n] = new_dir
                     structural_changed = True
             hp = rc_get_hp(entity_id)
-            building_hp[n] = hp
-            max_hp = _MAX_HP_BY_IDX[et_idx]
-            if hp < max_hp:
-                _bm_damaged |= bit
-            else:
-                _bm_damaged &= ~bit
-            if hp < max_hp - 2:
-                _bm_very_damaged |= bit
-            else:
-                _bm_very_damaged &= ~bit
+            # Only touch damage bits when HP actually changes — saves bitmask
+            # ops on the common case (full-HP roads/conveyors stay full HP).
+            if hp != building_hp[n]:
+                building_hp[n] = hp
+                max_hp = max_hp_by_idx[et_idx]
+                if hp < max_hp:
+                    bm_damaged |= bit
+                    if hp < max_hp - 2:
+                        bm_very_damaged |= bit
+                    else:
+                        bm_very_damaged &= ~bit
+                else:
+                    not_bit = ~bit
+                    bm_damaged &= not_bit
+                    bm_very_damaged &= not_bit
             if is_conv[et_idx]:
                 res = rc_get_stored_resource(entity_id)
                 if res is not None:
                     bm_conv_loaded |= bit
                     freshly_loaded |= bit
+                    not_bit = ~bit
                     if res == ResourceType.RAW_AXIONITE:
                         bm_conv_raw_ax |= bit
-                        bm_conv_ti &= ~bit
-                        bm_conv_refined &= ~bit
+                        bm_conv_ti &= not_bit
+                        bm_conv_refined &= not_bit
                     elif res == ResourceType.TITANIUM:
                         bm_conv_ti |= bit
-                        bm_conv_raw_ax &= ~bit
-                        bm_conv_refined &= ~bit
+                        bm_conv_raw_ax &= not_bit
+                        bm_conv_refined &= not_bit
                     else:
                         bm_conv_refined |= bit
-                        bm_conv_raw_ax &= ~bit
-                        bm_conv_ti &= ~bit
-        elif comms._marker_id_at[n] == entity_id:
+                        bm_conv_raw_ax &= not_bit
+                        bm_conv_ti &= not_bit
+        elif marker_id_at_local[n] == entity_id:
             # Already-seen marker — skip all controller calls
             continue
         else:
@@ -1474,23 +1485,22 @@ def update(recompute: bool = True) -> None:
                     message = comms.decode_visible_marker(entity_id, tile)
                     if message is not None:
                         estimated_turn = comms.estimate_turn(entity_id)
-                        _new_marker_messages.append((*message, estimated_turn))
+                        new_marker_messages.append((*message, estimated_turn))
                 old_et_idx = building_et_idx[n]
                 if old_et_idx >= 0:
+                    not_bit = ~bit
                     old_tn = building_conv_target[n]
                     if old_tn >= 0 and (conv_reverse[old_tn] & bit):
-                        conv_reverse[old_tn] &= ~bit
+                        conv_reverse[old_tn] &= not_bit
                     building_conv_target[n] = 0
-                    bm_et[old_et_idx] &= ~bit
-                    _bm_any_building &= ~bit
-                    for i in range(num_team):
-                        if bm_team[i] & bit:
-                            bm_team[i] &= ~bit
-                            break
+                    bm_et[old_et_idx] &= not_bit
+                    _bm_any_building &= not_bit
+                    bm_team[0] &= not_bit
+                    bm_team[1] &= not_bit
+                    bm_damaged &= not_bit
+                    bm_very_damaged &= not_bit
                 building_id[n] = 0
                 building_et_idx[n] = -1
-                _bm_damaged &= ~bit
-                _bm_very_damaged &= ~bit
                 if old_id or old_et_idx_prev >= 0 or old_target >= 0:
                     structural_changed = True
                 continue
@@ -1499,15 +1509,14 @@ def update(recompute: bool = True) -> None:
             # Clear old bits if replacing a different building
             old_et_idx = building_et_idx[n]
             if old_et_idx >= 0:
+                not_bit = ~bit
                 old_tn = building_conv_target[n]
                 if old_tn >= 0 and (conv_reverse[old_tn] & bit):
-                    conv_reverse[old_tn] &= ~bit
-                bm_et[old_et_idx] &= ~bit
-                _bm_any_building &= ~bit
-                for i in range(num_team):
-                    if bm_team[i] & bit:
-                        bm_team[i] &= ~bit
-                        break
+                    conv_reverse[old_tn] &= not_bit
+                bm_et[old_et_idx] &= not_bit
+                _bm_any_building &= not_bit
+                bm_team[0] &= not_bit
+                bm_team[1] &= not_bit
 
             direction     = rc_get_direction(entity_id) if has_dir[et_idx] else None
             team_val = rc_get_team(entity_id)
@@ -1532,33 +1541,36 @@ def update(recompute: bool = True) -> None:
             bm_et[et_idx] |= bit
             bm_team[team_idx] |= bit
             _bm_any_building |= bit
-            max_hp = _MAX_HP_BY_IDX[et_idx]
+            max_hp = max_hp_by_idx[et_idx]
             if hp < max_hp:
-                _bm_damaged |= bit
+                bm_damaged |= bit
+                if hp < max_hp - 2:
+                    bm_very_damaged |= bit
+                else:
+                    bm_very_damaged &= ~bit
             else:
-                _bm_damaged &= ~bit
-            if hp < max_hp - 2:
-                _bm_very_damaged |= bit
-            else:
-                _bm_very_damaged &= ~bit
+                not_bit = ~bit
+                bm_damaged &= not_bit
+                bm_very_damaged &= not_bit
 
             if is_conv[et_idx]:
                 res = rc_get_stored_resource(entity_id)
                 if res is not None:
                     bm_conv_loaded |= bit
                     freshly_loaded |= bit
+                    not_bit = ~bit
                     if res == ResourceType.RAW_AXIONITE:
                         bm_conv_raw_ax |= bit
-                        bm_conv_ti &= ~bit
-                        bm_conv_refined &= ~bit
+                        bm_conv_ti &= not_bit
+                        bm_conv_refined &= not_bit
                     elif res == ResourceType.TITANIUM:
                         bm_conv_ti |= bit
-                        bm_conv_raw_ax &= ~bit
-                        bm_conv_refined &= ~bit
+                        bm_conv_raw_ax &= not_bit
+                        bm_conv_refined &= not_bit
                     else:
                         bm_conv_refined |= bit
-                        bm_conv_raw_ax &= ~bit
-                        bm_conv_ti &= ~bit
+                        bm_conv_raw_ax &= not_bit
+                        bm_conv_ti &= not_bit
 
             if et is EntityType.CORE:
                 if _my_core is None and team_val == my_team:
@@ -1579,6 +1591,9 @@ def update(recompute: bool = True) -> None:
     # Write back bm_seen to global (int is immutable, local was a copy)
     _bm_seen = bm_seen
     _bm_seen_observed = bm_seen_observed
+    _bm_damaged = bm_damaged
+    _bm_very_damaged = bm_very_damaged
+    _new_marker_messages = new_marker_messages
 
     possible_syms = int(_hor_sym) + int(_ver_sym) + int(_rot_sym)
     if possible_syms == 1 and not _solved_sym:
@@ -1680,50 +1695,59 @@ def update(recompute: bool = True) -> None:
         _struct_version += 1
 
     # --- Update builder bot tracking ---
-    _bm_friendly_bots = 0
-    _bm_enemy_bots = 0
+    bm_friendly_bots = 0
+    bm_enemy_bots = 0
     seen_uids = set()
+    bot_pos_local = _bot_pos
+    bot_team_local = _bot_team
+    bot_at_local = _bot_at
+    my_id = rc.get_id()
+    rc_get_position = rc.get_position
     for uid in rc.get_nearby_units():
-        if uid > _max_id_seen:
-            _max_id_seen = uid
-        if rc.get_entity_type(uid) != _ET_BUILDER_BOT:
-            continue
-        if uid == rc.get_id():
-            continue
-        ep = rc.get_position(uid)
+        if uid > max_id_seen:
+            max_id_seen = uid
+        # Skip entity_type query for already-known bots; bot_team_local
+        # only contains builder bots (self is never inserted).
+        if uid not in bot_team_local:
+            if uid == my_id:
+                continue
+            if rc_get_entity_type(uid) != _ET_BUILDER_BOT:
+                continue
+        ep = rc_get_position(uid)
         n = ep.x + ep.y * width
-        team_idx = _TM_INT[rc.get_team(uid)]
+        team_idx = _TM_INT[rc_get_team(uid)]
         # If tracked at a different position, clear old
-        old_n = _bot_pos.get(uid)
+        old_n = bot_pos_local.get(uid)
         if old_n is not None and old_n != n:
-            if _bot_at.get(old_n) == uid:
-                del _bot_at[old_n]
-        _bot_pos[uid] = n
-        _bot_team[uid] = team_idx
-        _bot_at[n] = uid
+            if bot_at_local.get(old_n) == uid:
+                del bot_at_local[old_n]
+        bot_pos_local[uid] = n
+        bot_team_local[uid] = team_idx
+        bot_at_local[n] = uid
         seen_uids.add(uid)
+    _max_id_seen = max_id_seen
     # Invalidate tracked bots whose old position is now visible but they're gone
     to_remove = []
-    for uid, n in _bot_pos.items():
+    for uid, n in bot_pos_local.items():
         if uid in seen_uids:
             continue
-        bit = 1 << n
-        if bm_visible & bit:
+        if bm_visible & (1 << n):
             to_remove.append(uid)
     for uid in to_remove:
-        n = _bot_pos[uid]
-        if _bot_at.get(n) == uid:
-            del _bot_at[n]
-        del _bot_pos[uid]
-        del _bot_team[uid]
+        n = bot_pos_local[uid]
+        if bot_at_local.get(n) == uid:
+            del bot_at_local[n]
+        del bot_pos_local[uid]
+        del bot_team_local[uid]
 
     # Rebuild bitmasks from tracked positions
-    for uid, n in _bot_pos.items():
-        bit = 1 << n
-        if _bot_team[uid] == my_team_idx:
-            _bm_friendly_bots |= bit
+    for uid, n in bot_pos_local.items():
+        if bot_team_local[uid] == my_team_idx:
+            bm_friendly_bots |= 1 << n
         else:
-            _bm_enemy_bots |= bit
+            bm_enemy_bots |= 1 << n
+    _bm_friendly_bots = bm_friendly_bots
+    _bm_enemy_bots = bm_enemy_bots
 
     # Precompute other-bots zone masks for cant_claim().
     # expand_chebyshev distributes over OR, so one call per layer suffices.
