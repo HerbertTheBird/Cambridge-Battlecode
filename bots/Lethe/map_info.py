@@ -5,6 +5,7 @@ from collections import deque
 import pathing
 import units.builder as builder
 import comms
+from known_maps import KNOWN_MAPS
 from log import log
 
 _HAS_DIRECTION  = frozenset(e for e in (EntityType.ARMOURED_CONVEYOR, EntityType.BREACH, EntityType.CONVEYOR, EntityType.GUNNER, EntityType.SENTINEL, EntityType.SPLITTER))
@@ -935,7 +936,6 @@ def update_symmetry_from_comms(sym_bits):
         _rot_sym = False
 
 def determine_known_map() -> None:
-    from known_maps import KNOWN_MAPS
     global _their_core, _predicted_enemy_core, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym, _rush_tiebroken
     global _bm_seen, _bm_seen_observed, _bm_env, _bm_any_building, _struct_version
