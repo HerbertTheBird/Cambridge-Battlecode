@@ -135,7 +135,14 @@ def run():
             continue
         pn = pos.x + pos.y * w
         pbit = 1 << pn
-        if not ((map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&pbit):
+        if (map_info._bm_et[map_info._IDX_BRIDGE] & pbit) and (map_info._bm_team[my_team_idx] & pbit):
+            target_n = map_info._building_conv_target[pn]
+            if target_n >= 0 and target_n != best_n:
+                path = nav.calculate_conveyor_path(pos, is_raw_ax, True)
+                if path is not None:
+                    break
+            continue
+        if not ((map_info._bm_et[map_info._IDX_CONVEYOR] | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]) & pbit):
             continue
         d_idx = map_info._building_dir[pn]
         if d_idx < 0:
