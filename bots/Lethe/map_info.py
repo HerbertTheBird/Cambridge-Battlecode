@@ -787,6 +787,23 @@ def update_at(pos: Position) -> None:
     ):
         _struct_version += 1
 
+def update_env_at(pos: Position) -> None:
+    """Record directly observed terrain for a single tile."""
+    global _bm_seen, _bm_seen_observed
+    if not in_bounds(pos):
+        return
+
+    n = pos.x + pos.y * _width
+    bit = 1 << n
+    _bm_seen_observed |= bit
+    if _bm_seen & bit:
+        return
+
+    env = _rc.get_tile_env(pos)
+    env_idx = _ENV_INT[env]
+    _bm_env[env_idx] |= bit
+    _bm_seen |= bit
+
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
     global _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
@@ -819,6 +836,7 @@ def update_move() -> None:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
         pos = Position(n % width, n // width)
+        update_env_at(pos)
         update_at(pos)
         mask ^= lsb
     
@@ -906,15 +924,6 @@ def ver_flip(pos: Position):
 def rot_flip(pos: Position):
     return Position(_width - 1 - pos.x, _height - 1 - pos.y)
 
-def _determine_spawn_symmetry(spawn_a: Position, spawn_b: Position) -> tuple[bool, bool, bool] | None:
-    if hor_flip(spawn_a) == spawn_b and hor_flip(spawn_b) == spawn_a:
-        return True, False, False
-    if ver_flip(spawn_a) == spawn_b and ver_flip(spawn_b) == spawn_a:
-        return False, True, False
-    if rot_flip(spawn_a) == spawn_b and rot_flip(spawn_b) == spawn_a:
-        return False, False, True
-    return None
-
 def update_symmetry_from_comms(sym_bits):
     """Update symmetry from comms. Each bit represents a possible symmetry."""
     global _hor_sym, _ver_sym, _rot_sym
@@ -929,12 +938,12 @@ def determine_known_map() -> None:
     from known_maps import KNOWN_MAPS
     global _their_core, _predicted_enemy_core, _solved_sym
     global _hor_sym, _ver_sym, _rot_sym, _rush_tiebroken
-    global _bm_seen, _bm_env, _bm_any_building, _struct_version
+    global _bm_seen, _bm_seen_observed, _bm_env, _bm_any_building, _struct_version
 
     if _my_core is None:
         return
 
-    candidates = KNOWN_MAPS.get((_width, _height))
+    candidates = KNOWN_MAPS.get((_height, _width))
     if not candidates:
         return
 
@@ -943,7 +952,9 @@ def determine_known_map() -> None:
         return
 
     vision_matches = []
-    visible = _bm_visible
+    visible = _bm_seen_observed
+    if not visible:
+        return
     for entry in spawn_matches:
         matches_vision = True
         env_masks = entry["env_masks"]
@@ -962,9 +973,10 @@ def determine_known_map() -> None:
     opposite_core = spawn_b if _my_core == spawn_a else spawn_a
 
     if not _solved_sym:
-        symmetry = _determine_spawn_symmetry(spawn_a, spawn_b)
-        if symmetry is not None:
-            _hor_sym, _ver_sym, _rot_sym = symmetry
+        _hor_sym = match["hor_sym"]
+        _ver_sym = match["ver_sym"]
+        _rot_sym = match["rot_sym"]
+        if int(_hor_sym) + int(_ver_sym) + int(_rot_sym) == 1:
             _solved_sym = True
 
     _their_core = opposite_core

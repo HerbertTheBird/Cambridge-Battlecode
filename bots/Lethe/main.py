@@ -17,7 +17,7 @@ import comms
 import comms_stats
 from log import log
 
-ENABLE_PROFILER = False
+ENABLE_PROFILER = True
 ENABLE_COMMS_STATS = False
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:
@@ -171,8 +171,8 @@ class Player:
                 )
                 c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
 
-            # if self.first_turn_round == round_num:
-            #     map_info.determine_known_map()
+            if self.first_turn_round == round_num:
+                map_info.determine_known_map()
 
             self.current_round += 1
 
