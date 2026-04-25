@@ -63,19 +63,26 @@ def generate_explore_target():
 
     visited = seeds
     frontier = seeds
-    prev_frontier = frontier
     c = 0
     while frontier and c < 100:
-        prev_frontier = frontier
-        expanded = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1) | (frontier << w) | (frontier >> w)
+        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+        expanded = h | (h << w) | (h >> w)
         frontier = expanded & passable & ~visited
         visited |= frontier
         c += 1
-
+    a = 0
+    visited = seeds
+    frontier = seeds
+    while frontier and a < c-5:
+        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+        expanded = h | (h << w) | (h >> w)
+        frontier = expanded & passable & ~visited
+        visited |= frontier
+        a += 1
     # prev_frontier is the last ring before flood filled everything.
     # Pick a random unset bit from that ring (tiles NOT claimed by anyone).
-    unclaimed = prev_frontier & ~units.builder.claimed_targets[comm_flag]
-    pool = unclaimed if unclaimed else prev_frontier
+    unclaimed = frontier & ~units.builder.claimed_targets[comm_flag]
+    pool = unclaimed if unclaimed else frontier
     count = pool.bit_count()
     if count == 0:
         explore_target = Position(random.randint(0, map_info._width - 1),

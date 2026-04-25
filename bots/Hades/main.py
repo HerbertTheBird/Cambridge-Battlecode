@@ -17,7 +17,7 @@ import comms
 import comms_stats
 from log import log
 
-ENABLE_PROFILER = True
+ENABLE_PROFILER = False
 ENABLE_COMMS_STATS = False
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:
@@ -37,12 +37,10 @@ class Player:
     def __init__(self):
         self.initialized = False
         self.me: ModuleType
-        self.current_round: int = None
-        self.most_recent_tle_round: int | None = None
-        self.profiled_turn_count = 0
-        self.timeout_count = 0
-        self.profiler = None
-        self.profiler_path = None
+
+        if ENABLE_PROFILER:
+            self.profiler = None
+            self.profiler_path = None
 
     def _prepare_profile_dir(self, c: Controller) -> None:
         if not (ENABLE_PROFILER or ENABLE_COMMS_STATS):
@@ -81,8 +79,6 @@ class Player:
         with self.profiler_path.open("w", encoding="utf-8") as f:
             f.write("Profile sorted by total time (tottime)\n")
             f.write(f"Unit profile: {self.profiler_path.name}\n")
-            f.write(f"Profiled turns: {self.profiled_turn_count}\n")
-            f.write(f"Timed-out turns: {self.timeout_count}\n")
             f.write(f"Total calls: {total_calls}\n")
             f.write(f"Total tottime: {total_tottime * 1_000_000:.3f} us\n")
             f.write(f"Total cumtime: {total_cumtime * 1_000_000:.3f} us\n")
@@ -105,7 +101,6 @@ class Player:
 
     def run(self, c: Controller) -> None:
         global SPAWN_TURN
-        round_num = c.get_current_round()
 
         if not self.initialized:
             self._prepare_profile_dir(c)
@@ -115,7 +110,7 @@ class Player:
                 self.profiler = cProfile.Profile()
 
         if SPAWN_TURN == -2:
-            SPAWN_TURN = round_num - 1
+            SPAWN_TURN = c.get_current_round() - 1
 
         if ENABLE_PROFILER and self.profiler is not None:
             self.profiler.enable()
@@ -143,12 +138,7 @@ class Player:
                 map_info.init(c)
                 comms.init(c)
                 self.me.init(c)
-                self.current_round = round_num
                 self.initialized = True
-
-            if self.current_round != round_num:
-                self.most_recent_tle_round = self.current_round
-                self.current_round = round_num
 
             self.me.run()
 
@@ -157,9 +147,7 @@ class Player:
 
             log(f"{elapsed_us/1000000:.3f} ms")
 
-            timed_out = end_time - start_time > 2_000_000
-            if timed_out:
-                self.timeout_count += 1
+            if end_time - start_time > 2_000_000:
                 log(
                     "timed out",
                     c.get_id(),
@@ -176,8 +164,6 @@ class Player:
             #         self.profiler.disable()
                     # self.profiler.clear()
 
-            self.current_round += 1
-
         except Exception as e:
             print("Error:", e)
             print(f"Error: {e}", file=sys.stderr)
@@ -187,5 +173,4 @@ class Player:
 
         if ENABLE_PROFILER and self.profiler is not None:
             self.profiler.disable()
-            self.profiled_turn_count += 1
             self._write_profile()

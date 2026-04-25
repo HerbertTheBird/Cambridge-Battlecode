@@ -41,17 +41,17 @@ def init(c: Controller):
 
 SENTINEL_BUILDING_SCORE = [0] * map_info._NUM_ET
 SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 0
-SENTINEL_BUILDING_SCORE[map_info._IDX_HARVESTER] = 12
+SENTINEL_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 SENTINEL_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 16
 SENTINEL_BUILDING_SCORE[map_info._IDX_GUNNER] = 20
 SENTINEL_BUILDING_SCORE[map_info._IDX_SENTINEL] = 20
 SENTINEL_BUILDING_SCORE[map_info._IDX_BREACH] = 24
 SENTINEL_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 8
-SENTINEL_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 2
-SENTINEL_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 4
-SENTINEL_BUILDING_SCORE[map_info._IDX_BARRIER] = 4
-SENTINEL_BUILDING_SCORE[map_info._IDX_BRIDGE] = 2
-SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 2
+SENTINEL_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 8
+SENTINEL_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 12
+SENTINEL_BUILDING_SCORE[map_info._IDX_BARRIER] = 8
+SENTINEL_BUILDING_SCORE[map_info._IDX_BRIDGE] = 8
+SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 8
 
 # Gunners snipe single high-value lanes: big bonus for core + backline turrets,
 # smaller gain on clustered infra (sentinels already out-damage them there).
@@ -492,16 +492,16 @@ def get_best_direction(pos):
 
     directions = map_info._DIRECTIONS
 
-    log("AT POSITION", pos)
+    # log("AT POSITION", pos)
 
     # Sentinel: best valid-placement direction at pos.
     best_s_dir, best_s_score = Direction.NORTH, -1
     for d in range(8):
         if not (sentinel_masks[d] & bit):
-            log("  SENT", directions[d], "not a valid placement")
+            # log("  SENT", directions[d], "not a valid placement")
             continue
         s = _read_score(sent_planes_by_dir[d], n)
-        log("  SENT", directions[d], "score", s)
+        # log("  SENT", directions[d], "score", s)
         if s > best_s_score:
             best_s_score = s
             best_s_dir = directions[d]
@@ -509,7 +509,7 @@ def get_best_direction(pos):
     # Gunner: sum plane is the decision basis.
     gun_sum = _read_score(gun_sum_plane, n) if gun_sum_plane is not None else 0
     gunner_placeable = bool(gunner_any & bit)
-    log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
+    # log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
 
     if not gunner_placeable or best_s_score >= gun_sum:
         return best_s_dir, EntityType.SENTINEL, best_s_score
@@ -518,10 +518,10 @@ def get_best_direction(pos):
     best_g_dir, best_g_score = Direction.NORTH, -1
     for d in range(8):
         if not (gunner_masks[d] & bit):
-            log("  GUN", directions[d], "not a valid placement")
+            # log("  GUN", directions[d], "not a valid placement")
             continue
         g = _read_score(gun_planes_by_dir[d], n)
-        log("  GUN", directions[d], "score", g)
+        # log("  GUN", directions[d], "score", g)
         if g > best_g_score:
             best_g_score = g
             best_g_dir = directions[d]
@@ -728,6 +728,10 @@ def _get_attack_candidates():
         return 0, 0
 
     sentinel_masks, gunner_masks = _placement_candidates()
+    if not can_afford_sent:
+        sentinel_masks = [0] * 8
+    if not can_afford_gun:
+        gunner_masks = [0] * 8
     _round_cache_placement_masks[0] = sentinel_masks
     _round_cache_placement_masks[1] = gunner_masks
 
@@ -918,7 +922,7 @@ def _my_claims():
     _ensure_round_cache()
     preferred, fallback = _round_cache_attack_candidates
     combined = preferred | fallback
-    claimed = pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], combined, map_info._bm_passable_FFF)
+    claimed = pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, combined, map_info._bm_passable_FFF)
     return claimed & preferred, claimed & fallback
 
 
@@ -988,12 +992,13 @@ def run():
                 log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)
-
     if turret_type == EntityType.GUNNER:
+        log("gunner cost", rc.get_gunner_cost(), rc.get_global_resources())
         if rc.can_build_gunner(best, direction):
             rc.build_gunner(best, direction)
             map_info.update_at(best)
     else:
+        log("sentinel cost", rc.get_sentinel_cost(), rc.get_global_resources())
         if rc.can_build_sentinel(best, direction):
             rc.build_sentinel(best, direction)
             map_info.update_at(best)

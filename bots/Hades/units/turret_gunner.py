@@ -1,30 +1,54 @@
-from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
+from cambc import Controller, Direction, EntityType, Position, Team, Environment
 import map_info
 from log import log
 
 rc: Controller = None
 my_pos: Position = None
 my_team: Team = None
-last_fired_round: int = 0
-skipped_firing_turns: int = 0
-adjacent_tiles: tuple[Position, ...] = ()
-
-# --- Ported from dragonfruit/globals.py ---
-TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
-
-INF = 999999
+_no_ammo_turns: int = 0
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
+# Sentinel-style weights. Builder bots are intentionally absent from rotation
+# scoring per spec — they're only valid as a *current-direction* fire target.
+_WEIGHTS = {
+    EntityType.CORE: 35,
+    EntityType.BREACH: 60,
+    EntityType.SENTINEL: 50,
+    EntityType.LAUNCHER: 10,
+    EntityType.HARVESTER: 0,
+    EntityType.GUNNER: 40,
+    EntityType.FOUNDRY: 55,
+    EntityType.BRIDGE: 4,
+    EntityType.ARMOURED_CONVEYOR: 4,
+    EntityType.BARRIER: 4,
+    EntityType.SPLITTER: 2,
+    EntityType.CONVEYOR: 1,
+    EntityType.ROAD: 0,
+    EntityType.MARKER: 0,
+}
 
-def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
-    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
+
+def init(c: Controller):
+    global rc, my_pos, my_team, _no_ammo_turns
+    rc = c
+    my_pos = rc.get_position()
+    _no_ammo_turns = 0
+    my_team = map_info._my_team
 
 
 def _should_stay():
-    """Block self-destruct when a harvester is adjacent, no bots are nearby,
-    or the closest visible builder bot is an enemy."""
-    for p in adjacent_tiles:
+    pos = rc.get_position()
+    for uid in rc.get_nearby_units(8):
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        if rc.get_team(uid) == my_team:
+            continue
+        p = rc.get_position(uid)
+        if max(abs(p.x - pos.x), abs(p.y - pos.y)) <= 2:
+            return True
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(pos.x + dx, pos.y + dy)
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
@@ -35,7 +59,7 @@ def _should_stay():
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
             continue
         p = rc.get_position(uid)
-        d = my_pos.distance_squared(p)
+        d = pos.distance_squared(p)
         if best_d is None or d < best_d:
             best_d = d
             closest_is_friendly = (rc.get_team(uid) == my_team)
@@ -44,287 +68,164 @@ def _should_stay():
     return not closest_is_friendly
 
 
-def init(c: Controller):
-    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns, adjacent_tiles
-    rc = c
-    my_pos = rc.get_position()
-    adjacent_tiles = _adjacent_cardinals(my_pos)
-    last_fired_round = rc.get_current_round()
-    skipped_firing_turns = 0
-    my_team = map_info._my_team
-
-# --- Ported and adapted from dragonfruit/units/gunner/combat.py ---
-
-def _get_invalid_sabotage_locations() -> set[Position]:
-    invalid_sabotage_locations = set()
-    my_pos_local = rc.get_position()
-    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
-        front_positions = []
-
-        if p.distance_squared(my_pos_local) <= 100:
-            for conv_pos in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
-                if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
-                    continue
-                if conv_pos not in invalid_sabotage_locations:
-                    front_positions.append(conv_pos)
-                    invalid_sabotage_locations.add(conv_pos)
-
-            for _ in range(4):
-                new_front = []
-                for front_p in front_positions:
-                    for conv_pos in map_info.iter_mask(map_info._conv_reverse[front_p.x + front_p.y * map_info._width]):
-                        if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
-                            continue
-                        if conv_pos not in invalid_sabotage_locations:
-                            new_front.append(conv_pos)
-                            invalid_sabotage_locations.add(conv_pos)
-                front_positions = new_front
-    return invalid_sabotage_locations
-
-def choose_gunner_target() -> Position | None:
-    """Pick the gunner's shot by scanning its short forward ray."""
-    direction = rc.get_direction()
-    attackable_tiles = set(rc.get_attackable_tiles()) # Re-added this line
-    ray_tiles = []
-    tile = map_info.pos_add(my_pos, direction)
-
-    invalid_sabotage_locations = _get_invalid_sabotage_locations()
-
-    for _ in range(3):
-        if not map_info.in_bounds(tile):
+def _ally_feeder_mask(max_steps: int = 6) -> int:
+    """Bitmask of friendly conveyors feeding any of my turrets (gunner/sentinel/breach)."""
+    my_team_bm = map_info._bm_team[map_info._my_team_idx]
+    my_turrets = (
+        map_info._bm_et[map_info._IDX_SENTINEL]
+        | map_info._bm_et[map_info._IDX_GUNNER]
+        | map_info._bm_et[map_info._IDX_BREACH]
+    ) & my_team_bm
+    if not my_turrets:
+        return 0
+    reverse = map_info._conv_reverse
+    visited = 0
+    frontier = my_turrets
+    for _ in range(max_steps):
+        next_frontier = 0
+        m = frontier
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            next_frontier |= reverse[n]
+            m ^= lsb
+        next_frontier &= ~visited
+        if not next_frontier:
             break
-        if tile not in attackable_tiles: # Re-added this check
-            break
-        ray_tiles.append(tile)
-        tile = map_info.pos_add(tile, direction)
+        visited |= next_frontier
+        frontier = next_frontier
+    return visited
 
-    first_enemy_idx = None
-    for i, current_ray_tile in enumerate(ray_tiles):
-        if current_ray_tile in invalid_sabotage_locations:
-            continue
 
-        bot_id = rc.get_tile_builder_bot_id(current_ray_tile)
-        if bot_id is not None:
-            if rc.get_team(bot_id) != my_team:
-                first_enemy_idx = i
-                break
-            return None
+def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
+    """Walk forward from my_pos in `direction`. Friendly roads and any markers
+    are pass-through; everything else is a stopping tile.
 
-        building_id = rc.get_tile_building_id(current_ray_tile)
-        if building_id is not None:
-            etype = rc.get_entity_type(building_id)
-            if etype == EntityType.MARKER:
-                continue
-            if rc.get_team(building_id) != my_team:
-                first_enemy_idx = i
-                break
-            if etype == EntityType.ROAD:
-                continue
-            return None
+    Returns (target_etype, fire_at) where:
+      - target_etype: the EntityType of the *enemy* thing motivating the shot
+        (used for rotation scoring).
+      - fire_at: the Position to pass to rc.fire — the first real game-side
+        obstruction on the ray, which may be a friendly road we're sacrificing.
+    Returns None if firing is not desired in this direction.
 
-        if not rc.is_tile_empty(current_ray_tile):
-            return None
-
-    if first_enemy_idx is None:
-        return None
-
-    for i in range(first_enemy_idx):
-        tile_to_check = ray_tiles[i]
-        if tile_to_check in invalid_sabotage_locations:
-            continue
-
-        bot_id = rc.get_tile_builder_bot_id(tile_to_check)
-        if bot_id is not None:
-            return None
-
-        building_id = rc.get_tile_building_id(tile_to_check)
-        if building_id is None:
-            continue
-
-        etype = rc.get_entity_type(building_id)
-        if etype == EntityType.MARKER:
-            continue
-        if rc.get_team(building_id) != my_team or etype == EntityType.ROAD:
-            return tile_to_check
-        return None
-
-    return ray_tiles[first_enemy_idx]
-
-def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
-    threat_tiles = set()
-    width = map_info._width
-    height = map_info._height
-
-    for d in map_info._DIRECTIONS:
-        dx, dy = map_info._DIRECTION_DELTAS[d]
-        max_range = 3 if d in map_info._CARDINAL else 2
-
-        x, y = tpos.x, tpos.y
-        for _ in range(max_range):
-            x += dx
-            y += dy
-            cur = Position(x, y)
-
-            if not map_info.in_bounds(cur):
-                break
-
-            if map_info.ground_at(x, y) == Environment.WALL:
-                break
-
-            threat_tiles.add(cur)
-            
-            if not rc.is_in_vision(cur):
-                break
-
-            bbid = rc.get_tile_builder_bot_id(cur)
-            if bbid is not None:
-                if rc.get_team(bbid) == my_team:
-                    break
-                continue
-
-            bid = rc.get_tile_building_id(cur)
-            if bid is not None:
-                etype = rc.get_entity_type(bid)
-                team = rc.get_team(bid)
-
-                if etype == EntityType.MARKER or etype == EntityType.ROAD:
-                    continue
-
-                if team == my_team:
-                    break
-                continue
-
-    return threat_tiles
-
-def get_enemy_units():
-    global my_team
-    enemy_units = []
-
-    for p in map_info._nearby_tiles:
-        # --- builder bots ---
-        bbid = rc.get_tile_builder_bot_id(p)
-        if bbid is not None:
-            if rc.get_team(bbid) != my_team:
-                etype = rc.get_entity_type(bbid)
-                enemy_units.append((bbid, etype, p, rc.get_team(bbid)))
-            continue
-
-        # --- buildings ---
-        bid = rc.get_tile_building_id(p)
-        if bid is None:
-            continue
-
-        if rc.get_team(bid) == my_team:
-            continue
-
-        etype = rc.get_entity_type(bid)
-
-        if etype in {
-            EntityType.LAUNCHER,
-            EntityType.SENTINEL,
-            EntityType.BREACH,
-            EntityType.GUNNER,
-            EntityType.CONVEYOR,
-            EntityType.BRIDGE,
-            EntityType.ARMOURED_CONVEYOR,
-            EntityType.CORE,
-            EntityType.BUILDER_BOT,
-            EntityType.BARRIER,
-        }:
-            enemy_units.append((bid, etype, p, rc.get_team(bid)))
-
-    return enemy_units
-
-def _get_loaders(pos):
-    """Return list of direction indices (0-7) from pos toward buildings that feed it."""
+    Rules:
+      - Wall: ray blocked, no fire.
+      - Friendly non-road non-marker building / friendly builder bot: blocks, no fire.
+      - Friendly conveyor that's part of an ally feeder chain: no fire.
+      - Enemy building: fire (even past friendly roads).
+      - Enemy builder bot: fire only if `allow_builder_bots` AND nothing in
+        front of it (no friendly road already passed)."""
     w = map_info._width
-    h = map_info._height
-    px, py = pos.x, pos.y
-    pos_n = px + py * w
-    loaders = []
+    cur = map_info.pos_add(my_pos, direction)
+    fire_at = None
+    passed_road = False
+    while map_info.in_bounds(cur) and cur in attackable:
+        n = cur.x + cur.y * w
+        if map_info.ground_at(cur.x, cur.y) == Environment.WALL:
+            return None
 
-    harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
-    conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]
-                 | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
+        bot_id = rc.get_tile_builder_bot_id(cur)
+        bid = rc.get_tile_building_id(cur)
 
-    # Cardinal-adjacent harvesters
-    for di, (dx, dy) in zip([0, 2, 4, 6], [(0, -1), (1, 0), (0, 1), (-1, 0)]):
-        nx, ny = px + dx, py + dy
-        if 0 <= nx < w and 0 <= ny < h:
-            if harvesters & (1 << (nx + ny * w)):
-                loaders.append(di)
-
-    # Any neighbor conveyor whose output targets this tile
-    for di in range(8):
-        dx, dy = map_info._DIRECTION_DELTAS_I[di]
-        nx, ny = px + dx, py + dy
-        if 0 <= nx < w and 0 <= ny < h:
-            nn = nx + ny * w
-            if (conveyors & (1 << nn)) and map_info._building_conv_target[nn] == pos_n:
-                if di not in loaders:
-                    loaders.append(di)
-
-    return loaders
-
-def choose_rotate_dir(enemies) -> Direction | None:
-    current_dir = rc.get_direction()
-    rotate_dir = None
-    rotate_dist = INF
-    blocked_dirs = _get_loaders(my_pos)
-    can_face_any_dir = len(blocked_dirs) >= 2
-
-    for (eid, etype, tpos, team) in enemies:
-        if etype not in TURRET_TYPES:
+        # Empty
+        if bot_id is None and bid is None:
+            cur = map_info.pos_add(cur, direction)
             continue
 
-        threat_tiles = get_gunner_threat_tiles(tpos)
-
-        if my_pos not in threat_tiles:
+        # Marker (no bot) — pass through
+        if bot_id is None and bid is not None and rc.get_entity_type(bid) == EntityType.MARKER:
+            cur = map_info.pos_add(cur, direction)
             continue
 
-        dist = my_pos.distance_squared(tpos)
-        desired_dir = map_info.direction_to(my_pos, tpos)
+        # First real obstruction (the engine will resolve fire to this)
+        if fire_at is None:
+            fire_at = cur
 
-        if desired_dir == current_dir:
+        # Don't shoot tiles feeding our own turrets
+        if feeder_mask & (1 << n):
+            return None
+
+        if bot_id is not None:
+            if rc.get_team(bot_id) == my_team:
+                return None
+            if not allow_builder_bots:
+                return None
+            if passed_road:
+                return None
+            return EntityType.BUILDER_BOT, fire_at
+
+        # Building only
+        bid_etype = rc.get_entity_type(bid)
+        if rc.get_team(bid) == my_team:
+            if bid_etype == EntityType.ROAD:
+                passed_road = True
+                cur = map_info.pos_add(cur, direction)
+                continue
+            return None
+        return bid_etype, fire_at
+
+    return None
+
+
+def _decide_fire():
+    direction = rc.get_direction()
+    if direction == Direction.CENTRE:
+        return None
+    attackable = set(rc.get_attackable_tiles())
+    feeder_mask = _ally_feeder_mask()
+    res = _scan_ray(direction, attackable, feeder_mask, allow_builder_bots=True)
+    return None if res is None else res[1]
+
+
+def _choose_rotate_dir():
+    feeder_mask = _ally_feeder_mask()
+    current = rc.get_direction()
+    best_dir = None
+    best_score = 0
+    for d in map_info._DIRECTIONS:
+        if d == current:
             continue
-        if not can_face_any_dir and desired_dir in blocked_dirs:
+        attackable = set(rc.get_attackable_tiles_from(my_pos, d, EntityType.GUNNER))
+        res = _scan_ray(d, attackable, feeder_mask, allow_builder_bots=False)
+        if res is None:
             continue
+        etype, _ = res
+        score = _WEIGHTS.get(etype, 0)
+        if score > best_score:
+            best_score = score
+            best_dir = d
+    return best_dir
 
-        if dist < rotate_dist:
-            rotate_dist = dist
-            rotate_dir = desired_dir
 
-    return rotate_dir
-
-# --- Ported and adapted from dragonfruit/units/gunner/run.py ---
 def run():
-    global last_fired_round, skipped_firing_turns
+    global _no_ammo_turns
     map_info.update()
-    enemies = get_enemy_units()
-    target = choose_gunner_target()
-    log(f"gunner target: {target}")
 
-    if target is not None and rc.can_fire(target):
-        rc.fire(target)
-        log(f"gunner fired at {target}")
-        last_fired_round = rc.get_current_round()
-        skipped_firing_turns = 0
+    if rc.get_ammo_amount() < 2:
+        _no_ammo_turns += 1
+        if _no_ammo_turns >= 10 and not _should_stay():
+            rc.self_destruct()
+            return
+    else:
+        _no_ammo_turns = 0
 
-    elif rc.get_global_resources()[0] >= 60:
-        rotate_dir = choose_rotate_dir(enemies)
+    if rc.get_action_cooldown() > 0:
+        return
+    if rc.get_ammo_amount() < 2:
+        return
 
-        if rotate_dir is not None and rc.can_rotate(rotate_dir):
-            rc.rotate(rotate_dir)
-            skipped_firing_turns = 0
-            log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+    fire_target = _decide_fire()
+    if fire_target is not None and rc.can_fire(fire_target):
+        rc.fire(fire_target)
+        log(f"gunner fired at {fire_target}")
+        return
 
-    if rc.get_action_cooldown() == 0:
-        skipped_firing_turns += 1
+    rotate_dir = _choose_rotate_dir()
+    if rotate_dir is not None and rc.get_global_resources()[0] >= 60 and rc.can_rotate(rotate_dir):
+        rc.rotate(rotate_dir)
+        log(f"gunner rotated toward {rotate_dir}")
+        return
 
-    if skipped_firing_turns >= 8:
-        if len(enemies) > 0:
-            last_fired_round = rc.get_current_round()
-            skipped_firing_turns -= 1
-        if (rc.get_scale_percent() > 500 or skipped_firing_turns >= 32):
-            if not _should_stay():
-                rc.self_destruct()
+    if fire_target is None and rotate_dir is None:
+        if not _should_stay():
+            rc.self_destruct()

@@ -5,7 +5,7 @@ import comms
 from cambc import *
 import units.builder
 from log import log
-
+import sys
 rc: Controller = None
 nav: Pathing = None
 comm_flag = 5
@@ -112,15 +112,20 @@ def _my_claims():
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     avoid = _too_expensive() | cant_claim() | unpathable
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
+    return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, candidates)
 
 _cached_claims = 0
 
-MAX_SCORE = 5
+MAX_SCORE = 7.25
 def score():
     global _cached_claims
-    units.builder.draw_mask(_dead_end_conveyors(), 255, 0, 0)
+    # units.builder.draw_mask(map_info._bm_route_targets, 0, 0, 255)
+    units.builder.draw_mask(map_info._bm_feeding_enemy, 255, 0, 0)
     _cached_claims = _my_claims()
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~map_info._bm_et[map_info._IDX_HARVESTER]&~map_info._bm_et[map_info._IDX_FOUNDRY]|map_info._bm_feeding_enemy
+    if important&_cached_claims:
+        _cached_claims &= important
+        return 7.25
     return 5 if _cached_claims else 0
 
 def run():
@@ -128,7 +133,12 @@ def run():
     global unpathable
     log("ROUTE")
     candidates = _cached_claims
+    high_priority = False
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~map_info._bm_et[map_info._IDX_HARVESTER]&~map_info._bm_et[map_info._IDX_FOUNDRY]|map_info._bm_feeding_enemy
 
+    if important & candidates:
+        high_priority = True
+        candidates &= important
     if not candidates:
         log("no candidates?")
         return
@@ -138,7 +148,26 @@ def run():
         log("no closest???")
         unpathable |= candidates
         return
-    
+
+    _BARRIER_DESTROYABLE = (
+        EntityType.ROAD,
+        EntityType.MARKER,
+        EntityType.CONVEYOR,
+        EntityType.ARMOURED_CONVEYOR,
+    )
+
+    def fallback_barrier(target):
+        log("barrier fallback at", target)
+        nav.move_adjacent(target)
+        existing = map_info.type_at(target.x, target.y)
+        if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target):
+            rc.destroy(target)
+            map_info.update_at(target)
+        if rc.can_build_barrier(target):
+            rc.build_barrier(target)
+            map_info.update_at(target)
+        comms.mark(target.x + target.y * map_info._width, comm_flag)
+
     best_bit = 1 << (best.x + best.y * width)
     is_harvester = bool(map_info._bm_et[map_info._IDX_HARVESTER] & best_bit)
 
@@ -159,6 +188,9 @@ def run():
     if is_harvester or is_foundry:
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
         if path is None:
+            if high_priority:
+                fallback_barrier(best)
+                return
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
@@ -169,6 +201,9 @@ def run():
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
         log("PATH", path, bool(is_raw_ax))
         if path is None:
+            if high_priority:
+                fallback_barrier(best)
+                return
             unpathable |= best_bit
             return
         target_conveyor = [path[0], path[1]]
@@ -178,6 +213,9 @@ def run():
         _cost_map[best_n] = (cost, rc.get_current_round())
         if rc.get_global_resources()[0] < cost:
             log("can't afford", cost)
+            if high_priority:
+                fallback_barrier(best)
+                return
             comms.mark(best.x + best.y * map_info._width, comm_flag)
             return
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0

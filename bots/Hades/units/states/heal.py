@@ -55,6 +55,7 @@ def _claimed_enemy_ids():
 
 
 def _find_chase_target():
+    # log("find chase")
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     claimed = _claimed_enemy_ids()
@@ -62,47 +63,51 @@ def _find_chase_target():
     enemy_bots = map_info._bm_enemy_bots
     
     if not enemy_bots:
+        # log("no enemies")
         return None
 
     friendly_bots = map_info._bm_friendly_bots
     my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     other_friendly = friendly_bots & ~my_bit
 
-    filtered = 0
-    mask = enemy_bots
+    filtered = enemy_bots
+    mask = friendly_bots&~my_bit & map_info._bm_visible
+    
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
-        uid = map_info._bot_at.get(n)
-        if uid is not None:
-            # if (uid & ID_MASK) not in claimed:
-            #     filtered |= lsb
-            # else:
-            nearby_friendly = map_info.expand_chebyshev(lsb) & other_friendly
-            if not nearby_friendly:
-                filtered |= lsb
+        closest = nav.closest(filtered, Position(n%w, n//w))
+        if closest[0] and closest[1] <= 4:
+            filtered ^= (1<<(closest[0].x+closest[0].y*w))
+        # uid = map_info._bot_at.get(n)
+        # if uid is not None:
+        #     # if (uid & ID_MASK) not in claimed:
+        #     #     filtered |= lsb
+        #     # else:
+        #     nearby_friendly = map_info.expand_chebyshev(lsb, 2) & other_friendly
+        #     if not nearby_friendly:
+        #         filtered |= lsb
         mask ^= lsb
     # log(map_info._bot_pos)
     # units.builder.draw_mask(enemy_bots, 255, 0, 0)
     # units.builder.draw_mask(friendly_bots, 0, 255, 0)
 
     if not filtered:
+        filtered = enemy_bots
         return None
-
     closest_pos, dist = nav.closest(filtered)
     if closest_pos is None:
+        # log("no closest")
         return None
-    if dist > 4:
+    if dist > 8:
+        # log("too far")
         return None
     # if dist < 6:
     #     return None
     n = closest_pos.x + closest_pos.y * w
-    uid = map_info._bot_at.get(n)
-    if uid is None:
+    if closest_pos.distance_squared(map_info._my_pos) < 5:
         return None
-    if closest_pos.distance_squared(map_info._my_pos) <= 5:
-        return None
-    return (uid, closest_pos)
+    return closest_pos
 
 
 def _healable_mask():
@@ -123,69 +128,71 @@ def _heal_targets():
 
 _cached_chase_target = None  # set by score(), reused by run()
 
-MAX_SCORE = 7
+MAX_SCORE = 8
 def score():
     global _cached_chase_target
     _cached_chase_target = _find_chase_target()
 
     if _very_damaged_targets():
-        return 7
+        return 8
     target = _cached_chase_target
+    # log(target)
+    # units.builder.draw_mask(map_info._bm_enemy_bots, 255, 0, 0)
     if target is not None:
-        if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
-            log("high priority heal", target[0])
+        if _conv_zone() & (1<<(target.x + target.y * map_info._width)):
+            log("high priority heal", target)
             return 7
         else:
-            log("low priority heal", target[0])
+            log("low priority heal", target)
             return 2.5
     return 0
 
 
-def _try_barrier_dead_ends():
-    """Barrier any adjacent tiles that are dead-end conveyor targets."""
-    w = map_info._width
-    dead_ends = map_info._bm_dead_end
-    if not dead_ends:
-        return
-    # Only dead-end conveyors whose output is empty / marker / enemy building
-    my_team_idx = map_info._my_team_idx
-    enemy_idx = 1 - my_team_idx
-    enemy_any = map_info._bm_team[enemy_idx]
-    marker = map_info._bm_et[map_info._IDX_MARKER]
-    empty_mask = ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
+# def _try_barrier_dead_ends():
+#     """Barrier any adjacent tiles that are dead-end conveyor targets."""
+#     w = map_info._width
+#     dead_ends = map_info._bm_dead_end
+#     if not dead_ends:
+#         return
+#     # Only dead-end conveyors whose output is empty / marker / enemy building
+#     my_team_idx = map_info._my_team_idx
+#     enemy_idx = 1 - my_team_idx
+#     enemy_any = map_info._bm_team[enemy_idx]
+#     marker = map_info._bm_et[map_info._IDX_MARKER]
+#     empty_mask = ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
 
-    targets = 0
-    mask = dead_ends
-    conv_target = map_info._building_conv_target
-    tiles = w * map_info._height
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        tn = conv_target[n]
-        if tn and 0 <= tn < tiles:
-            tbit = 1 << tn
-            if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
-                targets |= lsb
-        mask ^= lsb
-    if not targets:
-        return
-    my_pos = map_info._my_pos
-    for d in map_info._DIRECTIONS:
-        dx, dy = map_info._DIRECTION_DELTAS[d]
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if not map_info.in_bounds(p):
-            continue
-        pbit = 1 << (p.x + p.y * w)
-        if not (targets & pbit):
-            continue
-        if rc.get_action_cooldown() == 0:
-            if rc.can_destroy(p):
-                rc.destroy(p)
-                map_info.update_at(p)
-        if rc.can_build_barrier(p):
-            rc.build_barrier(p)
-            map_info.update_at(p)
-            return
+#     targets = 0
+#     mask = dead_ends
+#     conv_target = map_info._building_conv_target
+#     tiles = w * map_info._height
+#     while mask:
+#         lsb = mask & -mask
+#         n = lsb.bit_length() - 1
+#         tn = conv_target[n]
+#         if tn and 0 <= tn < tiles:
+#             tbit = 1 << tn
+#             if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
+#                 targets |= lsb
+#         mask ^= lsb
+#     if not targets:
+#         return
+#     my_pos = map_info._my_pos
+#     for d in map_info._DIRECTIONS:
+#         dx, dy = map_info._DIRECTION_DELTAS[d]
+#         p = Position(my_pos.x + dx, my_pos.y + dy)
+#         if not map_info.in_bounds(p):
+#             continue
+#         pbit = 1 << (p.x + p.y * w)
+#         if not (targets & pbit):
+#             continue
+#         if rc.get_action_cooldown() == 0:
+#             if rc.can_destroy(p):
+#                 rc.destroy(p)
+#                 map_info.update_at(p)
+#         if rc.can_build_barrier(p):
+#             rc.build_barrier(p)
+#             map_info.update_at(p)
+#             return
 
 def _do_best_heal():
     """Heal the most damaged adjacent friendly building."""
@@ -218,23 +225,21 @@ def _do_best_heal():
 
 def run():
     log("HEAL")
-
-    # Priority 1: chase an enemy near my conveyors
-    target = _cached_chase_target
-    if target is not None:
-        log("target is",target)
-        uid, ep = target
-        _try_barrier_dead_ends()
-        nav.move_adjacent(ep)
-        comms.mark(uid & ID_MASK, comm_flag)
-        _do_best_heal()
-        return
-
-    # Priority 2: move to most damaged building and heal
     very_damaged = _very_damaged_targets()
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None:
+        if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
+    # Priority 1: chase an enemy near my conveyors
+    target = _cached_chase_target
+    if target is not None:
+        log("target is",target)
+        ep = target
+        # _try_barrier_dead_ends()
+        nav.move_adjacent(ep)
+        # comms.mark(uid & ID_MASK, comm_flag)
+        _do_best_heal()
+        return
+
     _do_best_heal()

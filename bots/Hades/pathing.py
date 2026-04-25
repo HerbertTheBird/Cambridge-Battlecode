@@ -28,7 +28,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 bridge_cost = 6
 barrier_cost = 15
 threat_cost = 20
-conveyor_end_cost = 10
+conveyor_end_cost = 4
 
 
 

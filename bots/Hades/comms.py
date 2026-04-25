@@ -135,6 +135,7 @@ def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
 def mark(target_idx, type):
+    return
     if DRAW_DEBUG and type != heal.comm_flag:
         rc.draw_indicator_line(map_info._my_pos, Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
     log("mark", target_idx, type)

@@ -205,6 +205,7 @@ _bm_ti_carrying: int = 0       # conveyors believed to carry titanium (within 3 
 _bm_raw_ax_carrying: int = 0   # conveyors believed to carry raw axionite
 _bm_refined_carrying: int = 0  # conveyors believed to carry refined axionite
 _bm_dead_end: int = 0           # possible places to route from, defined by the targets of any conveyor types heading into nothing or a building that is not a (conveyor type, my foundry, my core, my sentinel, my gunner, or my breach). also includes my conveyors pointing into an enemy non road non marker building (update only in update)
+_bm_feeding_enemy: int = 0      # loaded conveyors whose target is an enemy gunner/sentinel/breach (excludes launcher; launchers don't get fed)
 _bm_enemy_soft_threat: int = 0    # tiles enemy sentinels can shoot (low dps) (update only in update)
 _bm_enemy_hard_threat: int = 0    # tiles enemy gunners/breaches can shoot (high dps) (update only in update)
 _bm_my_gunner_claims: int = 0     # tiles already covered by one of my gunners' current ray (update only in update)
@@ -1104,7 +1105,7 @@ def _compute_route_targets() -> int:
     my sentinel, my gunner, my breach). Also includes my conveyors pointing
     into an enemy non-road non-marker building.
     """
-    global _bm_dead_end
+    global _bm_dead_end, _bm_feeding_enemy
     my_team_idx = _my_team_idx
     bm_my = _bm_team[my_team_idx]
     my_convs = _bm_conveyors & bm_my
@@ -1125,6 +1126,15 @@ def _compute_route_targets() -> int:
             | _bm_et[_IDX_FOUNDRY]) & bm_my)
     )
     enemy_hard = _bm_team[1 - my_team_idx] & ~_bm_et[_IDX_MARKER] & ~_bm_et[_IDX_ROAD]
+    enemy_bm = _bm_team[1 - my_team_idx]
+    enemy_fed_turret = (
+        _bm_et[_IDX_GUNNER] | _bm_et[_IDX_SENTINEL] | _bm_et[_IDX_BREACH]
+    ) & enemy_bm
+    hard_block = (
+        enemy_fed_turret
+        | ((_bm_et[_IDX_LAUNCHER] | _bm_et[_IDX_BARRIER] | _bm_et[_IDX_CORE]) & enemy_bm)
+        | _bm_et[_IDX_HARVESTER]
+    )
 
     loaded_union = _bm_conv_ti | _bm_conv_raw_ax | _bm_conv_refined
     loaded_sources = all_convs & loaded_union
@@ -1134,6 +1144,7 @@ def _compute_route_targets() -> int:
     # Loaded guard conveyors (pointing into open ore) mark themselves as dead
     # ends since the ore target tile is unbuildable.
     dead_ends = 0
+    feeding_enemy = 0
     guard = _bm_guard_conveyor
     mask = loaded_sources
     while mask:
@@ -1145,12 +1156,17 @@ def _compute_route_targets() -> int:
             pass
         elif guard & tbit:
             dead_ends |= tbit
+        elif hard_block & tbit:
+            dead_ends |= lsb
+            if enemy_fed_turret & tbit:
+                feeding_enemy |= lsb
         elif not (accepting & tbit):
             dead_ends |= tbit
         elif (bm_my & lsb) and (enemy_hard & tbit):
             dead_ends |= tbit
         mask ^= lsb
     _bm_dead_end = dead_ends
+    _bm_feeding_enemy = feeding_enemy
 
     # --- Reverse walk from my core: every conveyor that eventually chains
     # into my core area. reverse[n] contains only my conveyors by construction.
@@ -1604,10 +1620,10 @@ def get_avoid(
     #     mask |= _bm_my_core_area
     if avoid_builders:
         mask |= _bm_friendly_bots | _bm_enemy_bots
-    # threat = _bm_enemy_turret_threat
-    # pos = _my_pos
-    # my_bit = 1 << (pos.x + pos.y * _width)
-    # if not (threat & my_bit):
-    #     mask |= threat
+    threat = _bm_enemy_hard_threat
+    pos = _my_pos
+    my_bit = 1 << (pos.x + pos.y * _width)
+    if not (threat & my_bit):
+        mask |= threat
     mask |= _bm_enemy_launch_adj
     return mask

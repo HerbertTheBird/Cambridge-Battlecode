@@ -16,7 +16,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
-    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available) & ~map_info._bm_friendly_bots
+    return available & ~pathing.voronoi_claim(map_info._bm_friendly_bots, my_mask, available) & ~map_info._bm_friendly_bots
 
 def init(c: Controller):
     global rc, nav
@@ -104,7 +104,6 @@ MAX_SCORE = 4
 _cached_claims = 0
 def score():
     global _cached_claims
-    units.builder.draw_mask(cant_harvest, 0, 0, 255)
     _cached_claims = _my_claims()
     return 4 if _cached_claims else 0
 

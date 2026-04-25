@@ -4,8 +4,6 @@ from log import log
 
 rc: Controller = None
 _no_ammo_turns = 0
-_my_pos: Position | None = None
-_adjacent_tiles: tuple[Position, ...] = ()
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
@@ -29,26 +27,27 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc, _my_pos, _adjacent_tiles
+    global rc
     rc = c
-    _my_pos = rc.get_position()
-    _adjacent_tiles = _adjacent_cardinals(_my_pos)
 
 
-def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
-    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
-
-
-def _should_stay(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
+def _should_stay():
+    my_pos = rc.get_position()
     my_team = map_info._my_team
-    for p in adjacent_tiles:
+    for uid in rc.get_nearby_units(8):
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        if rc.get_team(uid) == my_team:
+            continue
+        p = rc.get_position(uid)
+        if max(abs(p.x - my_pos.x), abs(p.y - my_pos.y)) <= 2:
+            return True
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
                 return True
-    # Only allow self-destruct when the closest builder bot in vision is a
-    # friendly one (likely able to reclaim). Stay if no bots are nearby, or if
-    # the closest bot is an enemy (giving them a free kill is worse than idling).
     best_d = 8
     closest_is_friendly = False
     for uid in rc.get_nearby_units():
@@ -64,86 +63,86 @@ def _should_stay(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
     return not closest_is_friendly
 
 
-def _get_feeder_positions(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
-    """Return set of positions that feed this sentinel (don't shoot these)."""
-    feeders = set()
-    for p in adjacent_tiles:
-        if not map_info.in_bounds(p):
-            continue
-        bid = rc.get_tile_building_id(p)
-        if not bid:
-            continue
-        etype = rc.get_entity_type(bid)
-        if etype == EntityType.HARVESTER:
-            feeders.add(p)
-        elif etype in (EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR):
-            d = rc.get_direction(bid)
-            ddx, ddy = map_info._DIRECTION_DELTAS[d]
-            if p.x + ddx == my_pos.x and p.y + ddy == my_pos.y:
-                feeders.add(p)
-    return feeders
-
-
-def _tile_score(tile, feeders):
-    my_team = map_info._my_team
-    if tile in feeders:
+def _ally_feeder_mask(max_steps: int = 6) -> int:
+    """Bitmask of friendly conveyors feeding any of my turrets (gunner/sentinel/breach).
+    Walks upstream via map_info._conv_reverse from each turret tile."""
+    my_team = map_info._bm_team[map_info._my_team_idx]
+    my_turrets = (
+        map_info._bm_et[map_info._IDX_SENTINEL]
+        | map_info._bm_et[map_info._IDX_GUNNER]
+        | map_info._bm_et[map_info._IDX_BREACH]
+    ) & my_team
+    if not my_turrets:
         return 0
-    # Turrets hit builder bot first if present
-    builder_id = rc.get_tile_builder_bot_id(tile)
-    if builder_id:
-        if rc.get_team(builder_id) != my_team:
-            return _WEIGHTS.get(EntityType.BUILDER_BOT, 0)
-        else:
-            return -5
-    building_id = rc.get_tile_building_id(tile)
-    if building_id and rc.get_team(building_id) != my_team:
-        return _WEIGHTS.get(rc.get_entity_type(building_id), 0)
-    return 0
+    reverse = map_info._conv_reverse
+    visited = 0
+    frontier = my_turrets
+    for _ in range(max_steps):
+        next_frontier = 0
+        m = frontier
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            next_frontier |= reverse[n]
+            m ^= lsb
+        next_frontier &= ~visited
+        if not next_frontier:
+            break
+        visited |= next_frontier
+        frontier = next_frontier
+    return visited
 
 
-def _prune_conveyor_targets(target_positions):
-    # Convert list of Position objects to a bitmask
-    targets = map_info.positions_to_mask(target_positions)
-
-    # expensive calculations - nonbitmasked, leave at end. calculates conveyors that go into a turret.
-    pruned_targets = 0
-    invalid_sabotage_locations = set()
+def _other_sentinel_attack_mask() -> int:
+    """Union of geometric attack patterns of every OTHER friendly sentinel."""
+    w = map_info._width
     my_pos = rc.get_position()
-    for p in map_info.iter_mask((map_info._bm_et[map_info._IDX_GUNNER] | map_info._bm_et[map_info._IDX_SENTINEL]) & map_info._bm_team[map_info._my_team_idx]):
-        front_positions = []
+    my_n = my_pos.x + my_pos.y * w
+    sentinels = (
+        map_info._bm_et[map_info._IDX_SENTINEL]
+        & map_info._bm_team[map_info._my_team_idx]
+        & ~(1 << my_n)
+    )
+    if not sentinels:
+        return 0
+    union = 0
+    m = sentinels
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        m ^= lsb
+        sid = map_info._building_id[n]
+        if sid is None:
+            continue
+        try:
+            sdir = rc.get_direction(sid)
+        except Exception:
+            continue
+        spos = Position(n % w, n // w)
+        for t in rc.get_attackable_tiles_from(spos, sdir, EntityType.SENTINEL):
+            union |= 1 << (t.x + t.y * w)
+    return union
 
-        if p.distance_squared(my_pos) <= 100:
-            # Iterating over conveyors that feed into p
-            for conv_pos in map_info.iter_mask(map_info._conv_reverse[p.x + p.y * map_info._width]):
-                # Allow skipping blacklisting if it's in vision and has a builder bot
-                if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
-                    continue
-                if conv_pos not in invalid_sabotage_locations:
-                    front_positions.append(conv_pos)
-                    invalid_sabotage_locations.add(conv_pos)
-                    # rc.draw_indicator_dot(conv, 0, 0, 255)
 
-            # Propagate up conveyor chain
-            for _ in range(4):
-                new_front = []
-                for front_p in front_positions:
-                    for conv_pos in map_info.iter_mask(map_info._conv_reverse[front_p.x + front_p.y * map_info._width]):
-                        # Allow skipping blacklisting if it's in vision and has a builder bot
-                        if rc.is_in_vision(conv_pos) and rc.get_tile_builder_bot_id(conv_pos) is not None:
-                            continue
-                        if conv_pos not in invalid_sabotage_locations:
-                            new_front.append(conv_pos)
-                            invalid_sabotage_locations.add(conv_pos)
-                            # rc.draw_indicator_dot(conv, 0, 0, 255)
-                front_positions = new_front
-
-    # Prune targets that are in invalid_sabotage_locations
-    for target in map_info.iter_mask(targets):
-        if target not in invalid_sabotage_locations:
-            pruned_targets |= (1 << (target.x + target.y * map_info._width))
-
-    # Convert pruned_targets bitmask back to a list of Position objects
-    return list(map_info.iter_mask(pruned_targets))
+def _resolve_target_on_tile(tile: Position):
+    """Return (etype, hp) of what a sentinel shot at `tile` would actually hit,
+    or None if the tile is empty / friendly / a marker. Sentinels (like all
+    turrets) hit a builder bot before any building on the same tile."""
+    my_team = map_info._my_team
+    bot_id = rc.get_tile_builder_bot_id(tile)
+    if bot_id is not None:
+        if rc.get_team(bot_id) == my_team:
+            return None
+        return EntityType.BUILDER_BOT, rc.get_hp(bot_id)
+    bid = rc.get_tile_building_id(tile)
+    if bid is None:
+        return None
+    if rc.get_team(bid) == my_team:
+        return None
+    etype = rc.get_entity_type(bid)
+    if etype == EntityType.MARKER:
+        return None
+    return etype, rc.get_hp(bid)
 
 
 def run():
@@ -152,7 +151,7 @@ def run():
 
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _should_stay(_my_pos, _adjacent_tiles):
+        if _no_ammo_turns >= 10 and not _should_stay():
             rc.self_destruct()
             return
     else:
@@ -163,25 +162,41 @@ def run():
     if rc.get_ammo_amount() < 5:
         return
 
-    feeders = _get_feeder_positions(_my_pos, _adjacent_tiles)
-    best_target = None
-    best_score = 0
+    w = map_info._width
+    feeder_mask = _ally_feeder_mask()
 
-    # Get attackable tiles and then prune them
-    attackable_tiles = rc.get_attackable_tiles()
-    pruned_attackable_tiles = _prune_conveyor_targets(attackable_tiles)
-
-    for tile in pruned_attackable_tiles:
+    candidates = []  # (pos, weight, hp)
+    for tile in rc.get_attackable_tiles():
+        n = tile.x + tile.y * w
+        if feeder_mask & (1 << n):
+            continue
         if not rc.can_fire(tile):
             continue
-        s = _tile_score(tile, feeders)
-        if s > best_score:
-            best_score = s
-            best_target = tile
+        resolved = _resolve_target_on_tile(tile)
+        if resolved is None:
+            continue
+        etype, hp = resolved
+        weight = _WEIGHTS.get(etype, 0)
+        if weight <= 0:
+            continue
+        candidates.append((tile, weight, hp))
 
-    if best_target is None:
-        if not _should_stay(_my_pos, _adjacent_tiles):
+    if not candidates:
+        if not _should_stay():
             rc.self_destruct()
         return
 
-    rc.fire(best_target)
+    one_shots = [c for c in candidates if c[2] <= 18]
+    if one_shots:
+        # Highest weight, then highest HP (use the full damage on a chunky kill)
+        one_shots.sort(key=lambda c: (-c[1], -c[2]))
+        best = one_shots[0][0]
+    else:
+        other_mask = _other_sentinel_attack_mask()
+        focus = [c for c in candidates if other_mask & (1 << (c[0].x + c[0].y * w))]
+        pool = focus if focus else candidates
+        # Highest weight, then lowest HP (finish softer targets first)
+        pool.sort(key=lambda c: (-c[1], c[2]))
+        best = pool[0][0]
+
+    rc.fire(best)
