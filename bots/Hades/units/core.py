@@ -11,6 +11,15 @@ DEFENSE_FRIENDLY_RADIUS_SQ = 20
 
 _spawn_plan: list[Direction] | None = None
 _num_spawned = 0
+_core_area: tuple[Position, ...] = ()
+
+
+def _core_area_positions(pos: Position) -> tuple[Position, ...]:
+    return tuple(
+        Position(pos.x + dx, pos.y + dy)
+        for dx in (-1, 0, 1)
+        for dy in (-1, 0, 1)
+    )
 
 
 def _try_spawn_planned(core_pos: Position) -> bool:
@@ -30,18 +39,15 @@ def _try_spawn_planned(core_pos: Position) -> bool:
 
 def _spawn_toward_center():
     """Spawn on the core tile closest to map center."""
-    core_pos = rc.get_position()
     center = Position(map_info._width//2, map_info._height//2)
     best = None
     best_dist = float('inf')
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            p = Position(core_pos.x + dx, core_pos.y + dy)
-            if rc.can_spawn(p):
-                d = p.distance_squared(center)
-                if d < best_dist:
-                    best_dist = d
-                    best = p
+    for p in _core_area:
+        if rc.can_spawn(p):
+            d = p.distance_squared(center)
+            if d < best_dist:
+                best_dist = d
+                best = p
     if best is not None:
         rc.spawn_builder(best)
 
@@ -54,14 +60,12 @@ def _spawn_toward_enemy_if_undefended(core_pos: Position, has_close_ally: bool, 
         return False
     best = None
     best_d = None
-    for dx in (-1, 0, 1):
-        for dy in (-1, 0, 1):
-            p = Position(core_pos.x + dx, core_pos.y + dy)
-            if rc.can_spawn(p):
-                d = p.distance_squared(closest_enemy)
-                if best_d is None or d < best_d:
-                    best_d = d
-                    best = p
+    for p in _core_area:
+        if rc.can_spawn(p):
+            d = p.distance_squared(closest_enemy)
+            if best_d is None or d < best_d:
+                best_d = d
+                best = p
     if best is None:
         return False
     rc.spawn_builder(best)
@@ -110,5 +114,6 @@ def run():
 
 
 def init(c: Controller):
-    global rc
+    global rc, _core_area
     rc = c
+    _core_area = _core_area_positions(rc.get_position())

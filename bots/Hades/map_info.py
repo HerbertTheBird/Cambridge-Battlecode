@@ -216,6 +216,13 @@ _bm_ax_fed: int = 0              # target tiles of conveyors observed carrying r
 _bm_enemy_turret_threat: int = 0 # union of enemy soft + hard threat
 _bm_others_5x5: int = 0          # 5x5 around other friendly builder bots
 _bm_others_3x3: int = 0          # 3x3 around other friendly builder bots
+_bm_passable_FFF: int = 0        # cached (_board_mask & ~get_avoid(False, False, False))
+
+# Structural state version — bumped on any structural map change (build/destroy
+# of a tracked building, or symmetry-solved insertion). Used to cheaply
+# invalidate caches that only change on structural updates. HP /
+# loaded-resource transitions are NOT counted.
+_struct_version: int = 0
 _board_mask: int = 0              # (1 << (w*h)) - 1, cached
 _bm_visible: int = 0              # tiles visible this turn
 _nearby_tiles: list = []           # cached rc.get_nearby_tiles() for this round
@@ -394,6 +401,10 @@ def _build_turret_shift_masks():
         block = row_bits * ((1 << (nrows * w)) - 1) // ((1 << w) - 1)
         _turret_shift_masks[(dx, dy)] = block << (y0 * w)
 
+_turret_threat_cache_version: int = -1
+_turret_threat_cache: tuple[int, int] = (0, 0)
+
+
 def _compute_enemy_turret_threat() -> tuple[int, int]:
     """Compute (soft, hard) threat bitmasks.
 
@@ -402,6 +413,10 @@ def _compute_enemy_turret_threat() -> tuple[int, int]:
 
     Sentinel/breach use bitmask shifting (no wall blocking).
     Gunner uses per-turret ray in current facing only (wall blocking)."""
+    global _turret_threat_cache_version, _turret_threat_cache
+    if _struct_version == _turret_threat_cache_version:
+        return _turret_threat_cache
+
     w = _width
     h = _height
     enemy_idx = 1 - _my_team_idx
@@ -453,11 +468,21 @@ def _compute_enemy_turret_threat() -> tuple[int, int]:
                 acc |= dm
         hard |= acc
 
-    return soft, hard
+    _turret_threat_cache_version = _struct_version
+    _turret_threat_cache = (soft, hard)
+    return _turret_threat_cache
+
+
+_my_gunner_claims_cache_version: int = -1
+_my_gunner_claims_cache: int = 0
 
 
 def _compute_my_gunner_claims() -> int:
     """Bitmask of tiles already covered by one of my gunners' current ray."""
+    global _my_gunner_claims_cache_version, _my_gunner_claims_cache
+    if _struct_version == _my_gunner_claims_cache_version:
+        return _my_gunner_claims_cache
+
     w = _width
     gunners = _bm_et[_IDX_GUNNER] & _bm_team[_my_team_idx]
     claimed = 0
@@ -477,6 +502,8 @@ def _compute_my_gunner_claims() -> int:
                 else:
                     dm = ((dm & shift_mask) >> (-offset)) & not_walls
                 claimed |= dm
+    _my_gunner_claims_cache_version = _struct_version
+    _my_gunner_claims_cache = claimed
     return claimed
 
 
@@ -513,8 +540,18 @@ def _compute_predicted_enemy_core() -> Position | None:
     return _predicted_enemy_core
 
 
+_conv_by_dir_cache_version: int = -1
+_conv_by_dir_cache: list[int] = [0] * 8
+
+
 def _compute_conv_by_dir() -> list[int]:
-    """Per facing (0..7): CONVEYOR|ARMOURED_CONVEYOR tiles with that output direction."""
+    """Per facing (0..7): CONVEYOR|ARMOURED_CONVEYOR tiles with that output
+    direction. Cached on _struct_version — only rebuilt on structural changes
+    (conveyor build/destroy/redirect)."""
+    global _conv_by_dir_cache_version, _conv_by_dir_cache
+    if _struct_version == _conv_by_dir_cache_version:
+        return _conv_by_dir_cache
+
     result = [0] * 8
     bd = _building_dir
     convs = _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
@@ -526,6 +563,9 @@ def _compute_conv_by_dir() -> list[int]:
         if 0 <= d < 8:
             result[d] |= lsb
         m ^= lsb
+
+    _conv_by_dir_cache_version = _struct_version
+    _conv_by_dir_cache = result
     return result
 
 
@@ -630,6 +670,7 @@ def update_at(pos: Position) -> None:
     global _bm_damaged, _bm_very_damaged
     global _hor_sym, _ver_sym, _rot_sym
     global _max_id_seen, _my_core, _their_core, _core_id, _predicted_enemy_core
+    global _struct_version
 
     rc = _rc
     width = _width
@@ -674,6 +715,10 @@ def update_at(pos: Position) -> None:
                 fbit = 1 << (rx + ry * width)
                 if (_bm_seen & fbit) and not (_bm_env[env_idx] & fbit):
                     _rot_sym = False
+        # Newly-observed walls block gunner rays in _compute_enemy_turret_threat
+        # and _compute_my_gunner_claims, so invalidate those caches.
+        if env_idx == _IDX_ENV_WALL:
+            _struct_version += 1
 
     # --- Building state ---
     entity_id = rc.get_tile_building_id(pos)
@@ -702,6 +747,7 @@ def update_at(pos: Position) -> None:
             _building_hp[n] = 0
             _building_dir[n] = -1
             _building_conv_target[n] = -1
+            _struct_version += 1
         _bm_damaged &= nbit
         _bm_very_damaged &= nbit
         return
@@ -773,6 +819,7 @@ def update_at(pos: Position) -> None:
             _building_hp[n] = 0
             _building_dir[n] = -1
             _building_conv_target[n] = -1
+            _struct_version += 1
         _bm_damaged &= nbit
         _bm_very_damaged &= nbit
         return
@@ -866,6 +913,9 @@ def update_at(pos: Position) -> None:
             build_core_areas()
             _predicted_enemy_core = _compute_predicted_enemy_core()
 
+    # Different-building path always writes new structural state.
+    _struct_version += 1
+
 def update_move() -> None:
     """After moving, re-scan tiles that are now visible but weren't from the previous position."""
     global _bm_visible, _prev_pos, _nearby_tiles, _nearby_tiles_pos, _my_pos
@@ -913,6 +963,10 @@ def init(c: Controller):
     global _bm_et, _bm_team, _bm_env
     global _left_col, _right_col, _bottom_row, _top_row, _not_left_col, _not_right_col, _not_bottom_row, _not_top_row
     global _board_mask, _bm_dir
+    global _struct_version
+    global _turret_threat_cache_version, _turret_threat_cache
+    global _my_gunner_claims_cache_version, _my_gunner_claims_cache
+    global _conv_by_dir_cache_version, _conv_by_dir_cache
     _rc = c
     _my_team = _rc.get_team()
     _my_team_idx = _TM_INT[_my_team]
@@ -931,6 +985,14 @@ def init(c: Controller):
     _bm_team = [0] * _NUM_TEAM
     _bm_env  = [0] * _NUM_ENV
     _bm_dir  = [0] * len(Direction)
+
+    _struct_version = 0
+    _turret_threat_cache_version = -1
+    _turret_threat_cache = (0, 0)
+    _my_gunner_claims_cache_version = -1
+    _my_gunner_claims_cache = 0
+    _conv_by_dir_cache_version = -1
+    _conv_by_dir_cache = [0] * 8
 
     # Column masks for safe bit-shifting (prevent wrap-around)
     _left_col = _board_mask//((1<<_width)-1)
@@ -1216,7 +1278,7 @@ def recompute_derived() -> None:
     global _bm_enemy_launch_adj, _bm_route_targets
     global _bm_enemy_turret_threat, _bm_enemy_soft_threat, _bm_enemy_hard_threat
     global _bm_my_gunner_claims, _bm_conv_by_dir, _bm_conv_into_open_ore
-    global _bm_guard_conveyor
+    global _bm_guard_conveyor, _bm_passable_FFF
     global _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying
 
     width = _width
@@ -1295,6 +1357,9 @@ def recompute_derived() -> None:
 
     _bm_conv_into_open_ore = _compute_conv_into_open_ore()
 
+    # Cached (~get_avoid(False, False, False)) board mask for voronoi-style BFS.
+    _bm_passable_FFF = _board_mask & ~(_bm_blocked | _bm_enemy_launch_adj)
+
 
 def update(recompute: bool = True) -> None:
     global _my_core, _their_core, _core_id, _solved_sym
@@ -1306,6 +1371,7 @@ def update(recompute: bool = True) -> None:
     global _bm_others_5x5, _bm_others_3x3
     global _max_id_seen
     global _new_marker_messages
+    global _struct_version
     rc = _rc
     building_id = _building_id
     building_et_idx = _building_et_idx
@@ -1376,6 +1442,10 @@ def update(recompute: bool = True) -> None:
                                 break
                         bm_seen |= fbit
         _bm_seen = bm_seen
+        # Symmetry-solve mirrored walls into _bm_env[WALL] and may have inserted
+        # the predicted enemy core into _bm_et[CORE] / _bm_team / _building_*.
+        # Both can affect cached compute_* outputs, so invalidate.
+        _struct_version += 1
 
     if _my_core:
         if _their_core:
@@ -1450,21 +1520,16 @@ def update(recompute: bool = True) -> None:
         else:
             _bm_enemy_bots |= bit
 
-    # Precompute other-bots zone masks for cant_claim()
+    # Precompute other-bots zone masks for cant_claim().
+    # expand_chebyshev distributes over OR, so one call per layer suffices.
     my_bit = 1 << (my_pos.x + my_pos.y * width)
     friendly_others = _bm_friendly_bots & ~my_bit
-    others_5x5 = 0
-    others_3x3 = 0
     if friendly_others:
-        mask = friendly_others
-        while mask:
-            bit = mask & -mask
-            small = expand_chebyshev(bit)
-            others_3x3 |= small
-            others_5x5 |= expand_chebyshev(small)
-            mask ^= bit
-    _bm_others_5x5 = others_5x5
-    _bm_others_3x3 = others_3x3
+        _bm_others_3x3 = expand_chebyshev(friendly_others)
+        _bm_others_5x5 = expand_chebyshev(_bm_others_3x3)
+    else:
+        _bm_others_3x3 = 0
+        _bm_others_5x5 = 0
 
     current_round = rc.get_current_round()
     while len(_max_id_by_round) <= current_round:

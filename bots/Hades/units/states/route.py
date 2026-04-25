@@ -167,7 +167,7 @@ def run():
         is_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & best_bit)
         is_refined = bool(map_info._bm_refined_carrying & prev_bit) or bool(map_info._bm_refined_carrying & best_bit)
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
-        print("PATH", path, bool(is_raw_ax))
+        log("PATH", path, bool(is_raw_ax))
         if path is None:
             unpathable |= best_bit
             return

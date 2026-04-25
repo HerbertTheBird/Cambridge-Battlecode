@@ -82,7 +82,7 @@ def _find_chase_target():
             if not nearby_friendly:
                 filtered |= lsb
         mask ^= lsb
-    # print(map_info._bot_pos)
+    # log(map_info._bot_pos)
     # units.builder.draw_mask(enemy_bots, 255, 0, 0)
     # units.builder.draw_mask(friendly_bots, 0, 255, 0)
 

@@ -120,7 +120,7 @@ def run():
         return
 
     best_ore, _ = nav.closest(available)
-    print("harvesting", best_ore)
+    log("harvesting", best_ore)
     if best_ore is None:
         cant_harvest |= available
         return
@@ -175,7 +175,7 @@ def run():
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
     targets = set()
-    print(path[0])
+    log(path[0])
     for d in Direction:
         p = map_info.pos_add(path[0], d)
         if p == best_ore or not map_info.in_bounds(p):

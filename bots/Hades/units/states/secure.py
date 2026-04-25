@@ -91,7 +91,7 @@ def run():
     if not best_ore:
         cant_secure |= available
         return
-    print("dist", _)
+    log("dist", _)
     log("best secure", best_ore)
     if best_ore.distance_squared(rc.get_position()) <= 2:
         check_region = map_info.expand_chebyshev(1<<(rc.get_position().x+rc.get_position().y*w), 2)
@@ -199,7 +199,7 @@ def run():
             scale_estimate += 0.01
         _cost_map[best_n] = (cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate), rc.get_current_round())
     else:
-        print("CANT SECURE", best_ore, done_conveyor)
+        log("CANT SECURE", best_ore, done_conveyor)
         cant_secure |= 1 << (best_ore.x + best_ore.y * w)
         return
     if _cost_map[best_n][0] > rc.get_global_resources()[0] and not secure_now:

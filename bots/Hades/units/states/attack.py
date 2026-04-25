@@ -715,7 +715,7 @@ def _draw_attack_candidates(filtered):
         n = lsb.bit_length() - 1
         x, y = n % w, n // w
         direction, turret_type, score = get_best_direction(Position(x, y))
-        print(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
+        log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
         dx, dy = dir_deltas[direction]
         ex, ey = x + dx, y + dy
         if turret_type == EntityType.GUNNER:
