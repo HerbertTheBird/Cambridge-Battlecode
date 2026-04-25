@@ -88,7 +88,14 @@ def not_blocked():
         & ~map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
     )
     already_routed = map_info.expand_manhattan(my_connected) | left_conveyors | right_conveyors | up_conveyors | down_conveyors
-    blocked = map_info._board_mask * ((blocking&map_info._not_left_col)>>1 | ~map_info._not_right_col) & ((blocking&map_info._not_right_col)<<1 | ~map_info._not_left_col) & (blocking >> w | (((1<<w)-1)*(map_info._height-1))) & (blocking << w | ((1<<w)-1))
+    bottom_row = ((1 << w) - 1) << (w * (map_info._height - 1))
+    top_row = (1 << w) - 1
+    blocked = (
+        (((blocking & map_info._not_left_col) >> 1) | ~map_info._not_right_col)
+        & (((blocking & map_info._not_right_col) << 1) | ~map_info._not_left_col)
+        & ((blocking >> w) | bottom_row)
+        & ((blocking << w) | top_row)
+    )
     return map_info._board_mask & ~already_routed & ~blocked & ~map_info._bm_enemy_turret_threat
 
 def _orphan_harvesters():

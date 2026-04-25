@@ -6,6 +6,7 @@ rc: Controller = None
 my_pos: Position = None
 my_team: Team = None
 _no_ammo_turns: int = 0
+_attackable_by_dir: dict = {}
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
@@ -30,11 +31,15 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc, my_pos, my_team, _no_ammo_turns
+    global rc, my_pos, my_team, _no_ammo_turns, _attackable_by_dir
     rc = c
     my_pos = rc.get_position()
     _no_ammo_turns = 0
     my_team = map_info._my_team
+    _attackable_by_dir = {
+        d: set(rc.get_attackable_tiles_from(my_pos, d, EntityType.GUNNER))
+        for d in map_info._DIRECTIONS
+    }
 
 
 def _should_stay():
@@ -171,7 +176,7 @@ def _decide_fire():
     direction = rc.get_direction()
     if direction == Direction.CENTRE:
         return None
-    attackable = set(rc.get_attackable_tiles())
+    attackable = _attackable_by_dir[direction]
     feeder_mask = _ally_feeder_mask()
     res = _scan_ray(direction, attackable, feeder_mask, allow_builder_bots=True)
     return None if res is None else res[1]
@@ -185,7 +190,7 @@ def _choose_rotate_dir():
     for d in map_info._DIRECTIONS:
         if d == current:
             continue
-        attackable = set(rc.get_attackable_tiles_from(my_pos, d, EntityType.GUNNER))
+        attackable = _attackable_by_dir[d]
         res = _scan_ray(d, attackable, feeder_mask, allow_builder_bots=False)
         if res is None:
             continue

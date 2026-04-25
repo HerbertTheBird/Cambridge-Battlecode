@@ -62,17 +62,6 @@ def score():
     return 3 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
-def secured():
-    my_team_idx = map_info._my_team_idx
-    securing = ( map_info._bm_team[my_team_idx]
-        & ~map_info._bm_et[map_info._IDX_ROAD]
-        & ~map_info._bm_et[map_info._IDX_MARKER]
-    | map_info._bm_env[map_info._IDX_ENV_WALL])
-    w = map_info._width
-    bottom_row = ((1<<w)-1)<<w*(map_info._height-1)
-    top_row = ((1<<w)-1)
-    secured = (((securing&map_info._not_left_col) >> 1)|~map_info._not_right_col) & (((securing&map_info._not_right_col) << 1)|~map_info._not_left_col) & ((securing>>w)|bottom_row) & ((securing<<w)|top_row)
-    return secured
 
 def run():
     global cant_secure

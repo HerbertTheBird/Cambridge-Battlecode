@@ -1,3 +1,5 @@
+from collections import deque
+
 import map_info
 from pathing import Pathing
 import comms
@@ -61,8 +63,10 @@ def generate_explore_target():
             seeds |= 1 << (ix + iy * w)
         mask ^= lsb
 
+    # Keep the trailing 6 frontiers so we can recover the ring at iteration (c-5) once the fill terminates.
     visited = seeds
     frontier = seeds
+    recent_frontiers = deque([seeds], maxlen=6)
     c = 0
     while frontier and c < 100:
         h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
@@ -70,16 +74,8 @@ def generate_explore_target():
         frontier = expanded & passable & ~visited
         visited |= frontier
         c += 1
-    a = 0
-    visited = seeds
-    frontier = seeds
-    while frontier and a < c-5:
-        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-        expanded = h | (h << w) | (h >> w)
-        frontier = expanded & passable & ~visited
-        visited |= frontier
-        a += 1
-    # prev_frontier is the last ring before flood filled everything.
+        recent_frontiers.append(frontier)
+    frontier = recent_frontiers[0]
     # Pick a random unset bit from that ring (tiles NOT claimed by anyone).
     unclaimed = frontier & ~units.builder.claimed_targets[comm_flag]
     pool = unclaimed if unclaimed else frontier

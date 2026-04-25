@@ -143,6 +143,8 @@ def run():
         conv_dir = map_info._INT_DIR[d_idx]
         if conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & pbit):
             path = nav.calculate_conveyor_path(pos.add(conv_dir), is_raw_ax, True)
+            if path is not None:
+                break
     if not path:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
     if path is not None:
