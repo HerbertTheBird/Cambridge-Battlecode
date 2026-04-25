@@ -37,6 +37,8 @@ class Player:
     def __init__(self):
         self.initialized = False
         self.me: ModuleType
+        self.current_round: int = None
+        self.most_recent_tle_round: int | None = None
 
         if ENABLE_PROFILER:
             self.profiled_turn_count = 0
@@ -105,6 +107,7 @@ class Player:
 
     def run(self, c: Controller) -> None:
         global SPAWN_TURN
+        round_num = c.get_current_round()
 
         if not self.initialized:
             self._prepare_profile_dir(c)
@@ -114,7 +117,7 @@ class Player:
                 self.profiler = cProfile.Profile()
 
         if SPAWN_TURN == -2:
-            SPAWN_TURN = c.get_current_round() - 1
+            SPAWN_TURN = round_num - 1
 
         if ENABLE_PROFILER and self.profiler is not None:
             self.profiler.enable()
@@ -142,7 +145,12 @@ class Player:
                 map_info.init(c)
                 comms.init(c)
                 self.me.init(c)
+                self.current_round = round_num
                 self.initialized = True
+
+            if self.current_round != round_num:
+                self.most_recent_tle_round = self.current_round
+                self.current_round = round_num
 
             self.me.run()
 
@@ -169,6 +177,8 @@ class Player:
             #     if ENABLE_PROFILER and self.profiler is not None:
             #         self.profiler.disable()
                     # self.profiler.clear()
+
+            self.current_round += 1
 
         except Exception as e:
             print("Error:", e)
