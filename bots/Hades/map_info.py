@@ -531,6 +531,45 @@ def _compute_fed() -> tuple[int, int]:
     return ti_fed, ax_fed
 
 
+def _conveyor_target_tiles(source_mask: int) -> int:
+    """Return the union of output target tiles for the given conveyor-like
+    sources. Cardinal outputs are shifted in bulk; bridges fall back to their
+    arbitrary target lookup."""
+    if not source_mask:
+        return 0
+
+    w = _width
+    board = _board_mask
+    dir_mask = _bm_dir
+    cardinal = source_mask & (
+        _bm_et[_IDX_CONVEYOR]
+        | _bm_et[_IDX_ARMOURED_CONVEYOR]
+        | _bm_et[_IDX_SPLITTER]
+    )
+    targets = (
+        ((cardinal & dir_mask[_DIR_INT[Direction.EAST]] & _not_right_col) << 1)
+        | ((cardinal & dir_mask[_DIR_INT[Direction.WEST]] & _not_left_col) >> 1)
+        | ((cardinal & dir_mask[_DIR_INT[Direction.SOUTH]] & _not_bottom_row) << w)
+        | ((cardinal & dir_mask[_DIR_INT[Direction.NORTH]] & _not_top_row) >> w)
+    ) & board
+
+    bridges = source_mask & _bm_et[_IDX_BRIDGE]
+    if not bridges:
+        return targets
+
+    conv_target = _building_conv_target
+    tiles = _width * _height
+    m = bridges
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        tn = conv_target[n]
+        if 0 <= tn < tiles:
+            targets |= 1 << tn
+        m ^= lsb
+    return targets
+
+
 def _compute_predicted_enemy_core() -> Position | None:
     """Return the enemy core position when known. Symmetry-based prediction is
     left to `update()`, since the flip helpers aren't available here."""
@@ -1028,6 +1067,9 @@ def init(c: Controller):
     global _turret_threat_cache_version, _turret_threat_cache
     global _my_gunner_claims_cache_version, _my_gunner_claims_cache
     global _conv_by_dir_cache_version, _conv_by_dir_cache
+    global _route_targets_cache_key, _route_targets_cache
+    global _route_reaches_core_cache_version, _route_reaches_core_cache
+    global _recompute_structural_cache_version, _recompute_loaded_cache_key, _recompute_visible_cache_key
     _rc = c
     _my_team = _rc.get_team()
     _my_team_idx = _TM_INT[_my_team]
@@ -1054,6 +1096,13 @@ def init(c: Controller):
     _my_gunner_claims_cache = 0
     _conv_by_dir_cache_version = -1
     _conv_by_dir_cache = [0] * 8
+    _route_targets_cache_key = None
+    _route_targets_cache = (0, 0, 0)
+    _route_reaches_core_cache_version = -1
+    _route_reaches_core_cache = (0, ())
+    _recompute_structural_cache_version = -1
+    _recompute_loaded_cache_key = None
+    _recompute_visible_cache_key = None
 
     # Column masks for safe bit-shifting (prevent wrap-around)
     _left_col = _board_mask//((1<<_width)-1)
@@ -1223,15 +1272,11 @@ def _compute_route_targets() -> int:
     my_team_idx = _my_team_idx
     bm_my = _bm_team[my_team_idx]
     my_convs = _bm_conveyors & bm_my
-
     conv_target = _building_conv_target
     tiles = _width * _height
     reverse = _conv_reverse
-
     all_convs = _bm_conveyors
 
-    # Accepting set: any conveyor type (any team) plus my core, sentinel,
-    # gunner, breach, foundry.
     accepting = (
         _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
         | _bm_et[_IDX_BRIDGE] | _bm_et[_IDX_SPLITTER]
@@ -1283,9 +1328,6 @@ def _compute_route_targets() -> int:
     _bm_feeding_enemy = feeding_enemy
 
     # --- Overlay loaded/visible state on top of the structural conveyor graph.
-    # The core-reaching conveyor set only changes when structure changes, so we
-    # cache that reverse walk separately and reuse its downstream-first order
-    # here for the loaded-run scan.
     reaches_core, reaches_core_order = _compute_route_reaches_core()
     loaded_mine = my_convs & (_bm_conv_ti | _bm_conv_raw_ax | _bm_conv_refined)
     visible_loaded_mine = loaded_mine & _bm_visible
@@ -1379,23 +1421,22 @@ def _compute_route_targets() -> int:
     _route_targets_cache = (result, _bm_dead_end, _bm_feeding_enemy)
     return result
 
-_recompute_derived_cache_key: tuple | None = None
+_recompute_structural_cache_version: int = -1
+_recompute_loaded_cache_key: tuple | None = None
+_recompute_visible_cache_key: tuple | None = None
 
 
-def recompute_derived() -> None:
-    """Rebuild derived bitmasks from the current tracked map state."""
-    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets, _bm_ti_fed, _bm_ax_fed
-    global _bm_enemy_launch_adj, _bm_route_targets
+def _recompute_derived_structural() -> None:
+    global _bm_blocked, _bm_conveyors, _bm_conveyor_targets
+    global _bm_enemy_launch_adj
     global _bm_enemy_turret_threat, _bm_enemy_soft_threat, _bm_enemy_hard_threat
     global _bm_my_gunner_claims, _bm_conv_by_dir, _bm_conv_into_open_ore
     global _bm_guard_conveyor, _bm_passable_FFF
-    global _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying
-    global _recompute_derived_cache_key
+    global _recompute_structural_cache_version
 
-    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined, _bm_visible)
-    if key == _recompute_derived_cache_key:
+    if _struct_version == _recompute_structural_cache_version:
         return
-    _recompute_derived_cache_key = key
+    _recompute_structural_cache_version = _struct_version
 
     width = _width
     height = _height
@@ -1403,49 +1444,23 @@ def recompute_derived() -> None:
     bm_et = _bm_et
     bm_team = _bm_team
     bm_env = _bm_env
-    building_conv_target = _building_conv_target
 
-    # Conveyors (all conveyor-type buildings + my core area)
     _bm_conveyors = (
         bm_et[_IDX_CONVEYOR]
         | bm_et[_IDX_ARMOURED_CONVEYOR]
         | bm_et[_IDX_BRIDGE]
         | bm_et[_IDX_SPLITTER]
     )
-
     _bm_guard_conveyor = _compute_guard_conv()
-    _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying = _compute_carrying()
-    _bm_route_targets = _compute_route_targets()
+    _bm_conveyor_targets = _conveyor_target_tiles(_bm_conveyors)
 
-    # Blocked = walls + non-passable buildings + enemy core area
     _bm_blocked = bm_env[_IDX_ENV_WALL]
     _bm_blocked |= bm_et[_IDX_HARVESTER] | bm_et[_IDX_FOUNDRY]
     _bm_blocked |= bm_et[_IDX_GUNNER] | bm_et[_IDX_SENTINEL]
     _bm_blocked |= bm_et[_IDX_BREACH] | bm_et[_IDX_LAUNCHER]
-    _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]  # enemy barriers only
+    _bm_blocked |= bm_et[_IDX_BARRIER] & ~bm_team[my_team_idx]
     _bm_blocked |= _bm_their_core_area
 
-    # Conveyor targets + fed bitmasks
-    _bm_conveyor_targets = 0
-    _bm_ti_fed = 0
-    _bm_ax_fed = 0
-    bm_conv_ti_local = _bm_conv_ti
-    bm_conv_refined_local = _bm_conv_refined
-    mask = _bm_conveyors
-    while mask:
-        lsb = mask & -mask
-        cn = lsb.bit_length() - 1
-        tn = building_conv_target[cn]
-        if tn >= 0:
-            tbit = 1 << tn
-            _bm_conveyor_targets |= tbit
-            if bm_conv_ti_local & lsb:
-                _bm_ti_fed |= tbit
-            if bm_conv_refined_local & lsb:
-                _bm_ax_fed |= tbit
-        mask ^= lsb
-
-    # Enemy launcher adjacency
     enemy_launchers = bm_et[_IDX_LAUNCHER] & ~bm_team[my_team_idx]
     _bm_enemy_launch_adj = 0
     mask = enemy_launchers
@@ -1461,20 +1476,45 @@ def recompute_derived() -> None:
                 _bm_enemy_launch_adj |= 1 << (nx + ny * width)
         mask ^= lsb
 
-    # Enemy turret threat
     _bm_enemy_soft_threat, _bm_enemy_hard_threat = _compute_enemy_turret_threat()
     _bm_enemy_turret_threat = _bm_enemy_soft_threat | _bm_enemy_hard_threat
-
-    # My gunner coverage (for attack scoring)
     _bm_my_gunner_claims = _compute_my_gunner_claims()
-
-    # Conveyor masks by facing direction (for attack placement candidates)
     _bm_conv_by_dir = _compute_conv_by_dir()
-
     _bm_conv_into_open_ore = _compute_conv_into_open_ore()
-
-    # Cached (~get_avoid(False, False, False)) board mask for voronoi-style BFS.
     _bm_passable_FFF = _board_mask & ~(_bm_blocked | _bm_enemy_launch_adj)
+
+
+def _recompute_derived_loaded() -> None:
+    global _bm_ti_fed, _bm_ax_fed
+    global _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying
+    global _recompute_loaded_cache_key
+
+    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined)
+    if key == _recompute_loaded_cache_key:
+        return
+    _recompute_loaded_cache_key = key
+
+    convs = _bm_conveyors
+    _bm_ti_fed = _conveyor_target_tiles(_bm_conv_ti & convs)
+    _bm_ax_fed = _conveyor_target_tiles(_bm_conv_refined & convs)
+    _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying = _compute_carrying()
+
+
+def _recompute_derived_visible() -> None:
+    global _bm_route_targets, _recompute_visible_cache_key
+
+    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined, _bm_visible)
+    if key == _recompute_visible_cache_key:
+        return
+    _recompute_visible_cache_key = key
+    _bm_route_targets = _compute_route_targets()
+
+
+def recompute_derived() -> None:
+    """Rebuild derived bitmasks from the current tracked map state."""
+    _recompute_derived_structural()
+    _recompute_derived_loaded()
+    _recompute_derived_visible()
 
 
 def update(recompute: bool = True) -> None:
