@@ -24,6 +24,13 @@ DIRECTIONS = [
     Direction.NORTHWEST,
 ]
 
+DIAGONAL = {
+    Direction.NORTHEAST,
+    Direction.SOUTHEAST,
+    Direction.SOUTHWEST,
+    Direction.NORTHWEST,
+}
+
 
 def dir_distance(a: Direction, b: Direction) -> int:
     ia = DIRECTIONS.index(a)
@@ -97,20 +104,17 @@ def pick_n_directions(width: int, height: int, pool, n: int):
 
     best = tuple(range(n))
     best_score = -1
+    best_diagonal_count = sum(1 for k in best if pool[k][0] in DIAGONAL)
     for combo in combinations(range(len(pool)), n):
-        spread = 1
+        score = 1
         for i in range(n):
             for j in range(i + 1, n):
-                spread *= dir_distance(pool[combo[i]][0], pool[combo[j]][0])
+                score *= dir_distance(pool[combo[i]][0], pool[combo[j]][0])
 
-        best_closeness = max(
-            1.0 - pool[k][1].distance_squared(center) / max_dist_sq
-            for k in combo
-        )
-
-        score = spread * 10 + best_closeness * 30
-        if score > best_score:
+        diagonal_count = sum(1 for k in combo if pool[k][0] in DIAGONAL)
+        if score > best_score or (score == best_score and diagonal_count > best_diagonal_count):
             best_score = score
+            best_diagonal_count = diagonal_count
             best = combo
 
     return [pool[k] for k in best]
