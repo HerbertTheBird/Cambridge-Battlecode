@@ -170,13 +170,6 @@ class Player:
                     file=sys.stderr,
                 )
                 c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
-            #     if ENABLE_PROFILER and self.profiler is not None:
-            #         self.profiler.disable()
-            #         self._write_profile()
-            # else:
-            #     if ENABLE_PROFILER and self.profiler is not None:
-            #         self.profiler.disable()
-                    # self.profiler.clear()
 
             # if self.first_turn_round == round_num:
             #     map_info.determine_known_map()
