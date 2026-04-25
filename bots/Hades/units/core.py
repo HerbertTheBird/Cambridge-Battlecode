@@ -74,6 +74,7 @@ def _spawn_toward_enemy_if_undefended(core_pos: Position, has_close_ally: bool, 
 
 def run():
     global _spawn_plan
+    map_info.update()
     core_pos = rc.get_position()
     if _spawn_plan is None:
         _spawn_plan = choose_spawn_plan(rc, core_pos, INITIAL_SPAWN_COUNT)

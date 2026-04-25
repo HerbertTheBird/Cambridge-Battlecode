@@ -34,6 +34,53 @@ def load_map26(filename):
     return env_masks, spawn_positions, height, width
 
 
+def _tile_env_at(env_masks, width, x, y):
+    bit = 1 << (x + y * width)
+    for env_idx, mask in enumerate(env_masks):
+        if mask & bit:
+            return env_idx
+    raise ValueError(f"No environment found at ({x}, {y})")
+
+
+def _is_symmetric(env_masks, spawns, width, height, transform):
+    spawn_set = {(p.x, p.y) for p in spawns}
+
+    for y in range(height):
+        for x in range(width):
+            tx, ty = transform(x, y)
+            if _tile_env_at(env_masks, width, x, y) != _tile_env_at(env_masks, width, tx, ty):
+                return False
+
+    transformed_spawns = {transform(p.x, p.y) for p in spawns}
+    return transformed_spawns == spawn_set
+
+
+def determine_symmetries(env_masks, spawns, width, height):
+    return {
+        "hor_sym": _is_symmetric(
+            env_masks,
+            spawns,
+            width,
+            height,
+            lambda x, y: (width - 1 - x, y),
+        ),
+        "ver_sym": _is_symmetric(
+            env_masks,
+            spawns,
+            width,
+            height,
+            lambda x, y: (x, height - 1 - y),
+        ),
+        "rot_sym": _is_symmetric(
+            env_masks,
+            spawns,
+            width,
+            height,
+            lambda x, y: (width - 1 - x, height - 1 - y),
+        ),
+    }
+
+
 def env_masks_to_python(env_masks):
     inner = ", ".join(str(mask) for mask in env_masks)
     return f"[{inner}]"
@@ -52,6 +99,7 @@ def generate_known_maps():
 
     for path in sorted(MAPS_DIR.glob("*.map26")):
         env_masks, spawns, height, width = load_map26(path)
+        symmetries = determine_symmetries(env_masks, spawns, width, height)
 
         key = (height, width)
 
@@ -59,6 +107,7 @@ def generate_known_maps():
             "name": path.name,
             "spawns": spawns,
             "env_masks": env_masks,
+            **symmetries,
         }
 
         known_maps.setdefault(key, []).append(entry)
@@ -83,6 +132,9 @@ def write_output(known_maps):
             lines.append(f"            'name': {m['name']!r},")
             lines.append(f"            'spawns': {spawns_to_python(m['spawns'])},")
             lines.append(f"            'env_masks': {env_masks_to_python(m['env_masks'])},")
+            lines.append(f"            'hor_sym': {m['hor_sym']},")
+            lines.append(f"            'ver_sym': {m['ver_sym']},")
+            lines.append(f"            'rot_sym': {m['rot_sym']},")
             lines.append("        },")
 
         lines.append("    ],")

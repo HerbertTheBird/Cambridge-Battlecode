@@ -14,4 +14,4 @@ def init(c: Controller):
     my_team = map_info._my_team
 
 def run():
-    pass
+    map_info.update()

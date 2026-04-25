@@ -148,6 +148,7 @@ def _prune_conveyor_targets(target_positions):
 
 def run():
     global _no_ammo_turns
+    map_info.update()
 
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
