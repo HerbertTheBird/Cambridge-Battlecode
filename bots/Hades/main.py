@@ -16,7 +16,7 @@ import map_info
 import comms
 from log import log
 
-ENABLE_PROFILER = False
+ENABLE_PROFILER = True
 
 if ENABLE_PROFILER:
     import cProfile

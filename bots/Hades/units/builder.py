@@ -133,6 +133,7 @@ def register_active_target(flag: int, target: Position | None):
 def handle_comms():
     current_round = rc.get_current_round()
     w = map_info._width
+    visible = map_info._bm_visible
     for v, sender_pos, _marker_pos, _marker_id, estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
@@ -146,12 +147,14 @@ def handle_comms():
             sn = sender_pos.x + sender_pos.y * w
             claimed_senders[flag] |= 1 << sn
             _sender_rounds[flag][sn] = estimated_turn
-    for p in map_info._nearby_tiles:
-        idx = p.x + p.y * w
-        for i in range(len(claimed_targets)):
-            if idx in _target_rounds[i] and _target_rounds[i][idx] + 3 < current_round:
-                del _target_rounds[i][idx]
-                claimed_targets[i] &= ~(1 << idx)
+    for i, rounds in enumerate(_target_rounds):
+        expired = [
+            idx for idx, t in rounds.items()
+            if (visible & (1 << idx)) and t + 3 < current_round
+        ]
+        for idx in expired:
+            del rounds[idx]
+            claimed_targets[i] &= ~(1 << idx)
     for i in range(len(claimed_senders)):
         expired = [idx for idx, t in _sender_rounds[i].items() if t + 20 < current_round]
         for idx in expired:

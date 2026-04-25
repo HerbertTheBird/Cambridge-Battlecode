@@ -618,18 +618,36 @@ def _compute_carrying() -> tuple[int, int, int]:
     conv_target = _building_conv_target
     reverse = _conv_reverse
     tiles = _width * _height
+    w = _width
+    board = _board_mask
+    cardinal = (
+        _bm_et[_IDX_CONVEYOR]
+        | _bm_et[_IDX_ARMOURED_CONVEYOR]
+        | _bm_et[_IDX_SPLITTER]
+    )
+    dir_mask = _bm_dir
+    convs_e = cardinal & dir_mask[_DIR_INT[Direction.EAST]]
+    convs_w = cardinal & dir_mask[_DIR_INT[Direction.WEST]]
+    convs_s = cardinal & dir_mask[_DIR_INT[Direction.SOUTH]]
+    convs_n = cardinal & dir_mask[_DIR_INT[Direction.NORTH]]
+    bridges = _bm_et[_IDX_BRIDGE]
 
     def _expand(seed: int) -> int:
         expanded = seed
         # Upstream (reverse chain).
         cur = seed
         for _ in range(3):
-            nxt = 0
+            nxt = (
+                ((cur & _not_left_col) >> 1) & convs_e
+                | ((cur & _not_right_col) << 1) & convs_w
+                | ((cur & _not_top_row) >> w) & convs_s
+                | ((cur & _not_bottom_row) << w) & convs_n
+            ) & bm_conveyors & ~expanded
             m = cur
             while m:
                 lsb = m & -m
                 n = lsb.bit_length() - 1
-                nxt |= reverse[n] & bm_conveyors & ~expanded
+                nxt |= reverse[n] & bridges & ~expanded
                 m ^= lsb
             if not nxt:
                 break
@@ -638,8 +656,13 @@ def _compute_carrying() -> tuple[int, int, int]:
         # Downstream (conv_target chain).
         cur = seed
         for _ in range(3):
-            nxt = 0
-            m = cur
+            nxt = (
+                ((cur & convs_e & _not_right_col) << 1)
+                | ((cur & convs_w & _not_left_col) >> 1)
+                | ((cur & convs_s & _not_bottom_row) << w)
+                | ((cur & convs_n & _not_top_row) >> w)
+            ) & board & bm_conveyors & ~expanded
+            m = cur & bridges
             while m:
                 lsb = m & -m
                 n = lsb.bit_length() - 1
@@ -1132,6 +1155,49 @@ def build_core_areas() -> None:
 
 _route_targets_cache_key: tuple | None = None
 _route_targets_cache: tuple[int, int, int] = (0, 0, 0)  # (route_targets, dead_end, feeding_enemy)
+_route_reaches_core_cache_version: int = -1
+_route_reaches_core_cache: tuple[int, tuple[int, ...]] = (0, ())
+
+
+def _compute_route_reaches_core() -> tuple[int, tuple[int, ...]]:
+    global _route_reaches_core_cache_version, _route_reaches_core_cache
+    if _struct_version == _route_reaches_core_cache_version:
+        return _route_reaches_core_cache
+
+    my_convs = _bm_conveyors & _bm_team[_my_team_idx]
+    reverse = _conv_reverse
+    reaches_core = 0
+    order: list[int] = []
+
+    layer = 0
+    c_mask = _bm_my_core_area
+    while c_mask:
+        lsb = c_mask & -c_mask
+        n = lsb.bit_length() - 1
+        layer |= reverse[n] & my_convs
+        c_mask ^= lsb
+
+    while layer:
+        m = layer
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            order.append(n)
+            m ^= lsb
+        reaches_core |= layer
+        next_layer = 0
+        m = layer
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            next_layer |= reverse[n] & my_convs & ~reaches_core
+            m ^= lsb
+        layer = next_layer
+
+    result = (reaches_core, tuple(order))
+    _route_reaches_core_cache_version = _struct_version
+    _route_reaches_core_cache = result
+    return result
 
 
 def _compute_route_targets() -> int:
@@ -1216,75 +1282,49 @@ def _compute_route_targets() -> int:
     _bm_dead_end = dead_ends
     _bm_feeding_enemy = feeding_enemy
 
-    # --- Reverse walk from my core: every conveyor that eventually chains
-    # into my core area. reverse[n] contains only my conveyors by construction.
-    # --- BFS upward from my core through my conveyors along reverse chains.
-    # For each visited node, carry a running count of how many consecutive
-    # loaded conveyors (and loaded-and-visible conveyors) form the chain
-    # ending at that node (toward the core side). A loaded run reaching 4
-    # marks those 4 conveyors unroutable; a visible-loaded run reaching 4
-    # additionally propagates unroutability through the entire my-conveyor
-    # chain, upstream and downstream.
+    # --- Overlay loaded/visible state on top of the structural conveyor graph.
+    # The core-reaching conveyor set only changes when structure changes, so we
+    # cache that reverse walk separately and reuse its downstream-first order
+    # here for the loaded-run scan.
+    reaches_core, reaches_core_order = _compute_route_reaches_core()
     loaded_mine = my_convs & (_bm_conv_ti | _bm_conv_raw_ax | _bm_conv_refined)
     visible_loaded_mine = loaded_mine & _bm_visible
     run_loaded_arr = [0] * tiles
     run_visible_arr = [0] * tiles
-    reaches_core = 0
     unroutable = 0
     ext_roots = 0
 
-    layer = 0
-    c_mask = _bm_my_core_area
-    while c_mask:
-        lsb = c_mask & -c_mask
-        n = lsb.bit_length() - 1
-        layer |= reverse[n] & my_convs
-        c_mask ^= lsb
-
-    while layer:
-        m = layer
-        while m:
-            lsb = m & -m
-            n = lsb.bit_length() - 1
-            p = conv_target[n]
-            if p >= 0 and (reaches_core & (1 << p)):
-                p_loaded = run_loaded_arr[p]
-                p_visible = run_visible_arr[p]
+    for n in reaches_core_order:
+        lsb = 1 << n
+        p = conv_target[n]
+        if p >= 0 and (reaches_core & (1 << p)):
+            p_loaded = run_loaded_arr[p]
+            p_visible = run_visible_arr[p]
+        else:
+            p_loaded = 0
+            p_visible = 0
+        if loaded_mine & lsb:
+            rl = p_loaded + 1
+            run_loaded_arr[n] = rl
+        else:
+            rl = 0
+        if visible_loaded_mine & lsb:
+            rv = p_visible + 1
+            run_visible_arr[n] = rv
+        else:
+            rv = 0
+        if rl >= 4:
+            if rl == 4:
+                cur = n
+                for _ in range(4):
+                    unroutable |= 1 << cur
+                    cur = conv_target[cur]
+                    if cur < 0:
+                        break
             else:
-                p_loaded = 0
-                p_visible = 0
-            if loaded_mine & lsb:
-                rl = p_loaded + 1
-                run_loaded_arr[n] = rl
-            else:
-                rl = 0
-            if visible_loaded_mine & lsb:
-                rv = p_visible + 1
-                run_visible_arr[n] = rv
-            else:
-                rv = 0
-            if rl >= 4:
-                if rl == 4:
-                    cur = n
-                    for _ in range(4):
-                        unroutable |= 1 << cur
-                        cur = conv_target[cur]
-                        if cur < 0:
-                            break
-                else:
-                    unroutable |= lsb
-            if rv >= 4:
-                ext_roots |= lsb
-            m ^= lsb
-        reaches_core |= layer
-        next_layer = 0
-        m = layer
-        while m:
-            lsb = m & -m
-            n = lsb.bit_length() - 1
-            next_layer |= reverse[n] & my_convs & ~reaches_core
-            m ^= lsb
-        layer = next_layer
+                unroutable |= lsb
+        if rv >= 4:
+            ext_roots |= lsb
 
     # builder.draw_mask(unroutable, 255, 0, 0)
 
