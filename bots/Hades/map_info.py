@@ -570,10 +570,19 @@ def _compute_conv_by_dir() -> list[int]:
     return result
 
 
+_conv_into_open_ore_cache_version: int = -1
+_conv_into_open_ore_cache: int = 0
+
+
 def _compute_conv_into_open_ore() -> int:
     """CONVEYOR|ARMOURED_CONVEYOR tiles whose target is a non-landlocked ore tile."""
+    global _conv_into_open_ore_cache_version, _conv_into_open_ore_cache
+    if _struct_version == _conv_into_open_ore_cache_version:
+        return _conv_into_open_ore_cache
     convs = _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
     if not convs:
+        _conv_into_open_ore_cache_version = _struct_version
+        _conv_into_open_ore_cache = 0
         return 0
     w = _width
     ore = (_bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]) & ~_bm_landlocked
@@ -581,7 +590,14 @@ def _compute_conv_into_open_ore() -> int:
     left = convs & _bm_dir[_DIR_INT[Direction.WEST]] & ((_not_left_col & ore) << 1)
     up = convs & _bm_dir[_DIR_INT[Direction.NORTH]] & ((_not_bottom_row & ore) << w)
     down = convs & _bm_dir[_DIR_INT[Direction.SOUTH]] & ((_not_top_row & ore) >> w)
-    return right | left | up | down
+    result = right | left | up | down
+    _conv_into_open_ore_cache_version = _struct_version
+    _conv_into_open_ore_cache = result
+    return result
+
+
+_carrying_cache_key: tuple | None = None
+_carrying_cache: tuple[int, int, int] = (0, 0, 0)
 
 
 def _compute_carrying() -> tuple[int, int, int]:
@@ -590,9 +606,15 @@ def _compute_carrying() -> tuple[int, int, int]:
     A conveyor Y is believed to carry X if any conveyor within 3 upstream OR 3
     downstream hops of Y (inclusive) is observed carrying X.
     """
+    global _carrying_cache_key, _carrying_cache
+    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined)
+    if key == _carrying_cache_key:
+        return _carrying_cache
     bm_conveyors = _bm_conveyors
     if not bm_conveyors:
-        return 0, 0, 0
+        _carrying_cache_key = key
+        _carrying_cache = (0, 0, 0)
+        return _carrying_cache
     conv_target = _building_conv_target
     reverse = _conv_reverse
     tiles = _width * _height
@@ -633,19 +655,31 @@ def _compute_carrying() -> tuple[int, int, int]:
             cur = nxt
         return expanded
 
-    return (
+    result = (
         _expand(_bm_conv_ti & bm_conveyors),
         _expand(_bm_conv_raw_ax & bm_conveyors),
         _expand(_bm_conv_refined & bm_conveyors),
     )
+    _carrying_cache_key = key
+    _carrying_cache = result
+    return result
+
+
+_guard_conv_cache_version: int = -1
+_guard_conv_cache: int = 0
 
 
 def _compute_guard_conv() -> int:
     """Bitmask of CONVEYOR|ARMOURED_CONVEYOR tiles whose output target is a
     titanium/axionite ore tile not occupied by a conveyor-type building (conveyor,
     armoured conveyor, bridge, splitter) or a sentinel/gunner/breach/foundry."""
+    global _guard_conv_cache_version, _guard_conv_cache
+    if _struct_version == _guard_conv_cache_version:
+        return _guard_conv_cache
     convs = _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
     if not convs:
+        _guard_conv_cache_version = _struct_version
+        _guard_conv_cache = 0
         return 0
     w = _width
     ore = (_bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]) & ~_bm_landlocked
@@ -653,7 +687,10 @@ def _compute_guard_conv() -> int:
     left = convs & _bm_dir[_DIR_INT[Direction.WEST]] & ((_not_left_col & ore)<<1)
     up = convs & _bm_dir[_DIR_INT[Direction.NORTH]] & ((_not_bottom_row & ore)<<w)
     down = convs & _bm_dir[_DIR_INT[Direction.SOUTH]] & ((_not_top_row & ore)>>w)
-    return right | left | up | down
+    result = right | left | up | down
+    _guard_conv_cache_version = _struct_version
+    _guard_conv_cache = result
+    return result
 
 
 def update_at(pos: Position) -> None:
@@ -1093,6 +1130,10 @@ def build_core_areas() -> None:
                     bm_et[_IDX_CORE] |= bit
                     bm_team[enemy_team_idx] |= bit
 
+_route_targets_cache_key: tuple | None = None
+_route_targets_cache: tuple[int, int, int] = (0, 0, 0)  # (route_targets, dead_end, feeding_enemy)
+
+
 def _compute_route_targets() -> int:
     """Bitmask of tiles the route state can path toward.
 
@@ -1106,6 +1147,13 @@ def _compute_route_targets() -> int:
     into an enemy non-road non-marker building.
     """
     global _bm_dead_end, _bm_feeding_enemy
+    global _route_targets_cache_key, _route_targets_cache
+    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined, _bm_visible)
+    if key == _route_targets_cache_key:
+        rt, de, fe = _route_targets_cache
+        _bm_dead_end = de
+        _bm_feeding_enemy = fe
+        return rt
     my_team_idx = _my_team_idx
     bm_my = _bm_team[my_team_idx]
     my_convs = _bm_conveyors & bm_my
@@ -1286,7 +1334,13 @@ def _compute_route_targets() -> int:
                     _bm_dead_end |= lsb
                 m ^= lsb
 
-    return _bm_my_core_area | (reaches_core & ~unroutable & ~_bm_guard_conveyor)
+    result = _bm_my_core_area | (reaches_core & ~unroutable & ~_bm_guard_conveyor)
+    _route_targets_cache_key = key
+    _route_targets_cache = (result, _bm_dead_end, _bm_feeding_enemy)
+    return result
+
+_recompute_derived_cache_key: tuple | None = None
+
 
 def recompute_derived() -> None:
     """Rebuild derived bitmasks from the current tracked map state."""
@@ -1296,6 +1350,12 @@ def recompute_derived() -> None:
     global _bm_my_gunner_claims, _bm_conv_by_dir, _bm_conv_into_open_ore
     global _bm_guard_conveyor, _bm_passable_FFF
     global _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying
+    global _recompute_derived_cache_key
+
+    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined, _bm_visible)
+    if key == _recompute_derived_cache_key:
+        return
+    _recompute_derived_cache_key = key
 
     width = _width
     height = _height
