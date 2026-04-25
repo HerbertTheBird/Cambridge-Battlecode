@@ -17,7 +17,7 @@ import comms
 import comms_stats
 from log import log
 
-ENABLE_PROFILER = True
+ENABLE_PROFILER = False
 ENABLE_COMMS_STATS = False
 
 if ENABLE_PROFILER or ENABLE_COMMS_STATS:
@@ -36,15 +36,14 @@ SPAWN_TURN = -2
 class Player:
     def __init__(self):
         self.initialized = False
+        self.first_turn_round: int = None
         self.me: ModuleType
         self.current_round: int = None
         self.most_recent_tle_round: int | None = None
-
-        if ENABLE_PROFILER:
-            self.profiled_turn_count = 0
-            self.timeout_count = 0
-            self.profiler = None
-            self.profiler_path = None
+        self.profiled_turn_count = 0
+        self.timeout_count = 0
+        self.profiler = None
+        self.profiler_path = None
 
     def _prepare_profile_dir(self, c: Controller) -> None:
         if not (ENABLE_PROFILER or ENABLE_COMMS_STATS):
@@ -146,6 +145,7 @@ class Player:
                 comms.init(c)
                 self.me.init(c)
                 self.current_round = round_num
+                self.first_turn_round = round_num
                 self.initialized = True
                 
             if self.current_round != round_num:
@@ -177,6 +177,9 @@ class Player:
             #     if ENABLE_PROFILER and self.profiler is not None:
             #         self.profiler.disable()
                     # self.profiler.clear()
+
+            # if self.first_turn_round == round_num:
+            #     map_info.determine_known_map()
 
             self.current_round += 1
 

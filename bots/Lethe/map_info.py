@@ -906,6 +906,15 @@ def ver_flip(pos: Position):
 def rot_flip(pos: Position):
     return Position(_width - 1 - pos.x, _height - 1 - pos.y)
 
+def _determine_spawn_symmetry(spawn_a: Position, spawn_b: Position) -> tuple[bool, bool, bool] | None:
+    if hor_flip(spawn_a) == spawn_b and hor_flip(spawn_b) == spawn_a:
+        return True, False, False
+    if ver_flip(spawn_a) == spawn_b and ver_flip(spawn_b) == spawn_a:
+        return False, True, False
+    if rot_flip(spawn_a) == spawn_b and rot_flip(spawn_b) == spawn_a:
+        return False, False, True
+    return None
+
 def update_symmetry_from_comms(sym_bits):
     """Update symmetry from comms. Each bit represents a possible symmetry."""
     global _hor_sym, _ver_sym, _rot_sym
@@ -915,6 +924,70 @@ def update_symmetry_from_comms(sym_bits):
         _ver_sym = False
     if not (sym_bits & 4):
         _rot_sym = False
+
+def determine_known_map() -> None:
+    from known_maps import KNOWN_MAPS
+    global _their_core, _predicted_enemy_core, _solved_sym
+    global _hor_sym, _ver_sym, _rot_sym, _rush_tiebroken
+    global _bm_seen, _bm_env, _bm_any_building, _struct_version
+
+    if _my_core is None:
+        return
+
+    candidates = KNOWN_MAPS.get((_width, _height))
+    if not candidates:
+        return
+
+    spawn_matches = [entry for entry in candidates if _my_core in entry["spawns"]]
+    if not spawn_matches:
+        return
+
+    vision_matches = []
+    visible = _bm_visible
+    for entry in spawn_matches:
+        matches_vision = True
+        env_masks = entry["env_masks"]
+        for env_idx in range(_NUM_ENV):
+            if (_bm_env[env_idx] & visible) != (env_masks[env_idx] & visible):
+                matches_vision = False
+                break
+        if matches_vision:
+            vision_matches.append(entry)
+
+    if len(vision_matches) != 1:
+        return
+
+    match = vision_matches[0]
+    spawn_a, spawn_b = match["spawns"]
+    opposite_core = spawn_b if _my_core == spawn_a else spawn_a
+
+    if not _solved_sym:
+        symmetry = _determine_spawn_symmetry(spawn_a, spawn_b)
+        if symmetry is not None:
+            _hor_sym, _ver_sym, _rot_sym = symmetry
+            _solved_sym = True
+
+    _their_core = opposite_core
+    _predicted_enemy_core = opposite_core
+    _rush_tiebroken = 0
+
+    enemy_core_n = opposite_core.x + opposite_core.y * _width
+    enemy_core_bit = 1 << enemy_core_n
+    enemy_team_idx = 1 - _my_team_idx
+    _building_id[enemy_core_n] = -1
+    _building_et_idx[enemy_core_n] = _IDX_CORE
+    _building_hp[enemy_core_n] = GameConstants.CORE_MAX_HP
+    _bm_et[_IDX_CORE] |= enemy_core_bit
+    _bm_team[enemy_team_idx] |= enemy_core_bit
+    _bm_any_building |= enemy_core_bit
+    build_core_areas()
+
+    _bm_env = list(match["env_masks"])
+    _bm_seen = _board_mask
+
+    _struct_version += 1
+    recompute_derived()
+    print(match["name"])
 
 def _env_at_idx(n):
     """Return the env list index for tile n."""
