@@ -70,6 +70,8 @@ class Player:
         with self.profiler_path.open("w", encoding="utf-8") as f:
             f.write("Profile sorted by total time (tottime)\n")
             f.write(f"Unit profile: {self.profiler_path.name}\n")
+            f.write(f"Profiled turns: {self.profiled_turn_count}\n")
+            f.write(f"Timed-out turns: {self.timeout_count}\n")
             f.write(f"Total calls: {total_calls}\n")
             f.write(f"Total tottime: {total_tottime * 1_000_000:.3f} us\n")
             f.write(f"Total cumtime: {total_cumtime * 1_000_000:.3f} us\n")
