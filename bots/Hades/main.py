@@ -14,24 +14,19 @@ import units.turret_breach as breach
 import units.turret_launcher as launcher
 import map_info
 import comms
-import comms_stats
 from log import log
 
 ENABLE_PROFILER = False
-ENABLE_COMMS_STATS = False
 
-if ENABLE_PROFILER or ENABLE_COMMS_STATS:
+if ENABLE_PROFILER:
     import cProfile
     import pstats
     import pathlib
     import shutil
 
     PROFILE_DIR = pathlib.Path("profiles")
-    
-    comms_stats.ENABLED = ENABLE_COMMS_STATS
 
 SPAWN_TURN = -2
-
 
 class Player:
     def __init__(self):
@@ -43,7 +38,7 @@ class Player:
             self.profiler_path = None
 
     def _prepare_profile_dir(self, c: Controller) -> None:
-        if not (ENABLE_PROFILER or ENABLE_COMMS_STATS):
+        if not ENABLE_PROFILER:
             return
 
         # Guaranteed: exactly one of unit 1 or 2 exists, and it runs first.
@@ -56,8 +51,6 @@ class Player:
             PROFILE_DIR.mkdir(parents=True, exist_ok=True)
         else:
             PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-        if ENABLE_COMMS_STATS:
-            comms_stats.prepare_dir()
 
     def _write_profile(self) -> None:
         if not ENABLE_PROFILER or self.profiler is None or self.profiler_path is None:
