@@ -26,31 +26,29 @@ if ENABLE_PROFILER:
 
     PROFILE_DIR = pathlib.Path("profiles")
 
-SPAWN_TURN = -2
-
 class Player:
     def __init__(self):
         self.initialized = False
         self.me: ModuleType
+        self.spawn_turn = 0
+        self.current_round: int = None
+        self.most_recent_tle_round: int | None = None
 
         if ENABLE_PROFILER:
             self.profiler = None
             self.profiler_path = None
+            self.profiled_turn_count = 0
+            self.timeout_count = 0
 
     def _prepare_profile_dir(self, c: Controller) -> None:
         if not ENABLE_PROFILER:
             return
 
-        # Guaranteed: exactly one of unit 1 or 2 exists, and it runs first.
-        # So that first unit can safely clear the folder once.
-        unit_id = c.get_id()
-
-        if unit_id in (1, 2):
-            if PROFILE_DIR.exists():
-                shutil.rmtree(PROFILE_DIR)
-            PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-        else:
-            PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        # Core (guaranteed to be unit 1 or 2) clears directory
+        if c.get_id() in (1, 2) and PROFILE_DIR.exists():
+            shutil.rmtree(PROFILE_DIR)
+        
+        PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
     def _write_profile(self) -> None:
         if not ENABLE_PROFILER or self.profiler is None or self.profiler_path is None:
@@ -93,7 +91,7 @@ class Player:
                 )
 
     def run(self, c: Controller) -> None:
-        global SPAWN_TURN
+        round_num = c.get_current_round()
 
         if not self.initialized:
             self._prepare_profile_dir(c)
@@ -101,9 +99,6 @@ class Player:
             if ENABLE_PROFILER:
                 self.profiler_path = PROFILE_DIR / f"unit_{c.get_id()}.txt"
                 self.profiler = cProfile.Profile()
-
-        if SPAWN_TURN == -2:
-            SPAWN_TURN = c.get_current_round() - 1
 
         if ENABLE_PROFILER and self.profiler is not None:
             self.profiler.enable()
@@ -131,16 +126,27 @@ class Player:
                 map_info.init(c)
                 comms.init(c)
                 self.me.init(c)
+                self.current_round = round_num
+                self.spawn_turn = round_num
                 self.initialized = True
+                
+            # TLE detected if we didn't reach current_round += 1 last turn
+            if self.current_round != round_num:
+                self.most_recent_tle_round = self.current_round
+                self.current_round = round_num
 
             self.me.run()
 
+            self.current_round += 1
+            
             end_time = time.perf_counter_ns()
             elapsed_us = end_time - start_time
 
             log(f"{elapsed_us/1000000:.3f} ms")
 
             if end_time - start_time > 2_000_000:
+                if ENABLE_PROFILER and self.profiler is not None:
+                    self.timeout_count += 1
                 log(
                     "timed out",
                     c.get_id(),
@@ -149,13 +155,6 @@ class Player:
                     file=sys.stderr,
                 )
                 c.draw_indicator_line(Position(0, 0), c.get_position(), 255, 0, 0)
-            #     if ENABLE_PROFILER and self.profiler is not None:
-            #         self.profiler.disable()
-            #         self._write_profile()
-            # else:
-            #     if ENABLE_PROFILER and self.profiler is not None:
-            #         self.profiler.disable()
-                    # self.profiler.clear()
 
         except Exception as e:
             print("Error:", e)
@@ -166,4 +165,5 @@ class Player:
 
         if ENABLE_PROFILER and self.profiler is not None:
             self.profiler.disable()
+            self.profiled_turn_count += 1
             self._write_profile()
