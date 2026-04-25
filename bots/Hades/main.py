@@ -39,12 +39,10 @@ class Player:
         self.me: ModuleType
         self.current_round: int = None
         self.most_recent_tle_round: int | None = None
-
-        if ENABLE_PROFILER:
-            self.profiled_turn_count = 0
-            self.timeout_count = 0
-            self.profiler = None
-            self.profiler_path = None
+        self.profiled_turn_count = 0
+        self.timeout_count = 0
+        self.profiler = None
+        self.profiler_path = None
 
     def _prepare_profile_dir(self, c: Controller) -> None:
         if not (ENABLE_PROFILER or ENABLE_COMMS_STATS):
