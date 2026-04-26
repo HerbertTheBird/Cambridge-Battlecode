@@ -110,19 +110,16 @@ def score():
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 
-def run():
+def choose_harvest_target(available):
     global cant_harvest
-    log("HARVEST")
-
-    available = _cached_claims
     if not available:
-        return
+        return None
 
     best_ore, _ = nav.closest(available)
     log("harvesting", best_ore)
     if best_ore is None:
         cant_harvest |= available
-        return
+        return None
 
     w = map_info._width
     my_team_idx = map_info._my_team_idx
@@ -159,11 +156,29 @@ def run():
     else:
         cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
         log("cant route")
-        return
+        return None
     if _cost_map[best_n][0] > rc.get_global_resources()[0]:
         log("too expensive")
+        return None
+
+    return (best_ore, best_n, is_raw_ax, path)
+
+
+def run():
+    log("HARVEST")
+
+    result = None
+    available = _cached_claims
+    while not result and available:
+        result = choose_harvest_target(available)
+        available &= ~cant_harvest & ~_too_expensive()
+    if result is None:
         return
-        
+
+    best_ore, best_n, is_raw_ax, path = result
+    w = map_info._width
+    my_team_idx = map_info._my_team_idx
+
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]

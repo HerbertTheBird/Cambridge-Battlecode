@@ -103,7 +103,6 @@ def _scan_nearby_builders(core_pos: Position, my_team):
 
 def run():
     global _spawn_plan
-    
     # Sync round info
     map_info.update()
     titanium, axionite = rc.get_global_resources()

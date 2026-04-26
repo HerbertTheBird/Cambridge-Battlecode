@@ -1043,16 +1043,11 @@ def score():
     return 0
 
 
-def run():
+def choose_attack_target(preferred, fallback):
     global cant_attack
-    log("ATTACK")
-    preferred, fallback = _cached_claims
-
     if not preferred and not fallback:
-        return
+        return None
 
-    width = map_info._width
-    my_team_idx = map_info._my_team_idx
     best = None
     if preferred:
         best, _ = nav.closest(preferred)
@@ -1060,12 +1055,30 @@ def run():
         best, _ = nav.closest(fallback)
     if best is None:
         cant_attack |= preferred | fallback
+        return None
+
+    return best
+
+
+def run():
+    log("ATTACK")
+    preferred, fallback = _cached_claims
+
+    best = None
+    while best is None and (preferred or fallback):
+        best = choose_attack_target(preferred, fallback)
+        preferred &= ~cant_attack
+        fallback &= ~cant_attack
+    if best is None:
         return
 
+    width = map_info._width
+    my_team_idx = map_info._my_team_idx
     best_n = best.x + best.y * width
     best_bit = 1 << best_n
     direction, turret_type, _ = get_best_direction(best)
-    is_fallback = not bool(preferred & best_bit)
+    orig_preferred, _ = _cached_claims
+    is_fallback = not bool(orig_preferred & best_bit)
     best_id = map_info._building_id[best_n]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
 

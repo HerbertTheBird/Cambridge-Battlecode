@@ -43,6 +43,8 @@ def init(c: Controller):
 
 
 def _should_stay():
+    if rc.get_global_resources()[0] < rc.get_conveyor_cost()[0]*4:
+        return True
     pos = rc.get_position()
     for uid in rc.get_nearby_units(8):
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:

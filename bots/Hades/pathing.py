@@ -619,6 +619,24 @@ class Pathing:
         if start_mask & target_mask:
             s_idx = (start_mask & target_mask).bit_length() - 1
             return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
+        if map_info.expand_manhattan(start_mask) & target_mask:
+            targets = map_info.expand_manhattan(start_mask) & target_mask
+            if targets & ~end_cost_mask:
+                targets &= ~end_cost_mask
+            t_bit = targets & -targets
+            t_idx = t_bit.bit_length() - 1
+            w_ = self.width
+            tx = t_idx % w_
+            ty = t_idx // w_
+            nlc = map_info._not_left_col
+            nrc = map_info._not_right_col
+            neighbours = ((t_bit & nrc) << 1) | ((t_bit & nlc) >> 1) | (t_bit << w_) | (t_bit >> w_)
+            s_bit = neighbours & start_mask
+            s_bit &= -s_bit
+            s_idx = s_bit.bit_length() - 1
+            cost = conveyor_end_cost + 1 if (t_bit & end_cost_mask) else 1
+            return Position(s_idx % w_, s_idx // w_), Position(tx, ty), cost
+
         width = self.width
         height = self.height
         if avoid is None:
