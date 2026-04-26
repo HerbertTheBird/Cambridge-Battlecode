@@ -1,14 +1,9 @@
-from cambc import Controller, Position, Direction, EntityType, Environment, GameError
-
-from enum import Enum
-import random
-import sys
+from cambc import Controller, Position
 
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-import comms_positional
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
@@ -27,7 +22,15 @@ rc: Controller
 nav: Pathing = None
 harvest_radius = 0
 _harvest_zone = 0
-states = [explore, disrupt, harvest, route, heal, sabotage, attack, secure]
+
+# States are sorted in descending order of max score to allow early break in selection loop
+states = tuple(sorted(
+    [explore, disrupt, harvest, route, heal, sabotage, attack, secure],
+    key=lambda s: s.MAX_SCORE,
+    reverse=True
+))
+
+
 def init(c: Controller):
     global rc, harvest_radius, nav
     rc = c
@@ -35,7 +38,7 @@ def init(c: Controller):
     harvest_radius = (c.get_map_width() + c.get_map_height()) // 3
     for s in states:
         s.init(c)
-    states.sort(key=lambda s: s.MAX_SCORE, reverse=True)
+
 
 claimed_targets = [0] * (len(states) + 1)   # target bitmask per comm flag
 claimed_senders = [0] * (len(states) + 1)   # sender position bitmask per comm flag
@@ -130,6 +133,7 @@ def register_active_target(flag: int, target: Position | None):
     _active_target_flag = flag
     _active_target_idx = target.x + target.y * map_info._width
 
+
 def handle_comms():
     current_round = rc.get_current_round()
     w = map_info._width
@@ -160,11 +164,14 @@ def handle_comms():
         for idx in expired:
             del _sender_rounds[i][idx]
             claimed_senders[i] &= ~(1 << idx)
+
+
 def draw_mask(mask, r, g, b):
     if not DRAW_DEBUG:
         return
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
+
 
 _harvest_zone_final = False
 
@@ -174,6 +181,7 @@ _initial_explore_target: Position | None = None
 _initial_explore_done = False
 _initial_explore_round = -1  # round the target was set; used for timeout
 INITIAL_EXPLORE_TIMEOUT = 30
+
 
 def _compute_voronoi_harvest_zone():
     """Flood-fill Manhattan from both cores simultaneously.
@@ -208,12 +216,12 @@ def _compute_voronoi_harvest_zone():
 
     return my_claimed
 
-def run():
-    global _harvest_zone, _harvest_zone_final, _active_target_flag, _active_target_idx
+
+def _update_initial_explore(current_round: int):
     global _initial_explore_target, _initial_explore_done, _initial_explore_round
-    map_info.update(recompute=False)
+
     if not _initial_explore_done:
-        if rc.get_current_round() > INITIAL_SPAWN_COUNT + 1:
+        if current_round > INITIAL_SPAWN_COUNT + 1:
             _initial_explore_done = True
         elif map_info._my_core is not None:
             spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
@@ -221,45 +229,80 @@ def run():
                 map_info._my_pos, spawn_dir, map_info._width, map_info._height,
                 max_steps=INITIAL_EXPLORE_MAX_STEPS,
             )
-            _initial_explore_round = rc.get_current_round()
+            _initial_explore_round = current_round
             _initial_explore_done = True
+
     # Auto-clear stale initial target if we couldn't reach it in time
     if (
         _initial_explore_target is not None
-        and rc.get_current_round() - _initial_explore_round >= INITIAL_EXPLORE_TIMEOUT
+        and current_round - _initial_explore_round >= INITIAL_EXPLORE_TIMEOUT
     ):
         _initial_explore_target = None
-    handle_comms()
+
+
+def _update_harvest_zone():
+    global _harvest_zone, _harvest_zone_final
+
+    my_core = map_info._my_core
+    if not my_core or _harvest_zone_final:
+        return
+
+    if map_info._solved_sym and map_info._predicted_enemy_core is not None:
+        # Symmetry solved - compute Voronoi partition once
+        _harvest_zone = _compute_voronoi_harvest_zone()
+        _harvest_zone_final = True
+        return
+
+    if not _harvest_zone:
+        # Fallback: radius-based until symmetry is solved
+        w = map_info._width
+        zone = 1 << (my_core.x + my_core.y * w)
+        for _ in range(harvest_radius):
+            zone = map_info.expand_chebyshev(zone)
+        _harvest_zone = zone
+
+def select_best_state():
+    best_state = None
+    best_score = 0
+
+    for state in states:
+        # Since states are sorted, break early if we can't beat best score
+        if best_score >= state.MAX_SCORE:
+            break
+
+        score = state.score()
+        if score > best_score:
+            best_score = score
+            best_state = state
+
+    return best_state
+
+def run():
+    global _active_target_flag, _active_target_idx
+    
+    # Sync round info
+    current_round = rc.get_current_round()
+    map_info.update()
+    _update_harvest_zone()
+    
+    # First few builder bots derive explore target from spawn position
+    _update_initial_explore(current_round)
+    
+    # Check if active target from last turn is crowded by allies
     _update_crowded_claims()
     _active_target_flag = 0
     _active_target_idx = -1
-    map_info.recompute_derived()
+    
+    # If we broke barrier last turn, try rebuilding first    
     pathing.rebuild_broken_barriers(rc)
-    if map_info._my_core and not _harvest_zone_final:
-        if map_info._solved_sym and map_info._predicted_enemy_core is not None:
-            # Symmetry solved — compute Voronoi partition once
-            _harvest_zone = _compute_voronoi_harvest_zone()
-            _harvest_zone_final = True
-        elif not _harvest_zone:
-            # Fallback: radius-based until symmetry is solved
-            w = map_info._width
-            zone = 1 << (map_info._my_core.x + map_info._my_core.y * w)
-            for _ in range(harvest_radius):
-                zone = map_info.expand_chebyshev(zone)
-            _harvest_zone = zone
-    best_state = None
-    best_score = 0
-    for i in states:
-        if best_score >= i.MAX_SCORE:
-            break
-        score = i.score()
-        if score > best_score:
-            best_score = score
-            best_state = i
+
+    # Run state-specific logic
+    best_state = select_best_state()
     best_state.run()
-    # Heal the most damaged adjacent building, fall back to self
+
+    # Try healing adjacent building
     heal._do_best_heal()
+    
+    # Fall back to healing self
     if rc.can_heal(map_info._my_pos):
         rc.heal(map_info._my_pos)
-    # if rc.get_tile_building_id(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team() and rc.can_fire(rc.get_position()):
-    #     rc.fire(rc.get_position())
