@@ -49,7 +49,7 @@ def _too_expensive():
         if turn + COST_MAP_TTL < current:
             stale.append(n)
             continue
-        print("cost of", n%map_info._width, n//map_info._width, cost)
+        log("cost of", n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     for n in stale:
@@ -99,16 +99,16 @@ def not_blocked():
     )
     return map_info._board_mask & ~already_routed & ~blocked & ~map_info._bm_enemy_turret_threat
 
-def _orphan_harvesters():
+def _orphan_harvesters(not_blocked_mask: int):
     my_harvesters = map_info._bm_et[map_info._IDX_HARVESTER]
     if not my_harvesters:
         return 0
-    return my_harvesters & not_blocked()
-def _orphan_foundries():
+    return my_harvesters & not_blocked_mask
+def _orphan_foundries(not_blocked_mask: int):
     my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY]
     if not my_foundries:
         return 0
-    return my_foundries & not_blocked()
+    return my_foundries & not_blocked_mask
 def cant_claim():
     w = map_info._width
     my_pos = map_info._my_pos
@@ -120,7 +120,12 @@ def _my_claims():
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     avoid = _too_expensive() | cant_claim() | unpathable
     avoid &= ~(map_info._bm_feeding_enemy&~unpathable)
-    candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
+    not_blocked_mask = not_blocked()
+    candidates = (
+        _dead_end_conveyors()
+        | _orphan_harvesters(not_blocked_mask)
+        | _orphan_foundries(not_blocked_mask)
+    ) & ~avoid
     return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, candidates)
 
 _cached_claims = 0
