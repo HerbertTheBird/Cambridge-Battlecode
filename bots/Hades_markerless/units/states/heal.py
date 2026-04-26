@@ -59,7 +59,11 @@ def _find_chase_target():
     other_friendly = friendly_bots & ~my_bit
 
     filtered = enemy_bots
-    mask = friendly_bots&~my_bit & map_info._bm_visible
+    # Expand the enemy zone once and pre-filter the friendlies we iterate.
+    # A friendly outside enemy_zone_4 has no enemy within 4 chebyshev, so
+    # the per-friendly expansion below would be a no-op.
+    enemy_zone_4 = map_info.expand_chebyshev(enemy_bots, 4)
+    mask = friendly_bots & ~my_bit & map_info._bm_visible & enemy_zone_4
     
     while mask:
         lsb = mask & -mask
@@ -97,12 +101,8 @@ def _find_chase_target():
     if closest_pos is None:
         log("no closest")
         return None
-    # if dist < 6:
-    #     return None
-    n = closest_pos.x + closest_pos.y * w
-    if closest_pos.distance_squared(map_info._my_pos) < 5:
-        log("too close")
-        return None
+    # Removed the "too close" early return — when an enemy is right next to our
+    # buildings, we want to engage and heal those buildings, not flee.
     return closest_pos
 
 
@@ -113,8 +113,19 @@ def _healable_mask():
 
 
 def _very_damaged_targets():
-    """Bitmask of friendly buildings with > 2 damage."""
-    return _healable_mask() & map_info._bm_very_damaged & ~map_info._bm_my_core_area & map_info._bm_visible
+    """Bitmask of friendly buildings urgently needing repair: either >2 damage
+    OR any damage with an enemy bot adjacent (active attack — heal NOW before
+    the building dies and they can clear it to build a turret)."""
+    healable = _healable_mask() & ~map_info._bm_my_core_area & map_info._bm_visible
+    very_damaged = healable & map_info._bm_very_damaged
+    damaged = healable & map_info._bm_damaged
+    enemy_bots = map_info._bm_enemy_bots
+    if enemy_bots and damaged:
+        # Any of my damaged buildings within 2 cheb of an enemy bot is being
+        # actively damaged — react to the early hits, not just the late ones.
+        active_attack_zone = map_info.expand_chebyshev(enemy_bots, 2)
+        very_damaged |= damaged & active_attack_zone
+    return very_damaged
 
 
 def _heal_targets():
@@ -126,12 +137,13 @@ _cached_chase_target = None  # set by score(), reused by run()
 
 MAX_SCORE = 8
 def score():
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
-
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
+
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
+
     target = _cached_chase_target
     # log(target)
     # units.builder.draw_mask(_conv_zone(), 255, 0, 0)
@@ -201,8 +213,7 @@ def _do_best_heal():
     my_pos = map_info._my_pos
     my_x = my_pos.x
     my_y = my_pos.y
-    for d in Direction:
-        dx, dy = map_info._DIRECTION_DELTAS[d]
+    for dx, dy in map_info._DIRECTION_DELTAS_I:
         x = my_x + dx
         y = my_y + dy
         if not (0 <= x < w and 0 <= y < h):

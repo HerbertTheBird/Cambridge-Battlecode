@@ -1484,7 +1484,7 @@ def _recompute_derived_structural() -> None:
         ln = lsb.bit_length() - 1
         lx = ln % width
         ly = ln // width
-        for dx, dy in _DIRECTION_DELTAS.values():
+        for dx, dy in _DIRECTION_DELTAS_I:
             nx = lx + dx
             ny = ly + dy
             if 0 <= nx < width and 0 <= ny < height:
