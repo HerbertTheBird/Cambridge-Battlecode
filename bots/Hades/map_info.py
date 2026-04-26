@@ -593,17 +593,8 @@ def _compute_conv_by_dir() -> list[int]:
     if _struct_version == _conv_by_dir_cache_version:
         return _conv_by_dir_cache
 
-    result = [0] * 8
-    bd = _building_dir
     convs = _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
-    m = convs
-    while m:
-        lsb = m & -m
-        n = lsb.bit_length() - 1
-        d = bd[n]
-        if 0 <= d < 8:
-            result[d] |= lsb
-        m ^= lsb
+    result = [convs & _bm_dir[d] for d in range(8)]
 
     _conv_by_dir_cache_version = _struct_version
     _conv_by_dir_cache = result
