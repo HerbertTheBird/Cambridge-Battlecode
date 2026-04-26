@@ -75,8 +75,13 @@ def _find_chase_target():
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
-        closest = nav.closest(filtered, Position(n%w, n//w))
-        if closest[0] and closest[1] <= 4:
+        friend_zone = map_info.expand_chebyshev(lsb, 4)
+        nearby = filtered & friend_zone
+        if not nearby:
+            mask ^= lsb
+            continue
+        closest = nav.closest_within(nearby, Position(n % w, n // w), 4)
+        if closest[0]:
             log("filtering", closest[0], "because", n%w, n//2, closest[1])
             filtered ^= (1<<(closest[0].x+closest[0].y*w))
         # uid = map_info._bot_at.get(n)
@@ -95,12 +100,13 @@ def _find_chase_target():
     if not filtered:
         filtered = enemy_bots
         return None
-    closest_pos, dist = nav.closest(filtered)
+    nearby = filtered & map_info.expand_chebyshev(my_bit, 8)
+    if not nearby:
+        log("too far")
+        return None
+    closest_pos, dist = nav.closest_within(nearby, max_dist=8)
     if closest_pos is None:
         log("no closest")
-        return None
-    if dist > 8:
-        log("too far")
         return None
     # if dist < 6:
     #     return None

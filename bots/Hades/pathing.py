@@ -109,8 +109,8 @@ def voronoi_claim(my_mask, others_mask, claims, passable=None):
     my_front = my_mask & passable
     other_front = others_mask & passable
     my_claimed = my_front
-    other_claimed = other_front
-    all_claimed = my_claimed | other_claimed
+    all_claimed = my_claimed | other_front
+    remaining_claims = claims & ~all_claimed
 
     # Inlined expand_chebyshev — saves ~1us function-call overhead per expand,
     # and there can be many expands per call.
@@ -119,20 +119,21 @@ def voronoi_claim(my_mask, others_mask, claims, passable=None):
     nrc = map_info._not_right_col
     board = map_info._board_mask
 
-    while (claims & ~all_claimed) and (my_front or other_front):
+    while remaining_claims and (my_front or other_front):
         if my_front:
             h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
             my_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
             my_claimed |= my_expand
             all_claimed |= my_expand
+            remaining_claims &= ~my_expand
             my_front = my_expand
-        if not (claims & ~all_claimed):
+        if not remaining_claims:
             break
         if other_front:
             h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
             other_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
-            other_claimed |= other_expand
             all_claimed |= other_expand
+            remaining_claims &= ~other_expand
             other_front = other_expand
 
     return my_claimed & claims
@@ -155,11 +156,18 @@ class Pathing:
 
 
 
-    def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
-        """Find closest bit in *targets* from *pos*, avoiding get_avoid(F,F,F).
+    def _closest_impl(
+        self,
+        targets: int,
+        pos: Position | None = None,
+        max_dist: int | None = None,
+    ) -> tuple[Position | None, int]:
+        """Shared bitmask BFS for closest-target queries.
 
-        Uses Chebyshev flood-fill on bitmasks.  Returns (position, distance) or
-        (None, -1) if unreachable.
+        Returns the first target reached by Chebyshev distance, breaking ties by
+        lowest tile index exactly as the previous implementation did. When
+        `max_dist` is provided, the search stops after exploring that many
+        layers.
         """
         if targets == 0:
             return None, -1
@@ -175,7 +183,6 @@ class Pathing:
         dist = 0
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
-        # builder.draw_mask(targets, 255, 0, 0)
         while frontier:
             hit = frontier & targets
             if hit:
@@ -183,12 +190,27 @@ class Pathing:
                 n = lsb.bit_length() - 1
 
                 return Position(n % w, n // w), dist
+            if max_dist is not None and dist >= max_dist:
+                break
             visited |= frontier
             dist += 1
             h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
             expanded = h | (h << w) | (h >> w)
             frontier = expanded & passable & ~visited
         return None, -1
+
+    def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
+        """Find closest bit in *targets* from *pos* with the original full search."""
+        return self._closest_impl(targets, pos=pos, max_dist=None)
+
+    def closest_within(
+        self,
+        targets: int,
+        pos: Position | None = None,
+        max_dist: int = 0,
+    ) -> tuple[Position | None, int]:
+        """Find the closest target if it is within `max_dist`, else (None, -1)."""
+        return self._closest_impl(targets, pos=pos, max_dist=max_dist)
 
     def __init__(self, c: Controller):
         self.width = c.get_map_width()

@@ -33,14 +33,18 @@ def _my_claims():
     return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, _disruptable_ore())
 
 MAX_SCORE = 2
+_cached_claims = 0
 def score():
+    global _cached_claims
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*5:
+        _cached_claims = 0
         return 0
-    return 2 if _my_claims() else 0
+    _cached_claims = _my_claims()
+    return 2 if _cached_claims else 0
 
 def run():
     log("DISRUPT")
-    available = _my_claims()
+    available = _cached_claims
     if not available:
         return
 
