@@ -38,20 +38,14 @@ def generate_explore_target():
     # Seed with all other builders' claimed tiles + incremental steps from
     # the nearest friendly bot toward each claim, plus my own position.
     seeds = 0
-    claims = 0
-    for i, f in enumerate(units.builder.claimed_targets):
-        if i == 7:  # heal flag uses enemy IDs, not tile positions
-            continue
-        claims |= f
-    seeds |= claims
-
     my_pos = map_info._my_pos
     my_n = my_pos.x + my_pos.y * w
     seeds |= 1 << my_n
+    seeds |= map_info._bm_friendly_bots
 
     # Seed tiles every 5 Chebyshev steps from my position toward each claim.
     bx, by = my_pos.x, my_pos.y
-    mask = claims
+    mask = seeds
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1

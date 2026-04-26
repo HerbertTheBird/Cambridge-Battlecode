@@ -14,7 +14,7 @@ def _my_claims():
     my_pos = map_info._my_pos
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
-    available = securable_ore() & ~((_too_expensive()) & ~map_info._bm_et[map_info._IDX_HARVESTER]) & ~cant_secure
+    available = securable_ore() & ~((_too_expensive()) & ~(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])) & ~cant_secure()
     return available & ~pathing.voronoi_claim(map_info._bm_friendly_bots, my_mask, available) & ~map_info._bm_friendly_bots
 
 
@@ -23,15 +23,43 @@ def init(c: Controller):
     rc = c
     nav = units.builder.nav
 
-cant_secure = 0
+_cant_secure_map: dict[int, int] = {}  # tile index -> round recorded
+CANT_SECURE_TTL = 100
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
+
+
+def cant_secure():
+    """Bitmask of tiles we recently failed to secure; entries expire after CANT_SECURE_TTL rounds."""
+    current = rc.get_current_round()
+    result = 0
+    stale = []
+    for n, turn in _cant_secure_map.items():
+        if turn + CANT_SECURE_TTL < current:
+            stale.append(n)
+            continue
+        result |= 1 << n
+    for n in stale:
+        del _cant_secure_map[n]
+    return result
+
+
+def _mark_cant_secure(mask):
+    if not mask:
+        return
+    current = rc.get_current_round()
+    m = mask
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        _cant_secure_map[n] = current
+        m ^= lsb
 def securable_ore():
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
 
     ore = possible_ore()
     return (ore
-            & ~secured())
+            & ~secured()) | map_info._bm_et[map_info._IDX_FOUNDRY]
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -56,7 +84,7 @@ def score():
     _cached_claims = _my_claims()
     # units.builder.draw_mask(securable_ore(), 0, 255, 0)
     # units.builder.draw_mask(_cached_claims, 0, 0, 255)
-    if _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]:
+    if _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]):
         # units.builder.draw_mask(_cached_claims & map_info._bm_et[map_info._IDX_HARVESTER], 0, 255, 0)
         return 7.5
     return 3 if _cached_claims else 0
@@ -64,25 +92,25 @@ def score():
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 def run():
-    global cant_secure
     log("SECURE")
     available = _cached_claims
     secure_now = False
-    if _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]:
-        available = _cached_claims & map_info._bm_et[map_info._IDX_HARVESTER]
+    if _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]):
+        available = _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])
         secure_now = True
-    # units.builder.draw_mask(cant_secure, 255, 255, 255)
+    log("secure now?", secure_now)
+    # units.builder.draw_mask(cant_secure(), 255, 255, 255)
     if not available:
         return
     w = map_info._width
     my_team_idx = map_info._my_team_idx
     best_ore, _ = nav.closest(available)
     if not best_ore:
-        cant_secure |= available
+        _mark_cant_secure(available)
         return
     log("dist", _)
     log("best secure", best_ore)
-    if best_ore.distance_squared(rc.get_position()) <= 2:
+    if best_ore.distance_squared(rc.get_position()) <= 5:
         check_region = map_info.expand_chebyshev(1<<(rc.get_position().x+rc.get_position().y*w), 2)
         securing = ( map_info._bm_team[my_team_idx]
             & ~map_info._bm_et[map_info._IDX_ROAD]
@@ -126,8 +154,10 @@ def run():
         if loc_best:
             best_ore = loc_best
     log(best_ore)
+    is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY]&(1<<(best_ore.x+best_ore.y*w)))
+    log("is foundry", is_foundry)
     if best_ore is None:
-        cant_secure |= available
+        _mark_cant_secure(available)
         return
 
     best_n = best_ore.x + best_ore.y * w
@@ -153,6 +183,7 @@ def run():
         is_mine = bool(map_info._bm_team[my_team_idx] & pbit) if map_info._building_id[pn] else False
         is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & pbit)
         is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
+        log("checking", p, is_mine, is_road, is_marker, map_info._building_id[pn])
         if is_mine and (map_info._bm_et[map_info._IDX_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_BRIDGE]&pbit) and map_info._building_dir[pn] != map_info._DIR_INT[d.opposite()]:
             done_conveyor = p
         if is_mine and map_info._bm_et[map_info._IDX_BRIDGE]&pbit:
@@ -161,10 +192,11 @@ def run():
             # Has a real building (mine or enemy, not road/marker) — side is done
             continue
         unsecured |= pbit
-    # units.builder.draw_mask(unsecured, 255, 0, 0)
+    # units.builder.draw_mask(map_info._bm_team[my_team_idx], 255, 0, 0)
     closest, _ = nav.closest(unsecured)
     if not closest:
-        cant_secure |= unsecured
+        _mark_cant_secure(unsecured)
+        log("exit 3")
         return
     closest_n = closest.x+closest.y*w
     if map_info._building_id[closest_n] and not (map_info._bm_team[my_team_idx]&(1<<closest_n)) and not (map_info._bm_et[map_info._IDX_MARKER]&(1<<closest_n)):
@@ -173,6 +205,7 @@ def run():
             rc.fire(closest)
             map_info.update_at(closest)
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
+        log("exit 2")
         return
     if done_conveyor:
         path = nav.calculate_conveyor_path(done_conveyor, is_raw_ax, True)
@@ -192,19 +225,22 @@ def run():
         _cost_map[best_n] = (cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate), rc.get_current_round())
     elif not secure_now:
         log("CANT SECURE", best_ore, done_conveyor)
-        # cant_secure |= 1 << (best_ore.x + best_ore.y * w)
+        _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))
         return
     if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
         return
-    if path:
+    if path and not is_foundry:
         tn = path[1].x + path[1].y * w
         if not done_conveyor and is_conveyor and path[0] == closest and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
             nav.move_to(path[1])
             if rc.can_build_road(path[1]):
                 rc.build_road(path[1])
                 map_info.update_at(path[1])
+                log("Exit 1")
                 return
+    # units.builder.draw_mask(unsecured, 255, 0, 0)
     def build_stuff():
+        log("build stuff", closest)
         if rc.can_destroy(closest) and rc.get_action_cooldown() == 0:
             rc.destroy(closest)
             map_info.update_at(closest)

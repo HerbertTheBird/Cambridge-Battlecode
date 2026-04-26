@@ -7,7 +7,6 @@ import comms
 import units.builder
 from log import DRAW_DEBUG, log
 
-
 rc: Controller = None
 nav: Pathing = None
 
@@ -927,16 +926,19 @@ def _my_claims():
 
 
 _cached_claims = (0, 0)
-MAX_SCORE = 8
+MAX_SCORE = 9
 
 def score():
     global _cached_claims
     _cached_claims = _my_claims()
     preferred, fallback = _cached_claims
     if preferred:
-        return 8
+        return 9
     if fallback:
-        return 6
+        if units.builder._harvest_zone & (1<<(rc.get_position().x + rc.get_position().y*map_info._width)):
+            return 6
+        else:
+            return 8
     return 0
 
 

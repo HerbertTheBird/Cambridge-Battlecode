@@ -49,6 +49,7 @@ def _too_expensive():
         if turn + COST_MAP_TTL < current:
             stale.append(n)
             continue
+        print("cost of", n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     for n in stale:
@@ -118,21 +119,23 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     avoid = _too_expensive() | cant_claim() | unpathable
+    avoid &= ~(map_info._bm_feeding_enemy&~unpathable)
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, candidates)
 
 _cached_claims = 0
 
-MAX_SCORE = 7.25
+MAX_SCORE = 7.75
 def score():
     global _cached_claims
-    # units.builder.draw_mask(map_info._bm_route_targets, 0, 0, 255)
-    units.builder.draw_mask(map_info._bm_feeding_enemy, 255, 0, 0)
+    units.builder.draw_mask(map_info._bm_dead_end, 0, 0, 255)
     _cached_claims = _my_claims()
-    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~map_info._bm_et[map_info._IDX_HARVESTER]&~map_info._bm_et[map_info._IDX_FOUNDRY]|map_info._bm_feeding_enemy
+
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
     if important&_cached_claims:
+        log("IMPORTANT")
         _cached_claims &= important
-        return 7.25
+        return 7.75
     return 5 if _cached_claims else 0
 
 def run():
@@ -141,7 +144,7 @@ def run():
     log("ROUTE")
     candidates = _cached_claims
     high_priority = False
-    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~map_info._bm_et[map_info._IDX_HARVESTER]&~map_info._bm_et[map_info._IDX_FOUNDRY]|map_info._bm_feeding_enemy
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
 
     if important & candidates:
         high_priority = True
@@ -253,7 +256,7 @@ def run():
             map_info.update_at(target)
         comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
-    if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER):
+    if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER) and (map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) == rc.get_team() and map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) != EntityType.MARKER):
         nav.move_to(target_conveyor[1])
         if map_info._my_pos == target_conveyor[1]:
             if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) != map_info._my_team and rc.can_fire(target_conveyor[1]):

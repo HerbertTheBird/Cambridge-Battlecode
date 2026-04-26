@@ -237,6 +237,7 @@ _bm_enemy_bots: int = 0          # bitmask of known enemy builder bot positions
 _bot_pos: dict[int, int] = {}    # uid -> tile index (both teams)
 _bot_team: dict[int, int] = {}   # uid -> team_idx
 _bot_at: dict[int, int] = {}    # tile index -> uid
+_bot_last_seen: dict[int, int] = {}   # uid -> round it was last seen alive in vision
 
 _max_id_by_round: list[int] = []  # max_id_by_round[round] = max entity id seen up to that round
 _max_id_seen: int = 0
@@ -1179,7 +1180,7 @@ def build_core_areas() -> None:
                     bm_et[i] &= ~bit
                 for i in range(num_team):
                     bm_team[i] &= ~bit
-                _building_id[m] = _building_id[n]
+                _building_id[m] = _core_id
                 _building_et_idx[m] = _IDX_CORE
                 _building_hp[m] = _building_hp[n]
                 _bm_my_core_area |= bit
@@ -1642,6 +1643,7 @@ def update(recompute: bool = True) -> None:
     _bm_friendly_bots = 0
     _bm_enemy_bots = 0
     seen_uids = set()
+    cur_round = rc.get_current_round()
     for uid in rc.get_nearby_units():
         if uid > _max_id_seen:
             _max_id_seen = uid
@@ -1660,21 +1662,27 @@ def update(recompute: bool = True) -> None:
         _bot_pos[uid] = n
         _bot_team[uid] = team_idx
         _bot_at[n] = uid
+        _bot_last_seen[uid] = cur_round
         seen_uids.add(uid)
-    # Invalidate tracked bots whose old position is now visible but they're gone
+    # Invalidate tracked bots whose old position is now visible but they're gone.
+    # Grant a 1-round grace: if we saw the bot last round, keep its last position
+    # in the masks for one more round before purging.
     to_remove = []
     for uid, n in _bot_pos.items():
         if uid in seen_uids:
             continue
         bit = 1 << n
         if bm_visible & bit:
-            to_remove.append(uid)
+            last = _bot_last_seen.get(uid, -1)
+            if last < cur_round - 1:
+                to_remove.append(uid)
     for uid in to_remove:
         n = _bot_pos[uid]
         if _bot_at.get(n) == uid:
             del _bot_at[n]
         del _bot_pos[uid]
         del _bot_team[uid]
+        _bot_last_seen.pop(uid, None)
 
     # Rebuild bitmasks from tracked positions
     for uid, n in _bot_pos.items():

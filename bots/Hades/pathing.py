@@ -314,14 +314,14 @@ class Pathing:
 
     def bfs_move(self, start_n: int, target_mask: int, avoid: int, avoid_turret: bool = True):
         start_mask = 1 << start_n
-        if start_mask & target_mask:
-            s_idx = (start_mask & target_mask).bit_length() - 1
-            return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
+        # if start_mask & target_mask:
+        #     s_idx = (start_mask & target_mask).bit_length() - 1
+        #     return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
         width = self.width
         height = self.height
         avoid &= ~start_mask
-        # builders_mask = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~start_mask
-        can_move_to = map_info.expand_chebyshev(start_mask) & ~avoid
+        builders_mask = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~start_mask
+        can_move_to = map_info.expand_chebyshev(start_mask) & ~avoid & ~builders_mask
 
         my_team_idx = map_info._my_team_idx
         barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
@@ -383,6 +383,23 @@ class Pathing:
                 cy = start_n // width
                 start_pos = Position(cx, cy)
                 from_mask = hit
+                if target_mask.bit_count() == 1:
+                    target_pos = Position((target_mask.bit_length()-1)%w, (target_mask.bit_length()-1)//w)
+                    mask = hit
+                    all_covered = 0
+                    while mask:
+                        lsb = mask&-mask
+                        lsb_pos = Position((lsb.bit_length()-1)%w, (lsb.bit_length()-1)//w)
+                        covered = 0
+                        for d in Direction:
+                            if lsb_pos.distance_squared(target_pos.add(d)) <= 20:
+                                covered += 1
+                        log("moving to", lsb_pos, "covers", covered, "on", target_pos)
+                        if covered == 9:
+                            all_covered |= lsb
+                        mask ^= lsb
+                    if all_covered:
+                        from_mask = all_covered
                 if from_mask & walkable:
                     from_mask &= walkable
                 border = (~nlc | ~nrc | ((1 << width) - 1) | (((1 << width) - 1)<<(w*(height-1)))) & board
@@ -431,6 +448,7 @@ class Pathing:
             frontier[slot] = 0
 
     def bfs_route(self, start_mask: int, target_mask: int, avoid: int | None = None, end_cost_mask: int = 0):
+        log("bfs route")
         if start_mask & target_mask:
             s_idx = (start_mask & target_mask).bit_length() - 1
             return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
@@ -572,7 +590,7 @@ class Pathing:
                 adj.add(pos)
         return self.move_to(adj, **kwargs)
 
-    def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
+    def move_to(self, target: Position | set[Position], avoid_turret: bool = True):
         log("move to", target)
         if isinstance(target, Position):
             target_set = {target}
@@ -580,7 +598,7 @@ class Pathing:
             target_set = target
         if target_set != self.target_p:
             self.forget_launcher.clear()
-        avoid = map_info.get_avoid(False, True, False)
+        avoid = map_info.get_avoid(False, False, False)
         # if avoid_empty:
         #     avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = map_info._my_pos
@@ -628,6 +646,7 @@ class Pathing:
         w = self.width
         target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
+            log("no target")
             return None
         if not update:
             start_mask = 0
@@ -636,6 +655,7 @@ class Pathing:
                 if map_info.in_bounds(sp) and ((avoid >> (sp.x + sp.y * w)) & 1) == 0:
                     start_mask |= 1 << (sp.x + sp.y * w)
             if start_mask == 0:
+                log("no start")
                 return None
         else:
             start_mask = 1 << (start.x + start.y * w)

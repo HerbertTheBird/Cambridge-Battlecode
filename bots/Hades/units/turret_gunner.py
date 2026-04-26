@@ -52,12 +52,12 @@ def _should_stay():
         p = rc.get_position(uid)
         if max(abs(p.x - pos.x), abs(p.y - pos.y)) <= 2:
             return True
-    for dx, dy in CARDINAL_OFFSETS:
-        p = Position(pos.x + dx, pos.y + dy)
-        if map_info.in_bounds(p):
-            bid = rc.get_tile_building_id(p)
-            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
-                return True
+    # for dx, dy in CARDINAL_OFFSETS:
+    #     p = Position(pos.x + dx, pos.y + dy)
+    #     if map_info.in_bounds(p):
+    #         bid = rc.get_tile_building_id(p)
+    #         if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+    #             return True
     best_d = 8
     closest_is_friendly = False
     for uid in rc.get_nearby_units():
