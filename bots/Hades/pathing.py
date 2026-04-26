@@ -700,7 +700,7 @@ class Pathing:
         # Arithmetic-series equivalent of:
         #   sum(3 * (scaling + 0.01 * k) for k in range(dist))
         return 3 * dist * scaling + 0.015 * dist * (dist - 1)
-    def raw_ax_foundry_sites(self):
+    def raw_ax_foundry_sites_old(self):
         w = map_info._width
         my_idx = map_info._my_team_idx
         enemy_idx = 1 - my_idx
@@ -734,6 +734,23 @@ class Pathing:
         core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
         return (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_ti_carrying & ~map_info.expand_chebyshev(map_info._bm_et[map_info._IDX_FOUNDRY]))
         return ((adj & ~blocked & at_least_two) | (core_adj & map_info._bm_conveyors & map_info._bm_team[my_idx] & map_info._bm_conv_ti))&builder._harvest_zone
+
+    def raw_ax_foundry_sites(self):
+        """Active raw-ax foundry-site logic.
+
+        This preserves the behavior of the currently-reached return path above,
+        while keeping the older broader implementation available separately.
+        """
+        my_idx = map_info._my_team_idx
+        core_adj = map_info.expand_manhattan(map_info._bm_my_core_area)
+        my_foundries = map_info._bm_et[map_info._IDX_FOUNDRY]
+        return (
+            core_adj
+            & map_info._bm_conveyors
+            & map_info._bm_team[my_idx]
+            & map_info._bm_ti_carrying
+            & ~map_info.expand_chebyshev(my_foundries)
+        )
 
     def _get_conveyor_targets_and_avoid(
         self, raw_axionite: bool
