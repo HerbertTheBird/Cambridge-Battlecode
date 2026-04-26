@@ -70,8 +70,12 @@ def _find_chase_target():
     other_friendly = friendly_bots & ~my_bit
 
     filtered = enemy_bots
-    mask = friendly_bots&~my_bit & map_info._bm_visible
-    
+    # Expand the enemy zone once and pre-filter the friendlies we iterate.
+    # A friendly outside enemy_zone_4 has no enemy within 4 chebyshev, so
+    # the per-friendly expansion below would be a no-op.
+    enemy_zone_4 = map_info.expand_chebyshev(enemy_bots, 4)
+    mask = friendly_bots & ~my_bit & map_info._bm_visible & enemy_zone_4
+
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
@@ -137,12 +141,13 @@ _cached_chase_target = None  # set by score(), reused by run()
 
 MAX_SCORE = 8
 def score():
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
-
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
+
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
+
     target = _cached_chase_target
     # log(target)
     # units.builder.draw_mask(_conv_zone(), 255, 0, 0)
@@ -212,8 +217,7 @@ def _do_best_heal():
     my_pos = map_info._my_pos
     my_x = my_pos.x
     my_y = my_pos.y
-    for d in Direction:
-        dx, dy = map_info._DIRECTION_DELTAS[d]
+    for dx, dy in map_info._DIRECTION_DELTAS_I:
         x = my_x + dx
         y = my_y + dy
         if not (0 <= x < w and 0 <= y < h):
