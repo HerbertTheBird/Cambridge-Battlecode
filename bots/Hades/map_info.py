@@ -717,10 +717,13 @@ def _compute_carrying() -> tuple[int, int, int]:
             cur = nxt
         return expanded
 
+    ti_seed = _bm_conv_ti & bm_conveyors
+    raw_ax_seed = _bm_conv_raw_ax & bm_conveyors
+    refined_seed = _bm_conv_refined & bm_conveyors
     result = (
-        _expand(_bm_conv_ti & bm_conveyors),
-        _expand(_bm_conv_raw_ax & bm_conveyors),
-        _expand(_bm_conv_refined & bm_conveyors),
+        _expand(ti_seed) if ti_seed else 0,
+        _expand(raw_ax_seed) if raw_ax_seed else 0,
+        _expand(refined_seed) if refined_seed else 0,
     )
     _carrying_cache_key = key
     _carrying_cache = result
@@ -1261,17 +1264,25 @@ def _compute_route_targets() -> int:
     my sentinel, my gunner, my breach). Also includes my conveyors pointing
     into an enemy non-road non-marker building.
     """
+    my_team_idx = _my_team_idx
+    bm_my = _bm_team[my_team_idx]
+    my_convs = _bm_conveyors & bm_my
+    loaded_union = _bm_conv_ti | _bm_conv_raw_ax | _bm_conv_refined
+    visible_loaded_mine = my_convs & loaded_union & _bm_visible
     global _bm_dead_end, _bm_feeding_enemy
     global _route_targets_cache_key, _route_targets_cache
-    key = (_struct_version, _bm_conv_ti, _bm_conv_raw_ax, _bm_conv_refined, _bm_visible)
+    key = (
+        _struct_version,
+        _bm_conv_ti,
+        _bm_conv_raw_ax,
+        _bm_conv_refined,
+        visible_loaded_mine,
+    )
     if key == _route_targets_cache_key:
         rt, de, fe = _route_targets_cache
         _bm_dead_end = de
         _bm_feeding_enemy = fe
         return rt
-    my_team_idx = _my_team_idx
-    bm_my = _bm_team[my_team_idx]
-    my_convs = _bm_conveyors & bm_my
     conv_target = _building_conv_target
     tiles = _width * _height
     reverse = _conv_reverse
@@ -1295,7 +1306,6 @@ def _compute_route_targets() -> int:
         | _bm_et[_IDX_HARVESTER]
     )
 
-    loaded_union = _bm_conv_ti | _bm_conv_raw_ax | _bm_conv_refined
     loaded_sources = all_convs & loaded_union
 
     # --- Dead-ends: targets of any *loaded* conveyor whose output isn't
@@ -1329,69 +1339,67 @@ def _compute_route_targets() -> int:
 
     # --- Overlay loaded/visible state on top of the structural conveyor graph.
     reaches_core, reaches_core_order = _compute_route_reaches_core()
-    loaded_mine = my_convs & (_bm_conv_ti | _bm_conv_raw_ax | _bm_conv_refined)
-    visible_loaded_mine = loaded_mine & _bm_visible
-    run_loaded_arr = [0] * tiles
-    run_visible_arr = [0] * tiles
+    loaded_mine = my_convs & loaded_union
     unroutable = 0
-    ext_roots = 0
+    if loaded_mine:
+        run_loaded_arr = [0] * tiles
+        ext_roots = 0
+        run_visible_arr = [0] * tiles if visible_loaded_mine else None
 
-    for n in reaches_core_order:
-        lsb = 1 << n
-        p = conv_target[n]
-        if p >= 0 and (reaches_core & (1 << p)):
-            p_loaded = run_loaded_arr[p]
-            p_visible = run_visible_arr[p]
-        else:
-            p_loaded = 0
-            p_visible = 0
-        if loaded_mine & lsb:
-            rl = p_loaded + 1
-            run_loaded_arr[n] = rl
-        else:
-            rl = 0
-        if visible_loaded_mine & lsb:
-            rv = p_visible + 1
-            run_visible_arr[n] = rv
-        else:
-            rv = 0
-        if rl >= 4:
-            if rl == 4:
-                cur = n
-                for _ in range(4):
-                    unroutable |= 1 << cur
-                    cur = conv_target[cur]
-                    if cur < 0:
-                        break
+        for n in reaches_core_order:
+            lsb = 1 << n
+            p = conv_target[n]
+            if p >= 0 and (reaches_core & (1 << p)):
+                p_loaded = run_loaded_arr[p]
+                p_visible = run_visible_arr[p] if run_visible_arr is not None else 0
             else:
-                unroutable |= lsb
-        if rv >= 4:
-            ext_roots |= lsb
+                p_loaded = 0
+                p_visible = 0
+            if loaded_mine & lsb:
+                rl = p_loaded + 1
+                run_loaded_arr[n] = rl
+            else:
+                rl = 0
+            if run_visible_arr is not None and (visible_loaded_mine & lsb):
+                rv = p_visible + 1
+                run_visible_arr[n] = rv
+                if rv >= 4:
+                    ext_roots |= lsb
+            if rl >= 4:
+                if rl == 4:
+                    cur = n
+                    for _ in range(4):
+                        unroutable |= 1 << cur
+                        cur = conv_target[cur]
+                        if cur < 0:
+                            break
+                else:
+                    unroutable |= lsb
 
-    # builder.draw_mask(unroutable, 255, 0, 0)
+        # builder.draw_mask(unroutable, 255, 0, 0)
 
-    # --- A visible 4-run jams the full chain: extend through all my conveyors
-    # both upstream and downstream from each ext_root.
-    if ext_roots:
-        extended = ext_roots
-        frontier = ext_roots
-        while frontier:
-            new_frontier = 0
-            m = frontier
-            while m:
-                lb = m & -m
-                n = lb.bit_length() - 1
-                tn = conv_target[n]
-                if 0 <= tn < tiles:
-                    tbit = 1 << tn
-                    if (my_convs & tbit) and not (extended & tbit):
-                        new_frontier |= tbit
-                new_frontier |= reverse[n] & my_convs & ~extended
-                m ^= lb
-            extended |= new_frontier
-            frontier = new_frontier
-        # builder.draw_mask(extended & ~unroutable, 255, 255, 255)
-        unroutable |= extended
+        # --- A visible 4-run jams the full chain: extend through all my conveyors
+        # both upstream and downstream from each ext_root.
+        if ext_roots:
+            extended = ext_roots
+            frontier = ext_roots
+            while frontier:
+                new_frontier = 0
+                m = frontier
+                while m:
+                    lb = m & -m
+                    n = lb.bit_length() - 1
+                    tn = conv_target[n]
+                    if 0 <= tn < tiles:
+                        tbit = 1 << tn
+                        if (my_convs & tbit) and not (extended & tbit):
+                            new_frontier |= tbit
+                    new_frontier |= reverse[n] & my_convs & ~extended
+                    m ^= lb
+                extended |= new_frontier
+                frontier = new_frontier
+            # builder.draw_mask(extended & ~unroutable, 255, 255, 255)
+            unroutable |= extended
 
     # Color conveyors by unroutability reason (later draws win when overlapping):
     #   red     = part of a loaded run of 4+ along the chain toward core
