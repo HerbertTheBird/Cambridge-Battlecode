@@ -13,7 +13,33 @@ _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, 
 COST_MAP_TTL = 100
 
 unpathable = 0
+_unpathable_rounds: dict[int, int] = {}
+UNPATHABLE_TTL = 60
 ROUTE_DONE = object()  # sentinel: choose_route_target took an action; caller stops
+
+
+def _mark_unpathable(bits: int):
+    global unpathable
+    if not bits:
+        return
+    unpathable |= bits
+    cur = rc.get_current_round()
+    m = bits
+    while m:
+        lsb = m & -m
+        _unpathable_rounds[lsb.bit_length() - 1] = cur
+        m ^= lsb
+
+
+def _expire_unpathable():
+    global unpathable
+    if not _unpathable_rounds:
+        return
+    cur = rc.get_current_round()
+    expired = [n for n, r in _unpathable_rounds.items() if r + UNPATHABLE_TTL < cur]
+    for n in expired:
+        unpathable &= ~(1 << n)
+        del _unpathable_rounds[n]
 
 _BARRIER_DESTROYABLE = (
     EntityType.ROAD,
@@ -141,6 +167,7 @@ _cached_claims = 0
 MAX_SCORE = 7.75
 def score():
     global _cached_claims
+    _expire_unpathable()
     units.builder.draw_mask(map_info._bm_dead_end, 0, 0, 255)
     _cached_claims = _my_claims()
 
@@ -165,14 +192,13 @@ def fallback_barrier(target):
 
 
 def choose_route_target(candidates, high_priority):
-    global unpathable
     if not candidates:
         return None
     width = map_info._width
     best, _ = nav.closest(candidates)
     if best is None:
         log("no closest???")
-        unpathable |= candidates
+        _mark_unpathable(candidates)
         return None
 
     best_bit = 1 << (best.x + best.y * width)
@@ -195,7 +221,7 @@ def choose_route_target(candidates, high_priority):
             if high_priority:
                 fallback_barrier(best)
                 return ROUTE_DONE
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return None
     else:
         prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
@@ -207,7 +233,7 @@ def choose_route_target(candidates, high_priority):
             if high_priority:
                 fallback_barrier(best)
                 return ROUTE_DONE
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return None
     target_conveyor = [path[0], path[1]]
     cost = nav.conveyor_cost(path[2])
@@ -223,7 +249,6 @@ def choose_route_target(candidates, high_priority):
 
 
 def run():
-    global unpathable
     log("ROUTE")
     candidates = _cached_claims
     high_priority = False

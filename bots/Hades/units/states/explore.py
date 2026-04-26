@@ -38,6 +38,7 @@ def generate_explore_target():
     # Seed with all other builders' claimed tiles + incremental steps from
     # the nearest friendly bot toward each claim, plus my own position.
     seeds = map_info._bm_seen_observed
+    seeds |= map_info.expand_chebyshev(map_info._bm_friendly_bots, 4)
     # my_pos = map_info._my_pos
     # my_n = my_pos.x + my_pos.y * w
     # seeds |= 1 << my_n

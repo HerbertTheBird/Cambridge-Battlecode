@@ -98,6 +98,32 @@ MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
 
 cant_attack = 0
+_cant_attack_rounds: dict[int, int] = {}
+CANT_ATTACK_TTL = 60
+
+
+def _mark_cant_attack(bits: int):
+    global cant_attack
+    if not bits:
+        return
+    cant_attack |= bits
+    cur = rc.get_current_round()
+    m = bits
+    while m:
+        lsb = m & -m
+        _cant_attack_rounds[lsb.bit_length() - 1] = cur
+        m ^= lsb
+
+
+def _expire_cant_attack():
+    global cant_attack
+    if not _cant_attack_rounds:
+        return
+    cur = rc.get_current_round()
+    expired = [n for n, r in _cant_attack_rounds.items() if r + CANT_ATTACK_TTL < cur]
+    for n in expired:
+        cant_attack &= ~(1 << n)
+        del _cant_attack_rounds[n]
 
 
 # ---------------------------------------------------------------------------
@@ -922,6 +948,7 @@ def _ensure_round_cache():
     if _round_cache_round == r:
         return
     _round_cache_round = r
+    _expire_cant_attack()
     _round_cache_sentinel_planes = None
     _round_cache_gunner_planes = None
     _round_cache_gunner_sum = None
@@ -1044,7 +1071,6 @@ def score():
 
 
 def choose_attack_target(preferred, fallback):
-    global cant_attack
     if not preferred and not fallback:
         return None
 
@@ -1054,7 +1080,7 @@ def choose_attack_target(preferred, fallback):
     if best is None and fallback:
         best, _ = nav.closest(fallback)
     if best is None:
-        cant_attack |= preferred | fallback
+        _mark_cant_attack(preferred | fallback)
         return None
 
     return best
