@@ -141,12 +141,13 @@ _cached_chase_target = None  # set by score(), reused by run()
 
 MAX_SCORE = 8
 def score():
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
-
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
+
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
+
     target = _cached_chase_target
     # log(target)
     # units.builder.draw_mask(_conv_zone(), 255, 0, 0)
