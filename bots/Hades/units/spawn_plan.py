@@ -13,16 +13,7 @@ INITIAL_SPAWN_COUNT = 4
 # The core draws lines capped to +1 to account for the bot starting one step out from the core.
 INITIAL_EXPLORE_MAX_STEPS = 12
 
-DIRECTIONS = [
-    Direction.NORTH,
-    Direction.NORTHEAST,
-    Direction.EAST,
-    Direction.SOUTHEAST,
-    Direction.SOUTH,
-    Direction.SOUTHWEST,
-    Direction.WEST,
-    Direction.NORTHWEST,
-]
+DIRECTIONS = map_info._DIRECTIONS
 
 DIAGONAL = {
     Direction.NORTHEAST,
@@ -94,23 +85,22 @@ def get_valid_directions(rc: Controller, core_pos: Position, width: int, height:
     return valid
 
 
-def pick_n_directions(width: int, height: int, pool, n: int):
+def pick_n_directions(pool, n: int):
     if len(pool) <= n:
         return list(pool)
-
-    center = Position(width // 2, height // 2)
-    half_w, half_h = width // 2, height // 2
-    max_dist_sq = half_w * half_w + half_h * half_h or 1
 
     best = tuple(range(n))
     best_score = -1
     best_diagonal_count = sum(1 for k in best if pool[k][0] in DIAGONAL)
+    
     for combo in combinations(range(len(pool)), n):
+        # Maximize angular distance between chosen directions
         score = 1
         for i in range(n):
             for j in range(i + 1, n):
                 score *= dir_distance(pool[combo[i]][0], pool[combo[j]][0])
 
+        # Tiebreak by preferring diagonals
         diagonal_count = sum(1 for k in combo if pool[k][0] in DIAGONAL)
         if score > best_score or (score == best_score and diagonal_count > best_diagonal_count):
             best_score = score
@@ -123,7 +113,6 @@ def pick_n_directions(width: int, height: int, pool, n: int):
 def draw_spawn_plan(rc: Controller, core_pos: Position, spawn_plan, width: int, height: int) -> None:
     if not DRAW_DEBUG:
         return
-    # +1 because the builder starts one step out from the core along the direction
     for d in spawn_plan:
         endpoint = get_ray_endpoint(core_pos, d, width, height, max_steps=INITIAL_EXPLORE_MAX_STEPS + 1)
         rc.draw_indicator_line(core_pos, endpoint, 0, 255, 0)
@@ -132,14 +121,16 @@ def draw_spawn_plan(rc: Controller, core_pos: Position, spawn_plan, width: int, 
 def choose_spawn_plan(rc: Controller, core_pos: Position, n: int):
     width = rc.get_map_width()
     height = rc.get_map_height()
+    
+    # Filter directions first
     valid = get_valid_directions(rc, core_pos, width, height)
-
     if len(valid) == 0:
         return random.sample(DIRECTIONS, n)
 
-    chosen = pick_n_directions(width, height, valid, n)
+    # Then pick best subset
+    chosen = pick_n_directions(valid, n)
 
-    # Spawn directions that point closer to map center first
+    # Spawn in order of closeness to center
     center = Position(width // 2, height // 2)
     center_dir = map_info.direction_to(core_pos, center)
     chosen.sort(key=lambda de: (dir_distance(de[0], center_dir), de[1].distance_squared(center)))
