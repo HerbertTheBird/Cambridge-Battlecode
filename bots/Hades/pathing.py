@@ -23,6 +23,24 @@ threat_cost = 20
 conveyor_end_cost = 4
 
 
+def _dir_family(dx: int, dy: int) -> int:
+    """0 for cardinal, +1 for NE/SW diagonal, -1 for NW/SE diagonal."""
+    if dx == 0 or dy == 0:
+        return 0
+    return 1 if dx * dy > 0 else -1
+
+
+# Offsets (dx, dy) such that lsb_pos = target_pos + (dx, dy) covers all 9
+# tiles of the 3x3 around target_pos within d^2 <= 20. Worst-case corner is
+# (target + (sign(dx), sign(dy))), so the predicate is
+# (|dx|+1)^2 + (|dy|+1)^2 <= 20. Constant set, precomputed once.
+_FULL_COVER_OFFSETS = [
+    (dx, dy)
+    for dy in range(-3, 4) for dx in range(-3, 4)
+    if (abs(dx) + 1) ** 2 + (abs(dy) + 1) ** 2 <= 20
+]
+
+
 
 destroyed_barriers = dict()
 
@@ -94,16 +112,25 @@ def voronoi_claim(my_mask, others_mask, claims, passable=None):
     other_claimed = other_front
     all_claimed = my_claimed | other_claimed
 
+    # Inlined expand_chebyshev — saves ~1us function-call overhead per expand,
+    # and there can be many expands per call.
+    w = map_info._width
+    nlc = map_info._not_left_col
+    nrc = map_info._not_right_col
+    board = map_info._board_mask
+
     while (claims & ~all_claimed) and (my_front or other_front):
         if my_front:
-            my_expand = map_info.expand_chebyshev(my_front) & passable & ~all_claimed
+            h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
+            my_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
             my_claimed |= my_expand
             all_claimed |= my_expand
             my_front = my_expand
         if not (claims & ~all_claimed):
             break
         if other_front:
-            other_expand = map_info.expand_chebyshev(other_front) & passable & ~all_claimed
+            h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
+            other_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
             other_claimed |= other_expand
             all_claimed |= other_expand
             other_front = other_expand
@@ -384,20 +411,16 @@ class Pathing:
                 start_pos = Position(cx, cy)
                 from_mask = hit
                 if target_mask.bit_count() == 1:
-                    target_pos = Position((target_mask.bit_length()-1)%w, (target_mask.bit_length()-1)//w)
-                    mask = hit
-                    all_covered = 0
-                    while mask:
-                        lsb = mask&-mask
-                        lsb_pos = Position((lsb.bit_length()-1)%w, (lsb.bit_length()-1)//w)
-                        covered = 0
-                        for d in Direction:
-                            if lsb_pos.distance_squared(target_pos.add(d)) <= 20:
-                                covered += 1
-                        log("moving to", lsb_pos, "covers", covered, "on", target_pos)
-                        if covered == 9:
-                            all_covered |= lsb
-                        mask ^= lsb
+                    tn = target_mask.bit_length() - 1
+                    tx = tn % w
+                    ty = tn // w
+                    cover_mask = 0
+                    for dx, dy in _FULL_COVER_OFFSETS:
+                        nx = tx + dx
+                        ny = ty + dy
+                        if 0 <= nx < width and 0 <= ny < height:
+                            cover_mask |= 1 << (nx + ny * w)
+                    all_covered = hit & cover_mask
                     if all_covered:
                         from_mask = all_covered
                 if from_mask & walkable:
@@ -412,27 +435,27 @@ class Pathing:
                     from_mask &= ~border
                     border = map_info.expand_manhattan(border)
                 from_mask = last_working_mask
-                def family(dir):
-                    dx, dy = dir
-                    if dx == 0 or dy == 0:
-                        return 0
-                    return 1 if dx * dy > 0 else -1
-                last_fam = family(self.last_dir) if self.last_dir is not None else 0
-                last_last_fam = family(self.last_last_dir) if self.last_last_dir is not None else 0
+                last_fam = _dir_family(*self.last_dir) if self.last_dir is not None else 0
+                last_last_fam = _dir_family(*self.last_last_dir) if self.last_last_dir is not None else 0
                 preferred_family = 0 if last_fam == 0 else -last_fam if last_fam == last_last_fam else last_fam
                 if preferred_family == 0:
                     preferred_family = 2 #dont want to prefer straight over diag
                 # builder.draw_mask(from_mask, 255, 255, 0)
                 log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
                 best_dir = None
+                best_fam_abs = -1
                 while from_mask:
                     check_bit = from_mask & -from_mask
                     from_mask ^= check_bit
                     n = check_bit.bit_length() - 1
-                    dir = (n % width - cx, n // width - cy)
-                    if best_dir is None or family(dir) == preferred_family or abs(family(dir)) > abs(family(best_dir)):
-                        best_dir = dir
-                
+                    dx = n % width - cx
+                    dy = n // width - cy
+                    fam = _dir_family(dx, dy)
+                    fam_abs = -fam if fam < 0 else fam
+                    if best_dir is None or fam == preferred_family or fam_abs > best_fam_abs:
+                        best_dir = (dx, dy)
+                        best_fam_abs = fam_abs
+
                 return start_pos, Position(cx+best_dir[0], cy+best_dir[1]), i
             # 3x3 Chebyshev expansion via 4 shifts
             f = cur_frontier

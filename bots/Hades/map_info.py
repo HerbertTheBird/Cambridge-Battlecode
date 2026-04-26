@@ -640,6 +640,57 @@ _carrying_cache_key: tuple | None = None
 _carrying_cache: tuple[int, int, int] = (0, 0, 0)
 
 
+def _carrying_expand(
+    seed, bm_conveyors, convs_e, convs_w, convs_s, convs_n, bridges,
+    reverse, conv_target, w, board, tiles,
+    not_left_col, not_right_col, not_top_row, not_bottom_row,
+):
+    expanded = seed
+    # Upstream (reverse chain).
+    cur = seed
+    for _ in range(3):
+        nxt = (
+            ((cur & not_left_col) >> 1) & convs_e
+            | ((cur & not_right_col) << 1) & convs_w
+            | ((cur & not_top_row) >> w) & convs_s
+            | ((cur & not_bottom_row) << w) & convs_n
+        ) & bm_conveyors & ~expanded
+        m = cur
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            nxt |= reverse[n] & bridges & ~expanded
+            m ^= lsb
+        if not nxt:
+            break
+        expanded |= nxt
+        cur = nxt
+    # Downstream (conv_target chain).
+    cur = seed
+    for _ in range(3):
+        nxt = (
+            ((cur & convs_e & not_right_col) << 1)
+            | ((cur & convs_w & not_left_col) >> 1)
+            | ((cur & convs_s & not_bottom_row) << w)
+            | ((cur & convs_n & not_top_row) >> w)
+        ) & board & bm_conveyors & ~expanded
+        m = cur & bridges
+        while m:
+            lsb = m & -m
+            n = lsb.bit_length() - 1
+            tn = conv_target[n]
+            if 0 <= tn < tiles:
+                tbit = 1 << tn
+                if (bm_conveyors & tbit) and not (expanded & tbit):
+                    nxt |= tbit
+            m ^= lsb
+        if not nxt:
+            break
+        expanded |= nxt
+        cur = nxt
+    return expanded
+
+
 def _compute_carrying() -> tuple[int, int, int]:
     """Bitmasks of conveyors believed to carry titanium / raw ax / refined ax.
 
@@ -671,60 +722,22 @@ def _compute_carrying() -> tuple[int, int, int]:
     convs_s = cardinal & dir_mask[_DIR_INT[Direction.SOUTH]]
     convs_n = cardinal & dir_mask[_DIR_INT[Direction.NORTH]]
     bridges = _bm_et[_IDX_BRIDGE]
-
-    def _expand(seed: int) -> int:
-        expanded = seed
-        # Upstream (reverse chain).
-        cur = seed
-        for _ in range(3):
-            nxt = (
-                ((cur & _not_left_col) >> 1) & convs_e
-                | ((cur & _not_right_col) << 1) & convs_w
-                | ((cur & _not_top_row) >> w) & convs_s
-                | ((cur & _not_bottom_row) << w) & convs_n
-            ) & bm_conveyors & ~expanded
-            m = cur
-            while m:
-                lsb = m & -m
-                n = lsb.bit_length() - 1
-                nxt |= reverse[n] & bridges & ~expanded
-                m ^= lsb
-            if not nxt:
-                break
-            expanded |= nxt
-            cur = nxt
-        # Downstream (conv_target chain).
-        cur = seed
-        for _ in range(3):
-            nxt = (
-                ((cur & convs_e & _not_right_col) << 1)
-                | ((cur & convs_w & _not_left_col) >> 1)
-                | ((cur & convs_s & _not_bottom_row) << w)
-                | ((cur & convs_n & _not_top_row) >> w)
-            ) & board & bm_conveyors & ~expanded
-            m = cur & bridges
-            while m:
-                lsb = m & -m
-                n = lsb.bit_length() - 1
-                tn = conv_target[n]
-                if 0 <= tn < tiles:
-                    tbit = 1 << tn
-                    if (bm_conveyors & tbit) and not (expanded & tbit):
-                        nxt |= tbit
-                m ^= lsb
-            if not nxt:
-                break
-            expanded |= nxt
-            cur = nxt
-        return expanded
+    nlc = _not_left_col
+    nrc = _not_right_col
+    ntr = _not_top_row
+    nbr = _not_bottom_row
 
     ti_seed = _bm_conv_ti & bm_conveyors
     raw_ax_seed = _bm_conv_raw_ax & bm_conveyors
     refined_seed = _bm_conv_refined & bm_conveyors
+    expand = _carrying_expand
     result = (
-        _expand(ti_seed) if ti_seed else 0,
-        _expand(raw_ax_seed) if raw_ax_seed else 0,
-        _expand(refined_seed) if refined_seed else 0,
+        expand(ti_seed, bm_conveyors, convs_e, convs_w, convs_s, convs_n, bridges,
+               reverse, conv_target, w, board, tiles, nlc, nrc, ntr, nbr) if ti_seed else 0,
+        expand(raw_ax_seed, bm_conveyors, convs_e, convs_w, convs_s, convs_n, bridges,
+               reverse, conv_target, w, board, tiles, nlc, nrc, ntr, nbr) if raw_ax_seed else 0,
+        expand(refined_seed, bm_conveyors, convs_e, convs_w, convs_s, convs_n, bridges,
+               reverse, conv_target, w, board, tiles, nlc, nrc, ntr, nbr) if refined_seed else 0,
     )
     _carrying_cache_key = key
     _carrying_cache = result
@@ -1644,12 +1657,13 @@ def update(recompute: bool = True) -> None:
     _bm_enemy_bots = 0
     seen_uids = set()
     cur_round = rc.get_current_round()
+    self_id = rc.get_id()
     for uid in rc.get_nearby_units():
         if uid > _max_id_seen:
             _max_id_seen = uid
         if rc.get_entity_type(uid) != _ET_BUILDER_BOT:
             continue
-        if uid == rc.get_id():
+        if uid == self_id:
             continue
         ep = rc.get_position(uid)
         n = ep.x + ep.y * width
@@ -1664,18 +1678,20 @@ def update(recompute: bool = True) -> None:
         _bot_at[n] = uid
         _bot_last_seen[uid] = cur_round
         seen_uids.add(uid)
-    # Invalidate tracked bots whose old position is now visible but they're gone.
-    # Grant a 1-round grace: if we saw the bot last round, keep its last position
-    # in the masks for one more round before purging.
+    # Single pass: purge stale bots (visible-but-gone after grace) and rebuild
+    # the friendly/enemy bitmasks from the survivors.
+    grace_cutoff = cur_round - 1
     to_remove = []
     for uid, n in _bot_pos.items():
-        if uid in seen_uids:
-            continue
         bit = 1 << n
-        if bm_visible & bit:
-            last = _bot_last_seen.get(uid, -1)
-            if last < cur_round - 1:
+        if uid not in seen_uids and (bm_visible & bit):
+            if _bot_last_seen.get(uid, -1) < grace_cutoff:
                 to_remove.append(uid)
+                continue
+        if _bot_team[uid] == my_team_idx:
+            _bm_friendly_bots |= bit
+        else:
+            _bm_enemy_bots |= bit
     for uid in to_remove:
         n = _bot_pos[uid]
         if _bot_at.get(n) == uid:
@@ -1683,14 +1699,6 @@ def update(recompute: bool = True) -> None:
         del _bot_pos[uid]
         del _bot_team[uid]
         _bot_last_seen.pop(uid, None)
-
-    # Rebuild bitmasks from tracked positions
-    for uid, n in _bot_pos.items():
-        bit = 1 << n
-        if _bot_team[uid] == my_team_idx:
-            _bm_friendly_bots |= bit
-        else:
-            _bm_enemy_bots |= bit
 
     # Precompute other-bots zone masks for cant_claim().
     # expand_chebyshev distributes over OR, so one call per layer suffices.
@@ -1703,10 +1711,9 @@ def update(recompute: bool = True) -> None:
         _bm_others_3x3 = 0
         _bm_others_5x5 = 0
 
-    current_round = rc.get_current_round()
-    while len(_max_id_by_round) <= current_round:
+    while len(_max_id_by_round) <= cur_round:
         _max_id_by_round.append(0)
-    _max_id_by_round[current_round] = _max_id_seen
+    _max_id_by_round[cur_round] = _max_id_seen
 
     if recompute:
         recompute_derived()
