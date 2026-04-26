@@ -29,6 +29,14 @@ _GUNNER_BLOCKED_MASK = 0
 _TURRET_FEED_CACHE_VERSION = -1
 _TURRET_FEED_CACHE_MASK = 0
 
+_EMPTY_CANDIDATE_MASKS = (0,) * 8
+
+_SENTINEL_SCORE_CACHE_KEY = None
+_SENTINEL_SCORE_CACHE = None
+_GUNNER_SUM_CACHE_KEY = None
+_GUNNER_SUM_CACHE = None
+_GUNNER_PER_DIR_CACHE_KEY = None
+_GUNNER_PER_DIR_CACHE = None
 
 
 def init(c: Controller):
@@ -293,6 +301,50 @@ def _ge_threshold_mask(planes, threshold, candidates):
             gt |= eq & p
             eq &= ~p
     return gt | eq
+
+
+def _get_cached_sentinel_scores(enemy_team_bm: int, threat: int, sentinel_masks: tuple[int, ...]):
+    """Sentinel per-direction score planes, cached across rounds by exact masks."""
+    global _SENTINEL_SCORE_CACHE_KEY, _SENTINEL_SCORE_CACHE
+
+    key = (map_info._struct_version, sentinel_masks)
+    if key != _SENTINEL_SCORE_CACHE_KEY:
+        _SENTINEL_SCORE_CACHE = _compute_sentinel_dir_scores(
+            enemy_team_bm, threat, sentinel_masks
+        )
+        _SENTINEL_SCORE_CACHE_KEY = key
+    return _SENTINEL_SCORE_CACHE
+
+
+def _get_cached_gunner_sum(enemy_team_bm: int, threat: int, gunner_masks: tuple[int, ...]):
+    """Gunner summed score plane, cached across rounds by exact masks."""
+    global _GUNNER_SUM_CACHE_KEY, _GUNNER_SUM_CACHE
+
+    key = (map_info._struct_version, gunner_masks)
+    if key != _GUNNER_SUM_CACHE_KEY:
+        _, _GUNNER_SUM_CACHE = _compute_gunner_dir_scores(
+            enemy_team_bm, threat, gunner_masks, include_per_dir=False
+        )
+        _GUNNER_SUM_CACHE_KEY = key
+    return _GUNNER_SUM_CACHE
+
+
+def _get_cached_gunner_per_dir(enemy_team_bm: int, threat: int, gunner_masks: tuple[int, ...]):
+    """Gunner per-direction planes, cached across rounds by exact masks."""
+    global _GUNNER_PER_DIR_CACHE_KEY, _GUNNER_PER_DIR_CACHE
+    global _GUNNER_SUM_CACHE_KEY, _GUNNER_SUM_CACHE
+
+    key = (map_info._struct_version, gunner_masks)
+    if key != _GUNNER_PER_DIR_CACHE_KEY:
+        per_dir, summed = _compute_gunner_dir_scores(
+            enemy_team_bm, threat, gunner_masks, include_per_dir=True
+        )
+        _GUNNER_PER_DIR_CACHE = per_dir
+        _GUNNER_PER_DIR_CACHE_KEY = key
+        # Keep sum cache coherent for the same key.
+        _GUNNER_SUM_CACHE = summed
+        _GUNNER_SUM_CACHE_KEY = key
+    return _GUNNER_PER_DIR_CACHE
 
 
 # ---------------------------------------------------------------------------
@@ -670,8 +722,8 @@ def _turret_feed_chains(max_steps: int = 8) -> int:
 
 
 def _placement_candidates():
-    """Returns (sentinel_masks, gunner_masks): two lists of 8 bitmasks, one per
-    facing direction. Loader blockers are baked in:
+    """Returns (sentinel_masks, gunner_masks): two tuples of 8 bitmasks, one
+    per facing direction. Loader blockers are baked in:
       sentinel_masks[d] = tiles where a sentinel can face direction d
       gunner_masks[d]   = tiles where a gunner can face direction d
     Gunners with 2+ loader directions get the full-360 exemption."""
@@ -694,7 +746,7 @@ def _placement_candidates():
         candidates |= (map_info.expand_manhattan(harvesters))
     candidates &= map_info._bm_seen_observed
     if not candidates:
-        return [0] * 8, [0] * 8
+        return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     empty = ~map_info._bm_any_building | map_info._bm_et[map_info._IDX_MARKER]
 
     my_clearable = (
@@ -715,34 +767,38 @@ def _placement_candidates():
     candidates &= (empty | my_clearable | enemy_clearable)
     candidates &= ~map_info._bm_env[map_info._IDX_ENV_WALL]
     if not candidates:
-        return [0] * 8, [0] * 8
+        return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
     my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * map_info._width)
     all_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
     candidates &= ~all_bots
     if not candidates:
-        return [0] * 8, [0] * 8
+        return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
         tracked_zone = map_info.expand_chebyshev(enemy_bots)
         danger = map_info.expand_chebyshev(tracked_zone)
-        danger_for_clearable |= danger
+        # Builder bot vision radius² is 20 (≈ cheb 4). Tiles within cheb 3 are
+        # almost certainly visible to the enemy bot. Attacking a fallback tile
+        # in their vision lets them heal between our hits — better to skip.
+        wider_vision = map_info.expand_chebyshev(danger)
+        danger_for_clearable |= wider_vision
         if tracked_zone & my_bit:
             danger_for_clearable = map_info._board_mask #am being tracked
     candidates &= ~(danger_for_clearable & enemy_clearable)
     if not candidates:
-        return [0] * 8, [0] * 8
+        return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
     candidates &= ~cant_attack
     if not candidates:
-        return [0] * 8, [0] * 8
+        return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     feed_chains = _turret_feed_chains()
     if feed_chains:
         candidates &= ~feed_chains
         if not candidates:
-            return [0] * 8, [0] * 8
+            return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
     # Facing blockers: block direction D at tile P if P+delta_D has a friendly
     # harvester/foundry (always blocks), or a conveyor whose output points back
@@ -764,8 +820,8 @@ def _placement_candidates():
     # Sentinels have low dps and shouldn't sit in gunner/breach fire. Gunners
     # have high dps and can trade into hard threats.
     sentinel_cands = candidates & ~map_info._bm_enemy_hard_threat
-    sentinel_masks = [sentinel_cands & ~blockers[d] for d in range(8)]
-    gunner_masks   = [candidates & ~blockers[d] for d in range(8)]
+    sentinel_masks = tuple(sentinel_cands & ~blockers[d] for d in range(8))
+    gunner_masks = tuple(candidates & ~blockers[d] for d in range(8))
     return sentinel_masks, gunner_masks
 
 
@@ -780,8 +836,8 @@ def _get_attack_candidates():
     can_afford_sent = _round_cache_can_afford_sent
     can_afford_gun = _round_cache_can_afford_gun
     if not can_afford_sent and not can_afford_gun:
-        _round_cache_placement_masks[0] = [0] * 8
-        _round_cache_placement_masks[1] = [0] * 8
+        _round_cache_placement_masks[0] = _EMPTY_CANDIDATE_MASKS
+        _round_cache_placement_masks[1] = _EMPTY_CANDIDATE_MASKS
         return 0, 0
 
     enemy_idx = 1 - map_info._my_team_idx
@@ -791,15 +847,15 @@ def _get_attack_candidates():
         & ~map_info._bm_et[map_info._IDX_MARKER]
     )
     if not enemy_scorable:
-        _round_cache_placement_masks[0] = [0] * 8
-        _round_cache_placement_masks[1] = [0] * 8
+        _round_cache_placement_masks[0] = _EMPTY_CANDIDATE_MASKS
+        _round_cache_placement_masks[1] = _EMPTY_CANDIDATE_MASKS
         return 0, 0
 
     sentinel_masks, gunner_masks = _placement_candidates()
     if not can_afford_sent:
-        sentinel_masks = [0] * 8
+        sentinel_masks = _EMPTY_CANDIDATE_MASKS
     if not can_afford_gun:
-        gunner_masks = [0] * 8
+        gunner_masks = _EMPTY_CANDIDATE_MASKS
     _round_cache_placement_masks[0] = sentinel_masks
     _round_cache_placement_masks[1] = gunner_masks
 
@@ -878,7 +934,7 @@ _round_cache_sentinel_planes = None    # list of 8 plane-lists, one per directio
 _round_cache_gunner_planes = None      # list of 8 plane-lists, one per direction
 _round_cache_gunner_sum = None         # single plane-list: sum across 8 facings
 _round_cache_threshold = 0
-_round_cache_placement_masks = [None, None]  # [sentinel_masks[8], gunner_masks[8]]
+_round_cache_placement_masks = [None, None]  # [sentinel_masks tuple, gunner_masks tuple]
 _round_cache_can_afford_sent = False
 _round_cache_can_afford_gun = False
 _round_cache_sentinel_any = 0
@@ -923,9 +979,7 @@ def _ensure_sentinel_planes():
         return
     enemy_team_bm, threat = _round_cache_enemy_inputs()
     sentinel_masks = _round_cache_placement_masks[0]
-    _round_cache_sentinel_planes = _compute_sentinel_dir_scores(
-        enemy_team_bm, threat, sentinel_masks
-    )
+    _round_cache_sentinel_planes = _get_cached_sentinel_scores(enemy_team_bm, threat, sentinel_masks)
 
 
 def _ensure_gunner_scores(include_per_dir=False):
@@ -937,9 +991,9 @@ def _ensure_gunner_scores(include_per_dir=False):
         return
     enemy_team_bm, threat = _round_cache_enemy_inputs()
     gunner_masks = _round_cache_placement_masks[1]
-    _round_cache_gunner_planes, _round_cache_gunner_sum = _compute_gunner_dir_scores(
-        enemy_team_bm, threat, gunner_masks, include_per_dir=include_per_dir
-    )
+    _round_cache_gunner_sum = _get_cached_gunner_sum(enemy_team_bm, threat, gunner_masks)
+    if include_per_dir:
+        _round_cache_gunner_planes = _get_cached_gunner_per_dir(enemy_team_bm, threat, gunner_masks)
 
 
 def _ensure_score_planes():
