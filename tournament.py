@@ -42,6 +42,23 @@ def elo_update(rating: float, expected: float, actual: float) -> float:
     return rating + K_FACTOR * (actual - expected)
 
 
+# ── Statistics ───────────────────────────────────────────────────────────────
+
+def binomial_p_value(wins: int, losses: int) -> float:
+    """One-sided binomial test on H0: p = 0.5 vs H1: p > 0.5.
+
+    Treats each non-drawn game as a Bernoulli trial and returns
+    P(X >= wins | n = wins + losses, p = 0.5). Smaller values are stronger
+    evidence the bot with more wins is genuinely better. Draws are excluded.
+    Returns 1.0 when there are no decisive games.
+    """
+    n = wins + losses
+    if n == 0:
+        return 1.0
+    cumulative = sum(math.comb(n, k) for k in range(wins, n + 1))
+    return cumulative / (2 ** n)
+
+
 # ── Match running ────────────────────────────────────────────────────────────
 
 WINNER_RE = __import__("re").compile(r"Winner:\s+(\S+)\s+\(.*?turn\s+(\d+)\)")
@@ -289,16 +306,17 @@ def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead], stats: dict[str, 
     if not entries:
         return
 
-    print(f"\n{'=' * 80}")
-    print("  HEAD-TO-HEAD")
-    print(f"{'=' * 80}")
+    print(f"\n{'=' * 90}")
+    print("  HEAD-TO-HEAD  (p = one-sided binomial test that A is better than B; lower = stronger)")
+    print(f"{'=' * 90}")
 
     name_w = max(max(len(e.bot_a), len(e.bot_b)) for e in entries) if entries else 10
-    print(f"  {'Bot A':{name_w}}  vs  {'Bot B':{name_w}}  {'A':>4}  {'B':>4}  {'D':>4}")
-    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}")
+    print(f"  {'Bot A':{name_w}}  vs  {'Bot B':{name_w}}  {'A':>4}  {'B':>4}  {'D':>4}  {'p(A>B)':>8}")
+    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}  {'------':>8}")
 
     for e in entries:
-        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}")
+        p = binomial_p_value(e.a_wins, e.b_wins)
+        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}  {p:>8.4f}")
 
 
 def print_map_breakdown(results: list[MatchResult], bots: list[str]) -> None:
