@@ -1056,22 +1056,19 @@ def update_move() -> None:
         nearby = rc.get_nearby_tiles()
         _nearby_tiles = nearby
         _nearby_tiles_pos = new_pos
+    old_visible = _bm_visible
     new_visible = 0
+    saw_newly_visible = False
     for tile in nearby:
-        new_visible |= 1 << (tile.x + tile.y * width)
-
-    newly_visible = new_visible & ~_bm_visible
+        bit = 1 << (tile.x + tile.y * width)
+        new_visible |= bit
+        if not (old_visible & bit):
+            update_at(tile)
+            saw_newly_visible = True
     _bm_visible = new_visible
 
-    if not newly_visible:
+    if not saw_newly_visible:
         return
-
-    mask = newly_visible
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        update_at(Position(n % width, n // width))
-        mask ^= lsb
 
     pathing.rebuild_broken_barriers(rc)
     recompute_derived()
@@ -1571,22 +1568,27 @@ def update(recompute: bool = True) -> None:
     my_pos        = rc.get_position()
     _my_pos       = my_pos
 
-    if _nearby_tiles_pos == my_pos:
+    visible_cached = (_nearby_tiles_pos == my_pos)
+    if visible_cached:
         visible_tiles = _nearby_tiles
-        bm_visible = _bm_visible
     else:
         visible_tiles = rc.get_nearby_tiles()
         _nearby_tiles = visible_tiles
         _nearby_tiles_pos = my_pos
-        bm_visible = 0
-        for tile in visible_tiles:
-            bm_visible |= 1 << (tile.x + tile.y * width)
-        _bm_visible = bm_visible
-    _prev_pos     = my_pos
+    _prev_pos = my_pos
     _new_marker_messages = []
 
-    for tile in visible_tiles:
-        update_at(tile)
+    if visible_cached:
+        bm_visible = _bm_visible
+        for tile in visible_tiles:
+            update_at(tile)
+    else:
+        bm_visible = 0
+        for tile in visible_tiles:
+            bit = 1 << (tile.x + tile.y * width)
+            bm_visible |= bit
+            update_at(tile)
+        _bm_visible = bm_visible
 
     possible_syms = int(_hor_sym) + int(_ver_sym) + int(_rot_sym)
     if possible_syms == 1 and not _solved_sym:

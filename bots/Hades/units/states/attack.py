@@ -478,6 +478,45 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
     return (all_planes if include_per_dir else None), summed
 
 
+def _best_gunner_direction_at(n: int, bit: int, enemy_team_bm: int, threat: int, gunner_masks):
+    """Best gunner facing at a single tile, without building full-map per-dir planes."""
+    width = map_info._width
+    height = map_info._height
+    px = n % width
+    py = n // width
+    blocked = _gunner_ray_blocked_mask()
+    building_et_idx = map_info._building_et_idx
+    non_threat_tile = not (threat & bit)
+
+    best_dir = Direction.NORTH
+    best_score = -1
+    for d in range(8):
+        if not (gunner_masks[d] & bit):
+            continue
+        score = 0
+        hit_any = False
+        for dx, dy in map_info._GUNNER_RAYS[d]:
+            tx = px + dx
+            ty = py + dy
+            if not (0 <= tx < width and 0 <= ty < height):
+                break
+            tn = tx + ty * width
+            tbit = 1 << tn
+            if blocked & tbit:
+                break
+            if enemy_team_bm & tbit:
+                tile_score = GUNNER_BUILDING_SCORE[building_et_idx[tn]]
+                score += tile_score
+                if tile_score:
+                    hit_any = True
+        if hit_any and non_threat_tile:
+            score += THREAT_PENALTY
+        if score > best_score:
+            best_score = score
+            best_dir = map_info._DIRECTIONS[d]
+    return best_dir, best_score
+
+
 # ---------------------------------------------------------------------------
 # Per-tile "best direction / best type" pick
 # ---------------------------------------------------------------------------
@@ -496,9 +535,8 @@ def get_best_direction(pos):
     bit = 1 << n
 
     _ensure_sentinel_planes()
-    _ensure_gunner_scores(include_per_dir=True)
+    _ensure_gunner_scores(include_per_dir=False)
     sent_planes_by_dir = _round_cache_sentinel_planes
-    gun_planes_by_dir = _round_cache_gunner_planes
     gun_sum_plane = _round_cache_gunner_sum
     sentinel_masks = _round_cache_placement_masks[0]
     gunner_masks = _round_cache_placement_masks[1]
@@ -528,17 +566,9 @@ def get_best_direction(pos):
     if not gunner_placeable or best_s_score >= gun_sum:
         return best_s_dir, EntityType.SENTINEL, best_s_score
 
-    # Gunner wins: now pick its best facing from per-direction planes.
-    best_g_dir, best_g_score = Direction.NORTH, -1
-    for d in range(8):
-        if not (gunner_masks[d] & bit):
-            # log("  GUN", directions[d], "not a valid placement")
-            continue
-        g = _read_score(gun_planes_by_dir[d], n)
-        # log("  GUN", directions[d], "score", g)
-        if g > best_g_score:
-            best_g_score = g
-            best_g_dir = directions[d]
+    # Gunner wins: now pick its best facing locally for this tile only.
+    enemy_team_bm, threat = _round_cache_enemy_inputs()
+    best_g_dir, _best_g_score = _best_gunner_direction_at(n, bit, enemy_team_bm, threat, gunner_masks)
     return best_g_dir, EntityType.GUNNER, gun_sum
 
 
