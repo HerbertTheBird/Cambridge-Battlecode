@@ -22,7 +22,13 @@ def _core_area_positions(pos: Position) -> tuple[Position, ...]:
     )
 
 
-def _try_spawn_planned(core_pos: Position) -> bool:
+def init(c: Controller):
+    global rc, _core_area
+    rc = c
+    _core_area = _core_area_positions(rc.get_position())
+
+
+def _spawn_toward_plan(core_pos: Position) -> bool:
     global _num_spawned
     if _spawn_plan is None or _num_spawned >= len(_spawn_plan):
         return False
@@ -52,7 +58,7 @@ def _spawn_toward_center():
         rc.spawn_builder(best)
 
 
-def _spawn_toward_enemy_if_undefended(core_pos: Position, has_close_ally: bool, closest_enemy: Position | None) -> bool:
+def _spawn_toward_enemy_if_undefended(has_close_ally: bool, closest_enemy: Position | None) -> bool:
     """If an enemy builder bot is in vision and no friendly builder bot sits
     within dist² DEFENSE_FRIENDLY_RADIUS_SQ of the core, spawn a defender on
     the core tile closest to the nearest enemy bot. Returns True if spawned."""
@@ -72,25 +78,12 @@ def _spawn_toward_enemy_if_undefended(core_pos: Position, has_close_ally: bool, 
     return True
 
 
-def run():
-    global _spawn_plan
-    map_info.update()
-    core_pos = rc.get_position()
-    if _spawn_plan is None:
-        _spawn_plan = choose_spawn_plan(rc, core_pos, INITIAL_SPAWN_COUNT)
-    if rc.get_current_round() <= INITIAL_SPAWN_COUNT + INITIAL_EXPLORE_MAX_STEPS:
-        draw_spawn_plan(rc, core_pos, _spawn_plan, rc.get_map_width(), rc.get_map_height())
-
-    # if rc.get_current_round() == 400:
-    #     rc.resign()
-    titanium = rc.get_global_resources()[0]
-    axionite = rc.get_global_resources()[1]
-    scaling = rc.get_scale_percent()
-    my_team = map_info._my_team
+def _scan_nearby_builders(core_pos: Position, my_team):
     ally_builder_count = 0
     has_close_ally = False
     closest_enemy = None
     closest_enemy_d = None
+
     for uid in rc.get_nearby_units():
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
             continue
@@ -105,16 +98,40 @@ def run():
                 closest_enemy_d = d
                 closest_enemy = p
 
-    if not _spawn_toward_enemy_if_undefended(core_pos, has_close_ally, closest_enemy):
+    return ally_builder_count, has_close_ally, closest_enemy
+
+
+def run():
+    global _spawn_plan
+    
+    # Sync round info
+    map_info.update()
+    titanium, axionite = rc.get_global_resources()
+    scaling = rc.get_scale_percent()
+    core_pos = map_info._my_pos
+    my_team = map_info._my_team
+    
+    # Initialize spawn plan
+    if _spawn_plan is None:
+        _spawn_plan = choose_spawn_plan(rc, core_pos, INITIAL_SPAWN_COUNT)
+    if rc.get_current_round() <= INITIAL_SPAWN_COUNT + INITIAL_EXPLORE_MAX_STEPS:
+        draw_spawn_plan(rc, core_pos, _spawn_plan, rc.get_map_width(), rc.get_map_height())
+
+    # Spawn bot toward enemy if we see one and don't have a close ally
+    ally_builder_count, has_close_ally, closest_enemy = _scan_nearby_builders(core_pos, my_team)
+    if not _spawn_toward_enemy_if_undefended(has_close_ally, closest_enemy):
+        
+        # Otherwise only spawn if we have extra resources
         threshold = 400 if ally_builder_count >= 12 else 200
         if scaling * SCALE_MULT + threshold < titanium:
-            if not _try_spawn_planned(core_pos):
+            
+            # First spawn according to initial plan, then spawn toward center
+            if not _spawn_toward_plan(core_pos):
                 _spawn_toward_center()
-    if rc.get_current_round() < 1500 and titanium < 4 * rc.get_harvester_cost()[0]:
-        rc.convert(min(max(axionite - 1, 0), max((3 * rc.get_harvester_cost()[0] - titanium) // 4, 0)))
-
-
-def init(c: Controller):
-    global rc, _core_area
-    rc = c
-    _core_area = _core_area_positions(rc.get_position())
+                
+    # Convert axionite if we are short on titanium
+    harvester_cost = rc.get_harvester_cost()[0]
+    if rc.get_current_round() < 1500 and titanium < 4 * harvester_cost:
+        max_can_convert = axionite - 1
+        desired_convert = (3 * harvester_cost - titanium) // 4
+        rc.convert(max(min(max_can_convert, desired_convert), 0))
