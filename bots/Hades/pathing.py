@@ -1,14 +1,7 @@
-import heapq
 import map_info
-from cambc import Controller, Direction, Position, EntityType, ResourceType, Environment
-import comms
-import math
-from collections.abc import Collection
+from cambc import Controller, Direction, Position, EntityType
 import units.builder as builder
-import sys
-from functools import lru_cache
 from log import DRAW_DEBUG, log
-import colorsys
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -554,46 +547,10 @@ class Pathing:
             ) & not_avoid
             frontier[(i + bridge_cost) % cycle_len] |= new_bridge
             i += 1
-    def _move_to_mask(
-        self,
-        target_mask: int,
-        target_key,
-        targets_not_adjacent: bool,
-        avoid_turret: bool = True,
-    ):
-        if target_key != self.target_p:
-            self.forget_launcher.clear()
-        avoid = map_info.get_avoid(False, True, False)
-        my_pos = map_info._my_pos
-        if target_key == self.target_p and my_pos == self.prev_pos and targets_not_adjacent:
-            self.stuck_turns += 1
-        else:
-            self.prev_pos = my_pos
-            self.stuck_turns = 0
-            self.target_p = target_key
-        if self.stuck_turns > 2 + self.rc.get_id() % 8:
-            for d in ALL_DIRS:
-                if self.rc.can_move(d):
-                    self.rc.move(d)
-                    map_info.update_move()
-                    return True
-
-        result = self.bfs_move(my_pos.x + my_pos.y * self.width, target_mask, avoid, avoid_turret=avoid_turret)
-        if result is None:
-            return False
-        s_pos, p_pos, _ = result
-        if s_pos == p_pos:
-            return False
-        if DRAW_DEBUG:
-            self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
-        return self.move(map_info.direction_to(s_pos, p_pos))
     def move_adjacent(self, pos: Position, fallback: Position | None = None, **kwargs):
         """Move to an adjacent tile of pos. Filters by in_bounds, passable, no builder bot, and in vision."""
         rc = self.rc
-        w = self.width
-        target_mask = 0
-        target_key: list[int] = []
-        target_contains_my_pos = False
+        adj = set()
         for d in ALL_DIRS:
             if d == Direction.CENTRE:
                 continue
@@ -601,31 +558,19 @@ class Pathing:
             if not map_info.in_bounds(p):
                 continue
             if p == map_info._my_pos:
-                target_contains_my_pos = True
-                n = p.x + p.y * w
-                target_mask |= 1 << n
-                target_key.append(n)
+                adj.add(p)
                 continue
             if not map_info.is_passable(p):
                 continue
             if rc.is_in_vision(p) and rc.get_tile_builder_bot_id(p):
                 continue
-            n = p.x + p.y * w
-            target_mask |= 1 << n
-            target_key.append(n)
-        if target_mask == 0:
-            fallback_pos = fallback if fallback is not None else pos
-            n = fallback_pos.x + fallback_pos.y * w
-            target_mask = 1 << n
-            target_key.append(n)
-            if fallback_pos == map_info._my_pos:
-                target_contains_my_pos = True
-        return self._move_to_mask(
-            target_mask,
-            tuple(target_key),
-            not target_contains_my_pos,
-            **kwargs,
-        )
+            adj.add(p)
+        if not adj:
+            if fallback is not None:
+                adj.add(fallback)
+            else:
+                adj.add(pos)
+        return self.move_to(adj, **kwargs)
 
     def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
         log("move to", target)
@@ -633,6 +578,11 @@ class Pathing:
             target_set = {target}
         else:
             target_set = target
+        if target_set != self.target_p:
+            self.forget_launcher.clear()
+        avoid = map_info.get_avoid(False, True, False)
+        # if avoid_empty:
+        #     avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = map_info._my_pos
         targets_not_adjacent = True
         if my_pos in target_set:
@@ -644,17 +594,32 @@ class Pathing:
                 if max(abs(my_x - t.x), abs(my_y - t.y)) <= 1:
                     targets_not_adjacent = False
                     break
+        if target_set == self.target_p and my_pos == self.prev_pos and targets_not_adjacent:
+            self.stuck_turns += 1
+        else:
+            self.prev_pos = my_pos
+            self.stuck_turns = 0
+            self.target_p = target_set
+        if self.stuck_turns > 2 + self.rc.get_id() % 8:
+            for d in ALL_DIRS:
+                if self.rc.can_move(d):
+                    self.rc.move(d)
+                    map_info.update_move()
+                    return True
 
         w = self.width
         target_mask = 0
         for t in target_set:
             target_mask |= 1 << (t.x + t.y * w)
-        return self._move_to_mask(
-            target_mask,
-            target_set,
-            targets_not_adjacent,
-            avoid_turret=avoid_turret,
-        )
+        result = self.bfs_move(my_pos.x + my_pos.y * w, target_mask, avoid, avoid_turret=avoid_turret)
+        if result is None:
+            return False
+        s_pos, p_pos, _ = result
+        if s_pos == p_pos:
+            return False
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
+        return self.move(map_info.direction_to(s_pos, p_pos))
 
 
 
