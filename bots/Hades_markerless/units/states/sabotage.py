@@ -10,7 +10,7 @@ from log import log
 rc: Controller = None
 nav: Pathing = None
 
-comm_flag = 5
+comm_flag = 6
 
 def init(c: Controller):
     global rc, nav
@@ -62,11 +62,11 @@ def _sabotage_targets():
 def _my_claims():
     my_mask = units.builder.my_voronoi_mask(comm_flag)
     targets = units.builder.exclude_crowded_claims(comm_flag, _sabotage_targets())
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets, map_info._bm_passable_FFF)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets)
 
-MAX_SCORE = 5
+MAX_SCORE = 0
 def score():
-    return 5 if _my_claims() else 0
+    return 0 if _my_claims() else 0
 
 def run():
     log("SABOTAGE")

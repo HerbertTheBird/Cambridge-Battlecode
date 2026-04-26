@@ -12,6 +12,30 @@ comm_flag = 4
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to route
 
 unpathable = 0
+_unpathable_rounds: dict[int, int] = {}
+UNPATHABLE_TTL = 60
+
+
+def _mark_unpathable(bits: int):
+    global unpathable
+    unpathable |= bits
+    cur = rc.get_current_round()
+    m = bits
+    while m:
+        lsb = m & -m
+        _unpathable_rounds[lsb.bit_length() - 1] = cur
+        m ^= lsb
+
+
+def _expire_unpathable():
+    global unpathable
+    if not _unpathable_rounds:
+        return
+    cur = rc.get_current_round()
+    expired = [n for n, r in _unpathable_rounds.items() if r + UNPATHABLE_TTL < cur]
+    for n in expired:
+        unpathable &= ~(1 << n)
+        del _unpathable_rounds[n]
 
 
 def _prefer_armoured_conveyor() -> bool:
@@ -138,8 +162,7 @@ def avoid_mask():
     return _too_expensive() | cant_claim() | unpathable
 
 def _my_claims():
-    w = map_info._width
-    my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
+    my_mask = units.builder.my_voronoi_mask(comm_flag)
     avoid = avoid_mask()
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     candidates = units.builder.exclude_crowded_claims(comm_flag, candidates)
@@ -150,6 +173,7 @@ _cached_claims = 0  # set by score(), reused by run()
 MAX_SCORE = 4
 def score():
     global _cached_claims
+    _expire_unpathable()
     _cached_claims = _my_claims()
     return 4 if _cached_claims else 0
 
@@ -171,7 +195,7 @@ def run():
     best, _ = nav.closest(candidates)
     if best is None:
         log("no closest???")
-        unpathable |= candidates
+        _mark_unpathable(candidates)
         return
     units.builder.register_active_target(comm_flag, best)
     
@@ -196,7 +220,7 @@ def run():
             is_raw_ax = False
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
         if path is None:
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return
         target_conveyor = [path[0], path[1]]
         # Route from harvester: expand start to cardinal neighbors
@@ -213,7 +237,7 @@ def run():
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
         log("PATH", path)
         if path is None:
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return
         target_conveyor = [path[0], path[1]]
         if (map_info._bm_team[1-map_info._my_team_idx] & (1 << target_n)) and not map_info.type_at(target_n%width, target_n//width) == EntityType.MARKER and not (map_info.type_at(target_n%width, target_n//width) == EntityType.ROAD and not can_heal_road):

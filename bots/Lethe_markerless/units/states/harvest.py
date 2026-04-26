@@ -12,9 +12,7 @@ nav: Pathing = None
 comm_flag = 3
 
 def _my_claims():
-    my_pos = map_info._my_pos
-    w = map_info._width
-    my_mask = 1 << (my_pos.x + my_pos.y * w)
+    my_mask = units.builder.my_voronoi_mask(comm_flag)
     available = units.builder.exclude_crowded_claims(comm_flag, harvestable_ore() & ~_too_expensive())
     return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available, map_info._bm_passable_FFF)
 
@@ -24,8 +22,38 @@ def init(c: Controller):
     nav = units.builder.nav
 
 cant_harvest = 0
+_cant_harvest_rounds: dict[int, int] = {}  # tile_n -> round it was added
+CANT_HARVEST_TTL = 60  # rounds before re-trying a tile we previously failed on
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
 _cached_claims = 0
+
+
+def _mark_cant_harvest(bits: int):
+    """Add bits to cant_harvest with TTL tracking, so impossible-to-route ore can
+    be re-tried later (e.g., after enemy clears the obstruction)."""
+    global cant_harvest
+    cant_harvest |= bits
+    cur = rc.get_current_round()
+    m = bits
+    while m:
+        lsb = m & -m
+        _cant_harvest_rounds[lsb.bit_length() - 1] = cur
+        m ^= lsb
+
+
+def _expire_cant_harvest():
+    """Clear cant_harvest entries older than CANT_HARVEST_TTL rounds."""
+    global cant_harvest
+    if not _cant_harvest_rounds:
+        return
+    cur = rc.get_current_round()
+    expired = [n for n, r in _cant_harvest_rounds.items() if r + CANT_HARVEST_TTL < cur]
+    for n in expired:
+        cant_harvest &= ~(1 << n)
+        del _cant_harvest_rounds[n]
+
+
+
 def possible_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
@@ -87,13 +115,45 @@ def _too_expensive():
             result |= 1 << n
     return result
 
-MAX_SCORE = 3
+MAX_SCORE = 7  # was 3 — boosted because mid-construction can score up to 7
+CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+
+
+def _is_mid_construction(target_idx: int) -> bool:
+    """True if I'm adjacent to target_idx AND there's a friendly barrier on at
+    least one cardinal side. Indicates we've started building this ore but
+    haven't finished — abandoning it now would leave stranded barriers."""
+    w = map_info._width
+    if target_idx < 0:
+        return False
+    tx, ty = target_idx % w, target_idx // w
+    my_pos = map_info._my_pos
+    if abs(my_pos.x - tx) > 2 or abs(my_pos.y - ty) > 2:
+        return False
+    my_barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[map_info._my_team_idx]
+    for d in CARD:
+        nx, ny = tx + d.delta()[0], ty + d.delta()[1]
+        if 0 <= nx < w and 0 <= ny < map_info._height:
+            if my_barriers & (1 << (nx + ny * w)):
+                return True
+    return False
+
+
 def score():
     global _cached_claims
+    _expire_cant_harvest()
     _cached_claims = _my_claims()
-    return 3 if _cached_claims else 0
-
-CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+    if not _cached_claims:
+        return 0
+    # If we're mid-construction on a harvest target (already placed barriers),
+    # outscore attack/sabotage/route so we finish the ore before chasing other
+    # opportunities. Stranded barriers waste resources.
+    last_flag = units.builder._last_active_target_flag
+    last_idx = units.builder._last_active_target_idx
+    if last_flag == comm_flag and last_idx >= 0:
+        if (1 << last_idx) & _cached_claims and _is_mid_construction(last_idx):
+            return 7  # above attack(6), sabotage(5), route(4)
+    return 3
 
 
 def run():
@@ -137,7 +197,7 @@ def run():
         is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & pbit)
         path = nav.calculate_conveyor_path(p, is_raw_ax)
         if path is None:
-            cant_harvest |= pbit
+            _mark_cant_harvest(pbit)
             continue
         cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
         log("diagonal ore at", p, "cost", cost)
@@ -159,7 +219,7 @@ def run():
 
     best_ore, _ = nav.closest(available)
     if best_ore is None:
-        cant_harvest |= available
+        _mark_cant_harvest(available)
         return
     units.builder.register_active_target(comm_flag, best_ore)
 
@@ -171,7 +231,7 @@ def run():
     if path is not None:
         _cost_map[best_n] = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
     else:
-        cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
+        _mark_cant_harvest(1 << (best_ore.x + best_ore.y * w))
         return
     if _cost_map[best_n] > rc.get_global_resources()[0]:
         return

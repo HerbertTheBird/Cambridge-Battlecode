@@ -19,6 +19,7 @@ import units.states.route    as route
 import units.states.heal     as heal
 import units.states.sabotage as sabotage
 import units.states.attack   as attack
+import units.states.secure   as secure
 
 from log import DRAW_DEBUG, log
 
@@ -27,7 +28,7 @@ rc: Controller
 nav: Pathing = None
 harvest_radius = 0
 _harvest_zone = 0
-states = [explore, disrupt, harvest, route, heal, sabotage, attack]
+states = [explore, disrupt, harvest, route, heal, sabotage, attack, secure]
 def init(c: Controller):
     global rc, harvest_radius, nav
     rc = c
@@ -55,7 +56,7 @@ _last_active_target_idx = -1
 # Per-flag history: (target_idx, round_set). Survives state transitions like
 # heal interruptions, so a bot resuming harvest after a few turns of healing
 # still claims its old ore. Capped by STICKY_TARGET_TTL.
-_last_target_per_flag: list[tuple[int, int]] = [(-1, -1)] * 8  # 8 = max comm_flag + 1
+_last_target_per_flag: list[tuple[int, int]] = [(-1, -1)] * 9  # 9 = max comm_flag (heal=8) + 1
 STICKY_TARGET_TTL = 8
 
 
@@ -240,22 +241,24 @@ def handle_comms():
     attack_zone   = _expand_n(attack_candidates)   if attack_candidates   else 0
     sabotage_zone = _expand_n(sabotage_candidates) if sabotage_candidates else 0
     route_zone    = _expand_n(route_candidates)    if route_candidates    else 0
-    harvest_zone_  = _expand_n(harvest_candidates)  if harvest_candidates  else 0
+    harvest_zone_ = _expand_n(harvest_candidates)  if harvest_candidates  else 0
     disrupt_zone  = _expand_n(disrupt_candidates)  if disrupt_candidates  else 0
 
     # Classify each friend by HIGHEST-PRIORITY state whose candidates are within reach.
-    # Mirrors the priority ordering of states[] (sorted by MAX_SCORE descending):
-    # attack(6) > sabotage(5) > route(4) > harvest(3) > disrupt(2) > explore(1).
+    # Hades priority order (by MAX_SCORE descending): attack(9) > heal(8) > route(7.75)
+    # > secure(7.5) > harvest(4) > disrupt(2) > explore(1) > sabotage(0).
+    # heal uses uid space (not positions) and secure._my_claims uses _bm_friendly_bots
+    # directly — both leave their claimed_senders[] at 0, so we skip them here.
     attack_friends   = friends & attack_zone
     remaining = friends & ~attack_friends
-    sabotage_friends = remaining & sabotage_zone
-    remaining &= ~sabotage_friends
     route_friends    = remaining & route_zone
     remaining &= ~route_friends
     harvest_friends  = remaining & harvest_zone_
     remaining &= ~harvest_friends
     disrupt_friends  = remaining & disrupt_zone
-    explore_friends  = remaining & ~disrupt_friends
+    remaining &= ~disrupt_friends
+    sabotage_friends = remaining & sabotage_zone
+    explore_friends  = remaining & ~sabotage_friends
 
     claimed_senders[attack.comm_flag]   = attack_friends
     claimed_senders[sabotage.comm_flag] = sabotage_friends
@@ -264,6 +267,7 @@ def handle_comms():
     claimed_senders[disrupt.comm_flag]  = disrupt_friends
     claimed_senders[explore.comm_flag]  = explore_friends
     # heal flag uses uid space, not positions — leave at 0.
+    # secure._my_claims uses _bm_friendly_bots directly — leave at 0.
 
     # Explore seeds: friend positions push my BFS frontier away from teammates.
     # Also add an extrapolated point along (my_core -> friend) outward by a
