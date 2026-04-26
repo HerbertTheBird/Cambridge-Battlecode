@@ -16,7 +16,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
-    return available & ~pathing.voronoi_claim(map_info._bm_friendly_bots, my_mask, available) & ~map_info._bm_friendly_bots
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 def init(c: Controller):
     global rc, nav
