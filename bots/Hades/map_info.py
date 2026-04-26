@@ -837,6 +837,12 @@ def update_at(pos: Position) -> None:
         if env_idx == _IDX_ENV_WALL:
             _struct_version += 1
 
+    # Walls can never hold buildings and never change. Skip the controller
+    # building lookup and all building-state work — saves get_tile_building_id
+    # calls (one of the heaviest controller methods in the profile).
+    if _bm_env[_IDX_ENV_WALL] & bit:
+        return
+
     # --- Building state ---
     entity_id = rc.get_tile_building_id(pos)
     if entity_id is not None and entity_id > _max_id_seen:
@@ -1116,7 +1122,7 @@ def init(c: Controller):
     _route_targets_cache_key = None
     _route_targets_cache = (0, 0, 0)
     _route_reaches_core_cache_version = -1
-    _route_reaches_core_cache = (0, ())
+    _route_reaches_core_cache = (0, [])
     _recompute_structural_cache_version = -1
     _recompute_loaded_cache_key = None
     _recompute_visible_cache_key = None
@@ -1222,7 +1228,7 @@ def build_core_areas() -> None:
 _route_targets_cache_key: tuple | None = None
 _route_targets_cache: tuple[int, int, int] = (0, 0, 0)  # (route_targets, dead_end, feeding_enemy)
 _route_reaches_core_cache_version: int = -1
-_route_reaches_core_cache: tuple[int, tuple[int, ...]] = (0, ())
+_route_reaches_core_cache: tuple[int, list[int]] = (0, [])
 
 
 def _compute_route_reaches_core() -> tuple[int, tuple[int, ...]]:
@@ -1243,24 +1249,23 @@ def _compute_route_reaches_core() -> tuple[int, tuple[int, ...]]:
         layer |= reverse[n] & my_convs
         c_mask ^= lsb
 
+    # Single walk per layer: append to `order` and accumulate `next_layer`
+    # in the same LSB-extraction loop, instead of two separate passes.
     while layer:
-        m = layer
-        while m:
-            lsb = m & -m
-            n = lsb.bit_length() - 1
-            order.append(n)
-            m ^= lsb
         reaches_core |= layer
         next_layer = 0
         m = layer
+        order_append = order.append
         while m:
             lsb = m & -m
             n = lsb.bit_length() - 1
-            next_layer |= reverse[n] & my_convs & ~reaches_core
+            order_append(n)
+            next_layer |= reverse[n]
             m ^= lsb
-        layer = next_layer
+        layer = next_layer & my_convs & ~reaches_core
 
-    result = (reaches_core, tuple(order))
+    # Cache as list — callers only iterate, no need to pay for tuple().
+    result = (reaches_core, order)
     _route_reaches_core_cache_version = _struct_version
     _route_reaches_core_cache = result
     return result

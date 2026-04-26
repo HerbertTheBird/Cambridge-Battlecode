@@ -392,6 +392,13 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
     summed = [0] * _NUM_PLANES
     all_planes = []
     any_placeable = 0
+    # Pre-extract type fields once: bits is constant across iterations, the
+    # bitmask values are mutated in-place per direction. This avoids
+    # rebuilding new_type_cur as a fresh list of tuples every BFS step.
+    n_types = len(type_initial)
+    type_bits_arr = [t[1] for t in type_initial]
+    type_bm_initial = [t[2] for t in type_initial]
+    type_bms = [0] * n_types
     for d in range(8):
         planes = [0] * _NUM_PLANES
         mask_d = gunner_masks[d]
@@ -403,7 +410,9 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
             continue
         combined_sm = sm & not_blocked
         core_cur = core_mask
-        type_cur = list(type_initial)
+        # Reset per-direction bm scratch in place — single buffer reused.
+        for j in range(n_types):
+            type_bms[j] = type_bm_initial[j]
         core_reach = 0
         if soff >= 0:
             for _ in range(max_step):
@@ -411,17 +420,20 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
                     core_cur = (core_cur & combined_sm) << soff
                     if core_cur:
                         core_reach |= core_cur
-                new_type_cur = []
-                for _s, bits, bm_t in type_cur:
+                any_alive = False
+                for j in range(n_types):
+                    bm_t = type_bms[j]
+                    if not bm_t:
+                        continue
                     shifted = (bm_t & combined_sm) << soff
+                    type_bms[j] = shifted
                     if shifted:
-                        new_type_cur.append((_s, bits, shifted))
+                        any_alive = True
                         non_zero |= shifted
                         restricted = shifted & mask_d
                         if restricted:
-                            _add_bits_to_planes(planes, bits, restricted)
-                type_cur = new_type_cur
-                if not core_cur and not type_cur:
+                            _add_bits_to_planes(planes, type_bits_arr[j], restricted)
+                if not core_cur and not any_alive:
                     break
         else:
             nsoff = -soff
@@ -430,17 +442,20 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
                     core_cur = (core_cur & combined_sm) >> nsoff
                     if core_cur:
                         core_reach |= core_cur
-                new_type_cur = []
-                for _s, bits, bm_t in type_cur:
+                any_alive = False
+                for j in range(n_types):
+                    bm_t = type_bms[j]
+                    if not bm_t:
+                        continue
                     shifted = (bm_t & combined_sm) >> nsoff
+                    type_bms[j] = shifted
                     if shifted:
-                        new_type_cur.append((_s, bits, shifted))
+                        any_alive = True
                         non_zero |= shifted
                         restricted = shifted & mask_d
                         if restricted:
-                            _add_bits_to_planes(planes, bits, restricted)
-                type_cur = new_type_cur
-                if not core_cur and not type_cur:
+                            _add_bits_to_planes(planes, type_bits_arr[j], restricted)
+                if not core_cur and not any_alive:
                     break
         non_zero |= core_reach
         if core_reach and gun_core_bits:
