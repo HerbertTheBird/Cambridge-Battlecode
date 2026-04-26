@@ -1,394 +1,397 @@
 Combined profile
 Profiled turns: 124909
-Timed-out turns: 412
-Total calls: 90512250
-Total tottime: 155538274.20 us
-Total cumtime: 675951412.40 us
+Timed-out turns: 372
+Total calls: 90911460
+Total tottime: 149080768.80 us
+Total cumtime: 674335304.00 us
 
       ncalls   tottime_us   cumtime_us   avg_cum_us  function
 ----------------------------------------------------------------------------------------------------
-      501996  22238048.80  22238048.80        44.30  pathing.py:voronoi_claim
-      115651  18306614.80  18921815.80       163.61  pathing.py:bfs_move
-       97748  12997102.10  16867056.40       172.56  attack.py:_compute_sentinel_dir_scores
-     8511361  12701050.60  16633643.50         1.95  map_info.py:update_at
-       86510  10523173.90  12622846.00       145.91  explore.py:generate_explore_target
-      124909   8392333.40  28655679.70       229.41  map_info.py:update
-      110315   5264815.10   7903382.80        71.64  attack.py:_compute_gunner_dir_scores
-     1679826   4763295.20   4763295.20         2.84  map_info.py:expand_chebyshev
-     7683231   4211467.30   4211467.30         0.55  attack.py:_add_bits_to_planes
-      120070   2693326.40 152294366.90      1268.38  builder.py:run
-       44465   2388975.50   3666209.00        82.45  map_info.py:_compute_route_targets
-      110658   2380650.70   2995984.80        27.07  attack.py:_placement_candidates
-     7056146   2234696.30   2234696.30         0.32  ~:0(<method 'get_tile_building_id' of 'builtins.Controller' objects>)
-      120070   2041962.10  33001760.80       274.85  attack.py:_get_attack_candidates
-      881303   1812037.80   1812037.80         2.06  attack.py:_add_planes_into
-      118249   1564076.10   1912304.90        16.17  route.py:not_blocked
-      645910   1513636.00   1513636.00         2.34  attack.py:_ge_threshold_mask
-      234341   1396103.70   1750941.60         7.47  harvest.py:possible_ore
-     4031556   1375047.20   1375047.20         0.34  ~:0(<method 'get_hp' of 'builtins.Controller' objects>)
-      120070   1226541.90   1586148.40        13.21  builder.py:handle_comms
-      121089   1182710.10   2045886.90        16.90  heal.py:_do_best_heal
-       36080   1170277.50   1292726.90        35.83  map_info.py:_carrying_expand
-      115888   1165932.00  28215570.10       243.47  pathing.py:move_to
-      118384   1107308.80   4939029.30        41.72  heal.py:_find_chase_target
-      124909   1092136.10   1092136.10         8.74  ~:0(<method 'disable' of '_lsprof.Profiler' objects>)
-      129409   1041017.30   1041017.30         8.04  ~:0(<method 'get_nearby_units' of 'builtins.Controller' objects>)
-       93603   1024614.10   1038784.00        11.10  pathing.py:_closest_impl
-      740980    981705.30    981705.30         1.32  map_info.py:expand_manhattan
-      888951    967602.60    967602.60         1.09  attack.py:_max_score_in_mask
-      120070    913557.00  34037334.60       283.48  attack.py:_ensure_round_cache
-      929940    865224.10   1462939.20         1.57  ~:0(<method 'get_position' of 'builtins.Controller' objects>)
-       29677    863048.20   7235593.50       243.81  map_info.py:update_move
-       34355    823411.00    997708.00        29.04  map_info.py:_compute_route_reaches_core
-     3275291    778416.50   1405534.10         0.43  <string>:<lambda>
-     3155578    778259.00   1163322.00         0.37  enum.py:__hash__
-     6128499    774920.40    774920.40         0.13  ~:0(<method 'bit_length' of 'int' objects>)
-      118249    744970.50   9160824.60        77.47  route.py:_my_claims
-      234341    714912.20    714912.20         3.05  harvest.py:secured
-     5581444    677323.30    677323.30         0.12  ~:0(<method 'append' of 'collections.deque' objects>)
-      104897    649791.80  37810103.70       360.45  explore.py:run
-     3275291    627117.60    627117.60         0.19  ~:0(<built-in method __new__ of type object at 0x00007FFDF56468A0>)
-      118067    563935.30    601833.70         5.10  secure.py:cant_secure
-     1111113    560461.30    560461.30         0.50  ~:0(<method 'get_entity_type' of 'builtins.Controller' objects>)
-      118067    542495.40  12091799.40       102.41  secure.py:_my_claims
-     3837456    504317.20    504317.20         0.13  ~:0(<method 'items' of 'dict' objects>)
-       29796    481554.20   1074526.80        36.06  ~:0(<method 'get_nearby_tiles' of 'builtins.Controller' objects>)
-      120070    469934.20    627811.30         5.23  builder.py:_update_crowded_claims
-        2807    435280.80    454718.10       161.99  pathing.py:bfs_route
-      118249    420824.60  10174065.30        86.04  route.py:score
-     3155578    385063.00    385063.00         0.12  ~:0(<built-in method builtins.hash>)
-      149725    373234.00    539037.10         3.60  pathing.py:rebuild_broken_barriers
-      154564    369884.20   6701983.60        43.36  map_info.py:recompute_derived
-     3443728    361005.80    361005.80         0.10  ~:0(<built-in method builtins.abs>)
-      120070    342978.60  39829354.40       331.72  attack.py:_my_claims
-      846319    341197.70    341450.00         0.40  ~:0(<method 'get' of 'dict' objects>)
-     1211050    336458.10    336458.10         0.28  enum.py:<genexpr>
-      118067    332092.10    404758.50         3.43  secure.py:_too_expensive
-      116274    306481.40   1857474.80        15.97  harvest.py:_my_claims
-      112368    294588.10   8251513.10        73.43  attack.py:_ensure_gunner_scores
-     2212318    291914.50    291914.50         0.13  ~:0(<built-in method builtins.max>)
-      932523    288353.60    288353.60         0.31  ~:0(<method 'get_global_resources' of 'builtins.Controller' objects>)
-     1870960    282996.60    282996.60         0.15  ~:0(<method 'append' of 'list' objects>)
-      118249    270459.80    363019.20         3.07  route.py:_too_expensive
-     1332252    268519.30    268519.30         0.20  ~:0(<method 'get_current_round' of 'builtins.Controller' objects>)
-      817265    263599.30    263599.30         0.32  ~:0(<method 'get_team' of 'builtins.Controller' objects>)
-      118384    244609.60   5348390.10        45.18  heal.py:score
-       99525    242831.80  17166843.30       172.49  attack.py:_ensure_sentinel_planes
-      118067    235846.90   1578523.70        13.37  secure.py:securable_ore
-       29472    228482.00   7753541.00       263.08  pathing.py:move
-      154564    223587.30    625168.80         4.04  map_info.py:_recompute_derived_structural
-      208063    214630.10    221588.90         1.07  attack.py:_enemy_score_group_masks
-      205237    213265.70    213265.70         1.04  map_info.py:get_avoid
-       84872    210782.70    273026.40         3.22  map_info.py:_conveyor_target_tiles
-      154564    206522.10   3872731.10        25.06  map_info.py:_recompute_derived_visible
-      154564    186740.80   1834199.50        11.87  map_info.py:_recompute_derived_loaded
-      120070    186213.50  40020746.40       333.31  attack.py:score
-       86510    179744.20    367375.70         4.25  random.py:randrange
-      116274    173754.70    238484.30         2.05  harvest.py:_too_expensive
-      116274    173033.80   1296210.80        11.15  harvest.py:harvestable_ore
-       11384    169471.10   3735643.10       328.15  secure.py:run
-      118067    167882.20  12259681.60       103.84  secure.py:score
-      800590    161947.60    161947.60         0.20  ~:0(<method 'add' of 'set' objects>)
-      121105    161391.50    161391.50         1.33  enum.py:__iter__
-      105093    157250.40   2370404.00        22.56  disrupt.py:score
-      455393    143361.60    143361.60         0.31  ~:0(<method 'get_stored_resource' of 'builtins.Controller' objects>)
-      118249    132951.10    275662.20         2.33  route.py:cant_claim
-       32625    131200.40   1457937.90        44.69  map_info.py:_compute_carrying
-      119538    129278.10    154265.20         1.29  heal.py:_very_damaged_targets
-       86510    128430.50    495806.20         5.73  random.py:randint
-      116274    126041.50   1983516.30        17.06  harvest.py:score
-      120330    115273.50    115273.50         0.96  ~:0(<method 'can_heal' of 'builtins.Controller' objects>)
-       86510    110731.60    153446.20         1.77  random.py:_randbelow_with_getrandbits
-      208471    110678.80    110678.80         0.53  attack.py:_round_cache_enemy_inputs
-      249818    107245.10    107245.10         0.43  ~:0(<built-in method time.perf_counter_ns>)
-       32435    101545.60    131303.20         4.05  ~:0(<method 'can_move' of 'builtins.Controller' objects>)
-       19622    100564.40    126173.40         6.43  map_info.py:_compute_guard_conv
-      318821     89692.80     93654.20         0.29  attack.py:_ensure_attack_shift_plans
-      303184     84816.50     84816.50         0.28  ~:0(<method 'get_harvester_cost' of 'builtins.Controller' objects>)
-       76299     75836.70    669919.90         8.78  pathing.py:closest_within
-      708190     74131.00     74131.00         0.10  log.py:log
-      139864     72445.90     72445.90         0.52  _types.py:distance_squared
-       19622     70974.30     92256.40         4.70  map_info.py:_compute_conv_into_open_ore
-      110315     64664.50     65971.70         0.60  attack.py:_turret_feed_chains
-      241326     63534.50     63534.50         0.26  ~:0(<method 'get_id' of 'builtins.Controller' objects>)
-        4000     57160.80   1465907.20       366.48  core.py:run
-       29336     56848.30   2156356.50        73.51  disrupt.py:_my_claims
-       29336     55118.60     55118.60         1.88  disrupt.py:_disruptable_ore
-       31941     53834.20    129891.50         4.07  pathing.py:raw_ax_foundry_sites
-      110723     52293.90     52293.90         0.47  attack.py:_gunner_ray_blocked_mask
-       29677     47419.80     60078.10         2.02  ~:0(<method 'move' of 'builtins.Controller' objects>)
-      161882     46094.70     46094.70         0.28  ~:0(<method 'bit_count' of 'int' objects>)
-      240627     44799.50     44799.50         0.19  heal.py:_healable_mask
-      223456     43854.90     43854.90         0.20  pathing.py:_dir_family
-      118249     43782.20     43782.20         0.37  route.py:_orphan_harvesters
-      149725     43355.10     43355.10         0.29  ~:0(<method 'get_barrier_cost' of 'builtins.Controller' objects>)
-       19622     43203.10     46311.10         2.36  map_info.py:_compute_enemy_turret_threat
-      106028     42007.60     42007.60         0.40  ~:0(<method 'get_tile_env' of 'builtins.Controller' objects>)
-      150642     41497.30     41497.30         0.28  ~:0(<method 'get_action_cooldown' of 'builtins.Controller' objects>)
-       30090     40848.70     40848.70         1.36  map_info.py:direction_to
-        2063     39904.30    909874.20       441.04  attack.py:run
-       19622     39339.30     39339.30         2.00  map_info.py:_compute_conv_by_dir
-      121715     38417.00     38417.00         0.32  ~:0(<method 'get_sentinel_cost' of 'builtins.Controller' objects>)
-       65100     36343.60     44452.40         0.68  enum.py:__get__
-      259530     34185.30     34185.30         0.13  ~:0(<built-in method _operator.index>)
-      118249     33441.70     33441.70         0.28  builder.py:draw_mask
-      118249     32809.50     32809.50         0.28  route.py:_dead_end_conveyors
-      120478     32415.00     32415.00         0.27  ~:0(<method 'get_gunner_cost' of 'builtins.Controller' objects>)
-         117     31915.90     42642.40       364.46  map_info.py:_build_turret_shift_masks
-      146059     27537.30     27537.30         0.19  ~:0(<method 'getrandbits' of '_random.Random' objects>)
-        2839     27091.80    527975.50       185.97  pathing.py:calculate_conveyor_path
-      120070     26112.60     26112.60         0.22  comms.py:get_new_messages
-      116122     25524.50     25524.50         0.22  ~:0(<built-in method builtins.isinstance>)
-       28096     25348.20     46823.90         1.67  map_info.py:pos_add
-      118249     24144.50     24144.50         0.20  route.py:_orphan_foundries
-       64955     23200.90     23200.90         0.36  map_info.py:in_bounds
-       17304     20700.80    465401.60        26.90  pathing.py:closest
-       77045     20218.80     20218.80         0.26  ~:0(<method 'clear' of 'set' objects>)
-       29494     20187.20     20187.20         0.68  ~:0(<method 'can_build_road' of 'builtins.Controller' objects>)
-      104897     19283.10     19283.10         0.18  explore.py:score
-         930     17068.90    189029.90       203.26  pathing.py:move_adjacent
-       37609     16221.40     16221.40         0.43  ~:0(<method 'get_tile_builder_bot_id' of 'builtins.Controller' objects>)
-       14612     15636.70     24841.00         1.70  map_info.py:rot_flip
-        2053     14622.00     37560.00        18.30  attack.py:get_best_direction
-       14456     14215.00     14215.00         0.98  attack.py:_read_score
-       19622     13995.70     13995.70         0.71  map_info.py:_compute_my_gunner_claims
-         213     11519.90     11519.90        54.08  map_info.py:build_core_areas
-         971     11345.20     11345.20        11.68  heal.py:_conv_zone
-         495     10875.20    260588.80       526.44  route.py:run
-        1989     10108.00     12110.70         6.09  secure.py:_mark_cant_secure
-         839      8785.90    274944.10       327.70  turret_sentinel.py:run
-        2839      8272.10     28261.80         9.95  pathing.py:_get_conveyor_targets_and_avoid
-       65100      8108.80      8108.80         0.12  enum.py:value
-        6886      7270.80      8537.30         1.24  map_info.py:is_passable
-          99      7080.90     17711.70       178.91  builder.py:_compute_voronoi_harvest_zone
-        4106      6871.30     12296.80         2.99  enum.py:__format__
-        1645      5700.90      6799.80         4.13  ~:0(<method 'can_build_sentinel' of 'builtins.Controller' objects>)
-        2979      5491.50      5491.50         1.84  secure.py:dirs_covered
-       32002      5320.20      5320.20         0.17  comms.py:mark
-         408      5081.30      5156.60        12.64  attack.py:_best_gunner_direction_at
-        2400      4995.70      6306.70         2.63  pathing.py:build_mask
-        1685      4936.90      9123.50         5.41  _types.py:opposite
-        1019      4480.90    296434.20       290.91  heal.py:run
-        9026      4393.90      4393.90         0.49  ~:0(<method 'get_direction' of 'builtins.Controller' objects>)
-        4106      4392.80      4392.80         1.07  enum.py:__str__
-         117      4367.20     47788.60       408.45  map_info.py:init
-        2069      4097.50      4097.50         1.98  __init__.py:__repr__
-        6807      3278.80      3278.80         0.48  ~:0(<method 'get_scale_percent' of 'builtins.Controller' objects>)
-        2807      2788.30      3096.90         1.10  pathing.py:conveyor_cost
-        5579      2765.30      2765.30         0.50  ~:0(<method 'can_fire' of 'builtins.Controller' objects>)
-        3883      2657.90      5158.70         1.33  turret_sentinel.py:_resolve_target_on_tile
-        2024      2533.00      2533.00         1.25  ~:0(<method 'can_spawn' of 'builtins.Controller' objects>)
-         538      2504.90     11883.40        22.09  route.py:attempt_build
-       26941      2495.60      2495.60         0.09  ~:0(<built-in method builtins.min>)
-        6328      2467.40      2467.40         0.39  ~:0(<method 'is_in_vision' of 'builtins.Controller' objects>)
-        6967      2266.00      2266.00         0.33  ~:0(<method 'pop' of 'dict' objects>)
-         100      2124.30      2124.30        21.24  pathing.py:_init_col_masks
-         100      1878.30     24651.50       246.52  builder.py:init
-         196      1711.90     74310.50       379.14  disrupt.py:run
-         230      1662.70      1809.50         7.87  turret_sentinel.py:_ally_feeder_mask
-        1154      1658.60      1658.60         1.44  ~:0(<method 'build_road' of 'builtins.Controller' objects>)
-         230      1645.60      3004.30        13.06  ~:0(<method 'get_attackable_tiles' of 'builtins.Controller' objects>)
-        2971      1642.90      1642.90         0.55  ~:0(<method 'get_conveyor_cost' of 'builtins.Controller' objects>)
-         301      1562.10      4846.70        16.10  turret_sentinel.py:_should_stay
-         570      1417.30      1870.60         3.28  ~:0(<method 'can_build_conveyor' of 'builtins.Controller' objects>)
-        4000      1273.10      2156.20         0.54  core.py:_spawn_toward_enemy_if_undefended
-         100      1133.30     10676.10       106.76  pathing.py:__init__
-         300      1079.00      7385.70        24.62  pathing.py:make_steps
-        4106      1032.70      1032.70         0.25  ~:0(<method '__format__' of 'str' objects>)
-         117      1010.60      1557.60        13.31  random.py:seed
-        2173       973.30       973.30         0.45  ~:0(<method 'get_bridge_cost' of 'builtins.Controller' objects>)
-          16       943.80      8658.00       541.12  harvest.py:run
-         137       932.30      3028.70        22.11  core.py:_spawn_toward_center
-          99       774.50     49646.10       501.48  route.py:fallback_barrier
-         408       755.30      1027.60         2.52  ~:0(<method 'can_build_gunner' of 'builtins.Controller' objects>)
-         676       747.00      1102.40         1.63  route.py:_prefer_armoured_conveyor
-         412       683.00       683.00         1.66  ~:0(<method 'draw_indicator_line' of 'builtins.Controller' objects>)
-         749       681.00       681.00         0.91  ~:0(<method 'can_destroy' of 'builtins.Controller' objects>)
-         116       658.40      2698.80        23.27  secure.py:build_stuff
-         492       649.30      3191.80         6.49  route.py:_can_build_preferred_conveyor
-         456       619.60      1095.50         2.40  map_info.py:empty
-         117       616.50      1137.10         9.72  comms.py:init
-         250       605.60       719.30         2.88  ~:0(<method 'build_conveyor' of 'builtins.Controller' objects>)
-         114       599.10      1930.90        16.94  map_info.py:core_center
-        1365       543.50       543.50         0.40  ~:0(<method 'convert' of 'builtins.Controller' objects>)
-        1506       523.50       523.50         0.35  ~:0(<method 'get_ammo_amount' of 'builtins.Controller' objects>)
-         188       505.40       740.00         3.94  ~:0(<method 'sort' of 'list' objects>)
-         848       464.40       837.80         0.99  spawn_plan.py:dir_distance
-         117       415.70       481.00         4.11  comms.py:random_hash
-         100       374.50     11139.00       111.39  attack.py:init
-          63       360.30      1008.30        16.00  turret_sentinel.py:_other_sentinel_attack_mask
-           2       358.90      1552.80       776.40  spawn_plan.py:pick_n_directions
-         189       331.30       331.30         1.75  ~:0(<method 'heal' of 'builtins.Controller' objects>)
-         184       314.80      1049.20         5.70  route.py:_build_preferred_conveyor
-          31       296.90       527.40        17.01  ~:0(<method 'get_attackable_tiles_from' of 'builtins.Controller' objects>)
-         421       288.50       288.50         0.69  map_info.py:type_at
-         100       250.80       250.80         2.51  ~:0(<method 'spawn_builder' of 'builtins.Controller' objects>)
-        1696       237.30       237.30         0.14  ~:0(<method 'index' of 'list' objects>)
-          79       225.80       422.90         5.35  _types.py:delta
-         169       218.40       218.40         1.29  ~:0(<method 'destroy' of 'builtins.Controller' objects>)
-         296       215.20       215.20         0.73  ~:0(<method 'can_build_barrier' of 'builtins.Controller' objects>)
-         252       193.10       193.10         0.77  map_info.py:team_at
-          99       191.60       367.00         3.71  map_info.py:flip
-         676       190.50       190.50         0.28  ~:0(<method 'get_armoured_conveyor_cost' of 'builtins.Controller' objects>)
-         800       182.70       182.70         0.23  builder.py:<lambda>
-         587       167.50       167.50         0.29  ~:0(<method 'get_map_width' of 'builtins.Controller' objects>)
-         426       139.60       287.90         0.68  spawn_plan.py:<genexpr>
-         587       139.10       139.10         0.24  ~:0(<method 'get_map_height' of 'builtins.Controller' objects>)
-          86       137.40       137.40         1.60  ~:0(<method 'fire' of 'builtins.Controller' objects>)
-         145       120.10       323.20         2.23  core.py:_try_spawn_planned
-         117       107.80       122.90         1.05  enum.py:__len__
-          58       106.50       106.50         1.84  ~:0(<method 'build_barrier' of 'builtins.Controller' objects>)
-          55       104.70       417.60         7.59  _types.py:add
-         100       103.70       103.70         1.04  explore.py:init
-          38       102.30       133.40         3.51  ~:0(<method 'can_build_armoured_conveyor' of 'builtins.Controller' objects>)
-          24        80.50       229.30         9.55  spawn_plan.py:get_ray_endpoint
-         142        75.20       363.10         2.56  ~:0(<built-in method builtins.sum>)
-          15        58.90        64.90         4.33  ~:0(<method 'build_sentinel' of 'builtins.Controller' objects>)
-          45        54.90        81.20         1.80  ~:0(<method 'get_bridge_target' of 'builtins.Controller' objects>)
-         100        51.50        51.50         0.51  secure.py:init
-         114        47.60        47.60         0.42  map_info.py:_compute_predicted_enemy_core
-         100        42.10        42.10         0.42  disrupt.py:init
-           2        41.70       202.70       101.35  spawn_plan.py:_build_ti_near_mask
-         100        41.30        41.30         0.41  harvest.py:init
-         100        40.00        40.00         0.40  sabotage.py:init
-         100        39.60        39.60         0.40  heal.py:init
-         100        38.80        38.80         0.39  route.py:init
-           8        35.00        57.40         7.18  _types.py:rotate_left
-         155        32.70        32.70         0.21  turret_sentinel.py:<lambda>
-          21        32.10        40.80         1.94  map_info.py:has_builder_bot
-          16        27.80        27.80         1.74  ~:0(<method 'build_harvester' of 'builtins.Controller' objects>)
-          46        24.60        24.60         0.53  ~:0(<method 'can_build_bridge' of 'builtins.Controller' objects>)
-           2        22.70      1961.40       980.70  spawn_plan.py:choose_spawn_plan
-           8        18.90        37.00         4.62  _types.py:rotate_right
-          20        13.90        21.50         1.07  core.py:<genexpr>
-          34        13.80        13.80         0.41  spawn_plan.py:draw_spawn_plan
-           2        13.50       355.80       177.90  spawn_plan.py:get_valid_directions
-          16        12.30        12.30         0.77  ~:0(<method 'can_build_harvester' of 'builtins.Controller' objects>)
-           2         9.80        31.30        15.65  core.py:_core_area_positions
-           2         8.70       133.80        66.90  spawn_plan.py:_all_dir_endpoints
-           8         7.10        19.20         2.40  spawn_plan.py:<lambda>
-           2         6.40        52.50        26.25  core.py:init
-           3         5.70         5.70         1.90  ~:0(<method 'build_bridge' of 'builtins.Controller' objects>)
-           1         5.20         5.20         5.20  ~:0(<function Random.seed at 0x00000249EDB03920>)
-           1         5.10         5.10         5.10  ~:0(<function Random.seed at 0x00000249F82C8900>)
-           1         5.00         5.00         5.00  ~:0(<function Random.seed at 0x00000249D7BF7600>)
-           1         4.90         4.90         4.90  ~:0(<function Random.seed at 0x00000249E375D800>)
-           1         4.90         4.90         4.90  ~:0(<function Random.seed at 0x00000249FAAB3D80>)
-           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000249EB4F2660>)
-           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000249EBA7D3A0>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000249F613B600>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000249F7FDC9A0>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000249FB2696C0>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000249FD4082C0>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000249FD87B6A0>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x0000024980543560>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x0000024981206980>)
-           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x0000024982669EE0>)
-           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x00000249ED22C900>)
-           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x00000249F7E404A0>)
-           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x00000249FA956C00>)
-           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000249E3CC4720>)
-           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000249E8546C00>)
-           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000249D8925C60>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249DE311300>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249D9110AE0>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249EB8AC900>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249F35C00E0>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249F3270720>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249F5C9FB00>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000249808DE0C0>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249DDF97E20>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249E5A76520>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249F2C99260>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249E0A65080>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249F3BB1440>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249F6A22200>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249FE19E0C0>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249FE571620>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000249D84C2660>)
-          15         4.10         4.10         0.27  turret_sentinel.py:init
-           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000249DA6180E0>)
-           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000249E80C3740>)
-           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000249F8FEC2C0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249D5DB4360>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249DDA21EE0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249E2AB79C0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249E33B63E0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249E6C6BE20>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249EA6DBEC0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249F01B1C60>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249F94F7BA0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249FC043880>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000249D8062FC0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249DD5AAAC0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249DDEA5620>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E00CE520>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E2F2ED40>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E514B920>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E55E7100>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E5F45620>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E8CC2160>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E8E419E0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249E60C0C20>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249EBB6E5C0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249D779FF60>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249F3138C20>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249F3EC72E0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249FADC6520>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249FDD0AFC0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249FEAB8F40>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249FFF37F60>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249804676A0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000024982AE54E0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249DAB6FE20>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249DB8DA340>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000249DBCEBD80>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249D8CB1300>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249DFC53740>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249E0E287C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249E128BF60>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249E67F0220>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249E89DA520>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249D639C4A0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249E9324CC0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249EAB879C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249EB047100>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249EDF8AFC0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249EB7F65C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249EFD12980>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F062D120>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F0ABC2C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F13B2AC0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F5312CA0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F65B2B60>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F7E65800>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F8B80C20>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249F7FE0B80>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249803674C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x0000024980CA5620>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249804476A0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249DAFDF420>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000249DB476B60>)
-          10         3.70         3.70         0.37  ~:0(<method 'get_move_cooldown' of 'builtins.Controller' objects>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249DE6B4A40>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249E055D8A0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249E09A8F40>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249E262C4A0>)
-           2         3.70         3.70         1.85  ~:0(<method 'build_foundry' of 'builtins.Controller' objects>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249E6390D60>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249EB99DBC0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249EBDF9080>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249EE43FE20>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249EE8A39C0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249F0F03B00>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249F181A020>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249F5854360>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249F875FE20>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249FB6F4D60>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000249FBB982C0>)
-           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000249ED687E20>)
-           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000249F3A3BC40>)
-           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000249DD12B380>)
-           2         1.70         1.70         0.85  ~:0(<method 'can_build_foundry' of 'builtins.Controller' objects>)
-           2         1.10         1.10         0.55  ~:0(<method 'get_foundry_cost' of 'builtins.Controller' objects>)
-           1         0.50         0.50         0.50  ~:0(<method 'get_road_cost' of 'builtins.Controller' objects>)
+      115651  18566723.00  19191255.20       165.94  pathing.py:bfs_move
+       97748  13039603.80  16849354.10       172.38  attack.py:_compute_sentinel_dir_scores
+     8511361  12858082.00  16769764.90         1.97  map_info.py:update_at
+       86510  10702576.70  12822758.30       148.22  explore.py:generate_explore_target
+       91608   9447990.70   9447990.70       103.13  pathing.py:_claim_zone_on_passable
+      124909   8398961.80  28743991.10       230.12  map_info.py:update
+      110315   5283532.40   7918243.00        71.78  attack.py:_compute_gunner_dir_scores
+       70982   5068812.60   5068812.60        71.41  pathing.py:voronoi_claim
+     1679826   4834909.40   4834909.40         2.88  map_info.py:expand_chebyshev
+     7683231   4156887.50   4156887.50         0.54  attack.py:_add_bits_to_planes
+      120070   2663424.90 145820034.40      1214.46  builder.py:run
+       44465   2389126.10   3671358.20        82.57  map_info.py:_compute_route_targets
+      110658   2354850.90   2973144.20        26.87  attack.py:_placement_candidates
+     7056146   2228826.80   2228826.80         0.32  ~:0(<method 'get_tile_building_id' of 'builtins.Controller' objects>)
+      120070   2034350.80  32993598.70       274.79  attack.py:_get_attack_candidates
+      881303   1806029.70   1806029.70         2.05  attack.py:_add_planes_into
+      118249   1585511.30   1932848.50        16.35  route.py:not_blocked
+      645910   1528902.10   1528902.10         2.37  attack.py:_ge_threshold_mask
+      234341   1383754.30   1737225.80         7.41  harvest.py:possible_ore
+     4031556   1360021.40   1360021.40         0.34  ~:0(<method 'get_hp' of 'builtins.Controller' objects>)
+      120070   1220431.40   1584443.20        13.20  builder.py:handle_comms
+      121089   1184060.70   2047445.50        16.91  heal.py:_do_best_heal
+       36080   1177696.10   1301249.10        36.07  map_info.py:_carrying_expand
+      115888   1132354.30  28449798.00       245.49  pathing.py:move_to
+      118384   1119943.70   5024117.90        42.44  heal.py:_find_chase_target
+      124909   1082902.80   1082902.80         8.67  ~:0(<method 'disable' of '_lsprof.Profiler' objects>)
+       93603   1042845.40   1057035.10        11.29  pathing.py:_closest_impl
+      129409    999241.90    999241.90         7.72  ~:0(<method 'get_nearby_units' of 'builtins.Controller' objects>)
+      740980    987524.70    987524.70         1.33  map_info.py:expand_manhattan
+      888951    975187.90    975187.90         1.10  attack.py:_max_score_in_mask
+      120070    939117.50  34055440.80       283.63  attack.py:_ensure_round_cache
+       29677    862556.50   7242427.40       244.04  map_info.py:update_move
+      929900    862209.00   1458348.80         1.57  ~:0(<method 'get_position' of 'builtins.Controller' objects>)
+       34355    825640.70   1001129.90        29.14  map_info.py:_compute_route_reaches_core
+     3155578    784326.00   1169781.40         0.37  enum.py:__hash__
+     6128499    783318.20    783318.20         0.13  ~:0(<method 'bit_length' of 'int' objects>)
+     3275211    776965.20   1409068.70         0.43  <string>:<lambda>
+      118249    743937.80   9223089.50        78.00  route.py:_my_claims
+      234341    711096.40    711096.40         3.03  harvest.py:secured
+     5581444    687179.90    687179.90         0.12  ~:0(<method 'append' of 'collections.deque' objects>)
+      104897    633044.00  38230490.00       364.46  explore.py:run
+     3275211    632103.50    632103.50         0.19  ~:0(<built-in method __new__ of type object at 0x00007FFDF56468A0>)
+      118067    561945.00    600683.70         5.09  secure.py:cant_secure
+     1111113    558993.10    558993.10         0.50  ~:0(<method 'get_entity_type' of 'builtins.Controller' objects>)
+      501996    522444.40  15294770.50        30.47  pathing.py:claim_subset
+     3837456    511812.20    511812.20         0.13  ~:0(<method 'items' of 'dict' objects>)
+       29796    481626.70   1078906.50        36.21  ~:0(<method 'get_nearby_tiles' of 'builtins.Controller' objects>)
+      120070    473895.90    634254.60         5.28  builder.py:_update_crowded_claims
+      118067    461875.50   6919368.60        58.61  secure.py:_my_claims
+        2807    437956.20    457503.40       162.99  pathing.py:bfs_route
+      118249    417050.40  10241714.30        86.61  route.py:score
+     3155578    385455.40    385455.40         0.12  ~:0(<built-in method builtins.hash>)
+      120070    369271.20  40000887.60       333.15  attack.py:_my_claims
+      149725    365924.40    531466.10         3.55  pathing.py:rebuild_broken_barriers
+     3443728    363664.30    363664.30         0.11  ~:0(<built-in method builtins.abs>)
+      154564    362116.30   6695582.10        43.32  map_info.py:recompute_derived
+      846319    341193.80    341446.10         0.40  ~:0(<method 'get' of 'dict' objects>)
+     1211050    332468.20    332468.20         0.27  enum.py:<genexpr>
+      118067    325563.70    399054.90         3.38  secure.py:_too_expensive
+     2212318    296556.10    296556.10         0.13  ~:0(<built-in method builtins.max>)
+      112368    295492.60   8267649.20        73.58  attack.py:_ensure_gunner_scores
+      932523    289632.30    289632.30         0.31  ~:0(<method 'get_global_resources' of 'builtins.Controller' objects>)
+     1870960    285810.80    285810.80         0.15  ~:0(<method 'append' of 'list' objects>)
+      116274    282317.20   1800240.00        15.48  harvest.py:_my_claims
+     1332212    273866.00    273866.00         0.21  ~:0(<method 'get_current_round' of 'builtins.Controller' objects>)
+      118249    267692.60    362315.40         3.06  route.py:_too_expensive
+      817265    262512.80    262512.80         0.32  ~:0(<method 'get_team' of 'builtins.Controller' objects>)
+      236980    255522.80   9703513.50        40.95  pathing.py:_get_base_claim_zones
+      118384    247881.10   5439606.60        45.95  heal.py:score
+       99525    243491.60  17149491.40       172.31  attack.py:_ensure_sentinel_planes
+      118067    236597.90   1589377.00        13.46  secure.py:securable_ore
+      154564    222821.70    618337.10         4.00  map_info.py:_recompute_derived_structural
+       29472    220933.60   7754385.80       263.11  pathing.py:move
+      205237    215023.40    215023.40         1.05  map_info.py:get_avoid
+       84872    212398.10    273751.80         3.23  map_info.py:_conveyor_target_tiles
+      208063    209301.80    216273.40         1.04  attack.py:_enemy_score_group_masks
+      154564    204937.40   3876295.60        25.08  map_info.py:_recompute_derived_visible
+      154564    180672.30   1838833.10        11.90  map_info.py:_recompute_derived_loaded
+      120070    180495.00  40186798.60       334.69  attack.py:score
+       86510    178570.10    366528.20         4.24  random.py:randrange
+      116274    173147.00   1268690.10        10.91  harvest.py:harvestable_ore
+      116274    168611.70    233359.20         2.01  harvest.py:_too_expensive
+       11384    168269.20   3734016.40       328.01  secure.py:run
+      118067    164472.70   7083841.30        60.00  secure.py:score
+      800590    160152.00    160152.00         0.20  ~:0(<method 'add' of 'set' objects>)
+      121105    159084.40    159084.40         1.31  enum.py:__iter__
+      105093    155116.30    358712.20         3.41  disrupt.py:score
+      455393    141309.30    141309.30         0.31  ~:0(<method 'get_stored_resource' of 'builtins.Controller' objects>)
+      118249    137250.50    281957.30         2.38  route.py:cant_claim
+       32625    133864.10   1468379.60        45.01  map_info.py:_compute_carrying
+      119538    131789.80    157066.40         1.31  heal.py:_very_damaged_targets
+       86510    129231.40    495759.60         5.73  random.py:randint
+      116274    123769.00   1924009.00        16.55  harvest.py:score
+      120330    117976.00    117976.00         0.98  ~:0(<method 'can_heal' of 'builtins.Controller' objects>)
+      208471    110743.50    110743.50         0.53  attack.py:_round_cache_enemy_inputs
+       86510    110644.20    153717.20         1.78  random.py:_randbelow_with_getrandbits
+      249818    106333.00    106333.00         0.43  ~:0(<built-in method time.perf_counter_ns>)
+       32435    104931.00    133425.30         4.11  ~:0(<method 'can_move' of 'builtins.Controller' objects>)
+       19622    100462.40    125453.20         6.39  map_info.py:_compute_guard_conv
+      318821     90924.40     94919.70         0.30  attack.py:_ensure_attack_shift_plans
+      303184     84786.00     84786.00         0.28  ~:0(<method 'get_harvester_cost' of 'builtins.Controller' objects>)
+      708150     74204.00     74204.00         0.10  log.py:log
+      139864     73446.20     73446.20         0.53  _types.py:distance_squared
+       76299     72645.20    678392.10         8.89  pathing.py:closest_within
+       19622     67813.50     88893.50         4.53  map_info.py:_compute_conv_into_open_ore
+      110315     64478.50     65808.70         0.60  attack.py:_turret_feed_chains
+      241286     61310.00     61310.00         0.25  ~:0(<method 'get_id' of 'builtins.Controller' objects>)
+        4000     58249.80   1497937.90       374.48  core.py:run
+       29336     56442.50    146874.90         5.01  disrupt.py:_my_claims
+       29336     56084.80     56084.80         1.91  disrupt.py:_disruptable_ore
+       31941     53426.80    129986.30         4.07  pathing.py:raw_ax_foundry_sites
+      110723     51016.50     51016.50         0.46  attack.py:_gunner_ray_blocked_mask
+       29677     46766.90     59450.60         2.00  ~:0(<method 'move' of 'builtins.Controller' objects>)
+      161882     46397.00     46397.00         0.29  ~:0(<method 'bit_count' of 'int' objects>)
+      240627     45168.40     45168.40         0.19  heal.py:_healable_mask
+      118249     44205.50     44205.50         0.37  route.py:_orphan_harvesters
+      149725     43525.20     43525.20         0.29  ~:0(<method 'get_barrier_cost' of 'builtins.Controller' objects>)
+       19622     43048.00     46083.50         2.35  map_info.py:_compute_enemy_turret_threat
+      223456     43003.00     43003.00         0.19  pathing.py:_dir_family
+      106028     41435.30     41435.30         0.39  ~:0(<method 'get_tile_env' of 'builtins.Controller' objects>)
+      150642     40628.90     40628.90         0.27  ~:0(<method 'get_action_cooldown' of 'builtins.Controller' objects>)
+        2063     39900.40    915813.10       443.92  attack.py:run
+       30090     39474.10     39474.10         1.31  map_info.py:direction_to
+       19622     38577.10     38577.10         1.97  map_info.py:_compute_conv_by_dir
+      121715     38002.90     38002.90         0.31  ~:0(<method 'get_sentinel_cost' of 'builtins.Controller' objects>)
+       65100     35119.90     43205.20         0.66  enum.py:__get__
+      259530     34240.90     34240.90         0.13  ~:0(<built-in method _operator.index>)
+      118249     33514.40     33514.40         0.28  route.py:_dead_end_conveyors
+      118249     33208.70     33208.70         0.28  builder.py:draw_mask
+      120478     32964.20     32964.20         0.27  ~:0(<method 'get_gunner_cost' of 'builtins.Controller' objects>)
+         117     31954.20     42628.40       364.35  map_info.py:_build_turret_shift_masks
+      146059     27763.20     27763.20         0.19  ~:0(<method 'getrandbits' of '_random.Random' objects>)
+        2839     26824.10    530198.70       186.76  pathing.py:calculate_conveyor_path
+      120070     26004.50     26004.50         0.22  comms.py:get_new_messages
+      116122     25669.80     25669.80         0.22  ~:0(<built-in method builtins.isinstance>)
+       28096     25396.00     46765.30         1.66  map_info.py:pos_add
+      118249     24314.30     24314.30         0.21  route.py:_orphan_foundries
+       64955     23202.30     23202.30         0.36  map_info.py:in_bounds
+       17304     20047.10    471335.30        27.24  pathing.py:closest
+       77045     19838.00     19838.00         0.26  ~:0(<method 'clear' of 'set' objects>)
+       29494     19073.00     19073.00         0.65  ~:0(<method 'can_build_road' of 'builtins.Controller' objects>)
+      104897     18961.20     18961.20         0.18  explore.py:score
+         930     16831.80    189462.60       203.72  pathing.py:move_adjacent
+       37609     16617.20     16617.20         0.44  ~:0(<method 'get_tile_builder_bot_id' of 'builtins.Controller' objects>)
+       14612     15824.50     25216.60         1.73  map_info.py:rot_flip
+        2053     14797.30     38108.70        18.56  attack.py:get_best_direction
+       14456     14501.60     14501.60         1.00  attack.py:_read_score
+       19622     12537.50     12537.50         0.64  map_info.py:_compute_my_gunner_claims
+         213     11658.50     11658.50        54.73  map_info.py:build_core_areas
+         971     11457.00     11457.00        11.80  heal.py:_conv_zone
+         495     10816.80    261603.70       528.49  route.py:run
+        1989     10108.80     12112.70         6.09  secure.py:_mark_cant_secure
+         839      8649.90    276969.60       330.12  turret_sentinel.py:run
+        2839      8155.60     28032.00         9.87  pathing.py:_get_conveyor_targets_and_avoid
+       65100      8085.30      8085.30         0.12  enum.py:value
+        6886      7346.00      8627.10         1.25  map_info.py:is_passable
+          99      7096.10     17751.60       179.31  builder.py:_compute_voronoi_harvest_zone
+        4106      6887.50     12270.80         2.99  enum.py:__format__
+        2979      5582.50      5582.50         1.87  secure.py:dirs_covered
+        1645      5569.70      6697.30         4.07  ~:0(<method 'can_build_sentinel' of 'builtins.Controller' objects>)
+         408      5138.40      5214.70        12.78  attack.py:_best_gunner_direction_at
+        2400      4988.30      6308.10         2.63  pathing.py:build_mask
+        1685      4843.70      9091.30         5.40  _types.py:opposite
+       32002      4623.20      4623.20         0.14  comms.py:mark
+        9026      4370.60      4370.60         0.48  ~:0(<method 'get_direction' of 'builtins.Controller' objects>)
+        4106      4366.70      4366.70         1.06  enum.py:__str__
+        1019      4329.10    295961.40       290.44  heal.py:run
+         117      4266.00     47632.10       407.11  map_info.py:init
+        2069      4112.80      4112.80         1.99  __init__.py:__repr__
+        6807      3208.90      3208.90         0.47  ~:0(<method 'get_scale_percent' of 'builtins.Controller' objects>)
+        2807      2828.10      3128.70         1.11  pathing.py:conveyor_cost
+        5579      2768.00      2768.00         0.50  ~:0(<method 'can_fire' of 'builtins.Controller' objects>)
+        3883      2600.60      5058.90         1.30  turret_sentinel.py:_resolve_target_on_tile
+        2024      2522.90      2522.90         1.25  ~:0(<method 'can_spawn' of 'builtins.Controller' objects>)
+         538      2491.00     11895.30        22.11  route.py:attempt_build
+       26941      2470.30      2470.30         0.09  ~:0(<built-in method builtins.min>)
+        6328      2470.20      2470.20         0.39  ~:0(<method 'is_in_vision' of 'builtins.Controller' objects>)
+        6967      2294.80      2294.80         0.33  ~:0(<method 'pop' of 'dict' objects>)
+         100      2272.40      2272.40        22.72  pathing.py:_init_col_masks
+         100      1859.40     24854.80       248.55  builder.py:init
+        1154      1724.40      1724.40         1.49  ~:0(<method 'build_road' of 'builtins.Controller' objects>)
+         230      1674.80      1821.50         7.92  turret_sentinel.py:_ally_feeder_mask
+         230      1674.20      3030.20        13.17  ~:0(<method 'get_attackable_tiles' of 'builtins.Controller' objects>)
+         196      1654.40     74899.70       382.14  disrupt.py:run
+        2971      1608.60      1608.60         0.54  ~:0(<method 'get_conveyor_cost' of 'builtins.Controller' objects>)
+         301      1544.10      4827.10        16.04  turret_sentinel.py:_should_stay
+         570      1489.80      1938.60         3.40  ~:0(<method 'can_build_conveyor' of 'builtins.Controller' objects>)
+        4000      1257.90      2137.00         0.53  core.py:_spawn_toward_enemy_if_undefended
+         100      1117.80     10805.00       108.05  pathing.py:__init__
+         300      1071.90      7380.00        24.60  pathing.py:make_steps
+         117      1017.20      1563.40        13.36  random.py:seed
+        4106      1016.60      1016.60         0.25  ~:0(<method '__format__' of 'str' objects>)
+        2173       965.20       965.20         0.44  ~:0(<method 'get_bridge_cost' of 'builtins.Controller' objects>)
+          16       904.50      8353.40       522.09  harvest.py:run
+         137       894.90      2981.80        21.76  core.py:_spawn_toward_center
+          99       757.70     49955.50       504.60  route.py:fallback_barrier
+         408       750.50       990.50         2.43  ~:0(<method 'can_build_gunner' of 'builtins.Controller' objects>)
+         676       738.80      1092.50         1.62  route.py:_prefer_armoured_conveyor
+         749       684.00       684.00         0.91  ~:0(<method 'can_destroy' of 'builtins.Controller' objects>)
+         492       664.40      3238.10         6.58  route.py:_can_build_preferred_conveyor
+         116       660.80      2804.50        24.18  secure.py:build_stuff
+         250       635.80       750.10         3.00  ~:0(<method 'build_conveyor' of 'builtins.Controller' objects>)
+         456       634.20      1107.60         2.43  map_info.py:empty
+         117       600.20      1111.70         9.50  comms.py:init
+         114       591.00      1946.20        17.07  map_info.py:core_center
+        1365       533.60       533.60         0.39  ~:0(<method 'convert' of 'builtins.Controller' objects>)
+        1506       532.60       532.60         0.35  ~:0(<method 'get_ammo_amount' of 'builtins.Controller' objects>)
+         188       491.50       728.50         3.88  ~:0(<method 'sort' of 'list' objects>)
+         848       449.50       818.10         0.96  spawn_plan.py:dir_distance
+         372       412.90       412.90         1.11  ~:0(<method 'draw_indicator_line' of 'builtins.Controller' objects>)
+         117       411.10       473.10         4.04  comms.py:random_hash
+          63       357.60      1006.50        15.98  turret_sentinel.py:_other_sentinel_attack_mask
+         100       357.30     11217.30       112.17  attack.py:init
+           2       356.90      1516.90       758.45  spawn_plan.py:pick_n_directions
+         189       354.80       354.80         1.88  ~:0(<method 'heal' of 'builtins.Controller' objects>)
+          31       296.30       527.80        17.03  ~:0(<method 'get_attackable_tiles_from' of 'builtins.Controller' objects>)
+         421       291.20       291.20         0.69  map_info.py:type_at
+         184       280.50      1030.60         5.60  route.py:_build_preferred_conveyor
+         100       248.50       248.50         2.48  ~:0(<method 'spawn_builder' of 'builtins.Controller' objects>)
+          79       237.80       435.90         5.52  _types.py:delta
+        1696       231.60       231.60         0.14  ~:0(<method 'index' of 'list' objects>)
+         169       227.50       227.50         1.35  ~:0(<method 'destroy' of 'builtins.Controller' objects>)
+         296       225.40       225.40         0.76  ~:0(<method 'can_build_barrier' of 'builtins.Controller' objects>)
+          99       198.30       384.80         3.89  map_info.py:flip
+         252       194.30       194.30         0.77  map_info.py:team_at
+         676       192.80       192.80         0.29  ~:0(<method 'get_armoured_conveyor_cost' of 'builtins.Controller' objects>)
+         800       184.70       184.70         0.23  builder.py:<lambda>
+         587       165.80       165.80         0.28  ~:0(<method 'get_map_width' of 'builtins.Controller' objects>)
+         426       139.10       278.00         0.65  spawn_plan.py:<genexpr>
+         587       137.10       137.10         0.23  ~:0(<method 'get_map_height' of 'builtins.Controller' objects>)
+          86       128.00       128.00         1.49  ~:0(<method 'fire' of 'builtins.Controller' objects>)
+         145       120.10       332.70         2.29  core.py:_try_spawn_planned
+         100       117.90       117.90         1.18  explore.py:init
+          38       102.20       133.20         3.51  ~:0(<method 'can_build_armoured_conveyor' of 'builtins.Controller' objects>)
+          58        97.50        97.50         1.68  ~:0(<method 'build_barrier' of 'builtins.Controller' objects>)
+         117        93.60       108.70         0.93  enum.py:__len__
+          55        84.70       401.90         7.31  _types.py:add
+          24        80.50       238.20         9.93  spawn_plan.py:get_ray_endpoint
+         142        71.60       349.60         2.46  ~:0(<built-in method builtins.sum>)
+          15        56.40        62.50         4.17  ~:0(<method 'build_sentinel' of 'builtins.Controller' objects>)
+          45        55.10        82.80         1.84  ~:0(<method 'get_bridge_target' of 'builtins.Controller' objects>)
+         100        51.80        51.80         0.52  secure.py:init
+         100        46.60        46.60         0.47  heal.py:init
+         114        45.60        45.60         0.40  map_info.py:_compute_predicted_enemy_core
+         100        44.30        44.30         0.44  route.py:init
+         100        42.90        42.90         0.43  sabotage.py:init
+           2        42.20       197.70        98.85  spawn_plan.py:_build_ti_near_mask
+         100        41.50        41.50         0.41  harvest.py:init
+         100        39.30        39.30         0.39  disrupt.py:init
+           8        37.60        59.80         7.47  _types.py:rotate_left
+          21        34.10        42.60         2.03  map_info.py:has_builder_bot
+         155        33.00        33.00         0.21  turret_sentinel.py:<lambda>
+          16        25.90        25.90         1.62  ~:0(<method 'build_harvester' of 'builtins.Controller' objects>)
+          46        25.40        25.40         0.55  ~:0(<method 'can_build_bridge' of 'builtins.Controller' objects>)
+           2        22.50      1917.40       958.70  spawn_plan.py:choose_spawn_plan
+           8        18.40        37.40         4.67  _types.py:rotate_right
+          34        15.90        15.90         0.47  spawn_plan.py:draw_spawn_plan
+           2        13.70       348.10       174.05  spawn_plan.py:get_valid_directions
+          20        13.00        20.20         1.01  core.py:<genexpr>
+          16        12.20        12.20         0.76  ~:0(<method 'can_build_harvester' of 'builtins.Controller' objects>)
+           2         9.20        29.40        14.70  core.py:_core_area_positions
+           2         7.90       131.00        65.50  spawn_plan.py:_all_dir_endpoints
+           2         7.20        50.80        25.40  core.py:init
+           8         6.80        19.30         2.41  spawn_plan.py:<lambda>
+           3         6.50         6.50         2.17  ~:0(<method 'build_bridge' of 'builtins.Controller' objects>)
+           1         5.10         5.10         5.10  ~:0(<function Random.seed at 0x00000227FF81CC20>)
+           1         4.90         4.90         4.90  ~:0(<function Random.seed at 0x00000227DD57F9C0>)
+           1         4.90         4.90         4.90  ~:0(<function Random.seed at 0x00000227E050CAE0>)
+           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000227E3CA2AC0>)
+           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000227DEB714E0>)
+           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000227EDA96B60>)
+           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000227FB24DE40>)
+           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x000002278596F6A0>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000227E413A340>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000227F64ACF40>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000227DD134220>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000227F86962A0>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000227FB00A0C0>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000227FDCD6840>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x0000022785F3EB60>)
+          15         4.70         4.70         0.31  turret_sentinel.py:init
+           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x0000022783BD91C0>)
+           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000227F17D11C0>)
+           1         4.40         4.40         4.40  ~:0(<function Random.seed at 0x00000227F30804A0>)
+           1         4.40         4.40         4.40  ~:0(<function Random.seed at 0x00000227F683C900>)
+           1         4.40         4.40         4.40  ~:0(<function Random.seed at 0x00000227F9449120>)
+           1         4.40         4.40         4.40  ~:0(<function Random.seed at 0x00000227832AE5C0>)
+           1         4.40         4.40         4.40  ~:0(<function Random.seed at 0x00000227837420C0>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000227E5F0F600>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000227E9676FC0>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000227F3E3C720>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000227FF3B11C0>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x0000022781A7E480>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000227DDE3ECA0>)
+           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000227EAFB5DA0>)
+           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x0000022782E2AFC0>)
+           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000227F6D9FA60>)
+           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000227F72131A0>)
+           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000227FB6B54E0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227E2F3BE20>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227E55F1260>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227DFECCCC0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227F05536A0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227F0ED2660>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227F1479800>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227F6019BC0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227F8B0DE40>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227F8FC54E0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227862AD800>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000227DE2AE3E0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227DB7D4360>)
+          10         3.90         3.90         0.39  ~:0(<method 'get_move_cooldown' of 'builtins.Controller' objects>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E633ADE0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E6C42200>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E7FD6700>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E8461EE0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E88E11C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E8D74A40>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227EAB0A340>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227EB445300>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227EDF12160>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227EE39DA80>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F0A1EE80>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F1381C60>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F1151F80>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F2E628E0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F57031A0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F5BA2700>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F98D4900>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227F8A86DE0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FBB55120>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FBFC4860>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FC433F60>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FE59ADE0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FC226340>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FC2A6840>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227FEF1E0C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x000002278113B740>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x000002278406C900>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022784504360>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022785E1ADE0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022785C72B60>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227DD9E74C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022786748EA0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022786BF65C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022787081B20>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x0000022788425300>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000227E0988220>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227DE711BC0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E38E1940>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E67D27A0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227EB914540>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227EBD53D80>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227ED607060>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227DBD185E0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227EE80D1C0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227EFF485E0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227F00B79C0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227F34E7E20>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227F396F740>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227F1348F40>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227F4298220>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E6228400>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227FD877740>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227FE17DF80>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227FEA065C0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227FC23F100>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227FFCBFEC0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227815C2DE0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227818CED40>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227860DEF20>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E0E13A60>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E1267380>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E1690F40>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000227E2ACC680>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227E33B34C0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227E384ADE0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227E5A6BF60>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227E91DFF60>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227EC1B72E0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227EBE05800>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227EECF4540>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227F2C14B80>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000227FAD28720>)
+           2         3.40         3.40         1.70  ~:0(<method 'build_foundry' of 'builtins.Controller' objects>)
+           2         1.50         1.50         0.75  ~:0(<method 'can_build_foundry' of 'builtins.Controller' objects>)
+           2         1.00         1.00         0.50  ~:0(<method 'get_foundry_cost' of 'builtins.Controller' objects>)
+           1         0.40         0.40         0.40  ~:0(<method 'get_road_cost' of 'builtins.Controller' objects>)

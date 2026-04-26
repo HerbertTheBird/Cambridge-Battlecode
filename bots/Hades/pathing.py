@@ -44,6 +44,9 @@ _FULL_COVER_OFFSETS = [
 
 destroyed_barriers = dict()
 
+_base_claim_cache_key = None
+_base_claim_cache_value = (0, 0)
+
 # Column masks for shifting by 2/3 — precomputed once from map dimensions.
 _col_masks_initialized = False
 _nlc2 = 0
@@ -137,6 +140,123 @@ def voronoi_claim(my_mask, others_mask, claims, passable=None):
             other_front = other_expand
 
     return my_claimed & claims
+
+
+def _claim_zone_on_passable(my_mask: int, others_mask: int, passable: int, self_first: bool) -> int:
+    """Ownership zone over an already-passable graph.
+
+    This is exact for claims wholly contained in `passable`. It intentionally
+    does not try to handle blocked claim tiles, because in `voronoi_claim`
+    those tiles become traversable and can act as corridors.
+    """
+    if not passable:
+        return 0
+    if not others_mask:
+        return passable
+
+    w = map_info._width
+    nlc = map_info._not_left_col
+    nrc = map_info._not_right_col
+    board = map_info._board_mask
+
+    my_front = my_mask & passable
+    other_front = others_mask & passable
+    my_claimed = my_front
+    all_claimed = my_front | other_front
+    remaining = passable & ~all_claimed
+
+    while remaining and (my_front or other_front):
+        if self_first:
+            first_is_self = True
+        else:
+            first_is_self = False
+
+        if first_is_self:
+            if my_front:
+                h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
+                my_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
+                my_claimed |= my_expand
+                all_claimed |= my_expand
+                remaining &= ~my_expand
+                my_front = my_expand
+            if not remaining:
+                break
+            if other_front:
+                h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
+                other_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
+                all_claimed |= other_expand
+                remaining &= ~other_expand
+                other_front = other_expand
+        else:
+            if other_front:
+                h = other_front | ((other_front & nrc) << 1) | ((other_front & nlc) >> 1)
+                other_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
+                all_claimed |= other_expand
+                remaining &= ~other_expand
+                other_front = other_expand
+            if not remaining:
+                break
+            if my_front:
+                h = my_front | ((my_front & nrc) << 1) | ((my_front & nlc) >> 1)
+                my_expand = ((h | (h << w) | (h >> w)) & board) & passable & ~all_claimed
+                my_claimed |= my_expand
+                all_claimed |= my_expand
+                remaining &= ~my_expand
+                my_front = my_expand
+
+    return my_claimed
+
+
+def _get_base_claim_zones(my_mask: int, others_mask: int, passable: int) -> tuple[int, int]:
+    """Return (self_wins_ties_self_zone, others_win_ties_other_zone)."""
+    global _base_claim_cache_key, _base_claim_cache_value
+
+    key = (my_mask, others_mask, passable)
+    if key == _base_claim_cache_key:
+        return _base_claim_cache_value
+
+    if not passable:
+        result = (0, 0)
+    elif not others_mask:
+        result = (passable, 0)
+    else:
+        result = (
+            _claim_zone_on_passable(my_mask, others_mask, passable, self_first=True),
+            _claim_zone_on_passable(others_mask, my_mask, passable, self_first=True),
+        )
+
+    _base_claim_cache_key = key
+    _base_claim_cache_value = result
+    return result
+
+
+def claim_subset(
+    my_mask: int,
+    others_mask: int,
+    claims: int,
+    passable: int | None = None,
+    tie_self: bool = True,
+) -> int:
+    """Exact wrapper around `voronoi_claim` with a cached fast path.
+
+    If all claims are already passable on the base graph, we can reuse a shared
+    territorial partition for the current builder turn. If any blocked claim is
+    present, we fall back to the original exact computation because blocked
+    claims become traversable corridors in `voronoi_claim`.
+    """
+    if not claims:
+        return 0
+    if passable is None:
+        passable = map_info._bm_passable_FFF
+    if claims & ~passable:
+        if tie_self:
+            return voronoi_claim(my_mask, others_mask, claims, passable)
+        return claims & ~voronoi_claim(others_mask, my_mask, claims, passable) & ~others_mask
+
+    tie_me_zone, others_first_other_zone = _get_base_claim_zones(my_mask, others_mask, passable)
+    if tie_self:
+        return claims & tie_me_zone
+    return claims & ~others_first_other_zone & ~others_mask
 
 class Pathing:
 

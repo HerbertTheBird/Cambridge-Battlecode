@@ -15,7 +15,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = securable_ore() & ~((_too_expensive()) & ~(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])) & ~cant_secure()
-    return available & ~pathing.voronoi_claim(map_info._bm_friendly_bots, my_mask, available) & ~map_info._bm_friendly_bots
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 
 def init(c: Controller):
