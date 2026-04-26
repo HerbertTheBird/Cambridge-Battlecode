@@ -29,7 +29,7 @@ def _disruptable_ore():
 
 def _my_claims():
     my_mask = units.builder.my_voronoi_mask(comm_flag)
-    return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, _disruptable_ore())
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, _disruptable_ore(), tie_self=True)
 
 MAX_SCORE = 2
 _cached_claims = 0

@@ -989,7 +989,13 @@ def _my_claims():
     _ensure_round_cache()
     preferred, fallback = _round_cache_attack_candidates
     combined = preferred | fallback
-    claimed = pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, combined, map_info._bm_passable_FFF)
+    claimed = pathing.claim_subset(
+        my_mask,
+        map_info._bm_friendly_bots,
+        combined,
+        passable=map_info._bm_passable_FFF,
+        tie_self=True,
+    )
     return claimed & preferred, claimed & fallback
 
 

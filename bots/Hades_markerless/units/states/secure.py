@@ -13,7 +13,7 @@ comm_flag = 3
 def _my_claims():
     my_mask = units.builder.my_voronoi_mask(comm_flag)
     available = securable_ore() & ~((_too_expensive()) & ~(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])) & ~cant_secure()
-    return available & ~pathing.voronoi_claim(map_info._bm_friendly_bots, my_mask, available) & ~map_info._bm_friendly_bots
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 
 def init(c: Controller):
