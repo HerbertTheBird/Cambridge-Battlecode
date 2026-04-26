@@ -71,6 +71,8 @@ def _init_col_masks(width: int, height: int) -> None:
     _nrc3 = ~right_col_3
     _col_masks_initialized = True
 def rebuild_broken_barriers(rc: Controller):
+    if not destroyed_barriers:
+        return
     if  rc.get_global_resources()[0] < rc.get_barrier_cost()[0]:
         return
     if rc.get_action_cooldown() > 0:
