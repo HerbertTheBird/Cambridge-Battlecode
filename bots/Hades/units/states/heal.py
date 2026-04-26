@@ -199,21 +199,26 @@ def score():
 def _do_best_heal():
     """Heal the most damaged adjacent friendly building."""
     w = map_info._width
+    h = map_info._height
     healable = _healable_mask() & map_info._bm_damaged
     best_heal = None
     best_heal_damage = -1
     my_pos = map_info._my_pos
+    my_x = my_pos.x
+    my_y = my_pos.y
     for d in Direction:
         dx, dy = map_info._DIRECTION_DELTAS[d]
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if not map_info.in_bounds(p):
+        x = my_x + dx
+        y = my_y + dy
+        if not (0 <= x < w and 0 <= y < h):
             continue
-        pbit = 1 << (p.x + p.y * w)
+        n = x + y * w
+        pbit = 1 << n
         if not (healable & pbit):
             continue
+        p = Position(x, y)
         if not rc.can_heal(p):
             continue
-        n = p.x + p.y * w
         hp = map_info._building_hp[n]
         et_idx = map_info._building_et_idx[n]
         if et_idx >= 0:
