@@ -176,13 +176,14 @@ def run_tournament(
     results: list[MatchResult] = []
     h2h: dict[tuple[str, str], HeadToHead] = {}
 
-    # Generate all match jobs
+    # Generate all match jobs, playing each pairing on both sides.
     jobs: list[tuple[str, str, Path, int]] = []
     for bot_a, bot_b in combinations(bots, 2):
         h2h[(bot_a, bot_b)] = HeadToHead(bot_a=bot_a, bot_b=bot_b)
         for map_path in maps:
             for seed in seeds:
                 jobs.append((bot_a, bot_b, map_path, seed))
+                jobs.append((bot_b, bot_a, map_path, seed))
 
     total_matches = len(jobs)
     print(f"Tournament: {len(bots)} bots, {len(maps)} maps, {len(seeds)} seed(s)")
