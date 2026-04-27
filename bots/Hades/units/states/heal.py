@@ -23,7 +23,7 @@ def _conv_zone():
     # return units.builder._harvest_zone
     """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
     my_team_idx = map_info._my_team_idx
-    my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx] & (map_info._bm_ti_carrying | map_info._bm_raw_ax_carrying | map_info._bm_refined_carrying)
+    my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
     my_convs |= map_info._bm_my_core_area
     if not my_convs:
         return 0
@@ -55,7 +55,7 @@ def _claimed_enemy_ids():
 
 
 def _find_chase_target():
-    log("find chase")
+    # log("find chase")
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
@@ -64,7 +64,7 @@ def _find_chase_target():
     if not enemy_bots:
         log("no enemies")
         return None
-    units.builder.draw_mask(enemy_bots, 255, 0, 0)
+
     friendly_bots = map_info._bm_friendly_bots
     my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     other_friendly = friendly_bots & ~my_bit
@@ -86,7 +86,7 @@ def _find_chase_target():
             continue
         closest = nav.closest_within(nearby, Position(n % w, n // w), 4)
         if closest[0]:
-            log("filtering", closest[0], "because", n%w, n//w, closest[1])
+            log("filtering", closest[0], "because", n%w, n//2, closest[1])
             filtered ^= (1<<(closest[0].x+closest[0].y*w))
         # uid = map_info._bot_at.get(n)
         # if uid is not None:
@@ -103,7 +103,6 @@ def _find_chase_target():
 
     if not filtered:
         filtered = enemy_bots
-        log("no filtered")
         return None
     nearby = filtered & map_info.expand_chebyshev(my_bit, 8)
     if not nearby:
@@ -119,7 +118,6 @@ def _find_chase_target():
     if closest_pos.distance_squared(map_info._my_pos) < 5:
         log("too close")
         return None
-    log("found chase target", closest_pos)
     return closest_pos
 
 
@@ -143,13 +141,12 @@ _cached_chase_target = None  # set by score(), reused by run()
 
 MAX_SCORE = 8
 def score():
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
-
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
 
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
 
     target = _cached_chase_target
     # log(target)
@@ -250,14 +247,12 @@ def run():
     if targets:
         best, dist = nav.closest(targets)
         if best is not None and dist <= 4:
-            log("healing to", best)
             nav.move_adjacent(best, avoid_turret=False)
     # Priority 1: chase an enemy near my conveyors
     target = _cached_chase_target
     if target is not None:
         ep = target
         # _try_barrier_dead_ends()
-        log("chasing to", ep)
         nav.move_to(ep)
         # comms.mark(uid & ID_MASK, comm_flag)
         _do_best_heal()
@@ -267,6 +262,5 @@ def run():
     if targets:
         best, dist = nav.closest(targets)
         if best is not None and dist <= 4:
-            log("healing2 to", best)
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()

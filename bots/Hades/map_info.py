@@ -721,38 +721,6 @@ def _compute_carrying() -> tuple[int, int, int]:
     ti_seed = _bm_conv_ti & bm_conveyors
     raw_ax_seed = _bm_conv_raw_ax & bm_conveyors
     refined_seed = _bm_conv_refined & bm_conveyors
-
-    # Harvester-adjacent seeds: any-team harvesters on ore deposit onto
-    # cardinally-adjacent CONVEYOR/ARMOURED_CONVEYOR (when facing does not
-    # point back into the harvester) and onto cardinally-adjacent BRIDGES
-    # (unconditionally — bridges have no facing direction).
-    harvesters = _bm_et[_IDX_HARVESTER]
-    dir_convs = _bm_et[_IDX_CONVEYOR] | _bm_et[_IDX_ARMOURED_CONVEYOR]
-    if harvesters and (dir_convs or bridges):
-        s_dir = dir_mask[_DIR_INT[Direction.SOUTH]]
-        n_dir = dir_mask[_DIR_INT[Direction.NORTH]]
-        e_dir = dir_mask[_DIR_INT[Direction.EAST]]
-        w_dir = dir_mask[_DIR_INT[Direction.WEST]]
-        n_recv = (dir_convs & ~s_dir) | bridges
-        s_recv = (dir_convs & ~n_dir) | bridges
-        e_recv = (dir_convs & ~w_dir) | bridges
-        w_recv = (dir_convs & ~e_dir) | bridges
-        h_ti = harvesters & _bm_env[_IDX_ENV_ORE_TI]
-        h_ax = harvesters & _bm_env[_IDX_ENV_ORE_AX]
-        if h_ti:
-            ti_seed |= (
-                ((h_ti & ntr) >> w) & n_recv
-                | ((h_ti & nbr) << w) & s_recv
-                | ((h_ti & nrc) << 1) & e_recv
-                | ((h_ti & nlc) >> 1) & w_recv
-            )
-        if h_ax:
-            raw_ax_seed |= (
-                ((h_ax & ntr) >> w) & n_recv
-                | ((h_ax & nbr) << w) & s_recv
-                | ((h_ax & nrc) << 1) & e_recv
-                | ((h_ax & nlc) >> 1) & w_recv
-            )
     expand = _carrying_expand
     result = (
         expand(ti_seed, bm_conveyors, convs_e, convs_w, convs_s, convs_n, bridges,
