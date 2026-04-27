@@ -64,7 +64,7 @@ SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 8
 # Gunners snipe single high-value lanes: big bonus for core + backline turrets,
 # smaller gain on clustered infra (sentinels already out-damage them there).
 GUNNER_BUILDING_SCORE = [0] * map_info._NUM_ET
-GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 256
+GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 128
 GUNNER_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 GUNNER_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 56
 GUNNER_BUILDING_SCORE[map_info._IDX_GUNNER] = 100
@@ -91,7 +91,7 @@ _NON_CORE_TYPE_INDICES = (
     map_info._IDX_SPLITTER,
 )
 
-_NUM_PLANES = 12  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
+_NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
 
 SCORE_THRESHOLD_FACTOR = 0.25
 MIN_ATTACK_SCORE = 16

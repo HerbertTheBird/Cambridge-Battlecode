@@ -43,8 +43,6 @@ def init(c: Controller):
 
 
 def _should_stay():
-    if rc.get_global_resources()[0] < rc.get_conveyor_cost()[0]*4:
-        return True
     pos = rc.get_position()
     for uid in rc.get_nearby_units(8):
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
@@ -214,7 +212,7 @@ def run():
 
     if rc.get_ammo_amount() < 2:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _should_stay():
+        if _no_ammo_turns >= 16 and not _should_stay():
             rc.self_destruct()
             return
     else:

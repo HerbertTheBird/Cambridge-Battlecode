@@ -77,23 +77,16 @@ def _too_expensive():
         del _cost_map[n]
     return result
 
-MAX_SCORE = 8.5
+MAX_SCORE = 7.5
 _cached_claims = 0
 def score():
     global _cached_claims
     _cached_claims = _my_claims()
     # units.builder.draw_mask(securable_ore(), 0, 255, 0)
     # units.builder.draw_mask(_cached_claims, 0, 0, 255)
-    important = _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])
-    # units.builder.draw_mask(important, 0, 255, 0)
-
-    if important:
-        closest, dist = nav.closest(important, map_info._my_pos)
-        if closest:
-            if dist <= 2:
-                return 8.5
-            else:
-                return 7.5
+    if _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]):
+        # units.builder.draw_mask(_cached_claims & map_info._bm_et[map_info._IDX_HARVESTER], 0, 255, 0)
+        return 7.5
     return 3 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]

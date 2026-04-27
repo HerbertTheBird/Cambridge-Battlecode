@@ -54,19 +54,15 @@ def _claimed_enemy_ids():
     return claimed
 
 
-def _find_chase_target(damaged = True):
-    log("find chase")
+def _find_chase_target():
+    # log("find chase")
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
     enemy_bots = map_info._bm_enemy_bots
-    if damaged:
-        enemy_bots = enemy_bots & _very_damaged_targets()
     
     if not enemy_bots:
         log("no enemies")
-        if damaged:
-            return _find_chase_target(False)
         return None
 
     friendly_bots = map_info._bm_friendly_bots
@@ -107,29 +103,21 @@ def _find_chase_target(damaged = True):
 
     if not filtered:
         filtered = enemy_bots
-        log("no filtered")
-        if damaged:
-            return _find_chase_target(False)
         return None
     nearby = filtered & map_info.expand_chebyshev(my_bit, 8)
     if not nearby:
         log("too far")
-        if damaged:
-            return _find_chase_target(False)
         return None
     closest_pos, dist = nav.closest_within(nearby, max_dist=8)
     if closest_pos is None:
         log("no closest")
-        if damaged:
-            return _find_chase_target(False)
         return None
     # if dist < 6:
     #     return None
     n = closest_pos.x + closest_pos.y * w
-    # if closest_pos.distance_squared(map_info._my_pos) < 5:
-    #     log("too close")
-    #     return None
-    log("found chase target", closest_pos)
+    if closest_pos.distance_squared(map_info._my_pos) < 5:
+        log("too close")
+        return None
     return closest_pos
 
 
@@ -260,8 +248,6 @@ def run():
         best, dist = nav.closest(targets)
         if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
-            _do_best_heal()
-            return
     # Priority 1: chase an enemy near my conveyors
     target = _cached_chase_target
     if target is not None:
