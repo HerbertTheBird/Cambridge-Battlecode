@@ -5,6 +5,7 @@ import os
 
 # Change this to your folder / pattern
 FILES = glob.glob("profiles/*.txt")
+SORT_BY = "tottime_us"  # "tottime_us", "cumtime_us", "avg_cum_us", "ncalls"
 
 # function -> [ncalls, tottime, cumtime]
 data = defaultdict(lambda: [0, 0.0, 0.0])
@@ -77,12 +78,20 @@ for file in FILES:
                     data[func][1] += tottime
                     data[func][2] += cumtime
 
-# Sort by average cumulative time (descending)
-sorted_rows = sorted(
-    data.items(),
-    key=lambda x: (x[1][2] / x[1][0]) if x[1][0] > 0 else 0,
-    reverse=True
-)
+def sort_key(item):
+    _func, (ncalls, tottime, cumtime) = item
+    if SORT_BY == "ncalls":
+        return ncalls
+    if SORT_BY == "tottime_us":
+        return tottime
+    if SORT_BY == "cumtime_us":
+        return cumtime
+    if SORT_BY == "avg_cum_us":
+        return (cumtime / ncalls) if ncalls > 0 else 0.0
+    raise ValueError(f"Unsupported SORT_BY={SORT_BY!r}")
+
+
+sorted_rows = sorted(data.items(), key=sort_key, reverse=True)
 
 # Output
 with open("combined_profile.txt", "w") as out:

@@ -26,6 +26,7 @@ from tournament import (
     DEFAULT_ELO,
     HeadToHead,
     MatchResult,
+    binomial_p_value,
     discover_maps,
     elo_expected,
     elo_update,
@@ -180,16 +181,17 @@ def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead]) -> None:
     if not entries:
         return
 
-    print(f"\n{'=' * 80}")
-    print("  HEAD-TO-HEAD")
-    print(f"{'=' * 80}")
+    print(f"\n{'=' * 90}")
+    print("  HEAD-TO-HEAD  (p = one-sided binomial test that main bot is better; lower = stronger)")
+    print(f"{'=' * 90}")
 
     name_w = max(max(len(e.bot_a), len(e.bot_b)) for e in entries) if entries else 10
-    print(f"  {'Main Bot':{name_w}}  vs  {'Opponent':{name_w}}  {'W':>4}  {'L':>4}  {'D':>4}")
-    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}")
+    print(f"  {'Main Bot':{name_w}}  vs  {'Opponent':{name_w}}  {'W':>4}  {'L':>4}  {'D':>4}  {'p':>8}")
+    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}  {'------':>8}")
 
     for e in entries:
-        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}")
+        p = binomial_p_value(e.a_wins, e.b_wins)
+        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}  {p:>8.4f}")
 
 
 def print_side_breakdown(results: list[MatchResult], main_bot: str) -> None:
@@ -227,6 +229,55 @@ def print_side_breakdown(results: list[MatchResult], main_bot: str) -> None:
     print(f"  {'-' * 10}  {'--':>4}  {'--':>4}  {'--':>4}  {'-----':>6}  {'----':>6}")
     print(f"  {'GOLD (A)':<10}  {gold_w:>4}  {gold_l:>4}  {gold_d:>4}  {gold_total:>6}  {gold_wr:>5.1f}%")
     print(f"  {'SILVER (B)':<10}  {silver_w:>4}  {silver_l:>4}  {silver_d:>4}  {silver_total:>6}  {silver_wr:>5.1f}%")
+
+
+def print_pair_breakdown(results: list[MatchResult], main_bot: str, opponents: list[str]) -> None:
+    """Group matches into (opponent, map, seed) pairs (main bot plays both sides)
+    and report 2-0 sweeps, 1-1 splits, 0-2 losses, plus pairs containing draws."""
+    pairs: dict[tuple[str, str, int], list[MatchResult]] = defaultdict(list)
+    for mr in results:
+        if mr.error:
+            continue
+        opp = mr.bot_b if mr.bot_a == main_bot else mr.bot_a
+        pairs[(opp, mr.map_name, mr.seed)].append(mr)
+
+    counts: dict[str, dict[str, int]] = {opp: defaultdict(int) for opp in opponents}
+
+    for (opp, _map, _seed), match_pair in pairs.items():
+        if opp not in counts or len(match_pair) != 2:
+            continue
+        wins = sum(1 for m in match_pair if m.winner == main_bot)
+        losses = sum(1 for m in match_pair if m.winner is not None and m.winner != main_bot)
+        draws = sum(1 for m in match_pair if m.winner is None)
+        counts[opp]["total"] += 1
+        if draws > 0:
+            counts[opp]["with_draw"] += 1
+        elif wins == 2:
+            counts[opp]["sweep"] += 1
+        elif losses == 2:
+            counts[opp]["lost"] += 1
+        else:
+            counts[opp]["split"] += 1
+
+    print(f"\n{'=' * 80}")
+    print(f"  PAIR BREAKDOWN for {main_bot} (one pair = both sides on same map+seed)")
+    print(f"{'=' * 80}")
+
+    name_w = max(len(o) for o in opponents) if opponents else 10
+    print(f"  {'Opponent':{name_w}}  {'2-0':>5}  {'1-1':>5}  {'0-2':>5}  {'D?':>4}  {'Pairs':>6}  {'PairWR':>7}")
+    print(f"  {'-' * name_w}  {'---':>5}  {'---':>5}  {'---':>5}  {'--':>4}  {'-----':>6}  {'------':>7}")
+
+    for opp in opponents:
+        s = counts[opp]
+        sweep = s.get("sweep", 0)
+        split = s.get("split", 0)
+        lost = s.get("lost", 0)
+        with_draw = s.get("with_draw", 0)
+        total = s.get("total", 0)
+        decisive = sweep + split + lost
+        pair_wr = (sweep + 0.5 * split) / decisive * 100 if decisive else 0.0
+        wr_str = f"{pair_wr:.1f}%" if decisive else "-"
+        print(f"  {opp:{name_w}}  {sweep:>5}  {split:>5}  {lost:>5}  {with_draw:>4}  {total:>6}  {wr_str:>7}")
 
 
 def print_map_breakdown(results: list[MatchResult], bots: list[str]) -> None:
@@ -309,6 +360,7 @@ def main() -> int:
 
     print_leaderboard(stats)
     print_head_to_head(h2h)
+    print_pair_breakdown(results, bot, opponents)
     print_side_breakdown(results, bot)
 
     if args.map_breakdown:

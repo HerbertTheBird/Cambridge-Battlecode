@@ -1,9 +1,8 @@
-from cambc import *
-
 import map_info
 from pathing import Pathing
 import comms
 import units.builder
+from cambc import *
 from log import log
 
 rc: Controller = None
@@ -14,38 +13,35 @@ comm_flag = 7
 CONV_CHASE_CHEB = 8
 ID_MASK = (1 << 12) - 1
 
-# Friendly buildings previously unreachable for heal — excluded from target sets.
-cant_heal = 0
-
 
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 
 def _conv_zone():
-    return units.builder._harvest_zone
-    # """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
-    # my_team_idx = map_info._my_team_idx
-    # my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
-    # my_convs |= map_info._bm_my_core_area
-    # if not my_convs:
-    #     return 0
-    # w = map_info._width
-    # board = (1 << (w * map_info._height)) - 1
-    # avoid = map_info._bm_blocked
-    # passable = ~avoid & board
-    # nlc = map_info._not_left_col
-    # nrc = map_info._not_right_col
-    # visited = my_convs
-    # frontier = my_convs
-    # for _ in range(CONV_CHASE_CHEB):
-    #     h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-    #     expanded = h | (h << w) | (h >> w)
-    #     frontier = expanded & passable & ~visited
-    #     visited |= frontier
-    # return visited
+    # return units.builder._harvest_zone
+    """Bitmask of tiles within CONV_CHASE_CHEB pathing distance of my conveyors."""
+    my_team_idx = map_info._my_team_idx
+    my_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    my_convs |= map_info._bm_my_core_area
+    if not my_convs:
+        return 0
+    w = map_info._width
+    board = (1 << (w * map_info._height)) - 1
+    avoid = map_info._bm_blocked
+    passable = ~avoid & board
+    nlc = map_info._not_left_col
+    nrc = map_info._not_right_col
+    visited = my_convs
+    frontier = my_convs
+    for _ in range(CONV_CHASE_CHEB):
+        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+        expanded = h | (h << w) | (h >> w)
+        frontier = expanded & passable & ~visited
+        visited |= frontier
+    return visited
 
 
 def _claimed_enemy_ids():
@@ -65,6 +61,7 @@ def _find_chase_target():
     claimed = _claimed_enemy_ids()
     # Filter enemy bots in zone, unclaimed
     enemy_bots = map_info._bm_enemy_bots
+    
     if not enemy_bots:
         return None
 
@@ -79,18 +76,19 @@ def _find_chase_target():
         n = lsb.bit_length() - 1
         uid = map_info._bot_at.get(n)
         if uid is not None:
-            if (uid & ID_MASK) not in claimed:
+            # if (uid & ID_MASK) not in claimed:
+            #     filtered |= lsb
+            # else:
+            nearby_friendly = map_info.expand_chebyshev(lsb) & other_friendly
+            if not nearby_friendly:
                 filtered |= lsb
-            else:
-                nearby_friendly = map_info.expand_chebyshev(map_info.expand_chebyshev(lsb)) & other_friendly
-                if not nearby_friendly:
-                    filtered |= lsb
         mask ^= lsb
-    # units.builder.draw_mask(enemy_bots, 255, 0, 0)
+    # log(map_info._bot_pos)
+    units.builder.draw_mask(enemy_bots, 255, 0, 0)
+    units.builder.draw_mask(friendly_bots, 0, 255, 0)
 
     if not filtered:
         return None
-    # units.builder.draw_mask(filtered, 0, 255, 0)
 
     closest_pos, dist = nav.closest(filtered)
     if closest_pos is None or dist > 6:
@@ -98,6 +96,8 @@ def _find_chase_target():
     n = closest_pos.x + closest_pos.y * w
     uid = map_info._bot_at.get(n)
     if uid is None:
+        return None
+    if closest_pos.distance_squared(map_info._my_pos) <= 5:
         return None
     return (uid, closest_pos)
 
@@ -110,47 +110,60 @@ def _healable_mask():
 
 def _very_damaged_targets():
     """Bitmask of friendly buildings with > 2 damage."""
-    return _healable_mask() & map_info._bm_very_damaged & ~cant_heal
+    return _healable_mask() & map_info._bm_very_damaged
 
 
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
-    return _healable_mask() & map_info._bm_damaged & ~map_info._bm_enemy_bots & ~cant_heal
+    return _healable_mask() & map_info._bm_damaged & ~map_info._bm_enemy_bots
 
 
 _cached_chase_target = None  # set by score(), reused by run()
 
+MAX_SCORE = 7
 def score():
     global _cached_chase_target
-    if _very_damaged_targets():
-        _cached_chase_target = None
-        return 7
     _cached_chase_target = _find_chase_target()
+
+    if _very_damaged_targets():
+        return 7
     target = _cached_chase_target
     if target is not None:
         if _conv_zone() & (1<<(target[1].x + target[1].y * map_info._width)):
             log("high priority heal", target[0])
             return 7
-        # else:
-        #     log("low priority heal", target[0])
-        #     return 2.5
+        else:
+            log("low priority heal", target[0])
+            return 2.5
     return 0
 
 
 def _try_barrier_dead_ends():
-    """Barrier any adjacent dead-end conveyor output tiles."""
+    """Barrier any adjacent tiles that are dead-end conveyor targets."""
     w = map_info._width
     dead_ends = map_info._bm_dead_end
     if not dead_ends:
         return
-    # dead_ends are output tiles; only barrier those that are empty / marker / enemy building
+    # Only dead-end conveyors whose output is empty / marker / enemy building
     my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     enemy_any = map_info._bm_team[enemy_idx]
     marker = map_info._bm_et[map_info._IDX_MARKER]
     empty_mask = ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
 
-    targets = dead_ends & (empty_mask | marker | enemy_any)
+    targets = 0
+    mask = dead_ends
+    conv_target = map_info._building_conv_target
+    tiles = w * map_info._height
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        tn = conv_target[n]
+        if tn and 0 <= tn < tiles:
+            tbit = 1 << tn
+            if (empty_mask & tbit) or (marker & tbit) or (enemy_any & tbit):
+                targets |= lsb
+        mask ^= lsb
     if not targets:
         return
     my_pos = map_info._my_pos
@@ -163,7 +176,7 @@ def _try_barrier_dead_ends():
         if not (targets & pbit):
             continue
         if rc.get_action_cooldown() == 0:
-            if not map_info.has_builder_bot(p) and rc.can_destroy(p):
+            if rc.can_destroy(p):
                 rc.destroy(p)
                 map_info.update_at(p)
         if rc.can_build_barrier(p):
@@ -209,21 +222,16 @@ def run():
         log("target is",target)
         uid, ep = target
         _try_barrier_dead_ends()
-        nav.move_to(ep)
+        nav.move_adjacent(ep)
         comms.mark(uid & ID_MASK, comm_flag)
         _do_best_heal()
         return
 
     # Priority 2: move to most damaged building and heal
-    global cant_heal
     very_damaged = _very_damaged_targets()
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is None:
-            cant_heal |= targets
-        else:
+        if best is not None:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()
-    if rc.can_fire(rc.get_position()) and rc.get_team(rc.get_tile_building_id(rc.get_position())) != rc.get_team():
-        rc.fire(rc.get_position())

@@ -1,5 +1,4 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
-
 import map_info
 from log import log
 
@@ -8,17 +7,48 @@ my_pos: Position = None
 my_team: Team = None
 last_fired_round: int = 0
 skipped_firing_turns: int = 0
+adjacent_tiles: tuple[Position, ...] = ()
 
 # --- Ported from dragonfruit/globals.py ---
 TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
-CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
 INF = 999999
 
+CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+
+
+def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
+    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
+
+
+def _should_stay():
+    """Block self-destruct when a harvester is adjacent, no bots are nearby,
+    or the closest visible builder bot is an enemy."""
+    for p in adjacent_tiles:
+        if map_info.in_bounds(p):
+            bid = rc.get_tile_building_id(p)
+            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+                return True
+    best_d = 8
+    closest_is_friendly = False
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        p = rc.get_position(uid)
+        d = my_pos.distance_squared(p)
+        if best_d is None or d < best_d:
+            best_d = d
+            closest_is_friendly = (rc.get_team(uid) == my_team)
+    if best_d is None:
+        return True
+    return not closest_is_friendly
+
+
 def init(c: Controller):
-    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns
+    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns, adjacent_tiles
     rc = c
     my_pos = rc.get_position()
+    adjacent_tiles = _adjacent_cardinals(my_pos)
     last_fired_round = rc.get_current_round()
     skipped_firing_turns = 0
     my_team = map_info._my_team
@@ -142,9 +172,9 @@ def get_gunner_threat_tiles(tpos: Position) -> set[Position]:
                 break
 
             threat_tiles.add(cur)
-
+            
             if not rc.is_in_vision(cur):
-                continue
+                break
 
             bbid = rc.get_tile_builder_bot_id(cur)
             if bbid is not None:
@@ -253,7 +283,7 @@ def choose_rotate_dir(enemies) -> Direction | None:
             continue
 
         dist = my_pos.distance_squared(tpos)
-        desired_dir = my_pos.direction_to(tpos)
+        desired_dir = map_info.direction_to(my_pos, tpos)
 
         if desired_dir == current_dir:
             continue
@@ -265,31 +295,6 @@ def choose_rotate_dir(enemies) -> Direction | None:
             rotate_dir = desired_dir
 
     return rotate_dir
-
-def choose_builder_bot_rotate_dir() -> Direction | None:
-    """Rotates towards adjacent enemy builder bots on allied conveyors."""
-    for d in tuple(Direction):
-        adj_pos = map_info.pos_add(my_pos, d)
-        if not map_info.in_bounds(adj_pos):
-            continue
-
-        bot_id = rc.get_tile_builder_bot_id(adj_pos)
-        if bot_id is None or rc.get_team(bot_id) == my_team:
-            continue
-
-        # Check if on allied conveyor or bridge
-        building_id = rc.get_tile_building_id(adj_pos)
-        if building_id is None:
-            continue
-
-        b_type = rc.get_entity_type(building_id)
-        b_team = rc.get_team(building_id)
-
-        if b_team == my_team and (b_type in {EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.ARMOURED_CONVEYOR}):
-             # Rotate towards them
-             return my_pos.direction_to(adj_pos)
-    
-    return None
 
 # --- Ported and adapted from dragonfruit/units/gunner/run.py ---
 def run():
@@ -308,13 +313,10 @@ def run():
     elif rc.get_global_resources()[0] >= 60:
         rotate_dir = choose_rotate_dir(enemies)
 
-        if rotate_dir is None:
-            rotate_dir = choose_builder_bot_rotate_dir()
-
         if rotate_dir is not None and rc.can_rotate(rotate_dir):
             rc.rotate(rotate_dir)
             skipped_firing_turns = 0
-            log(f"gunner rotated: {rotate_dir}")
+            log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
 
     if rc.get_action_cooldown() == 0:
         skipped_firing_turns += 1
@@ -323,19 +325,6 @@ def run():
         if len(enemies) > 0:
             last_fired_round = rc.get_current_round()
             skipped_firing_turns -= 1
-        if (rc.get_scale_percent() > 500 or skipped_firing_turns >= 32) and not _should_stay():
-            rc.self_destruct()
-
-def _should_stay():
-    my_pos = rc.get_position()
-    my_team = map_info._my_team
-    for dx, dy in CARDINAL_OFFSETS:
-        p = Position(my_pos.x + dx, my_pos.y + dy)
-        if map_info.in_bounds(p):
-            bid = rc.get_tile_building_id(p)
-            if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
-                return True
-            bot_id = rc.get_tile_builder_bot_id(p)
-            if bot_id and rc.get_team(bot_id) != my_team:
-                return True
-    return False
+        if (rc.get_scale_percent() > 500 or skipped_firing_turns >= 32):
+            if not _should_stay():
+                rc.self_destruct()

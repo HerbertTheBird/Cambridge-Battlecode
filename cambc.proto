@@ -1,0 +1,267 @@
+syntax = "proto3";
+
+package battlecode;
+
+message Replay {
+  Map map = 1;
+  repeated Turn turns = 3;
+  optional Team winner = 4;
+}
+
+message Map {
+  int32 width = 1;
+  int32 height = 2;
+  repeated TileRow rows = 3;
+  repeated CorePosition cores = 4;
+}
+
+message TileRow {
+  repeated Environment tiles = 1;
+}
+
+message Players {
+  Player a = 1;
+  Player b = 2;
+}
+
+message Player {
+  int32 titanium = 1;
+  int32 axionite = 2;
+  int32 resources_collected = 3;
+  int32 titanium_collected = 4;
+  int32 axionite_collected = 5;
+}
+
+message Turn {
+  repeated Update updates = 1;
+}
+
+message Update {
+  oneof kind {
+    PlaceEntity place_entity = 1;
+    MoveBuilderBot move_builder_bot = 2;
+    RemoveEntity remove_entity = 3;
+    DistributeResources distribute_resources = 4;
+    UpdateHp update_hp = 5;
+    UpdatePlayers update_players = 6;
+    SetActionCooldown set_action_cooldown = 7;
+    SetMoveCooldown set_move_cooldown = 8;
+    BotOutput bot_output = 9;
+    IndicatorLine indicator_line = 10;
+    IndicatorDot indicator_dot = 11;
+    FireTurret fire_turret = 12;
+    BuilderAttack builder_attack = 13;
+  }
+}
+
+message PlaceEntity {
+  Entity entity = 1;
+}
+
+message MoveBuilderBot {
+  int32 id = 1;
+  Pos to = 2;
+}
+
+message RemoveEntity {
+  int32 id = 1;
+}
+
+message DistributeResources {
+  repeated ResourceMove moves = 1;
+}
+
+message ResourceMove {
+  Pos from = 1;
+  Pos to = 2;
+  optional int32 resource_id = 3;
+}
+
+message UpdateHp {
+  int32 id = 1;
+  int32 delta = 2;
+}
+
+message UpdatePlayers {
+  Players players = 1;
+}
+
+message SetActionCooldown {
+  int32 id = 1;
+  int32 value = 2;
+}
+
+message SetMoveCooldown {
+  int32 id = 1;
+  int32 value = 2;
+}
+
+message BotOutput {
+  int32 id = 1;
+  string stdout = 2;
+  uint32 exec_time_us = 3;
+  bool tled = 4;
+}
+
+message IndicatorLine {
+  int32 id = 1;
+  Pos pos_a = 2;
+  Pos pos_b = 3;
+  int32 r = 4;
+  int32 g = 5;
+  int32 b = 6;
+}
+
+message IndicatorDot {
+  int32 id = 1;
+  Pos pos = 2;
+  int32 r = 3;
+  int32 g = 4;
+  int32 b = 5;
+}
+
+message FireTurret {
+  Pos from = 1;
+  Pos to = 2;
+}
+
+message BuilderAttack {
+  int32 id = 1;
+}
+
+message Pos {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message CorePosition {
+  int32 id = 1;
+  Team team = 2;
+  Pos position = 3;
+}
+
+enum Team {
+  TEAM_A = 0;
+  TEAM_B = 1;
+}
+
+enum Direction {
+  DIR_CENTRE = 0;
+  DIR_NORTH = 1;
+  DIR_NORTHEAST = 2;
+  DIR_EAST = 3;
+  DIR_SOUTHEAST = 4;
+  DIR_SOUTH = 5;
+  DIR_SOUTHWEST = 6;
+  DIR_WEST = 7;
+  DIR_NORTHWEST = 8;
+}
+
+enum ResourceType {
+  RESOURCE_NONE = 0;
+  RESOURCE_TITANIUM = 1;
+  RESOURCE_RAW_AXIONITE = 2;
+  RESOURCE_REFINED_AXIONITE = 3;
+}
+
+enum Environment {
+  ENV_EMPTY = 0;
+  ENV_WALL = 1;
+  ENV_ORE_TITANIUM = 2;
+  ENV_ORE_AXIONITE = 3;
+}
+
+message Entity {
+  int32 id = 1;
+  Team team = 2;
+  Pos position = 3;
+  int32 hp = 4;
+  int32 max_hp = 5;
+
+  oneof kind {
+    BuilderBot builder_bot = 10;
+    Conveyor conveyor = 11;
+    Splitter splitter = 12;
+    ArmouredConveyor armoured_conveyor = 13;
+    Bridge bridge = 14;
+    Harvester harvester = 15;
+    Foundry foundry = 16;
+    Road road = 17;
+    Barrier barrier = 18;
+    Marker marker = 19;
+    Core core = 20;
+    Gunner gunner = 21;
+    Sentinel sentinel = 22;
+    Breach breach = 23;
+    Launcher launcher = 24;
+  }
+}
+
+message BuilderBot {
+  int32 action_cooldown = 1;
+  int32 move_cooldown = 2;
+}
+
+message Conveyor {
+  Direction direction = 1;
+  ResourceType stored = 2;
+}
+
+message Splitter {
+  Direction direction = 1;
+  ResourceType stored = 2;
+}
+
+message ArmouredConveyor {
+  Direction direction = 1;
+  ResourceType stored = 2;
+}
+
+message Bridge {
+  Pos target = 1;
+  ResourceType stored = 2;
+}
+
+message Harvester {
+  int32 cooldown = 1;
+  ResourceType resource_type = 2;
+}
+
+message Foundry {
+  ResourceType stored = 2;
+}
+
+message Road {}
+
+message Barrier {}
+
+message Marker {
+  uint32 value = 1;
+}
+
+message Core {
+  int32 action_cooldown = 1;
+}
+
+message Gunner {
+  Direction direction = 1;
+  ResourceType ammo_type = 2;
+  int32 ammo_amount = 3;
+}
+
+message Sentinel {
+  Direction direction = 1;
+  ResourceType ammo_type = 2;
+  int32 ammo_amount = 3;
+}
+
+message Breach {
+  Direction direction = 1;
+  ResourceType ammo_type = 2;
+  int32 ammo_amount = 3;
+}
+
+message Launcher {
+  ResourceType ammo_type = 2;
+  int32 ammo_amount = 3;
+}

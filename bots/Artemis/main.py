@@ -19,11 +19,92 @@ import units.turret_sentinel as sentinel
 import units.turret_breach as breach
 import units.turret_launcher as launcher
 
+import sys
+import threading
+
 
 # PROFILE_DIR = pathlib.Path("profiles")
 SPAWN_TURN = -2
 
+def _clear_frame_chain(frame):
+    seen = set()
+    while frame is not None and id(frame) not in seen:
+        seen.add(id(frame))
+        try:
+            frame.f_trace = None
+        except Exception:
+            pass
+        try:
+            frame.f_trace_lines = False
+        except Exception:
+            pass
+        try:
+            frame.f_trace_opcodes = False
+        except Exception:
+            pass
+        frame = frame.f_back
 
+def disable_runtime_hooks():
+    # Current thread
+    for fn_name in ("setprofile", "settrace"):
+        fn = getattr(sys, fn_name, None)
+        if fn is not None:
+            try:
+                fn(None)
+            except Exception:
+                pass
+
+    # threading defaults + all current threads on 3.12+
+    for fn_name in (
+        "setprofile",
+        "settrace",
+        "setprofile_all_threads",
+        "settrace_all_threads",
+    ):
+        fn = getattr(threading, fn_name, None)
+        if fn is not None:
+            try:
+                fn(None)
+            except Exception:
+                pass
+
+    # Clear per-frame trace hooks on this thread
+    try:
+        _clear_frame_chain(sys._getframe())
+    except Exception:
+        pass
+
+    # Try to clear per-frame hooks on other Python threads too
+    cur_frames = getattr(sys, "_current_frames", None)
+    if cur_frames is not None:
+        try:
+            for frame in cur_frames().values():
+                _clear_frame_chain(frame)
+        except Exception:
+            pass
+
+    # Python 3.12+: clear sys.monitoring tool IDs 0..5
+    mon = getattr(sys, "monitoring", None)
+    if mon is not None:
+        for tool_id in range(6):
+            try:
+                mon.clear_tool_id(tool_id)
+            except Exception:
+                pass
+            try:
+                mon.free_tool_id(tool_id)
+            except Exception:
+                pass
+
+def hook_state():
+    out = {
+        "sys.getprofile": getattr(sys, "getprofile", lambda: None)(),
+        "sys.gettrace": getattr(sys, "gettrace", lambda: None)(),
+        "threading.getprofile": getattr(threading, "getprofile", lambda: None)(),
+        "threading.gettrace": getattr(threading, "gettrace", lambda: None)(),
+        "sys.monitoring": hasattr(sys, "monitoring"),
+    }
+    return out
 class Player:
     def __init__(self):
         self.initialized = False
@@ -79,8 +160,12 @@ class Player:
     #                 f"{filename}:{lineno}({funcname})\n"
                 # )
 
+
     def run(self, c: Controller) -> None:
         global SPAWN_TURN
+        disable_runtime_hooks()
+
+        
         # if not self.initialized:
         #     self._prepare_profile_dir(c)
         

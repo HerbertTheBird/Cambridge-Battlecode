@@ -1,9 +1,7 @@
-from cambc import Controller, Position, Direction, EntityType
-
+from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
 from log import DRAW_DEBUG, log
 import comms_positional
-
 #type = 0:launch, 1:explore, 2:harvest, 3:route
 POS_BITS = 12
 SYM_BITS = 3
@@ -95,7 +93,7 @@ def decode_visible_marker(id: int, pos: Position):
     sender_dir = _DIRS_8[sender_dir_idx]
     dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
     sender_pos = Position(pos.x + dx, pos.y + dy)
-    return (val, pos, sender_pos)
+    return (val, sender_pos, pos, id)
 
 
 def get_new_messages():
@@ -143,8 +141,6 @@ def mark(target_idx, type):
     best = None # (priority, pos, tile_id)
 
     for pos in adjacent_tiles:
-        if pos == rc.get_position():
-            continue
         if _is_bad_marker_spot(pos):
             continue
 
@@ -171,7 +167,7 @@ def mark(target_idx, type):
                 best = (1, pos, tile_id)
 
         # Priority 2: replace own road
-        elif (entity_type == EntityType.ROAD and not map_info.has_builder_bot(pos)):
+        elif (entity_type == EntityType.ROAD and not rc.get_tile_builder_bot_id(pos)):
             if best is None or best[0] > 2:
                 best = (2, pos, tile_id)
 
@@ -179,13 +175,14 @@ def mark(target_idx, type):
     if best:
         priority, pos, tile_id = best
         sym = get_sym_bits()
-        sample_bits = comms_positional.encode_sample_bits(pos, sym)
-        sender_dir = pos.direction_to(map_info._my_pos)
+        sample_bits = 0
+        # sample_bits = comms_positional.encode_sample_bits(pos, sym)
+        sender_dir = map_info.direction_to(pos, map_info._my_pos)
         sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
         val = encode(target_idx, type, sym, sample_bits, sender_loc)
 
         _my_markers.discard(tile_id)
-        if tile_id is not None and not map_info.has_builder_bot(pos) and rc.can_destroy(pos):
+        if tile_id is not None and rc.can_destroy(pos):
             rc.destroy(pos)
             
             # Don't bother updating map if we replaced marker with marker

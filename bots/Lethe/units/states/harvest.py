@@ -1,9 +1,8 @@
-from cambc import *
-
 import map_info
 import pathing
 from pathing import Pathing
 import comms
+from cambc import *
 import units.builder
 from log import log
 
@@ -16,19 +15,20 @@ def _my_claims():
     my_pos = map_info._my_pos
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
-    available = harvestable_ore() & ~_too_expensive()
-    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available)
+    available = units.builder.exclude_crowded_claims(comm_flag, harvestable_ore() & ~_too_expensive())
+    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available, map_info._bm_passable_FFF)
 
 def init(c: Controller):
     global rc, nav
     rc = c
-    nav = Pathing(rc)
+    nav = units.builder.nav
 
 cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
+_cached_claims = 0
 def possible_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
-    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 750:
+    if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
         ore |= map_info._bm_env[map_info._IDX_ENV_ORE_AX]
     return ore
 def harvestable_ore():
@@ -67,22 +67,15 @@ def harvestable_ore():
     )
     enemy_hard_adj = map_info.expand_manhattan(enemy_hard)
 
-    # Axionite ore adjacent to my conveyors actively carrying Ti or refined — mixing
-    # those with fresh raw-ax would contaminate the flow. Empty/unclassified conveyors
-    # (e.g. guards we just placed) are fine; they'll pick up raw-ax once the harvester runs.
-    wrong_conveyors = (map_info._bm_conv_ti | map_info._bm_conv_refined) & map_info._bm_team[my_team_idx]
-    ax_ore_near_non_raw = map_info._bm_env[map_info._IDX_ENV_ORE_AX] & map_info.expand_manhattan(wrong_conveyors) if wrong_conveyors else 0
-
     return (ore
             & ~landlocked
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
             & ~enemy_blocking
             & ~friendly_blocking
             & ~enemy_hard_adj
-            & ~(map_info._bm_enemy_soft_threat | map_info._bm_enemy_hard_threat)
-            # & units.builder._harvest_zone
-            & ~cant_harvest
-            & ~ax_ore_near_non_raw)
+            & ~map_info._bm_enemy_turret_threat
+            & units.builder._harvest_zone
+            & ~cant_harvest)
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -94,9 +87,13 @@ def _too_expensive():
             result |= 1 << n
     return result
 
+MAX_SCORE = 3
 def score():
+    global _cached_claims
+    _cached_claims = _my_claims()
+    return 3 if _cached_claims else 0
 
-    return 3 if _my_claims() else 0
+CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 
 def run():
@@ -105,11 +102,9 @@ def run():
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
     my_team_idx = map_info._my_team_idx
-    ore_mask = possible_ore()
     wall_mask = map_info._bm_env[map_info._IDX_ENV_WALL]
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
     marker_mask = map_info._bm_et[map_info._IDX_MARKER]
-    harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
     has_building = map_info._bm_any_building
 
     my_pos = map_info._my_pos
@@ -125,7 +120,7 @@ def run():
             continue
         # Check all 4 cardinal sides are secured
         secured = True
-        for cd in map_info._CARDINAL:
+        for cd in CARD:
             cp = map_info.pos_add(p, cd)
             if not map_info.in_bounds(cp):
                 continue
@@ -145,11 +140,12 @@ def run():
             cant_harvest |= pbit
             continue
         cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
-        print("diagonal ore at", p, "cost", cost)
+        log("diagonal ore at", p, "cost", cost)
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
-        if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not map_info.has_builder_bot(p):
+        units.builder.register_active_target(comm_flag, p)
+        if rc.get_action_cooldown() == 0 and rc.can_destroy(p) and (map_info.type_at(p.x, p.y) == EntityType.ROAD or map_info.type_at(p.x, p.y) == EntityType.BARRIER) and not ((map_info._bm_friendly_bots | map_info._bm_enemy_bots) & pbit):
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_harvester(p):
@@ -158,7 +154,7 @@ def run():
         comms.mark(pn, comm_flag)
         return
 
-    available = _my_claims()
+    available = _cached_claims
     if not available:
         return
 
@@ -166,6 +162,7 @@ def run():
     if best_ore is None:
         cant_harvest |= available
         return
+    units.builder.register_active_target(comm_flag, best_ore)
 
     w = map_info._width
     my_team_idx = map_info._my_team_idx
@@ -185,7 +182,7 @@ def run():
         return
     # --- Secure each cardinal side ---
     all_secured = True
-    for d in map_info._CARDINAL:
+    for d in CARD:
         p = map_info.pos_add(best_ore, d)
         if not map_info.in_bounds(p):
             continue
@@ -210,6 +207,7 @@ def run():
             nav.move_to(p)
             if rc.can_fire(p):
                 rc.fire(p)
+                map_info.update_at(p)
             comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             return
 
@@ -220,7 +218,7 @@ def run():
         # Empty, marker, enemy marker, or my road — needs barrier
         all_secured = False
         nav.move_to(best_ore)
-        if pid and is_mine and not map_info.has_builder_bot(p) and rc.can_destroy(p) and rc.get_action_cooldown() == 0:
+        if pid and is_mine and rc.can_destroy(p) and rc.get_action_cooldown() == 0 and rc.get_position() != p:
             rc.destroy(p)
             map_info.update_at(p)
         if rc.can_build_barrier(p):
@@ -238,21 +236,6 @@ def run():
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]
-
-    # If an enemy road sits on the ore, step ONTO the ore and fire until it's
-    # gone. This has to happen before any adjacent-move, because move cooldown
-    # is spent by the first nav.move_to of the turn.
-    if ore_id:
-        is_mine = bool(map_info._bm_team[my_team_idx] & ore_bit)
-        is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
-        if not is_mine and is_road:
-            nav.move_to(best_ore)
-            if rc.can_fire(map_info._my_pos):
-                rc.fire(map_info._my_pos)
-            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
-            return
-
-    # Pick a passable tile adjacent to best_ore to stand on while building.
     targets = set()
     for d in map_info._ALL_DIRECTIONS:
         p = map_info.pos_add(path[0], d)
@@ -270,7 +253,15 @@ def run():
 
     if ore_id:
         is_mine = bool(map_info._bm_team[my_team_idx] & ore_bit)
-        if is_mine and not map_info.has_builder_bot(best_ore) and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
+        is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & ore_bit)
+        if not is_mine and is_road:
+            nav.move_to(best_ore)
+            if rc.can_fire(map_info._my_pos):
+                rc.fire(map_info._my_pos)
+                map_info.update_at(best_ore)
+            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
+            return
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
 

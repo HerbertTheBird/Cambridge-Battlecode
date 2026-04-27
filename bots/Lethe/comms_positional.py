@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 from cambc import Position
 
-import comms_stats
 import map_info
 from log import log
 
-COMMS_SAMPLE_DISTANCE = 7
+COMMS_SAMPLE_DISTANCE = 8
 
 OFFSETS = (
     (0, 0),
@@ -17,7 +18,6 @@ OFFSETS = (
     (-1, 0),
     (-1, 1),
 )
-_active_stats = None
 
 def get_corresponding_pos(pos: Position) -> Position:
     """Pick a comms sample position relative to our core and marker parity."""
@@ -78,7 +78,7 @@ def _sample_env_idx(marker_pos: Position) -> int:
     return map_info._IDX_ENV_ORE_TI
 
 def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
-    corresponding = get_corresponding_pos(marker_pos)
+    corresponding = get_corresponding_pos_by_symmetry(marker_pos, sym_bits)
     env_mask = map_info._bm_env[_sample_env_idx(marker_pos)]
     seen = map_info._bm_seen
     width = map_info._width
@@ -95,7 +95,7 @@ def encode_sample_bits(marker_pos: Position, sym_bits: int) -> int:
     return result
 
 def decode_sample_positions(marker_pos: Position, sample_bits: int, sym_bits: int):
-    corresponding = get_corresponding_pos(marker_pos)
+    corresponding = get_corresponding_pos_by_symmetry(marker_pos, sym_bits)
     for i, (dx, dy) in enumerate(OFFSETS):
         if not ((sample_bits >> i) & 1):
             continue
@@ -104,47 +104,6 @@ def decode_sample_positions(marker_pos: Position, sample_bits: int, sym_bits: in
         if map_info.in_bounds_coords(x, y):
             pos = Position(x, y)
             yield pos
-
-def _new_stats():
-    return {
-        "markers_read": 0,
-        "tiles_learned": 0,
-        "tiles_known": 0,
-        "tiles_conflict": 0,
-        "learned_manhattan_distance_sum": 0,
-        "known_manhattan_distance_sum": 0,
-        "learned_chebyshev_distance_sum": 0,
-        "known_chebyshev_distance_sum": 0,
-    }
-
-def start_round_stats():
-    global _active_stats
-    if comms_stats.is_enabled():
-        _active_stats = _new_stats()
-    else:
-        _active_stats = None
-
-def record_marker_read() -> None:
-    if _active_stats is not None:
-        _active_stats["markers_read"] += 1
-
-def _record_sample_stats(stats, marker_pos: Position, sample_pos: Position, status: str) -> None:
-    if status not in ("known", "learned", "conflict"):
-        return
-
-    manhattan_dist = abs(sample_pos.x - marker_pos.x) + abs(sample_pos.y - marker_pos.y)
-    chebyshev_dist = max(abs(sample_pos.x - marker_pos.x), abs(sample_pos.y - marker_pos.y))
-
-    if status == "known":
-        stats["tiles_known"] += 1
-        stats["known_manhattan_distance_sum"] += manhattan_dist
-        stats["known_chebyshev_distance_sum"] += chebyshev_dist
-    elif status == "learned":
-        stats["tiles_learned"] += 1
-        stats["learned_manhattan_distance_sum"] += manhattan_dist
-        stats["learned_chebyshev_distance_sum"] += chebyshev_dist
-    else:
-        stats["tiles_conflict"] += 1
 
 def note_comm_env(pos: Position, env_idx: int) -> str:
     """Record a communicated environment tile if it was previously unknown."""
@@ -164,31 +123,8 @@ def note_comm_env(pos: Position, env_idx: int) -> str:
     map_info._bm_env[env_idx] |= bit
     return "learned"
 
-def apply_message(marker_pos: Position, sym_bits: int, sample_bits: int, stats=None) -> None:
-    if stats is None:
-        stats = _active_stats
+def apply_message(marker_pos: Position, sym_bits: int, sample_bits: int) -> None:
     env_idx = _sample_env_idx(marker_pos)
     for sample_pos in decode_sample_positions(marker_pos, sample_bits, sym_bits):
         status = note_comm_env(sample_pos, env_idx)
-        if stats is not None:
-            _record_sample_stats(stats, marker_pos, sample_pos, status)
 
-def flush_round_stats(current_round: int) -> None:
-    global _active_stats
-    if _active_stats is None:
-        return
-    flush_stats(current_round, _active_stats)
-    _active_stats = None
-
-def flush_stats(current_round: int, stats) -> None:
-    comms_stats.record_round(
-        current_round=current_round,
-        markers_read=stats["markers_read"],
-        tiles_learned=stats["tiles_learned"],
-        tiles_known=stats["tiles_known"],
-        tiles_conflict=stats["tiles_conflict"],
-        learned_manhattan_distance_sum=stats["learned_manhattan_distance_sum"],
-        known_manhattan_distance_sum=stats["known_manhattan_distance_sum"],
-        learned_chebyshev_distance_sum=stats["learned_chebyshev_distance_sum"],
-        known_chebyshev_distance_sum=stats["known_chebyshev_distance_sum"],
-    )
