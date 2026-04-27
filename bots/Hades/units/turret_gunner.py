@@ -208,7 +208,7 @@ def run():
 
     if rc.get_ammo_amount() < 2:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _should_stay():
+        if _no_ammo_turns >= 16 and not _should_stay():
             rc.self_destruct()
             return
     else:
