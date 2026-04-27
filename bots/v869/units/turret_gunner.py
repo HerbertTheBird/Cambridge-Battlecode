@@ -43,8 +43,6 @@ def init(c: Controller):
 
 
 def _should_stay():
-    if rc.get_global_resources()[0] < rc.get_conveyor_cost()[0]*4:
-        return True
     pos = rc.get_position()
     for uid in rc.get_nearby_units(8):
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
@@ -186,8 +184,6 @@ def _decide_fire():
 
 def _choose_rotate_dir():
     feeder_mask = _ally_feeder_mask()
-    harv_adj = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER])
-    w = map_info._width
     current = rc.get_direction()
     best_dir = None
     best_score = 0
@@ -198,10 +194,8 @@ def _choose_rotate_dir():
         res = _scan_ray(d, attackable, feeder_mask, allow_builder_bots=False)
         if res is None:
             continue
-        etype, fire_at = res
+        etype, _ = res
         score = _WEIGHTS.get(etype, 0)
-        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> (fire_at.x + fire_at.y * w)) & 1:
-            score += 1
         if score > best_score:
             best_score = score
             best_dir = d

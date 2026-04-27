@@ -32,8 +32,6 @@ def init(c: Controller):
 
 
 def _should_stay():
-    if rc.get_global_resources()[0] < rc.get_conveyor_cost()[0]*4:
-        return True
     my_pos = rc.get_position()
     my_team = map_info._my_team
     for uid in rc.get_nearby_units(8):
@@ -166,7 +164,6 @@ def run():
 
     w = map_info._width
     feeder_mask = _ally_feeder_mask()
-    harv_adj = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER])
 
     candidates = []  # (pos, weight, hp)
     for tile in rc.get_attackable_tiles():
@@ -182,8 +179,6 @@ def run():
         weight = _WEIGHTS.get(etype, 0)
         if weight <= 0:
             continue
-        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> n) & 1:
-            weight += 1
         candidates.append((tile, weight, hp))
 
     if not candidates:

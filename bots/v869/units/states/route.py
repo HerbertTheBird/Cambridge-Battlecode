@@ -13,40 +13,6 @@ _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, 
 COST_MAP_TTL = 100
 
 unpathable = 0
-_unpathable_rounds: dict[int, int] = {}
-UNPATHABLE_TTL = 60
-ROUTE_DONE = object()  # sentinel: choose_route_target took an action; caller stops
-
-
-def _mark_unpathable(bits: int):
-    global unpathable
-    if not bits:
-        return
-    unpathable |= bits
-    cur = rc.get_current_round()
-    m = bits
-    while m:
-        lsb = m & -m
-        _unpathable_rounds[lsb.bit_length() - 1] = cur
-        m ^= lsb
-
-
-def _expire_unpathable():
-    global unpathable
-    if not _unpathable_rounds:
-        return
-    cur = rc.get_current_round()
-    expired = [n for n, r in _unpathable_rounds.items() if r + UNPATHABLE_TTL < cur]
-    for n in expired:
-        unpathable &= ~(1 << n)
-        del _unpathable_rounds[n]
-
-_BARRIER_DESTROYABLE = (
-    EntityType.ROAD,
-    EntityType.MARKER,
-    EntityType.CONVEYOR,
-    EntityType.ARMOURED_CONVEYOR,
-)
 
 
 def _prefer_armoured_conveyor() -> bool:
@@ -83,7 +49,7 @@ def _too_expensive():
         if turn + COST_MAP_TTL < current:
             stale.append(n)
             continue
-        # log("cost of", n%map_info._width, n//map_info._width, cost)
+        log("cost of", n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     for n in stale:
@@ -167,42 +133,61 @@ _cached_claims = 0
 MAX_SCORE = 7.75
 def score():
     global _cached_claims
-    _expire_unpathable()
     units.builder.draw_mask(map_info._bm_dead_end, 0, 0, 255)
     _cached_claims = _my_claims()
 
-    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 6)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
     if important&_cached_claims:
         log("IMPORTANT")
         _cached_claims &= important
         return 7.75
     return 5 if _cached_claims else 0
 
-def fallback_barrier(target):
-    log("barrier fallback at", target)
-    nav.move_adjacent(target)
-    existing = map_info.type_at(target.x, target.y)
-    if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]:
-        rc.destroy(target)
-        map_info.update_at(target)
-    if rc.can_build_barrier(target):
-        rc.build_barrier(target)
-        map_info.update_at(target)
-    comms.mark(target.x + target.y * map_info._width, comm_flag)
+def run():
 
+    global unpathable
+    log("ROUTE")
+    candidates = _cached_claims
+    high_priority = False
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
 
-def choose_route_target(candidates, high_priority):
+    if important & candidates:
+        high_priority = True
+        candidates &= important
     if not candidates:
-        return None
+        log("no candidates?")
+        return
     width = map_info._width
     best, _ = nav.closest(candidates)
     if best is None:
         log("no closest???")
-        _mark_unpathable(candidates)
-        return None
+        unpathable |= candidates
+        return
+
+    _BARRIER_DESTROYABLE = (
+        EntityType.ROAD,
+        EntityType.MARKER,
+        EntityType.CONVEYOR,
+        EntityType.ARMOURED_CONVEYOR,
+    )
+
+    def fallback_barrier(target):
+        log("barrier fallback at", target)
+        nav.move_adjacent(target)
+        existing = map_info.type_at(target.x, target.y)
+        if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]:
+            rc.destroy(target)
+            map_info.update_at(target)
+        if rc.can_build_barrier(target):
+            rc.build_barrier(target)
+            map_info.update_at(target)
+        comms.mark(target.x + target.y * map_info._width, comm_flag)
 
     best_bit = 1 << (best.x + best.y * width)
     is_harvester = bool(map_info._bm_et[map_info._IDX_HARVESTER] & best_bit)
+
+    target_conveyor = [None]*2
+    path = []
     best_n = best.x + best.y * width
     is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY] & best_bit)
     if is_foundry:
@@ -220,9 +205,10 @@ def choose_route_target(candidates, high_priority):
         if path is None:
             if high_priority:
                 fallback_barrier(best)
-                return ROUTE_DONE
-            _mark_unpathable(best_bit)
-            return None
+                return
+            unpathable |= best_bit
+            return
+        target_conveyor = [path[0], path[1]]
     else:
         prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
         is_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & best_bit)
@@ -232,44 +218,21 @@ def choose_route_target(candidates, high_priority):
         if path is None:
             if high_priority:
                 fallback_barrier(best)
-                return ROUTE_DONE
-            _mark_unpathable(best_bit)
-            return None
-    target_conveyor = [path[0], path[1]]
+                return
+            unpathable |= best_bit
+            return
+        target_conveyor = [path[0], path[1]]
     cost = nav.conveyor_cost(path[2])
+    best_n = best.x + best.y * width
     if not is_refined:
         _cost_map[best_n] = (cost, rc.get_current_round())
         if rc.get_global_resources()[0] < cost:
             log("can't afford", cost)
             if high_priority:
                 fallback_barrier(best)
-                return ROUTE_DONE
-            return None
-    return (best, best_n, target_conveyor, path, is_raw_ax, is_refined)
-
-
-def run():
-    log("ROUTE")
-    candidates = _cached_claims
-    high_priority = False
-    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
-
-    if important & candidates:
-        high_priority = True
-        candidates &= important
-
-    result = None
-    while not result and candidates:
-        result = choose_route_target(candidates, high_priority)
-        if result is ROUTE_DONE:
+                return
+            comms.mark(best.x + best.y * map_info._width, comm_flag)
             return
-        candidates &= ~unpathable & ~_too_expensive()
-    if result is None:
-        log("no candidates?")
-        return
-
-    best, best_n, target_conveyor, path, is_raw_ax, is_refined = result
-    width = map_info._width
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit) and target_conveyor[0] == target_conveyor[1]:

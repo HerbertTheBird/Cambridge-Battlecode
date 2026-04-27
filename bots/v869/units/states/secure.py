@@ -9,7 +9,6 @@ rc: Controller = None
 nav = None
 
 comm_flag = 3
-SECURE_DONE = object()  # sentinel: choose_secure_target took an action; caller stops
 
 def _my_claims():
     my_pos = map_info._my_pos
@@ -78,41 +77,37 @@ def _too_expensive():
         del _cost_map[n]
     return result
 
-MAX_SCORE = 8.5
+MAX_SCORE = 7.5
 _cached_claims = 0
 def score():
     global _cached_claims
     _cached_claims = _my_claims()
     # units.builder.draw_mask(securable_ore(), 0, 255, 0)
     # units.builder.draw_mask(_cached_claims, 0, 0, 255)
-    important = _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])
-    # units.builder.draw_mask(important, 0, 255, 0)
-
-    if important:
-        closest, dist = nav.closest(important, map_info._my_pos)
-        if closest:
-            if dist <= 2:
-                return 8.5
-            else:
-                return 7.5
+    if _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]):
+        # units.builder.draw_mask(_cached_claims & map_info._bm_et[map_info._IDX_HARVESTER], 0, 255, 0)
+        return 7.5
     return 3 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
-def choose_secure_target(available):
-    if not available:
-        return None
-    urgent = available & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])
-    secure_now = bool(urgent)
-    if secure_now:
-        available = urgent
+
+def run():
+    log("SECURE")
+    available = _cached_claims
+    secure_now = False
+    if _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]):
+        available = _cached_claims & (map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])
+        secure_now = True
     log("secure now?", secure_now)
     # units.builder.draw_mask(cant_secure(), 255, 255, 255)
+    if not available:
+        return
     w = map_info._width
     my_team_idx = map_info._my_team_idx
     best_ore, _ = nav.closest(available)
     if not best_ore:
         _mark_cant_secure(available)
-        return None
+        return
     log("dist", _)
     log("best secure", best_ore)
     if best_ore.distance_squared(rc.get_position()) <= 5:
@@ -123,7 +118,7 @@ def choose_secure_target(available):
         | map_info._bm_env[map_info._IDX_ENV_WALL]) |  map_info._bm_team[1-my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER]
         bottom_row = ((1<<w)-1)<<w*(map_info._height-1)
         top_row = ((1<<w)-1)
-
+        
         to_check = check_region&available
         loc_best = None
         def dirs_covered(n_bit):
@@ -163,13 +158,13 @@ def choose_secure_target(available):
     log("is foundry", is_foundry)
     if best_ore is None:
         _mark_cant_secure(available)
-        return None
+        return
 
     best_n = best_ore.x + best_ore.y * w
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
     if map_info._my_pos.distance_squared(best_ore) > 13:
         nav.move_to(best_ore)
-        return SECURE_DONE
+        return
     # --- Secure each cardinal side ---
     unsecured = 0
     done_conveyor = None
@@ -200,9 +195,9 @@ def choose_secure_target(available):
     # units.builder.draw_mask(map_info._bm_team[my_team_idx], 255, 0, 0)
     closest, _ = nav.closest(unsecured)
     if not closest:
-        _mark_cant_secure(unsecured | (1 << best_n))
+        _mark_cant_secure(unsecured)
         log("exit 3")
-        return None
+        return
     closest_n = closest.x+closest.y*w
     if map_info._building_id[closest_n] and not (map_info._bm_team[my_team_idx]&(1<<closest_n)) and not (map_info._bm_et[map_info._IDX_MARKER]&(1<<closest_n)):
         nav.move_to(closest)
@@ -211,12 +206,11 @@ def choose_secure_target(available):
             map_info.update_at(closest)
         comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         log("exit 2")
-        return SECURE_DONE
+        return
     if done_conveyor:
         path = nav.calculate_conveyor_path(done_conveyor, is_raw_ax, True)
     else:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
-    is_conveyor = False
     if path is not None:
         is_conveyor = path[0].distance_squared(path[1]) == 1
 
@@ -232,27 +226,9 @@ def choose_secure_target(available):
     elif not secure_now:
         log("CANT SECURE", best_ore, done_conveyor)
         _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))
-        return None
-    if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
-        _mark_cant_secure(1 << best_n)
-        return None
-    return (best_ore, best_n, is_foundry, is_raw_ax, unsecured, closest, closest_n, done_conveyor, path, is_conveyor, secure_now)
-
-
-def run():
-    log("SECURE")
-    result = None
-    available = _cached_claims
-    while not result and available:
-        result = choose_secure_target(available)
-        if result is SECURE_DONE:
-            return
-        available &= ~cant_secure()
-    if result is None:
         return
-    best_ore, best_n, is_foundry, is_raw_ax, unsecured, closest, closest_n, done_conveyor, path, is_conveyor, secure_now = result
-    w = map_info._width
-    my_team_idx = map_info._my_team_idx
+    if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
+        return
     if path and not is_foundry:
         tn = path[1].x + path[1].y * w
         if not done_conveyor and is_conveyor and path[0] == closest and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
@@ -294,6 +270,9 @@ def run():
             log("move to next")
             nav.move_to(next_closest)
     else:
-        nav.move_to(closest)
+        if secure_now:
+            nav.move_to(closest)
+        else:
+            nav.move_to(best_ore)
         build_stuff()
     comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)

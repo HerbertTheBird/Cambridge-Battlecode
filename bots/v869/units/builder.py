@@ -15,7 +15,6 @@ import units.states.attack   as attack
 import units.states.secure   as secure
 
 from log import DRAW_DEBUG
-from log import log
 
 
 rc: Controller
@@ -249,10 +248,11 @@ def _update_initial_explore(current_round: int):
     if not _initial_explore_calculated:
         # Only first few builders follow initial explore plan
         if current_round <= INITIAL_SPAWN_COUNT + 1 and map_info._my_core is not None:
+            # Choose explore direction based on where we are relative to core
             spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
             _initial_explore_target = get_ray_endpoint(map_info._my_pos, spawn_dir, map_info._width, map_info._height, max_steps=INITIAL_EXPLORE_MAX_STEPS)
             _initial_explore_round = current_round
-
+        
         _initial_explore_calculated = True
 
     # Auto-clear stale initial target if we couldn't reach it in time
@@ -273,7 +273,7 @@ def select_best_state():
         if score > best_score:
             best_score = score
             best_state = state
-    log("best score:", best_score)
+
     return best_state
 
 

@@ -249,8 +249,15 @@ def _update_initial_explore(current_round: int):
     if not _initial_explore_calculated:
         # Only first few builders follow initial explore plan
         if current_round <= INITIAL_SPAWN_COUNT + 1 and map_info._my_core is not None:
-            spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
-            _initial_explore_target = get_ray_endpoint(map_info._my_pos, spawn_dir, map_info._width, map_info._height, max_steps=INITIAL_EXPLORE_MAX_STEPS)
+            # spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
+            # _initial_explore_target = get_ray_endpoint(map_info._my_pos, spawn_dir, map_info._width, map_info._height, max_steps=INITIAL_EXPLORE_MAX_STEPS)
+            w = map_info._width
+            h = map_info._height
+            corners = [Position(0, 0), Position(w - 1, 0), Position(0, h - 1), Position(w - 1, h - 1)]
+            cx, cy = map_info._my_core.x, map_info._my_core.y
+            corners.sort(key=lambda p: (-((p.x - cx) ** 2 + (p.y - cy) ** 2), p.x, p.y))
+            idx = min(max(current_round - 1, 0), len(corners) - 1)
+            _initial_explore_target = corners[idx]
             _initial_explore_round = current_round
 
         _initial_explore_calculated = True
