@@ -55,7 +55,7 @@ def _claimed_enemy_ids():
 
 
 def _find_chase_target(damaged=True):
-    log("find chase")
+    # log("find chase")
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
@@ -64,7 +64,7 @@ def _find_chase_target(damaged=True):
         enemy_bots = enemy_bots & _very_damaged_targets()
 
     if not enemy_bots:
-        log("no enemies")
+        # log("no enemies")
         if damaged:
             return _find_chase_target(False)
         return None
@@ -90,7 +90,7 @@ def _find_chase_target(damaged=True):
             continue
         closest = nav.closest_within(nearby, Position(n % w, n // w), 4)
         if closest[0]:
-            log("filtering", closest[0], "because", n % w, n // 2, closest[1])
+            # log("filtering", closest[0], "because", n % w, n // w, closest[1])
             filtered ^= (1 << (closest[0].x + closest[0].y * w))
         # uid = map_info._bot_at.get(n)
         # if uid is not None:
@@ -107,19 +107,19 @@ def _find_chase_target(damaged=True):
 
     if not filtered:
         filtered = enemy_bots
-        log("no filtered")
+        # log("no filtered")
         if damaged:
             return _find_chase_target(False)
         return None
     nearby = filtered & map_info.expand_chebyshev(my_bit, 8)
     if not nearby:
-        log("too far")
+        # log("too far")
         if damaged:
             return _find_chase_target(False)
         return None
     closest_pos, dist = nav.closest_within(nearby, max_dist=8)
     if closest_pos is None:
-        log("no closest")
+        # log("no closest")
         if damaged:
             return _find_chase_target(False)
         return None
@@ -129,7 +129,7 @@ def _find_chase_target(damaged=True):
     # if closest_pos.distance_squared(map_info._my_pos) < 5:
     #     log("too close")
     #     return None
-    log("found chase target", closest_pos)
+    # log("found chase target", closest_pos)
     return closest_pos
 
 

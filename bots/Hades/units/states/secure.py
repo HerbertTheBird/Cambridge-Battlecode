@@ -58,8 +58,7 @@ def securable_ore():
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
 
     ore = possible_ore()
-    return (ore
-            & ~secured()) | map_info._bm_et[map_info._IDX_FOUNDRY]
+    return (ore | map_info._bm_et[map_info._IDX_FOUNDRY]) & ~secured()
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -277,9 +276,9 @@ def run():
             log("move to next")
             nav.move_to(next_closest)
     else:
-        if secure_now:
-            nav.move_to(closest)
-        else:
-            nav.move_to(best_ore)
+        # if secure_now:
+        nav.move_to(closest)
+        # else:
+        #     nav.move_to(best_ore)
         build_stuff()
     comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
