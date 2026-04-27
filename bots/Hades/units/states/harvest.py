@@ -24,8 +24,34 @@ def init(c: Controller):
     nav = units.builder.nav
 
 cant_harvest = 0
+_cant_harvest_rounds: dict[int, int] = {}  # tile_n -> round it was added
+CANT_HARVEST_TTL = 60
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
+
+
+def _mark_cant_harvest(bits: int):
+    global cant_harvest
+    if not bits:
+        return
+    cant_harvest |= bits
+    cur = rc.get_current_round()
+    m = bits
+    while m:
+        lsb = m & -m
+        _cant_harvest_rounds[lsb.bit_length() - 1] = cur
+        m ^= lsb
+
+
+def _expire_cant_harvest():
+    global cant_harvest
+    if not _cant_harvest_rounds:
+        return
+    cur = rc.get_current_round()
+    expired = [n for n, r in _cant_harvest_rounds.items() if r + CANT_HARVEST_TTL < cur]
+    for n in expired:
+        cant_harvest &= ~(1 << n)
+        del _cant_harvest_rounds[n]
 def possible_ore():
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
@@ -104,25 +130,22 @@ MAX_SCORE = 4
 _cached_claims = 0
 def score():
     global _cached_claims
+    _expire_cant_harvest()
     _cached_claims = _my_claims()
     return 4 if _cached_claims else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 
-def run():
-    global cant_harvest
-    log("HARVEST")
-
-    available = _cached_claims
+def choose_harvest_target(available):
     if not available:
-        return
+        return None
 
     best_ore, _ = nav.closest(available)
     log("harvesting", best_ore)
     if best_ore is None:
-        cant_harvest |= available
-        return
+        _mark_cant_harvest(available)
+        return None
 
     w = map_info._width
     my_team_idx = map_info._my_team_idx
@@ -157,13 +180,31 @@ def run():
     if path is not None:
         _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
     else:
-        cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
+        _mark_cant_harvest(1 << (best_ore.x + best_ore.y * w))
         log("cant route")
-        return
+        return None
     if _cost_map[best_n][0] > rc.get_global_resources()[0]:
         log("too expensive")
+        return None
+
+    return (best_ore, best_n, is_raw_ax, path)
+
+
+def run():
+    log("HARVEST")
+
+    result = None
+    available = _cached_claims
+    while not result and available:
+        result = choose_harvest_target(available)
+        available &= ~cant_harvest & ~_too_expensive()
+    if result is None:
         return
-        
+
+    best_ore, best_n, is_raw_ax, path = result
+    w = map_info._width
+    my_team_idx = map_info._my_team_idx
+
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]

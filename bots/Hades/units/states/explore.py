@@ -37,25 +37,26 @@ def generate_explore_target():
 
     # Seed with all other builders' claimed tiles + incremental steps from
     # the nearest friendly bot toward each claim, plus my own position.
-    seeds = 0
-    my_pos = map_info._my_pos
-    my_n = my_pos.x + my_pos.y * w
-    seeds |= 1 << my_n
-    seeds |= map_info._bm_friendly_bots
+    seeds = map_info._bm_seen_observed
+    seeds |= map_info.expand_chebyshev(map_info._bm_friendly_bots, 4)
+    # my_pos = map_info._my_pos
+    # my_n = my_pos.x + my_pos.y * w
+    # seeds |= 1 << my_n
+    # seeds |= map_info._bm_friendly_bots
 
     # Seed tiles every 5 Chebyshev steps from my position toward each claim.
-    bx, by = my_pos.x, my_pos.y
-    mask = seeds
-    while mask:
-        lsb = mask & -mask
-        n = lsb.bit_length() - 1
-        tx, ty = n % w, n // w
-        steps = max(abs(bx - tx), abs(by - ty))
-        for s in range(5, steps, 5):
-            ix = bx + (tx - bx) * s // steps
-            iy = by + (ty - by) * s // steps
-            seeds |= 1 << (ix + iy * w)
-        mask ^= lsb
+    # bx, by = my_pos.x, my_pos.y
+    # mask = seeds
+    # while mask:
+    #     lsb = mask & -mask
+    #     n = lsb.bit_length() - 1
+    #     tx, ty = n % w, n // w
+    #     steps = max(abs(bx - tx), abs(by - ty))
+    #     for s in range(5, steps, 5):
+    #         ix = bx + (tx - bx) * s // steps
+    #         iy = by + (ty - by) * s // steps
+    #         seeds |= 1 << (ix + iy * w)
+    #     mask ^= lsb
 
     # Keep the trailing 6 frontiers so we can recover the ring at iteration (c-5) once the fill terminates.
     visited = seeds

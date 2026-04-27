@@ -98,6 +98,32 @@ MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
 
 cant_attack = 0
+_cant_attack_rounds: dict[int, int] = {}
+CANT_ATTACK_TTL = 60
+
+
+def _mark_cant_attack(bits: int):
+    global cant_attack
+    if not bits:
+        return
+    cant_attack |= bits
+    cur = rc.get_current_round()
+    m = bits
+    while m:
+        lsb = m & -m
+        _cant_attack_rounds[lsb.bit_length() - 1] = cur
+        m ^= lsb
+
+
+def _expire_cant_attack():
+    global cant_attack
+    if not _cant_attack_rounds:
+        return
+    cur = rc.get_current_round()
+    expired = [n for n, r in _cant_attack_rounds.items() if r + CANT_ATTACK_TTL < cur]
+    for n in expired:
+        cant_attack &= ~(1 << n)
+        del _cant_attack_rounds[n]
 
 
 # ---------------------------------------------------------------------------
@@ -922,6 +948,7 @@ def _ensure_round_cache():
     if _round_cache_round == r:
         return
     _round_cache_round = r
+    _expire_cant_attack()
     _round_cache_sentinel_planes = None
     _round_cache_gunner_planes = None
     _round_cache_gunner_sum = None
@@ -1043,29 +1070,41 @@ def score():
     return 0
 
 
-def run():
-    global cant_attack
-    log("ATTACK")
-    preferred, fallback = _cached_claims
-
+def choose_attack_target(preferred, fallback):
     if not preferred and not fallback:
-        return
+        return None
 
-    width = map_info._width
-    my_team_idx = map_info._my_team_idx
     best = None
     if preferred:
         best, _ = nav.closest(preferred)
     if best is None and fallback:
         best, _ = nav.closest(fallback)
     if best is None:
-        cant_attack |= preferred | fallback
+        _mark_cant_attack(preferred | fallback)
+        return None
+
+    return best
+
+
+def run():
+    log("ATTACK")
+    preferred, fallback = _cached_claims
+
+    best = None
+    while best is None and (preferred or fallback):
+        best = choose_attack_target(preferred, fallback)
+        preferred &= ~cant_attack
+        fallback &= ~cant_attack
+    if best is None:
         return
 
+    width = map_info._width
+    my_team_idx = map_info._my_team_idx
     best_n = best.x + best.y * width
     best_bit = 1 << best_n
     direction, turret_type, _ = get_best_direction(best)
-    is_fallback = not bool(preferred & best_bit)
+    orig_preferred, _ = _cached_claims
+    is_fallback = not bool(orig_preferred & best_bit)
     best_id = map_info._building_id[best_n]
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
 
