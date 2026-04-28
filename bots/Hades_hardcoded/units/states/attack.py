@@ -64,7 +64,7 @@ SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 8
 # Gunners snipe single high-value lanes: big bonus for core + backline turrets,
 # smaller gain on clustered infra (sentinels already out-damage them there).
 GUNNER_BUILDING_SCORE = [0] * map_info._NUM_ET
-GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 128
+GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 256
 GUNNER_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 GUNNER_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 56
 GUNNER_BUILDING_SCORE[map_info._IDX_GUNNER] = 100
@@ -91,9 +91,9 @@ _NON_CORE_TYPE_INDICES = (
     map_info._IDX_SPLITTER,
 )
 
-_NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
+_NUM_PLANES = 12  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
 
-SCORE_THRESHOLD_FACTOR = 0.25
+SCORE_THRESHOLD_FACTOR = 0
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
 
@@ -754,7 +754,7 @@ def _placement_candidates():
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
-        tracked_zone = map_info.expand_chebyshev(enemy_bots)
+        tracked_zone = enemy_bots
         danger = map_info.expand_chebyshev(tracked_zone)
         danger_for_clearable |= danger
         if tracked_zone & my_bit:
@@ -991,7 +991,7 @@ def _draw_attack_candidates(filtered):
         n = lsb.bit_length() - 1
         x, y = n % w, n // w
         direction, turret_type, score = get_best_direction(Position(x, y))
-        log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
+        # log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
         dx, dy = dir_deltas[direction]
         ex, ey = x + dx, y + dy
         if turret_type == EntityType.GUNNER:
@@ -1091,7 +1091,12 @@ def run():
     else:
         nav.move_adjacent(best)
         if best_id and is_mine:
-            if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
+            if (
+                not map_info.has_builder_bot(best)
+                and rc.can_destroy(best)
+                and rc.get_action_cooldown() == 0
+                and rc.get_unit_count() < GameConstants.MAX_TEAM_UNITS
+            ):
                 log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)

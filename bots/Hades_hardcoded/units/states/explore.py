@@ -34,12 +34,19 @@ def generate_explore_target():
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
         avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
     passable = ~avoid & board
-
+    my_pos = map_info._my_pos
+    my_n = my_pos.x + my_pos.y * w
+    # frontier = (1<<my_n)
+    # reachable = 0
+    # while frontier:
+    #     frontier &= ~reachable
+    #     reachable |= frontier
+    #     h = frontier | ((frontier & map_info._not_right_col) << 1) | ((frontier & map_info._not_left_col) >> 1)
+    #     frontier = (h | (h << w) | (h >> w)) & passable
+    # passable &= reachable
     # Seed with all other builders' claimed tiles + incremental steps from
     # the nearest friendly bot toward each claim, plus my own position.
     seeds = 0
-    my_pos = map_info._my_pos
-    my_n = my_pos.x + my_pos.y * w
     seeds |= 1 << my_n
     seeds |= map_info._bm_friendly_bots
 

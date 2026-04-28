@@ -1,6 +1,13 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment
 import map_info
-from log import log
+from log import log, DRAW_DEBUG
+
+
+def _draw_feeder_mask(mask: int) -> None:
+    if not DRAW_DEBUG or not mask:
+        return
+    for p in map_info.iter_mask(mask):
+        rc.draw_indicator_dot(p, 0, 200, 255)
 
 rc: Controller = None
 my_pos: Position = None
@@ -10,8 +17,8 @@ _attackable_by_dir: dict = {}
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
-# Sentinel-style weights. Builder bots are intentionally absent from rotation
-# scoring per spec — they're only valid as a *current-direction* fire target.
+# Sentinel-style weights. Builder bots score for rotation only as a fallback —
+# specifically when an enemy bot is standing on one of our conveyor-types.
 _WEIGHTS = {
     EntityType.CORE: 35,
     EntityType.BREACH: 60,
@@ -23,11 +30,19 @@ _WEIGHTS = {
     EntityType.BRIDGE: 4,
     EntityType.ARMOURED_CONVEYOR: 4,
     EntityType.BARRIER: 4,
-    EntityType.SPLITTER: 2,
-    EntityType.CONVEYOR: 1,
-    EntityType.ROAD: 0,
+    EntityType.SPLITTER: 3,
+    EntityType.CONVEYOR: 2,
+    EntityType.ROAD: 1,
+    EntityType.BUILDER_BOT: 1,
     EntityType.MARKER: 0,
 }
+
+_ALLY_CONV_TYPES = (
+    EntityType.CONVEYOR,
+    EntityType.ARMOURED_CONVEYOR,
+    EntityType.SPLITTER,
+    EntityType.BRIDGE,
+)
 
 
 def init(c: Controller):
@@ -102,15 +117,18 @@ def _ally_feeder_mask(max_steps: int = 6) -> int:
     return visited
 
 
-def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
+def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool, bot_on_ally_conv_ok: bool = False):
     """Walk forward from my_pos in `direction`. Friendly roads and any markers
     are pass-through; everything else is a stopping tile.
 
-    Returns (target_etype, fire_at) where:
+    Returns (target_etype, fire_at, hit_hp) where:
       - target_etype: the EntityType of the *enemy* thing motivating the shot
         (used for rotation scoring).
       - fire_at: the Position to pass to rc.fire — the first real game-side
         obstruction on the ray, which may be a friendly road we're sacrificing.
+      - hit_hp: HP of the entity that the shot would actually resolve to (the
+        thing standing at fire_at — bot if present, else the building). Used
+        for one-shot bonuses; equals the road's HP when sacrificing a road.
     Returns None if firing is not desired in this direction.
 
     Rules:
@@ -118,11 +136,13 @@ def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
       - Friendly non-road non-marker building / friendly builder bot: blocks, no fire.
       - Friendly conveyor that's part of an ally feeder chain: no fire.
       - Enemy building: fire (even past friendly roads).
-      - Enemy builder bot: fire only if `allow_builder_bots` AND nothing in
-        front of it (no friendly road already passed)."""
+      - Enemy builder bot: fire if `allow_builder_bots`, OR if `bot_on_ally_conv_ok`
+        and the bot is standing on one of our conveyor-types (rotation fallback).
+        In either case, only when nothing in front of it (no friendly road passed)."""
     w = map_info._width
     cur = map_info.pos_add(my_pos, direction)
     fire_at = None
+    hit_hp = None
     passed_road = False
     while map_info.in_bounds(cur) and cur in attackable:
         n = cur.x + cur.y * w
@@ -145,6 +165,7 @@ def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
         # First real obstruction (the engine will resolve fire to this)
         if fire_at is None:
             fire_at = cur
+            hit_hp = rc.get_hp(bot_id) if bot_id is not None else rc.get_hp(bid)
 
         # Don't shoot tiles feeding our own turrets
         if feeder_mask & (1 << n):
@@ -153,11 +174,14 @@ def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
         if bot_id is not None:
             if rc.get_team(bot_id) == my_team:
                 return None
-            if not allow_builder_bots:
-                return None
             if passed_road:
                 return None
-            return EntityType.BUILDER_BOT, fire_at
+            if allow_builder_bots:
+                return EntityType.BUILDER_BOT, fire_at, hit_hp
+            if bot_on_ally_conv_ok and bid is not None and rc.get_team(bid) == my_team:
+                if rc.get_entity_type(bid) in _ALLY_CONV_TYPES and rc.get_hp(bid) < rc.get_max_hp(bid):
+                    return EntityType.BUILDER_BOT, fire_at, hit_hp
+            return None
 
         # Building only
         bid_etype = rc.get_entity_type(bid)
@@ -167,7 +191,7 @@ def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
                 cur = map_info.pos_add(cur, direction)
                 continue
             return None
-        return bid_etype, fire_at
+        return bid_etype, fire_at, hit_hp
 
     return None
 
@@ -184,6 +208,8 @@ def _decide_fire():
 
 def _choose_rotate_dir():
     feeder_mask = _ally_feeder_mask()
+    harv_adj = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER])
+    w = map_info._width
     current = rc.get_direction()
     best_dir = None
     best_score = 0
@@ -191,11 +217,18 @@ def _choose_rotate_dir():
         if d == current:
             continue
         attackable = _attackable_by_dir[d]
-        res = _scan_ray(d, attackable, feeder_mask, allow_builder_bots=False)
+        res = _scan_ray(d, attackable, feeder_mask, allow_builder_bots=False, bot_on_ally_conv_ok=True)
         if res is None:
             continue
-        etype, _ = res
-        score = _WEIGHTS.get(etype, 0)
+        etype, fire_at, hit_hp = res
+        weight = _WEIGHTS.get(etype, 0)
+        if weight == 0:
+            continue
+        score = weight
+        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> (fire_at.x + fire_at.y * w)) & 1:
+            score += 1
+        if hit_hp is not None and hit_hp <= 10:
+            score += 0.5
         if score > best_score:
             best_score = score
             best_dir = d
@@ -205,6 +238,7 @@ def _choose_rotate_dir():
 def run():
     global _no_ammo_turns
     map_info.update()
+    _draw_feeder_mask(_ally_feeder_mask())
 
     if rc.get_ammo_amount() < 2:
         _no_ammo_turns += 1

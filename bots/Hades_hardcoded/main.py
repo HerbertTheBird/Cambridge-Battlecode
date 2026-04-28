@@ -140,7 +140,7 @@ class Player:
                 self.current_round = round_num
 
             self.me.run()
-
+            
             if HARDCODE_MAPS and self.spawn_turn == round_num:
                 map_info.determine_known_map()
 
