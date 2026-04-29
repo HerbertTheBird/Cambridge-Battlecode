@@ -84,7 +84,9 @@ def not_blocked():
         & ~map_info._bm_et[map_info._IDX_MARKER]
         & ~map_info._bm_et[map_info._IDX_ROAD]
         & ~map_info._bm_et[map_info._IDX_CONVEYOR]
-        & ~map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])
+        & ~map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        & ~map_info._bm_et[map_info._IDX_BRIDGE]
+        & ~map_info._bm_et[map_info._IDX_SPLITTER])
     )
     already_routed = map_info.expand_manhattan(my_connected) | left_conveyors | right_conveyors | up_conveyors | down_conveyors
     bottom_row = ((1 << w) - 1) << (w * (map_info._height - 1))
@@ -167,13 +169,15 @@ def run():
         EntityType.MARKER,
         EntityType.CONVEYOR,
         EntityType.ARMOURED_CONVEYOR,
+        EntityType.BRIDGE,
+        EntityType.SPLITTER,
     )
 
     def fallback_barrier(target):
         log("barrier fallback at", target)
         nav.move_adjacent(target)
         existing = map_info.type_at(target.x, target.y)
-        if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]:
+        if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] and map_info._my_pos != target and not (map_info._bm_friendly_bots|map_info._bm_enemy_bots)&(1<<(target.x+target.y*width)):
             rc.destroy(target)
             map_info.update_at(target)
         if rc.can_build_barrier(target):
@@ -233,7 +237,7 @@ def run():
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit) and target_conveyor[0] == target_conveyor[1]:
         nav.move_adjacent(target_conveyor[0])
-        if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0]:
+        if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0] and map_info._my_pos != target_conveyor[0] and not (map_info._bm_friendly_bots|map_info._bm_enemy_bots)&(1<<(target_conveyor[0].x+target_conveyor[0].y*width)):
             if rc.can_destroy(target_conveyor[0]):
                 rc.destroy(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
@@ -242,12 +246,11 @@ def run():
                 map_info.update_at(target_conveyor[0])
         return
     near_enemy = False
-    if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
-        tc1_zone = 1 << (target_conveyor[1].x + target_conveyor[1].y * width)
-        for _ in range(4):
-            tc1_zone = map_info.expand_chebyshev(tc1_zone)
-        if tc1_zone & map_info._bm_enemy_bots:
-            near_enemy = True
+    tc1_zone = 1 << (target_conveyor[1].x + target_conveyor[1].y * width)
+    for _ in range(8):
+        tc1_zone = map_info.expand_chebyshev(tc1_zone)
+    if tc1_zone & map_info._bm_enemy_bots:
+        near_enemy = True
     if map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) == EntityType.ROAD and map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) != map_info._my_team:
         target = target_conveyor[0]
         nav.move_to(target)
@@ -255,7 +258,7 @@ def run():
             rc.fire(target)
             map_info.update_at(target)
         return
-    if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER) and (map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) == rc.get_team() and map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) != EntityType.MARKER):
+    if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER) and (map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) == rc.get_team() or map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) == EntityType.MARKER or not map_info._building_id[target_conveyor[0].x+target_conveyor[0].y*width]):
         nav.move_to(target_conveyor[1])
         if map_info._my_pos == target_conveyor[1]:
             if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) != map_info._my_team and rc.can_fire(target_conveyor[1]):

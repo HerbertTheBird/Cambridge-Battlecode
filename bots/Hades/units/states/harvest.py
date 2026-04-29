@@ -44,6 +44,8 @@ def possible_ore():
         map_info._bm_team[my_team_idx]
         & ~map_info._bm_et[map_info._IDX_CONVEYOR]
         & ~map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        & ~map_info._bm_et[map_info._IDX_BRIDGE]
+        & ~map_info._bm_et[map_info._IDX_SPLITTER]
         & ~map_info._bm_et[map_info._IDX_ROAD]
         & ~map_info._bm_et[map_info._IDX_BARRIER]
         & ~map_info._bm_et[map_info._IDX_MARKER]
@@ -175,7 +177,7 @@ def run():
                 map_info.update_at(best_ore)
             log("firing")
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and (map_info._my_pos != best_ore or rc.get_move_cooldown() == 0):
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore and not (map_info._bm_friendly_bots|map_info._bm_enemy_bots)&ore_bit:
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
     targets = set()

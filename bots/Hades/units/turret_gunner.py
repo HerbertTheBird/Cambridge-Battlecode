@@ -227,7 +227,7 @@ def _choose_rotate_dir():
         if weight == 0:
             continue
         score = weight
-        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> (fire_at.x + fire_at.y * w)) & 1:
+        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER) and (harv_adj >> (fire_at.x + fire_at.y * w)) & 1:
             score += 1
         if hit_hp is not None and hit_hp <= 10:
             score += 0.5

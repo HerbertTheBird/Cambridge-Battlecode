@@ -183,7 +183,7 @@ def run():
         weight = _WEIGHTS.get(etype, 0)
         if weight <= 0:
             continue
-        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> n) & 1:
+        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER) and (harv_adj >> n) & 1:
             weight += 1
         candidates.append((tile, weight, hp))
 

@@ -661,8 +661,6 @@ class Pathing:
             # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
-            if i > 1:
-                cur_frontier &= ~foundries
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
@@ -905,6 +903,7 @@ class Pathing:
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
+            avoid |= map_info.expand_manhattan(map_info._bm_my_core_area)
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_AX])
