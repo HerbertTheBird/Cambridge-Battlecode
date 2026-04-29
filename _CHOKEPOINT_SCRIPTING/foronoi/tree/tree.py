@@ -191,12 +191,12 @@ class Tree:
         :return: The root of the balanced tree
         """
 
-        node = Tree.balance(node)
-
-        if node.parent is None:
-            return node
-
-        return Tree.balance_and_propagate(node.parent)
+        current = node
+        while True:
+            current = Tree.balance(current)
+            if current.parent is None:
+                return current
+            current = current.parent
 
     @staticmethod
     def balance(node):

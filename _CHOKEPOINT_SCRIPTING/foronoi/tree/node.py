@@ -65,8 +65,10 @@ class Node:
 
     @property
     def balance(self):
-        left_height = self.left.height if self.left is not None else 0
-        right_height = self.right.height if self.right is not None else 0
+        left = self._left
+        right = self._right
+        left_height = left.height if left is not None else 0
+        right_height = right.height if right is not None else 0
         return left_height - right_height
 
     def calculate_height(self):
@@ -75,8 +77,10 @@ class Node:
         Height calculated for each node will be stored, so calculations need to be done only once.
         :return: (int) Height of the current node
         """
-        left_height = self.left.height if self.left is not None else 0
-        right_height = self.right.height if self.right is not None else 0
+        left = self._left
+        right = self._right
+        left_height = left.height if left is not None else 0
+        right_height = right.height if right is not None else 0
         height = 1 + max(left_height, right_height)
         return height
 
@@ -90,13 +94,10 @@ class Node:
         """
         Recalculate the heights of this node and all ancestor nodes.
         """
-
-        # Calculate height
-        self.update_height()
-
-        # Update parent
-        if self.parent is not None:
-            self.parent.update_heights()
+        current = self
+        while current is not None:
+            current.update_height()
+            current = current.parent
 
     def is_left_child(self):
         """
@@ -105,7 +106,7 @@ class Node:
         """
         if self.parent is None:
             return False
-        return self.parent.left == self
+        return self.parent._left is self
 
     def is_right_child(self):
         """
@@ -114,14 +115,14 @@ class Node:
         """
         if self.parent is None:
             return False
-        return self.parent.right == self
+        return self.parent._right is self
 
     def is_leaf(self):
         """
         Determines whether this node is a leaf.
         :return: (bool) True if this node is a leaf, False otherwise
         """
-        return self.left is None and self.right is None
+        return self._left is None and self._right is None
 
     def minimum(self):
         """
@@ -129,8 +130,8 @@ class Node:
         :return: (Node) Node with the smallest key
         """
         current = self
-        while current.left is not None:
-            current = current.left
+        while current._left is not None:
+            current = current._left
         return current
 
     def maximum(self):
@@ -139,8 +140,8 @@ class Node:
         :return: (Node) Node with the largest key
         """
         current = self
-        while current.right is not None:
-            current = current.right
+        while current._right is not None:
+            current = current._right
         return current
 
     @property
@@ -151,8 +152,8 @@ class Node:
         """
 
         # If the node has a right sub tree, take the minimum
-        if self.right is not None:
-            return self.right.minimum()
+        if self._right is not None:
+            return self._right.minimum()
 
         # Walk up to the left until we are no longer a right child
         current = self
@@ -160,11 +161,11 @@ class Node:
             current = current.parent
 
         # Check there is a right branch
-        if current.parent is None or current.parent.right is None:
+        if current.parent is None or current.parent._right is None:
             return None
 
         # Step over to the right branch, and take the minimum
-        return current.parent.right.minimum()
+        return current.parent._right.minimum()
 
     @property
     def predecessor(self):
@@ -174,8 +175,8 @@ class Node:
         """
 
         # If the node has a left sub tree, take the maximum
-        if self.left is not None:
-            return self.left.maximum()
+        if self._left is not None:
+            return self._left.maximum()
 
         # Walk up to the right until we are no longer a left child
         current = self
@@ -183,11 +184,11 @@ class Node:
             current = current.parent
 
         # Check there is a left branch
-        if current.parent is None or current.parent.left is None:
+        if current.parent is None or current.parent._left is None:
             return None
 
         # Step over to the left branch, and take the maximum
-        return current.parent.left.maximum()
+        return current.parent._left.maximum()
 
     def replace_leaf(self, replacement, root):
         """

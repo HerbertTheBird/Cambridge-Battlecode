@@ -317,28 +317,70 @@ def cell_centers_covered_by_mask(mask: Mask, rows: int, cols: int, scale: int) -
 
 
 def boundary_segments_from_mask(mask: Mask, scale: int) -> List[Segment]:
-    segments: List[Segment] = []
     height = len(mask)
     width = len(mask[0]) if height else 0
+    segments: List[Segment] = []
 
     for py in range(height):
+        y0 = round(py / scale, 9)
+        y1 = round((py + 1) / scale, 9)
+        row = mask[py]
+        row_above = mask[py - 1] if py > 0 else None
+        row_below = mask[py + 1] if py + 1 < height else None
+
+        run_start = None
         for px in range(width):
-            if not mask[py][px]:
-                continue
+            has_top = row[px] and (row_above is None or not row_above[px])
+            if has_top:
+                if run_start is None:
+                    run_start = px
+            elif run_start is not None:
+                segments.append(((run_start / scale, y0), (px / scale, y0)))
+                run_start = None
+        if run_start is not None:
+            segments.append(((run_start / scale, y0), (width / scale, y0)))
 
-            x0 = px / scale
-            x1 = (px + 1) / scale
-            y0 = py / scale
-            y1 = (py + 1) / scale
+        run_start = None
+        for px in range(width):
+            has_bottom = row[px] and (row_below is None or not row_below[px])
+            if has_bottom:
+                if run_start is None:
+                    run_start = px
+            elif run_start is not None:
+                segments.append(((run_start / scale, y1), (px / scale, y1)))
+                run_start = None
+        if run_start is not None:
+            segments.append(((run_start / scale, y1), (width / scale, y1)))
 
-            if py == 0 or not mask[py - 1][px]:
-                segments.append(((x0, y0), (x1, y0)))
-            if px == width - 1 or not mask[py][px + 1]:
-                segments.append(((x1, y0), (x1, y1)))
-            if py == height - 1 or not mask[py + 1][px]:
-                segments.append(((x1, y1), (x0, y1)))
-            if px == 0 or not mask[py][px - 1]:
-                segments.append(((x0, y1), (x0, y0)))
+    for px in range(width):
+        x0 = round(px / scale, 9)
+        x1 = round((px + 1) / scale, 9)
+
+        run_start = None
+        for py in range(height):
+            row = mask[py]
+            has_left = row[px] and (px == 0 or not row[px - 1])
+            if has_left:
+                if run_start is None:
+                    run_start = py
+            elif run_start is not None:
+                segments.append(((x0, run_start / scale), (x0, py / scale)))
+                run_start = None
+        if run_start is not None:
+            segments.append(((x0, run_start / scale), (x0, height / scale)))
+
+        run_start = None
+        for py in range(height):
+            row = mask[py]
+            has_right = row[px] and (px == width - 1 or not row[px + 1])
+            if has_right:
+                if run_start is None:
+                    run_start = py
+            elif run_start is not None:
+                segments.append(((x1, run_start / scale), (x1, py / scale)))
+                run_start = None
+        if run_start is not None:
+            segments.append(((x1, run_start / scale), (x1, height / scale)))
 
     return merge_axis_aligned_segments(segments)
 
