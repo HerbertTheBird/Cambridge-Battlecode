@@ -144,55 +144,22 @@ def _very_damaged_targets():
     return _healable_mask() & map_info._bm_very_damaged & ~map_info._bm_my_core_area & map_info._bm_visible
 
 
-def _actively_threatened_targets():
-    """Damaged friendly buildings (any damage) with an enemy bot within cheb 1.
-
-    These are buildings the enemy is currently chewing on. Healing them is
-    high priority even before they hit the > 2 damage threshold."""
-    if not map_info._bm_enemy_bots:
-        return 0
-    enemy_zone = map_info.expand_chebyshev(map_info._bm_enemy_bots)
-    return (
-            _healable_mask()
-            & map_info._bm_damaged
-            & enemy_zone
-            & ~map_info._bm_my_core_area
-            & map_info._bm_visible
-    )
-
-
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
     return _healable_mask() & map_info._bm_damaged & ~_very_damaged_targets()
 
 
 _cached_chase_target = None  # set by score(), reused by run()
-_cached_active_threats = 0  # set by score(), reused by run()
 
-MAX_SCORE = 9.5
+MAX_SCORE = 8
 
 
 def score():
-    global _cached_chase_target, _cached_active_threats
-    _cached_active_threats = _actively_threatened_targets()
-    if _cached_active_threats:
-        # Defender within range to actually contest gets top priority.
-        best, dist = nav.closest(_cached_active_threats)
-        if best is not None:
-            if dist <= 2:
-                # Critical: we are right on top of an actively threatened
-                # building. Pre-empt attack — defending now is essential.
-                log("CRITICAL active threat defense", best, dist)
-                return 9.5
-            if dist <= 6:
-                log("active threat defense", best, dist)
-                return 8.7
-        # Out of range → fall through, but still treat as priority defense if
-        # we can reach a damaged building elsewhere this turn.
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
 
+    global _cached_chase_target
     _cached_chase_target = _find_chase_target()
 
     target = _cached_chase_target
@@ -289,17 +256,7 @@ def _do_best_heal():
 
 def run():
     log("HEAL")
-    # Top priority: if a friendly building is actively being attacked (damaged
-    # AND enemy bot adjacent), get adjacent and heal. Don't strip enemy bots
-    # from the target mask: the building IS where the enemy stands, and we
-    # want to contest by healing from an adjacent tile.
-    if _cached_active_threats:
-        best, dist = nav.closest(_cached_active_threats)
-        if best is not None and dist <= 6:
-            nav.move_adjacent(best, avoid_turret=False)
-            _do_best_heal()
-            return
-    very_damaged = _very_damaged_targets()
+    very_damaged = _very_damaged_targets() & ~map_info._bm_enemy_bots
     targets = very_damaged
     if targets:
         best, dist = nav.closest(targets)

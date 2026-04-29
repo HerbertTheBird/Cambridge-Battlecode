@@ -14,7 +14,7 @@ import units.states.heal     as heal
 import units.states.attack   as attack
 import units.states.secure   as secure
 
-from log import DRAW_DEBUG
+from log import DRAW_DEBUG, log
 
 
 rc: Controller
@@ -273,7 +273,7 @@ def select_best_state():
         if score > best_score:
             best_score = score
             best_state = state
-
+    log("best score", best_score)
     return best_state
 
 
@@ -305,3 +305,4 @@ def run():
     # Fall back to healing self
     if rc.can_heal(map_info._my_pos):
         rc.heal(map_info._my_pos)
+    

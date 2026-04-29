@@ -103,7 +103,8 @@ def _scan_nearby_builders(core_pos: Position, my_team):
 
 def run():
     global _spawn_plan
-    
+    # if rc.get_current_round() == 200:
+    #     rc.resign()
     # Sync round info
     map_info.update()
     titanium, axionite = rc.get_global_resources()
@@ -119,7 +120,7 @@ def run():
 
     # Spawn bot toward enemy if we see one and don't have a close ally
     ally_builder_count, has_close_ally, closest_enemy = _scan_nearby_builders(core_pos, my_team)
-    if not _spawn_toward_enemy_if_undefended(has_close_ally, closest_enemy):
+    if rc.get_unit_count() < 48 and not _spawn_toward_enemy_if_undefended(has_close_ally, closest_enemy):
         
         # Otherwise only spawn if we have extra resources
         threshold = 400 if ally_builder_count >= 12 else 200
