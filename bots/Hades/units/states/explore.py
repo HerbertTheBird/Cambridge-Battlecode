@@ -2,7 +2,6 @@ from collections import deque
 
 import map_info
 from pathing import Pathing
-import comms
 import units.builder
 from cambc import *
 import random
@@ -13,7 +12,6 @@ nav: Pathing = None
 
 explore_target = None
 _explore_target_from_initial = False
-comm_flag = 1
 
 def init(c: Controller):
     global rc, nav
@@ -77,16 +75,13 @@ def generate_explore_target():
         c += 1
         recent_frontiers.append(frontier)
     frontier = recent_frontiers[0]
-    # Pick a random unset bit from that ring (tiles NOT claimed by anyone).
-    unclaimed = frontier & ~units.builder.claimed_targets[comm_flag]
-    pool = unclaimed if unclaimed else frontier
-    count = pool.bit_count()
+    count = frontier.bit_count()
     if count == 0:
         explore_target = Position(random.randint(0, map_info._width - 1),
                                   random.randint(0, map_info._height - 1))
         return
     pick = random.randint(0, count - 1)
-    mask = pool
+    mask = frontier
     for _ in range(pick):
         mask &= mask - 1
     lsb = mask & -mask
@@ -117,5 +112,3 @@ def run():
         else:
             break
         attempts += 1
-    if rc.get_global_resources()[0] >= rc.get_harvester_cost()[0]*5:
-        comms.mark(explore_target.x + explore_target.y * map_info._width, comm_flag)

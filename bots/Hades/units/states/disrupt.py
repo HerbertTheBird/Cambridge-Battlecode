@@ -1,15 +1,12 @@
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 import units.builder
 from cambc import *
 from log import log
 
 rc: Controller = None
 nav: Pathing = None
-
-comm_flag = 2
 
 def init(c: Controller):
     global rc, nav
@@ -78,5 +75,3 @@ def run():
     if rc.can_build_barrier(best):
         rc.build_barrier(best)
         map_info.update_at(best)
-
-    comms.mark(best.x + best.y * map_info._width, comm_flag)

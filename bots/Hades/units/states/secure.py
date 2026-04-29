@@ -1,14 +1,11 @@
 import map_info
 import pathing
-import comms
 from cambc import *
 import units.builder
 from log import log
 from units.states.harvest import possible_ore, secured
 rc: Controller = None
 nav = None
-
-comm_flag = 3
 
 def _my_claims():
     my_pos = map_info._my_pos
@@ -210,7 +207,6 @@ def run():
         if rc.can_fire(closest):
             rc.fire(closest)
             map_info.update_at(closest)
-        comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
         log("exit 2")
         return
     if done_conveyor:
@@ -281,4 +277,3 @@ def run():
         # else:
         #     nav.move_to(best_ore)
         build_stuff()
-    comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)

@@ -1,22 +1,22 @@
 from cambc import Controller, Position, Direction, EntityType, GameError
 import map_info
 from log import DRAW_DEBUG, log
-import comms_positional
-import units.states.heal as heal
-#type = 0:launch, 1:explore, 2:harvest, 3:route
+
+# TYPE_LAUNCHER_ORDER carries symmetry info, target_idx and sender_loc
+# SYMMETRY_BROADCAST only carries symmetry info
+TYPE_LAUNCHER_ORDER = 0
+TYPE_SYMMETRY_BROADCAST = 1
+
 POS_BITS = 12
 SYM_BITS = 3
-SAMPLE_BITS = 9
 SENDER_BITS = 3
-TYPE_BITS = 32 - POS_BITS - SYM_BITS - SAMPLE_BITS - SENDER_BITS
+TYPE_BITS = 5
 _POS_MASK = (1 << POS_BITS) - 1
 _SYM_MASK = (1 << SYM_BITS) - 1
-_SAMPLE_MASK = (1 << SAMPLE_BITS) - 1
 _SENDER_MASK = (1 << SENDER_BITS) - 1
 _TYPE_MASK = (1 << TYPE_BITS) - 1
 _SYM_SHIFT = POS_BITS
-_SAMPLE_SHIFT = _SYM_SHIFT + SYM_BITS
-_SENDER_SHIFT = _SAMPLE_SHIFT + SAMPLE_BITS
+_SENDER_SHIFT = _SYM_SHIFT + SYM_BITS
 _TYPE_SHIFT = _SENDER_SHIFT + SENDER_BITS
 
 _DIRS_8 = [
@@ -106,20 +106,13 @@ def decode_location(v):
 def decode_sym(v):
     return (v >> _SYM_SHIFT) & _SYM_MASK
 
-def decode_sample_bits(v):
-    return (v >> _SAMPLE_SHIFT) & _SAMPLE_MASK
-
-def decode_sender_location(v):
-    return (v >> _SENDER_SHIFT) & _SENDER_MASK
-
 def decode_type(v):
     return (v >> _TYPE_SHIFT) & _TYPE_MASK
 
-def encode(target, type, sym=0, sample_bits=0, sender_loc=0):
+def encode(target, type, sym=0, sender_loc=0):
     return (
         (target & _POS_MASK)
         | ((sym & _SYM_MASK) << _SYM_SHIFT)
-        | ((sample_bits & _SAMPLE_MASK) << _SAMPLE_SHIFT)
         | ((sender_loc & _SENDER_MASK) << _SENDER_SHIFT)
         | ((type & _TYPE_MASK) << _TYPE_SHIFT)
     ) ^ key
@@ -134,11 +127,25 @@ def _is_bad_marker_spot(pos):
 def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
-def mark(target_idx, type):
-    return
-    if DRAW_DEBUG and type != heal.comm_flag:
+def broadcast_symmetry():
+    my_pos = map_info._my_pos
+    for d in Direction:
+        if d == Direction.CENTRE:
+            continue
+        p = my_pos.add(d)
+        if not map_info.in_bounds(p):
+            continue
+        if rc.can_place_marker(p):
+            val = encode(0, TYPE_SYMMETRY_BROADCAST, sym=get_sym_bits())
+            rc.place_marker(p, val)
+            map_info.update_at(p)
+            _my_markers.add(rc.get_tile_building_id(p))
+            return
+
+def give_launcher_order(target_idx):
+    if DRAW_DEBUG:
         rc.draw_indicator_line(map_info._my_pos, Position(target_idx % map_info._width, target_idx // map_info._width), 255, 255, 0)
-    log("mark", target_idx, type)
+    log("launcher order", target_idx)
 
     adjacent_tiles = rc.get_nearby_tiles(2)
 
@@ -174,21 +181,18 @@ def mark(target_idx, type):
         elif (entity_type == EntityType.ROAD and not rc.get_tile_builder_bot_id(pos)):
             if best is None or best[0] > 2:
                 best = (2, pos, tile_id)
-
     # Execute best fallback
     if best:
         priority, pos, tile_id = best
         sym = get_sym_bits()
-        sample_bits = 0
-        # sample_bits = comms_positional.encode_sample_bits(pos, sym)
         sender_dir = map_info.direction_to(pos, map_info._my_pos)
         sender_loc = _DIR_TO_IDX.get(sender_dir, 0)
-        val = encode(target_idx, type, sym, sample_bits, sender_loc)
+        val = encode(target_idx, TYPE_LAUNCHER_ORDER, sym, sender_loc)
 
         _my_markers.discard(tile_id)
         if tile_id is not None and rc.can_destroy(pos):
             rc.destroy(pos)
-            
+
             # Don't bother updating map if we replaced marker with marker
             map_info.update_at(pos)
 

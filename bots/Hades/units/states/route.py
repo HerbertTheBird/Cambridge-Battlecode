@@ -1,14 +1,12 @@
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 from cambc import *
 import units.builder
 from log import log
 import sys
 rc: Controller = None
 nav: Pathing = None
-comm_flag = 5
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
 
@@ -181,7 +179,6 @@ def run():
         if rc.can_build_barrier(target):
             rc.build_barrier(target)
             map_info.update_at(target)
-        comms.mark(target.x + target.y * map_info._width, comm_flag)
 
     best_bit = 1 << (best.x + best.y * width)
     is_harvester = bool(map_info._bm_et[map_info._IDX_HARVESTER] & best_bit)
@@ -231,7 +228,6 @@ def run():
             if high_priority:
                 fallback_barrier(best)
                 return
-            comms.mark(best.x + best.y * map_info._width, comm_flag)
             return
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
@@ -244,7 +240,6 @@ def run():
             if rc.can_build_foundry(target_conveyor[0]):
                 rc.build_foundry(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     near_enemy = False
     if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
@@ -259,7 +254,6 @@ def run():
         if rc.can_fire(target):
             rc.fire(target)
             map_info.update_at(target)
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER) and (map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) == rc.get_team() and map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) != EntityType.MARKER):
         nav.move_to(target_conveyor[1])
@@ -270,7 +264,6 @@ def run():
         if rc.can_build_road(target_conveyor[0]):
             rc.build_road(target_conveyor[0])
             map_info.update_at(target_conveyor[0])
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     def attempt_build():
         destroy = target_conveyor[0]
@@ -291,4 +284,3 @@ def run():
     attempt_build()
     nav.move_to(target_conveyor[0])
     attempt_build()
-    comms.mark(best.x + best.y * map_info._width, comm_flag)

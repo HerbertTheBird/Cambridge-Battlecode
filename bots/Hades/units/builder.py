@@ -38,12 +38,6 @@ _initial_explore_calculated = False
 _initial_explore_target: Position | None = None
 _initial_explore_round = -1
 
-# Comms-based claims
-claimed_targets = [0] * (len(states) + 1)   # target bitmask per comm flag
-claimed_senders = [0] * (len(states) + 1)   # sender position bitmask per comm flag
-_target_rounds = [dict() for _ in range(len(states) + 1)]
-_sender_rounds = [dict() for _ in range(len(states) + 1)]
-
 # Vision-based claims
 crowded_claims = [0] * (len(states) + 1)    # locally observed crowded targets per comm flag
 _crowded_seen_rounds = [dict() for _ in range(len(states) + 1)]
@@ -97,35 +91,12 @@ def _adjacent_friendly_builder_count(target_idx: int) -> int:
     return count
 
 
-def handle_comms(current_round: int):
-    w = map_info._width
-    visible = map_info._bm_visible
-    for v, sender_pos, _marker_pos, _marker_id, estimated_turn in comms.get_new_messages():
+def handle_comms():
+    if map_info._solved_sym:
+        return
+    for v, _sender_pos, _marker_pos, _marker_id, _estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
-        if estimated_turn + 3 < current_round:
-            continue
-        idx = comms.decode_location(v)
-        flag = comms.decode_type(v)
-        claimed_targets[flag] |= 1 << idx
-        _target_rounds[flag][idx] = estimated_turn
-        if map_info.in_bounds(sender_pos):
-            sn = sender_pos.x + sender_pos.y * w
-            claimed_senders[flag] |= 1 << sn
-            _sender_rounds[flag][sn] = estimated_turn
-    for i, rounds in enumerate(_target_rounds):
-        expired = [
-            idx for idx, t in rounds.items()
-            if (visible & (1 << idx)) and t + 3 < current_round
-        ]
-        for idx in expired:
-            del rounds[idx]
-            claimed_targets[i] &= ~(1 << idx)
-    for i in range(len(claimed_senders)):
-        expired = [idx for idx, t in _sender_rounds[i].items() if t + 20 < current_round]
-        for idx in expired:
-            del _sender_rounds[i][idx]
-            claimed_senders[i] &= ~(1 << idx)
 
 
 def _update_crowded_claims(current_round: int):
@@ -282,7 +253,9 @@ def run():
 
     # Sync round info
     current_round = rc.get_current_round()
-    map_info.update()
+    map_info.update(recompute=False)
+    handle_comms()
+    map_info.recompute_derived()
     _update_harvest_zone()
 
     # First few builder bots derive explore target from spawn position
@@ -305,4 +278,6 @@ def run():
     # Fall back to healing self
     if rc.can_heal(map_info._my_pos):
         rc.heal(map_info._my_pos)
-    
+
+    # Broadcast symmetry via a marker on the first available adjacent tile
+    comms.broadcast_symmetry()
