@@ -149,15 +149,56 @@ class HalfEdge:
             return None
         return self.twin.origin
 
+    def _replacement_first_edge(self):
+        incident_point = self.incident_point
+        if incident_point is None:
+            return None
+
+        candidates = []
+        if self.prev is not None:
+            candidates.append(self.prev)
+        if self.next is not None and self.next is not self.prev:
+            candidates.append(self.next)
+
+        for candidate in candidates:
+            if (
+                candidate is not self
+                and not candidate.removed
+                and candidate.incident_point == incident_point
+            ):
+                return candidate
+
+        visited = {id(self)}
+
+        edge = self.next
+        while edge is not None and id(edge) not in visited:
+            visited.add(id(edge))
+            if not edge.removed and edge.incident_point == incident_point:
+                return edge
+            edge = edge.next
+
+        edge = self.prev
+        while edge is not None and id(edge) not in visited:
+            visited.add(id(edge))
+            if not edge.removed and edge.incident_point == incident_point:
+                return edge
+            edge = edge.prev
+
+        return None
+
     def delete(self):
         """
         Delete this half edge by pointing the previous edge to the next, and removing it from the origin's
         connected edges list.
         """
+        if self.removed:
+            return
+        self.removed = True
 
         # Remove the edge from the vertex' connected edges list
         if isinstance(self.origin, Vertex):
-            self.origin.connected_edges.remove(self)
+            if self in self.origin.connected_edges:
+                self.origin.connected_edges.remove(self)
 
         # Link previous edge to next edge
         if self.prev is not None:
@@ -165,11 +206,4 @@ class HalfEdge:
 
         # If the incident point had a pointer to this edge, we need to point it to a new one
         if self.incident_point is not None and self.incident_point.first_edge == self:
-
-            # Incident points should remain the same
-            assert (
-                    self.next is None or self.next.incident_point == self.incident_point
-            ), f"Incident points {self.next.incident_point} and {self.incident_point} do not match"
-
-            # Set the new "first edge" pointer
-            self.incident_point.first_edge = self.next
+            self.incident_point.first_edge = self._replacement_first_edge()

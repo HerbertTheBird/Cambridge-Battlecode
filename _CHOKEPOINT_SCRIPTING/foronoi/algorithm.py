@@ -609,6 +609,17 @@ class Algorithm(Subject):
         that are produced when two site-events happen at the same time.
         """
 
+        def remove_vertex(vertex):
+            if isinstance(self._vertices, set):
+                self._vertices.discard(vertex)
+                return
+
+            self._vertices = [
+                existing_vertex
+                for existing_vertex in self._vertices
+                if existing_vertex is not vertex
+            ]
+
         resulting_edges = []
         for edge in self.edges:
             start = edge.get_origin()
@@ -620,13 +631,15 @@ class Algorithm(Subject):
                 v2: Vertex = edge.twin.origin
 
                 # Move connected edges from v1 to v2
-                for connected in v1.connected_edges:
+                for connected in list(v1.connected_edges):
                     connected.origin = v2
-                    v1.connected_edges.remove(connected)
-                    v2.connected_edges.append(connected)
+                    if connected in v1.connected_edges:
+                        v1.connected_edges.remove(connected)
+                    if connected not in v2.connected_edges:
+                        v2.connected_edges.append(connected)
 
                 # Remove vertex v1
-                self._vertices.remove(v1)
+                remove_vertex(v1)
 
                 # Delete the edge
                 edge.delete()
@@ -634,4 +647,4 @@ class Algorithm(Subject):
 
             else:
                 resulting_edges.append(edge)
-            self.edges = resulting_edges
+        self.edges = resulting_edges

@@ -2,8 +2,11 @@ import collections
 
 from foronoi import Coordinate
 from foronoi.algorithm import Algorithm
+from foronoi.graph.half_edge import HalfEdge
+from foronoi.graph.point import Point
 from foronoi.graph import Polygon
 from foronoi.graph.bounding_box import BoundingBox
+from foronoi.graph.vertex import Vertex
 
 
 # -----------------
@@ -516,6 +519,31 @@ def test_vertices_correct():
                 [[(5.0, 10.0), (2.5, 10.0)], [(5.0, 10.0), (5.0, 10.0)]],
                 [[(5.0, 10.0), (5.0, 5.75)], [(5.0, 10.0), (5.0, 10.0)], [(5.0, 10.0), (9.25, 5.75)]]]
     _test_vertices_correct(polygon, points, expected, False)
+
+
+def test_delete_rehomes_first_edge_when_next_crosses_face():
+    site = Point(0, 0, name="A")
+    other = Point(1, 1, name="B")
+    left = Vertex(0, 0)
+    middle = Vertex(1, 0)
+    right = Vertex(2, 0)
+
+    previous = HalfEdge(site, origin=left)
+    current = HalfEdge(site, origin=middle)
+    crossing = HalfEdge(other, origin=right)
+
+    left.connected_edges.append(previous)
+    middle.connected_edges.append(current)
+    right.connected_edges.append(crossing)
+
+    previous.set_next(current)
+    current.set_next(crossing)
+
+    site.first_edge = current
+    current.delete()
+
+    assert site.first_edge == previous
+    assert previous.next == crossing
 
 
 def test_vertices_correct_removed():
