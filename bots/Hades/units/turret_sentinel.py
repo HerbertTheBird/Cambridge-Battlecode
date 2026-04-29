@@ -33,6 +33,8 @@ def init(c: Controller):
 
 
 def _should_stay():
+    if rc.get_global_resources()[0] < rc.get_bridge_cost()[0]:
+        return True
     my_pos = rc.get_position()
     my_team = map_info._my_team
     for uid in rc.get_nearby_units(8):

@@ -7,7 +7,6 @@ import comms
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
-import units.states.disrupt  as disrupt
 import units.states.harvest  as harvest
 import units.states.route    as route
 import units.states.heal     as heal
@@ -22,7 +21,7 @@ nav: Pathing = None
 
 # Sorted in descending order of max score to allow early break in selection loop
 states = tuple(sorted(
-    [explore, disrupt, harvest, route, heal, attack, secure],
+    [explore, harvest, route, heal, attack, secure],
     key=lambda s: s.MAX_SCORE,
     reverse=True
 ))

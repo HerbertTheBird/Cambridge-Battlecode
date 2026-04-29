@@ -244,11 +244,11 @@ def _do_best_heal():
 
 def run():
     log("HEAL")
-    very_damaged = _very_damaged_targets() & ~map_info._bm_enemy_bots
+    very_damaged = _very_damaged_targets() & ~(map_info._bm_enemy_bots & map_info.expand_chebyshev(map_info._bm_friendly_bots))
     targets = very_damaged
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None and dist <= 4:
+        if best is not None and dist <= map_info._building_hp[best.x+best.y*map_info._width]//2 + 1:
             nav.move_adjacent(best, avoid_turret=False)
             _do_best_heal()
             return

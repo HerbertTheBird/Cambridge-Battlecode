@@ -103,7 +103,7 @@ def _scan_nearby_builders(core_pos: Position, my_team):
 
 def run():
     global _spawn_plan
-    # if rc.get_current_round() == 200:
+    # if rc.get_current_round() == 400:
     #     rc.resign()
     # Sync round info
     map_info.update()
