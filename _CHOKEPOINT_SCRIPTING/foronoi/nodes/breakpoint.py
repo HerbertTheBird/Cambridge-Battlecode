@@ -36,6 +36,28 @@ class Breakpoint:
         i, j = self.breakpoint
         return not (is_close(i.yd, j.yd) and j.xd < i.xd)
 
+    def get_intersection_x(self, l):
+        i, j = self.breakpoint
+        a = i.xd
+        b = i.yd
+        c = j.xd
+        d = j.yd
+        u = 2 * (b - l)
+        v = 2 * (d - l)
+
+        if is_close(i.yd, j.yd) or is_zero(u - v):
+            return (i.xd + j.xd) / 2
+        if is_close(i.yd, l):
+            return i.xd
+        if is_close(j.yd, l):
+            return j.xd
+
+        return -(sqrt(
+            v * (a ** 2 * u - 2 * a * c * u + b ** 2 * (u - v) + c ** 2 * u)
+            + d ** 2 * u * (v - u)
+            + l ** 2 * (u - v) ** 2
+        ) + a * v - c * u) / (u - v)
+
     def get_intersection(self, l, max_y=None):
         """
         Calculate the coordinates of the intersection
@@ -60,9 +82,10 @@ class Breakpoint:
         u = 2 * (b - l)
         v = 2 * (d - l)
 
+        result.xd = self.get_intersection_x(l)
+
         # Handle the case where the two points have the same y-coordinate (breakpoint is in the middle)
         if is_close(i.yd, j.yd) or is_zero(u - v):
-            result.xd = (i.xd + j.xd) / 2
 
             if j.xd < i.xd:
                 result.yd = max_y or float('inf')
@@ -70,18 +93,7 @@ class Breakpoint:
 
         # Handle cases where one point's y-coordinate is the same as the sweep line
         elif is_close(i.yd, l):
-            result.xd = i.xd
             p = j
-        elif is_close(j.yd, l):
-            result.xd = j.xd
-        else:
-            # We now need to solve for x
-            # 1/u * (x**2 - 2*a*x + a**2 + b**2 - l**2) = 1/v * (x**2 - 2*c*x + c**2 + d**2 - l**2)
-            # Then we let Wolfram alpha do the heavy work for us, and we put it here in the code :D
-            x = -(sqrt(
-                v * (a ** 2 * u - 2 * a * c * u + b ** 2 * (u - v) + c ** 2 * u) + d ** 2 * u * (v - u) + l ** 2 * (
-                    u - v) ** 2) + a * v - c * u) / (u - v)
-            result.xd = x
 
         # We have to re-evaluate this, since the point might have been changed
         a = p.xd

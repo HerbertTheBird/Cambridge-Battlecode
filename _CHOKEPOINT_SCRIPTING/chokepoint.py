@@ -39,7 +39,6 @@ from chokepoint_runtime import (
     build_obstacle_mask,
     cell_centers_covered_by_mask,
     clip_polygon_against_half_plane,
-    point_to_segment_distance,
     raster_scale_from_spacing,
     rectangle_polygon,
     split_obstacle_mask_by_area,
@@ -552,7 +551,7 @@ class GeometricChokepointApp:
         self.isolated_radius_var      = tk.StringVar(value="1.0")
         self.max_choke_radius_var     = tk.StringVar(value="3")
         self.simplify_eps_var         = tk.StringVar(value="0.0")
-        self.sample_spacing_var       = tk.StringVar(value="1.0")
+        self.sample_spacing_var       = tk.StringVar(value="1.5")
         self.show_radii_var           = tk.BooleanVar(value=True)
 
         # diagonal movement
@@ -581,6 +580,8 @@ class GeometricChokepointApp:
         self.discarded_obstacle_cells: Set[Cell] = set()
         self.free_mask: List[List[bool]] = []
         self.free_boundary_segments: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+        self.free_boundary_verticals: List[Tuple[float, float, float]] = []
+        self.free_boundary_horizontals: List[Tuple[float, float, float]] = []
         self.raw_vertex_radius: Dict[VertexId, float] = {}
         self.kept_obstacle_geom = None
         self.discarded_obstacle_geom = None
@@ -648,6 +649,8 @@ class GeometricChokepointApp:
         self.discarded_obstacle_cells = set()
         self.free_mask = []
         self.free_boundary_segments = []
+        self.free_boundary_verticals = []
+        self.free_boundary_horizontals = []
         self.raw_vertex_radius = {}
         self.kept_obstacle_geom = None
         self.discarded_obstacle_geom = None
@@ -816,6 +819,8 @@ class GeometricChokepointApp:
         self.discarded_obstacle_cells.clear()
         self.free_mask = []
         self.free_boundary_segments = []
+        self.free_boundary_verticals = []
+        self.free_boundary_horizontals = []
         self.raw_vertex_radius.clear()
         self.kept_obstacle_geom = None
         self.discarded_obstacle_geom = None
@@ -837,6 +842,23 @@ class GeometricChokepointApp:
         self.redraw()
         self.status_var.set(
             "Cleared.  Left-drag draws obstacles.  Shift+left-drag erases.")
+
+    def prepare_free_boundary_segments(self) -> None:
+        verticals: List[Tuple[float, float, float]] = []
+        horizontals: List[Tuple[float, float, float]] = []
+
+        for (x1, y1), (x2, y2) in self.free_boundary_segments:
+            if x1 == x2:
+                low_y = y1 if y1 <= y2 else y2
+                high_y = y2 if y2 >= y1 else y1
+                verticals.append((x1, low_y, high_y))
+            else:
+                low_x = x1 if x1 <= x2 else x2
+                high_x = x2 if x2 >= x1 else x1
+                horizontals.append((y1, low_x, high_x))
+
+        self.free_boundary_verticals = verticals
+        self.free_boundary_horizontals = horizontals
 
     # ===================================================================== #
     #  Parameter parsing                                                     #
@@ -1276,6 +1298,7 @@ class GeometricChokepointApp:
         )
         self.free_mask = build_free_mask(self.analysis_mask, self.kept_obstacle_mask)
         self.free_boundary_segments = boundary_segments_from_mask(self.free_mask, scale)
+        self.prepare_free_boundary_segments()
 
         return any(any(row) for row in self.kept_obstacle_mask)
 
@@ -1597,25 +1620,37 @@ class GeometricChokepointApp:
             return 0.0
 
         x, y = pt
-        best = float("inf")
-        for (x1, y1), (x2, y2) in segments:
-            if x1 == x2:
-                low_y = y1 if y1 <= y2 else y2
-                high_y = y2 if y2 >= y1 else y1
-                clamped_y = low_y if y <= low_y else high_y if y >= high_y else y
-                dist = math.hypot(x - x1, y - clamped_y)
-            elif y1 == y2:
-                low_x = x1 if x1 <= x2 else x2
-                high_x = x2 if x2 >= x1 else x1
-                clamped_x = low_x if x <= low_x else high_x if x >= high_x else x
-                dist = math.hypot(x - clamped_x, y - y1)
+        best_sq = float("inf")
+
+        for x1, low_y, high_y in self.free_boundary_verticals:
+            dx = x - x1
+            if y <= low_y:
+                dy = low_y - y
+            elif y >= high_y:
+                dy = y - high_y
             else:
-                dist = point_to_segment_distance(pt, ((x1, y1), (x2, y2)))
+                dy = 0.0
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < best_sq:
+                if dist_sq == 0.0:
+                    return 0.0
+                best_sq = dist_sq
 
-            if dist < best:
-                best = dist
+        for y1, low_x, high_x in self.free_boundary_horizontals:
+            dy = y - y1
+            if x <= low_x:
+                dx = low_x - x
+            elif x >= high_x:
+                dx = x - high_x
+            else:
+                dx = 0.0
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < best_sq:
+                if dist_sq == 0.0:
+                    return 0.0
+                best_sq = dist_sq
 
-        return best
+        return math.sqrt(best_sq)
 
     def compute_radius_legacy(self, pt: Tuple[float, float]) -> float:
         backend = load_legacy_backend()

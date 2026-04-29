@@ -9,7 +9,7 @@ class InternalNode(Node):
         return f"Internal({self.data}, left={self.left}, right={self.right})"
 
     def get_key(self, sweep_line=None):
-        return self.data.get_intersection(sweep_line).xd
+        return self.data.get_intersection_x(sweep_line)
 
     def get_value(self, **kwargs):
         return self.data

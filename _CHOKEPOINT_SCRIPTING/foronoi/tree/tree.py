@@ -12,9 +12,10 @@ class Tree:
 
         node = root
         while node is not None:
-            if key == node.get_key(**kwargs):
+            node_key = node.get_key(**kwargs)
+            if key == node_key:
                 break
-            elif key < node.get_key(**kwargs):
+            elif key < node_key:
                 node = node.left
             else:
                 node = node.right
@@ -37,7 +38,8 @@ class Tree:
         key = query.get_key(**kwargs)
         node = root
         while node is not None:
-            if key == node.get_key(**kwargs):
+            node_key = node.get_key(**kwargs)
+            if key == node_key:
 
                 if compare(node.data, query.data):
                     return node
@@ -49,7 +51,7 @@ class Tree:
 
                 return left
 
-            elif key < node.get_key(**kwargs):
+            elif key < node_key:
                 # Normally, the three should go left and find the correct value there,
                 # but due to rounding errors, it sometimes takes the wrong turn. So if the left
                 # branch doesn't get a result, we try the other branch.
@@ -82,8 +84,10 @@ class Tree:
             if node.is_leaf():
                 return node
 
+            node_key = node.get_key(**kwargs)
+
             # If we found the key, we choose a direction
-            elif key == node.get_key(**kwargs) and not node.is_leaf():
+            if key == node_key:
 
                 # We take the left path if possible
                 if node.left is not None:
@@ -93,7 +97,7 @@ class Tree:
                 return node.right.minimum()
 
             # Normal binary search
-            elif key < node.get_key(**kwargs):
+            elif key < node_key:
                 node = node.left
             else:
                 node = node.right
