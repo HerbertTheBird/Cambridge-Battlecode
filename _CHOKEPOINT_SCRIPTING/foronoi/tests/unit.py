@@ -2,6 +2,7 @@ import collections
 
 from foronoi import Coordinate
 from foronoi.algorithm import Algorithm
+from foronoi.graph.algebra import Algebra
 from foronoi.graph.half_edge import HalfEdge
 from foronoi.graph.point import Point
 from foronoi.graph import Polygon
@@ -544,6 +545,34 @@ def test_delete_rehomes_first_edge_when_next_crosses_face():
 
     assert site.first_edge == previous
     assert previous.next == crossing
+
+
+def test_check_clockwise_matches_orientation():
+    center = Coordinate(0, 0)
+    assert Algebra.check_clockwise(
+        Coordinate(1, 0),
+        Coordinate(0, -1),
+        Coordinate(-1, 0),
+        center,
+    )
+    assert not Algebra.check_clockwise(
+        Coordinate(1, 0),
+        Coordinate(0, 1),
+        Coordinate(-1, 0),
+        center,
+    )
+
+
+def test_line_ray_intersection_point():
+    point = Algebra.line_ray_intersection_point(
+        [5, 0.5],
+        [38, 33],
+        [10, 5],
+        [7.5, 10],
+    )
+    assert len(point) == 1
+    assert round(point[0][0], 6) == round(9.857868020304569, 6)
+    assert round(point[0][1], 6) == round(5.284263959390863, 6)
 
 
 def test_vertices_correct_removed():
