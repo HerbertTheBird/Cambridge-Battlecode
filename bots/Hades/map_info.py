@@ -1,4 +1,5 @@
 from __future__ import annotations
+import random
 from cambc import Controller, Position, Environment, EntityType, Team, Direction, ResourceType, GameError, GameConstants
 import pathing
 import units.builder as builder
@@ -237,7 +238,6 @@ _bm_enemy_bots: int = 0          # bitmask of known enemy builder bot positions
 _bot_pos: dict[int, int] = {}    # uid -> tile index (both teams)
 _bot_team: dict[int, int] = {}   # uid -> team_idx
 _bot_at: dict[int, int] = {}    # tile index -> uid
-_bot_last_seen: dict[int, int] = {}   # uid -> round it was last seen alive in vision
 
 _max_id_by_round: list[int] = []  # max_id_by_round[round] = max entity id seen up to that round
 _max_id_seen: int = 0
@@ -1673,29 +1673,55 @@ def update(recompute: bool = True) -> None:
         _bot_pos[uid] = n
         _bot_team[uid] = team_idx
         _bot_at[n] = uid
-        _bot_last_seen[uid] = cur_round
         seen_uids.add(uid)
-    # Single pass: purge stale bots (visible-but-gone after grace) and rebuild
-    # the friendly/enemy bitmasks from the survivors.
-    grace_cutoff = cur_round - 1
+    # Single pass: rebuild the friendly/enemy bitmasks from the survivors.
+    # Ghosts (tracked but not seen this round) whose old tile is currently
+    # visible must have moved (or died); push them to a random Chebyshev-1
+    # tile that's outside vision and plausibly walkable.
+    ghost_passable = (
+        _board_mask
+        & ~bm_env[_IDX_ENV_WALL]
+        & ~bm_visible
+        & (~_bm_any_building
+            | bm_et[_IDX_ROAD] | bm_et[_IDX_MARKER]
+            | bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+            | bm_et[_IDX_BRIDGE] | bm_et[_IDX_SPLITTER]
+            | bm_et[_IDX_CORE])
+    )
     to_remove = []
+    moved = []  # (uid, old_n, new_n)
     for uid, n in _bot_pos.items():
         bit = 1 << n
         if uid not in seen_uids and (bm_visible & bit):
-            if _bot_last_seen.get(uid, -1) < grace_cutoff:
+            neighbors = expand_chebyshev(bit) & ~bit & ghost_passable
+            if not neighbors:
                 to_remove.append(uid)
                 continue
+            choices = []
+            m = neighbors
+            while m:
+                lsb = m & -m
+                choices.append(lsb.bit_length() - 1)
+                m ^= lsb
+            new_n = random.choice(choices)
+            moved.append((uid, n, new_n))
+            n = new_n
+            bit = 1 << n
         if _bot_team[uid] == my_team_idx:
             _bm_friendly_bots |= bit
         else:
             _bm_enemy_bots |= bit
+    for uid, old_n, new_n in moved:
+        if _bot_at.get(old_n) == uid:
+            del _bot_at[old_n]
+        _bot_pos[uid] = new_n
+        _bot_at[new_n] = uid
     for uid in to_remove:
         n = _bot_pos[uid]
         if _bot_at.get(n) == uid:
             del _bot_at[n]
         del _bot_pos[uid]
         del _bot_team[uid]
-        _bot_last_seen.pop(uid, None)
 
     # Precompute other-bots zone masks for cant_claim().
     # expand_chebyshev distributes over OR, so one call per layer suffices.

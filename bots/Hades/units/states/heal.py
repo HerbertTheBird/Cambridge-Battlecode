@@ -47,7 +47,7 @@ def _find_chase_target(damaged=True):
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
-    enemy_bots = map_info._bm_enemy_bots
+    enemy_bots = map_info._bm_enemy_bots & map_info._bm_visible
     if damaged:
         enemy_bots = enemy_bots & _very_damaged_targets()
     units.builder.draw_mask(enemy_bots, 255, 0, 0)
