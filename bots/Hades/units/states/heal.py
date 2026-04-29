@@ -50,7 +50,7 @@ def _find_chase_target(damaged=True):
     enemy_bots = map_info._bm_enemy_bots
     if damaged:
         enemy_bots = enemy_bots & _very_damaged_targets()
-
+    units.builder.draw_mask(enemy_bots, 255, 0, 0)
     if not enemy_bots:
         # log("no enemies")
         if damaged:
@@ -143,12 +143,12 @@ MAX_SCORE = 8
 
 
 def score():
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
+
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
-
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
 
     target = _cached_chase_target
     # log(target)
@@ -257,6 +257,7 @@ def run():
     if target is not None:
         ep = target
         # _try_barrier_dead_ends()
+        log("best chase", target)
         nav.move_to(ep)
         _do_best_heal()
         return
