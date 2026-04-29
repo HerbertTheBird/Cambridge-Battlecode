@@ -74,9 +74,9 @@ class CircleEvent(Event):
         a, b, c = left_arc.origin, middle_arc.origin, right_arc.origin
 
         # Check if we can create a circle event
-        if CircleEvent.create_circle(a, b, c):
-            # Create the circle
-            x, y, radius = CircleEvent.create_circle(a, b, c)
+        circle = CircleEvent.create_circle(a, b, c)
+        if circle:
+            x, y, radius = circle
 
             # Return circle event
             return CircleEvent(center=Coordinate(x, y), radius=radius, arc_node=middle_node, point_triple=(a, b, c),

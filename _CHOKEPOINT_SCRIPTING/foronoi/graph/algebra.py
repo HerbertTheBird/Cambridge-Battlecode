@@ -79,16 +79,12 @@ class Algebra:
 
     @staticmethod
     def check_clockwise(a, b, c, center):
-        angle_1 = Algebra.calculate_angle(a, center)
-        angle_2 = Algebra.calculate_angle(b, center)
-        angle_3 = Algebra.calculate_angle(c, center)
-
-        counter_clockwise = (angle_3 - angle_1) % 360 > (angle_3 - angle_2) % 360
-
-        if counter_clockwise:
-            return False
-
-        return True
+        _ = center
+        abx = b.xd - a.xd
+        aby = b.yd - a.yd
+        acx = c.xd - a.xd
+        acy = c.yd - a.yd
+        return abx * acy - aby * acx < 0
 
 
 if __name__ == "__main__":

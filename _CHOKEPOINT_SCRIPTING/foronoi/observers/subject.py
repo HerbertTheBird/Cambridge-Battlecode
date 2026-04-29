@@ -28,9 +28,14 @@ class Subject:
         """
         Notify all observers about an event.
         """
+        if not self._observers:
+            return self
         for observer in self._observers:
             observer.update(self._root_sender, message, **kwargs)
         return self
+
+    def has_observers(self):
+        return bool(self._observers)
 
     def get_observers(self):
         """

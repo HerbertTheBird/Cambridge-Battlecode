@@ -101,6 +101,9 @@ class Algorithm(Subject):
         # Whether to remove zero length edges
         self.remove_zero_length_edges = remove_zero_length_edges
 
+        # Fast lookup for live breakpoints in the beach line tree.
+        self.breakpoint_index = {}
+
     @property
     def arcs(self) -> List[Arc]:
         return list(self._arcs)
@@ -187,10 +190,11 @@ class Algorithm(Subject):
                 self.sweep_line = event.yd
 
                 # Debugging
-                self.notify_observers(
-                    Message.DEBUG,
-                    payload=f"# Handle circle event at {event.yd:.3f} with center= {event.center} and arcs= {event.point_triple}"
-                )
+                if self._observers:
+                    self.notify_observers(
+                        Message.DEBUG,
+                        payload=f"# Handle circle event at {event.yd:.3f} with center= {event.center} and arcs= {event.point_triple}"
+                    )
 
                 # Handle the event
                 self.handle_circle_event(event)
@@ -206,10 +210,11 @@ class Algorithm(Subject):
                 self.sweep_line = event.yd
 
                 # Debugging
-                self.notify_observers(
-                    Message.DEBUG,
-                    payload=f"# Handle site event at y={event.yd:.3f} with point {event.point}"
-                )
+                if self._observers:
+                    self.notify_observers(
+                        Message.DEBUG,
+                        payload=f"# Handle site event at y={event.yd:.3f} with point {event.point}"
+                    )
 
                 # Handle the event
                 self.handle_site_event(event)
@@ -218,10 +223,12 @@ class Algorithm(Subject):
                 continue
 
             self.event = event
-            self.notify_observers(Message.STEP_FINISHED)
+            if self._observers:
+                self.notify_observers(Message.STEP_FINISHED)
 
-        self.notify_observers(Message.DEBUG, payload="# Sweep finished")
-        self.notify_observers(Message.SWEEP_FINISHED)
+        if self._observers:
+            self.notify_observers(Message.DEBUG, payload="# Sweep finished")
+            self.notify_observers(Message.SWEEP_FINISHED)
 
         # Finish with the bounding box
         self.edges = self.bounding_poly.finish_edges(
@@ -234,8 +241,9 @@ class Algorithm(Subject):
             self.clean_up_zero_length_edges()
 
         # Final visualization
-        self.notify_observers(Message.DEBUG, payload="# Voronoi finished")
-        self.notify_observers(Message.VORONOI_FINISHED)
+        if self._observers:
+            self.notify_observers(Message.DEBUG, payload="# Voronoi finished")
+            self.notify_observers(Message.VORONOI_FINISHED)
 
     def handle_site_event(self, event: SiteEvent):
         """
@@ -296,13 +304,16 @@ class Algorithm(Subject):
         point_j = arc_above_point.origin
         breakpoint_left = Breakpoint(breakpoint=(point_j, point_i))
         breakpoint_right = Breakpoint(breakpoint=(point_i, point_j))
+        right_intersects = breakpoint_right.does_intersect()
 
         root = InternalNode(breakpoint_left)
+        self._register_breakpoint_node(root)
         root.left = LeafNode(Arc(origin=point_j, circle_event=None))
 
         # Only insert right breakpoint into the tree if it actually intersects
-        if breakpoint_right.does_intersect():
+        if right_intersects:
             root.right = InternalNode(breakpoint_right)
+            self._register_breakpoint_node(root.right)
             root.right.left = LeafNode(new_arc)
             root.right.right = LeafNode(Arc(origin=point_j, circle_event=None))
         else:
@@ -340,7 +351,7 @@ class Algorithm(Subject):
         #
 
         # If the right breakpoint does not intersect, we don't need to insert circle events.
-        if not breakpoint_right.does_intersect():
+        if not right_intersects:
             return
 
         node_a, node_b, node_c = root.left.predecessor, root.left, root.right.left
@@ -401,7 +412,8 @@ class Algorithm(Subject):
         def remove(neighbor_event):
             if neighbor_event is None:
                 return None
-            self.notify_observers(Message.DEBUG, payload=f"Circle event for {neighbor_event.yd} removed.")
+            if self._observers:
+                self.notify_observers(Message.DEBUG, payload=f"Circle event for {neighbor_event.yd} removed.")
             return neighbor_event.remove()
 
         remove(predecessor.get_value().circle_event)
@@ -467,13 +479,15 @@ class Algorithm(Subject):
         if left_event:
             if not Algebra.check_clockwise(node_a.data.origin, node_b.data.origin, node_c.data.origin,
                                            left_event.center):
-                self.notify_observers(Message.DEBUG, payload=f"Circle {left_event.point_triple} not clockwise.")
+                if self._observers:
+                    self.notify_observers(Message.DEBUG, payload=f"Circle {left_event.point_triple} not clockwise.")
                 left_event = None
 
         if right_event:
             if not Algebra.check_clockwise(node_d.data.origin, node_e.data.origin, node_f.data.origin,
                                            right_event.center):
-                self.notify_observers(Message.DEBUG, payload=f"Circle {right_event.point_triple} not clockwise.")
+                if self._observers:
+                    self.notify_observers(Message.DEBUG, payload=f"Circle {right_event.point_triple} not clockwise.")
                 right_event = None
 
         if left_event is not None:
@@ -484,17 +498,46 @@ class Algorithm(Subject):
             self.event_queue.put(right_event)
             node_e.data.circle_event = right_event
 
-        if left_event is not None:
-            self.notify_observers(Message.DEBUG,
-                                  payload=f"Left circle event created for {left_event.yd}. Arcs: {left_event.point_triple}")
-        if right_event is not None:
-            self.notify_observers(Message.DEBUG,
-                                  payload=f"Right circle event created for {right_event.yd}. Arcs: {right_event.point_triple}")
+        if self._observers:
+            if left_event is not None:
+                self.notify_observers(Message.DEBUG,
+                                      payload=f"Left circle event created for {left_event.yd}. Arcs: {left_event.point_triple}")
+            if right_event is not None:
+                self.notify_observers(Message.DEBUG,
+                                      payload=f"Right circle event created for {right_event.yd}. Arcs: {right_event.point_triple}")
 
         return left_event, right_event
 
-    @staticmethod
-    def _update_breakpoints(root, sweep_line, arc_node, predecessor, successor):
+    def _register_breakpoint_node(self, node):
+        if node is None or not isinstance(node, InternalNode):
+            return
+        self.breakpoint_index[node.data.breakpoint] = node
+
+    def _unregister_breakpoint(self, breakpoint):
+        self.breakpoint_index.pop(breakpoint.breakpoint, None)
+
+    def _retarget_breakpoint(self, node, new_breakpoint):
+        old_breakpoint = node.data.breakpoint
+        if old_breakpoint == new_breakpoint:
+            return node.data
+        self.breakpoint_index.pop(old_breakpoint, None)
+        node.data.breakpoint = new_breakpoint
+        self.breakpoint_index[new_breakpoint] = node
+        return node.data
+
+    def _find_breakpoint_node(self, root, breakpoint_tuple, sweep_line):
+        node = self.breakpoint_index.get(breakpoint_tuple)
+        if node is not None:
+            return node
+
+        query = InternalNode(Breakpoint(breakpoint=breakpoint_tuple))
+        compare = lambda x, y: hasattr(x, "breakpoint") and x.breakpoint == y.breakpoint
+        node = Tree.find_value(root, query, compare, sweep_line=sweep_line)
+        if node is not None:
+            self.breakpoint_index[breakpoint_tuple] = node
+        return node
+
+    def _update_breakpoints(self, root, sweep_line, arc_node, predecessor, successor):
 
         # If the arc node is a left child, then its parent is the node with right_breakpoint
         if arc_node.is_left_child():
@@ -505,23 +548,26 @@ class Algorithm(Subject):
             # Mark the right breakpoint as removed and right breakpoint
             removed = arc_node.parent.data
             right = removed
+            self._unregister_breakpoint(removed)
 
             # Rebalance the tree
             root = Tree.balance_and_propagate(root)
 
             # Find the left breakpoint
-            left_breakpoint = Breakpoint(breakpoint=(predecessor.get_value().origin, arc_node.get_value().origin))
-            query = InternalNode(left_breakpoint)
-            compare = lambda x, y: hasattr(x, "breakpoint") and x.breakpoint == y.breakpoint
-            breakpoint: InternalNode = Tree.find_value(root, query, compare, sweep_line=sweep_line)
+            breakpoint_tuple = (predecessor.get_value().origin, arc_node.get_value().origin)
+            breakpoint: InternalNode = self._find_breakpoint_node(root, breakpoint_tuple, sweep_line=sweep_line)
 
             # Update the breakpoint
             # assert(breakpoint is not None)
             if breakpoint is not None:
-                breakpoint.data.breakpoint = (breakpoint.get_value().breakpoint[0], successor.get_value().origin)
+                updated = self._retarget_breakpoint(
+                    breakpoint,
+                    (breakpoint.get_value().breakpoint[0], successor.get_value().origin),
+                )
+            else:
+                updated = None
 
             # Mark this breakpoint as updated and left breakpoint
-            updated = breakpoint.data if breakpoint is not None else None
             left = updated
 
         # If the arc node is a right child, then its parent is the breakpoint on the left
@@ -533,23 +579,26 @@ class Algorithm(Subject):
             # Mark the left breakpoint as removed
             removed = arc_node.parent.data
             left = removed
+            self._unregister_breakpoint(removed)
 
             # Rebalance the tree
             root = Tree.balance_and_propagate(root)
 
             # Find the right breakpoint
-            right_breakpoint = Breakpoint(breakpoint=(arc_node.get_value().origin, successor.get_value().origin))
-            query = InternalNode(right_breakpoint)
-            compare = lambda x, y: hasattr(x, "breakpoint") and x.breakpoint == y.breakpoint
-            breakpoint: InternalNode = Tree.find_value(root, query, compare, sweep_line=sweep_line)
+            breakpoint_tuple = (arc_node.get_value().origin, successor.get_value().origin)
+            breakpoint: InternalNode = self._find_breakpoint_node(root, breakpoint_tuple, sweep_line=sweep_line)
 
             # Update the breakpoint
             # assert(breakpoint is not None)
             if breakpoint is not None:
-                breakpoint.data.breakpoint = (predecessor.get_value().origin, breakpoint.get_value().breakpoint[1])
+                updated = self._retarget_breakpoint(
+                    breakpoint,
+                    (predecessor.get_value().origin, breakpoint.get_value().breakpoint[1]),
+                )
+            else:
+                updated = None
 
             # Mark this breakpoint as updated and right breakpoint
-            updated = breakpoint.data if breakpoint is not None else None
             right = updated
 
         return root, updated, removed, left, right
@@ -559,6 +608,17 @@ class Algorithm(Subject):
         Removes zero length edges and vertices with the same coordinate
         that are produced when two site-events happen at the same time.
         """
+
+        def remove_vertex(vertex):
+            if isinstance(self._vertices, set):
+                self._vertices.discard(vertex)
+                return
+
+            self._vertices = [
+                existing_vertex
+                for existing_vertex in self._vertices
+                if existing_vertex is not vertex
+            ]
 
         resulting_edges = []
         for edge in self.edges:
@@ -571,13 +631,15 @@ class Algorithm(Subject):
                 v2: Vertex = edge.twin.origin
 
                 # Move connected edges from v1 to v2
-                for connected in v1.connected_edges:
+                for connected in list(v1.connected_edges):
                     connected.origin = v2
-                    v1.connected_edges.remove(connected)
-                    v2.connected_edges.append(connected)
+                    if connected in v1.connected_edges:
+                        v1.connected_edges.remove(connected)
+                    if connected not in v2.connected_edges:
+                        v2.connected_edges.append(connected)
 
                 # Remove vertex v1
-                self._vertices.remove(v1)
+                remove_vertex(v1)
 
                 # Delete the edge
                 edge.delete()
@@ -585,4 +647,4 @@ class Algorithm(Subject):
 
             else:
                 resulting_edges.append(edge)
-            self.edges = resulting_edges
+        self.edges = resulting_edges
