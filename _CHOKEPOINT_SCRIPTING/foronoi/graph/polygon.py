@@ -140,7 +140,8 @@ class Polygon(Subject):
             else:
                 edge.delete()
                 edge.twin.delete()
-                self.notify_observers(Message.DEBUG, payload=f"Edges {edge} and {edge.twin} deleted!")
+                if self._observers:
+                    self.notify_observers(Message.DEBUG, payload=f"Edges {edge} and {edge.twin} deleted!")
 
         return resulting_edges
 
