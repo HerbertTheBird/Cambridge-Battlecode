@@ -10,7 +10,35 @@ nav: Pathing = None
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
 
-unpathable = 0
+_unpathable_map: dict[int, int] = {}  # tile index -> round recorded
+UNPATHABLE_TTL = 100
+
+
+def unpathable():
+    """Bitmask of tiles we recently failed to route to; entries expire after UNPATHABLE_TTL rounds."""
+    current = rc.get_current_round()
+    result = 0
+    stale = []
+    for n, turn in _unpathable_map.items():
+        if turn + UNPATHABLE_TTL < current:
+            stale.append(n)
+            continue
+        result |= 1 << n
+    for n in stale:
+        del _unpathable_map[n]
+    return result
+
+
+def _mark_unpathable(mask):
+    if not mask:
+        return
+    current = rc.get_current_round()
+    m = mask
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        _unpathable_map[n] = current
+        m ^= lsb
 
 
 def _prefer_armoured_conveyor() -> bool:
@@ -118,8 +146,9 @@ def cant_claim():
 def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
-    avoid = _too_expensive() | cant_claim() | unpathable
-    avoid &= ~(map_info._bm_feeding_enemy&~unpathable)
+    unpath = unpathable()
+    avoid = _too_expensive() | cant_claim() | unpath
+    avoid &= ~(map_info._bm_feeding_enemy&~unpath)
     not_blocked_mask = not_blocked()
     candidates = (
         _dead_end_conveyors()
@@ -144,8 +173,6 @@ def score():
     return 5 if _cached_claims else 0
 
 def run():
-
-    global unpathable
     log("ROUTE")
     candidates = _cached_claims
     high_priority = False
@@ -161,7 +188,7 @@ def run():
     best, _ = nav.closest(candidates)
     if best is None:
         log("no closest???")
-        unpathable |= candidates
+        _mark_unpathable(candidates)
         return
 
     _BARRIER_DESTROYABLE = (
@@ -207,7 +234,7 @@ def run():
             if high_priority:
                 fallback_barrier(best)
                 return
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return
         target_conveyor = [path[0], path[1]]
     else:
@@ -220,7 +247,7 @@ def run():
             if high_priority:
                 fallback_barrier(best)
                 return
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return
         target_conveyor = [path[0], path[1]]
     cost = nav.conveyor_cost(path[2])

@@ -51,7 +51,7 @@ def _should_stay():
     #         bid = rc.get_tile_building_id(p)
     #         if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
     #             return True
-    best_d = 8
+    best_d = None
     closest_is_friendly = False
     for uid in rc.get_nearby_units():
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
