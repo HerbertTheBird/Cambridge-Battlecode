@@ -1,4 +1,4 @@
-from cambc import Controller, Position
+from cambc import Controller, Direction, Position
 
 import map_info
 import pathing
@@ -155,9 +155,17 @@ def _update_initial_explore(current_round: int):
         if current_round <= INITIAL_SPAWN_COUNT + 1 and map_info._my_core is not None:
             # Choose explore direction based on where we are relative to core
             spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
+            if spawn_dir == Direction.CENTRE:
+                # Builder spawned on the centre core tile — fall back to the
+                # direction from the core toward the map centre so we still
+                # head somewhere useful instead of looping in place.
+                map_centre = Position(map_info._width // 2, map_info._height // 2)
+                spawn_dir = map_info.direction_to(map_info._my_core, map_centre)
+                if spawn_dir == Direction.CENTRE:
+                    spawn_dir = Direction.NORTH
             _initial_explore_target = get_ray_endpoint(map_info._my_pos, spawn_dir, map_info._width, map_info._height, max_steps=INITIAL_EXPLORE_MAX_STEPS)
             _initial_explore_round = current_round
-        
+
         _initial_explore_calculated = True
 
     # Auto-clear stale initial target if we couldn't reach it in time

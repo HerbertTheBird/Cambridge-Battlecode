@@ -94,7 +94,35 @@ SCORE_THRESHOLD_FACTOR = 0
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
 
-cant_attack = 0
+_cant_attack_map: dict[int, int] = {}  # tile index -> round recorded
+CANT_ATTACK_TTL = 100
+
+
+def cant_attack():
+    """Bitmask of tiles we recently failed to attack; entries expire after CANT_ATTACK_TTL rounds."""
+    current = rc.get_current_round()
+    result = 0
+    stale = []
+    for n, turn in _cant_attack_map.items():
+        if turn + CANT_ATTACK_TTL < current:
+            stale.append(n)
+            continue
+        result |= 1 << n
+    for n in stale:
+        del _cant_attack_map[n]
+    return result
+
+
+def _mark_cant_attack(mask):
+    if not mask:
+        return
+    current = rc.get_current_round()
+    m = mask
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        _cant_attack_map[n] = current
+        m ^= lsb
 
 
 # ---------------------------------------------------------------------------
@@ -760,7 +788,7 @@ def _placement_candidates():
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
-    candidates &= ~cant_attack
+    candidates &= ~cant_attack()
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     feed_chains = _turret_feed_chains()
@@ -1041,7 +1069,6 @@ def score():
 
 
 def run():
-    global cant_attack
     log("ATTACK")
     preferred, fallback = _cached_claims
 
@@ -1056,7 +1083,7 @@ def run():
     if best is None and fallback:
         best, _ = nav.closest(fallback)
     if best is None:
-        cant_attack |= preferred | fallback
+        _mark_cant_attack(preferred | fallback)
         return
 
     best_n = best.x + best.y * width
