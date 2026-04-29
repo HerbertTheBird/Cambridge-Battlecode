@@ -13,6 +13,7 @@ def _my_claims():
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = securable_ore() & ~cant_secure()
     # units.builder.draw_mask(available, 0, 255, 0)
+    available &= ~(_too_expensive() & map_info._bm_et[map_info._IDX_BARRIER])
     return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=True)
 
 

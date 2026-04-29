@@ -244,6 +244,14 @@ def _do_best_heal():
 
 def run():
     log("HEAL")
+    target = _cached_chase_target
+    if target is not None and _very_damaged_targets() & (1<<(target.x+target.y*map_info._width)):
+        ep = target
+        # _try_barrier_dead_ends()
+        log("best chase", target)
+        nav.move_to(ep)
+        _do_best_heal()
+        return
     very_damaged = _very_damaged_targets() & ~(map_info._bm_enemy_bots & map_info.expand_chebyshev(map_info._bm_friendly_bots))
     targets = very_damaged
     if targets:

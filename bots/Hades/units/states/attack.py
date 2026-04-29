@@ -1068,11 +1068,110 @@ def score():
     return 0
 
 
+def _try_instant_preferred(preferred: int) -> bool:
+    """Override: if a preferred tile is adjacent to a tile I can reach this
+    turn without placing a road (existing walkable infra or my current tile),
+    pick the highest-scoring such preferred and act on it directly."""
+    if not preferred:
+        return False
+
+    width = map_info._width
+    my_pos = map_info._my_pos
+    my_n = my_pos.x + my_pos.y * width
+    my_bit = 1 << my_n
+
+    walkable_infra = (
+        map_info._bm_my_core_area
+        | map_info._bm_et[map_info._IDX_ROAD]
+        | map_info._bm_et[map_info._IDX_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_BRIDGE]
+        | map_info._bm_et[map_info._IDX_SPLITTER]
+    )
+    other_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
+    walkable_infra &= ~other_bots
+
+    reach = map_info.expand_chebyshev(my_bit)
+    walkable_step1 = (walkable_infra & reach) | my_bit
+
+    near_walkable = map_info.expand_chebyshev(walkable_step1)
+    candidates = preferred & near_walkable
+    if not candidates:
+        return False
+
+    best_score = -1
+    best_pos = None
+    best_n = -1
+    best_dir = None
+    best_type = None
+    m = candidates
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        m ^= lsb
+        pos = Position(n % width, n // width)
+        d, t, score = get_best_direction(pos)
+        if score > best_score:
+            best_score = score
+            best_pos = pos
+            best_n = n
+            best_dir = d
+            best_type = t
+
+    if best_pos is None:
+        return False
+
+    best_bit = 1 << best_n
+    neighbors_of_best = map_info.expand_chebyshev(best_bit) & ~best_bit
+    valid_stands = walkable_step1 & neighbors_of_best
+    if not valid_stands:
+        return False
+
+    if valid_stands & my_bit:
+        target_bit = my_bit
+    else:
+        target_bit = valid_stands & -valid_stands
+
+    log(f"Attack-instant: best={best_pos}, dir={best_dir}, type={best_type}, score={best_score}")
+
+    if target_bit != my_bit:
+        target_n = target_bit.bit_length() - 1
+        target_pos = Position(target_n % width, target_n // width)
+        nav.move_to(target_pos)
+
+    my_team_idx = map_info._my_team_idx
+    best_id = map_info._building_id[best_n]
+    is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
+    if best_id and is_mine:
+        if (
+            not map_info.has_builder_bot(best_pos)
+            and rc.can_destroy(best_pos)
+            and rc.get_action_cooldown() == 0
+            and rc.get_unit_count() < GameConstants.MAX_TEAM_UNITS
+        ):
+            log(f"Attack-instant destroy own building at {best_pos}")
+            rc.destroy(best_pos)
+            map_info.update_at(best_pos)
+
+    if best_type == EntityType.GUNNER:
+        if rc.can_build_gunner(best_pos, best_dir):
+            rc.build_gunner(best_pos, best_dir)
+            map_info.update_at(best_pos)
+    else:
+        if rc.can_build_sentinel(best_pos, best_dir):
+            rc.build_sentinel(best_pos, best_dir)
+            map_info.update_at(best_pos)
+    return True
+
+
 def run():
     log("ATTACK")
     preferred, fallback = _cached_claims
 
     if not preferred and not fallback:
+        return
+
+    if _try_instant_preferred(preferred):
         return
 
     width = map_info._width
