@@ -15,7 +15,7 @@ def _my_claims():
     available = securable_ore() & ~cant_secure()
     # units.builder.draw_mask(available, 0, 255, 0)
     available &= ~(_too_expensive() & map_info._bm_et[map_info._IDX_BARRIER])
-    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=True)
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots&map_info._bm_visible, available, tie_self=True)
 
 
 def init(c: Controller):

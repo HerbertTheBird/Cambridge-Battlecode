@@ -14,7 +14,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
-    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots&map_info._bm_visible, available, tie_self=False)
 
 def init(c: Controller):
     global rc, nav
@@ -89,7 +89,7 @@ def possible_ore(allow_partial: bool = False):
     base = (ore
             & ~landlocked
             & ~friendly_blocking
-            & ~map_info._bm_enemy_turret_threat)
+            & ~map_info.expand_manhattan(map_info._bm_enemy_turret_threat))
     result = base & ~enemy_blocked
     if allow_partial:
         # Ore tiles with enemy adjacent: include if any-team harvester sits on them

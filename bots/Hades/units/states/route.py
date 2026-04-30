@@ -155,14 +155,13 @@ def _my_claims():
         | _orphan_harvesters(not_blocked_mask)
         | _orphan_foundries(not_blocked_mask)
     ) & ~avoid
-    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, candidates, tie_self=True)
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots&map_info._bm_visible, candidates, tie_self=True)
 
 _cached_claims = 0
 
 MAX_SCORE = 7.75
 def score():
     global _cached_claims
-    # units.builder.draw_mask(map_info._bm_dead_end, 0, 0, 255)
     _cached_claims = _my_claims()
 
     important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 6)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
