@@ -299,9 +299,90 @@ def run():
     best_state = select_best_state()
     best_state.run()
 
+    # Road-spam if an enemy is closing in
+    try_road_spam()
+
     # Try healing adjacent building
     heal._do_best_heal()
 
     # Fall back to healing self
     if rc.can_heal(map_info._my_pos):
         rc.heal(map_info._my_pos)
+
+
+def try_road_spam():
+    """Opportunistic road placement. Priority order:
+      1. (Always) tiles adjacent to a friendly conveyor or on a friendly
+         conveyor target — pave conveyor lanes regardless of enemies.
+      2. (Enemy within 4 pathing dist) tile adjacent to an enemy bot.
+      3. (Enemy within 4) tile adjacent to enemy non-marker non-road building.
+      4. (Enemy within 4) tile under me.
+      5. (Enemy within 4) any adjacent buildable tile.
+    Tiles covered by my gunners' current shooting rays are excluded.
+    Action-cooldown gated."""
+    if rc.get_action_cooldown() != 0:
+        return False
+
+    w = map_info._width
+    my_pos = map_info._my_pos
+    my_x = my_pos.x
+    my_y = my_pos.y
+    my_bit = 1 << (my_x + my_y * w)
+    my_neighbors = map_info.expand_chebyshev(my_bit) & ~my_bit
+
+    # Don't build roads where my own gunners are shooting through.
+    avoid = map_info._bm_my_gunner_claims
+    allowed_neighbors = my_neighbors & ~avoid
+    draw_mask(avoid & my_neighbors, 255, 0, 0)
+
+    def _try_mask(candidates):
+        mask = candidates
+        while mask:
+            lsb = mask & -mask
+            n = lsb.bit_length() - 1
+            p = Position(n % w, n // w)
+            if rc.can_build_road(p):
+                rc.build_road(p)
+                map_info.update_at(p)
+                return True
+            mask ^= lsb
+        return False
+
+    # Priority 1: pave around our conveyors (always, regardless of enemies)
+    my_team_idx = map_info._my_team_idx
+    friendly_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    if friendly_convs:
+        conv_zone = (
+            map_info.expand_chebyshev(friendly_convs)
+            | map_info._conveyor_target_tiles(friendly_convs)
+        )
+        if _try_mask(conv_zone & allowed_neighbors):
+            return True
+
+    enemy_bots = map_info._bm_enemy_bots
+    if not enemy_bots:
+        return False
+    closest_enemy, dist = nav.closest(enemy_bots)
+    if closest_enemy is None or dist > 4:
+        return False
+
+    if _try_mask(map_info.expand_chebyshev(enemy_bots) & allowed_neighbors):
+        return True
+
+    enemy_hard = (
+        map_info._bm_team[1 - my_team_idx]
+        & ~map_info._bm_et[map_info._IDX_MARKER]
+        & ~map_info._bm_et[map_info._IDX_ROAD]
+    )
+    if enemy_hard:
+        if _try_mask(map_info.expand_chebyshev(enemy_hard) & allowed_neighbors):
+            return True
+
+    if not (avoid & my_bit) and rc.can_build_road(my_pos):
+        rc.build_road(my_pos)
+        map_info.update_at(my_pos)
+        return True
+
+    if _try_mask(allowed_neighbors):
+        return True
+    return False
