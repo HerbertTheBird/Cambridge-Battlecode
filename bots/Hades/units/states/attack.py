@@ -742,16 +742,13 @@ def _placement_candidates(require_feed: bool = True):
     _ensure_attack_shift_plans()
 
     if require_feed:
+        candidates = (map_info._bm_ti_fed | map_info._bm_ax_fed) & map_info._bm_seen_observed
         my_sentinels = bm_et[map_info._IDX_SENTINEL] & my_team
         if my_sentinels:
-            taken_harvesters = map_info.expand_manhattan(my_sentinels) & bm_et[map_info._IDX_HARVESTER]
-        else:
-            taken_harvesters = 0
-        candidates = map_info._bm_ti_fed | map_info._bm_ax_fed | map_info._bm_ti_carrying | map_info._bm_refined_carrying
-        harvesters = (map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI] & ~taken_harvesters) | map_info._bm_et[map_info._IDX_FOUNDRY]
-        if harvesters:
-            candidates |= (map_info.expand_manhattan(harvesters))
-        candidates &= map_info._bm_seen_observed
+            sources = bm_et[map_info._IDX_HARVESTER] | bm_et[map_info._IDX_FOUNDRY]
+            taken = map_info.expand_manhattan(my_sentinels) & sources
+            if taken:
+                candidates &= ~map_info.expand_manhattan(taken)
     else:
         candidates = map_info._bm_seen_observed & map_info._board_mask
     if not candidates:
@@ -901,6 +898,7 @@ def _get_attack_candidates():
         return 0, 0
 
     sentinel_masks, gunner_masks = _placement_candidates()
+    units.builder.draw_mask(sentinel_masks[0], 255, 0, 0)
     if not can_afford_sent:
         sentinel_masks = _EMPTY_CANDIDATE_MASKS
     if not can_afford_gun:

@@ -46,12 +46,13 @@ def _should_stay():
         p = rc.get_position(uid)
         if max(abs(p.x - my_pos.x), abs(p.y - my_pos.y)) <= 2:
             return True
-    targets = map_info._bm_friendly_bots | map_info._bm_enemy_bots
-    closest, _ = pathing.closest_impl(targets, pos=my_pos, max_dist=4)
-    if closest is None:
+    _, friendly_d = pathing.closest_impl(map_info._bm_friendly_bots, pos=my_pos, max_dist=4)
+    if friendly_d < 0:
         return True
-    n = closest.x + closest.y * map_info._width
-    return not (map_info._bm_friendly_bots & (1 << n))
+    enemy_pos, _ = pathing.closest_impl(map_info._bm_enemy_bots, pos=my_pos, max_dist=friendly_d + 1)
+    if enemy_pos is not None:
+        return True
+    return False
 
 
 def _ally_feeder_mask(max_steps: int = 6) -> int:

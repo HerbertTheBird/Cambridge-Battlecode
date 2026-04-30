@@ -213,8 +213,8 @@ _bm_my_gunner_claims: int = 0     # tiles already covered by one of my gunners' 
 _bm_guard_conveyor: int = 0   # CONVEYOR|ARMOURED_CONVEYOR tiles whose target is an ore tile with a harvester (any team)
 _bm_conv_into_open_ore: int = 0   # CONVEYOR|ARMOURED_CONVEYOR tiles whose target is an open (non-landlocked) ore tile
 _bm_conv_by_dir: list[int] = [0] * 8  # per facing: CONVEYOR|ARMOURED_CONVEYOR tiles with that direction
-_bm_ti_fed: int = 0              # target tiles of conveyors observed carrying titanium
-_bm_ax_fed: int = 0              # target tiles of conveyors observed carrying refined axionite
+_bm_ti_fed: int = 0              # 4-hop forward propagation from (Ti-harvester adj | observed Ti) conveyors
+_bm_ax_fed: int = 0              # 4-hop forward propagation from (Ax-harvester adj | observed raw/refined ax) conveyors
 _bm_enemy_turret_threat: int = 0 # union of enemy soft + hard threat
 _bm_others_5x5: int = 0          # 5x5 around other friendly builder bots
 _bm_others_3x3: int = 0          # 3x3 around other friendly builder bots
@@ -510,25 +510,118 @@ def _compute_my_gunner_claims() -> int:
 
 
 def _compute_fed() -> tuple[int, int]:
-    """Return (ti_fed, ax_fed) — output target bitmasks of conveyors observed
-    carrying titanium / refined axionite respectively."""
-    ti_fed = 0
-    ax_fed = 0
+    """Return (ti_fed, ax_fed) — tiles where a turret placed there would be fed.
+
+    Composed of:
+      1. The cardinal neighbors of the resource source (Ti harvester or foundry),
+         since a turret built directly adjacent is loaded by the source.
+      2. 4-hop forward conveyor propagation from a seed of:
+           - conveyors the source actually feeds (adj minus pointing-back), plus
+           - conveyors observed carrying the matching resource, but only if they
+             have an upstream feeder OR are adjacent to the source.
+    Axionite-ore harvesters do not seed fed — only foundries do.
+    Propagation rules mirror `_carrying_expand` but only downstream.
+    """
+    bm_conveyors = _bm_conveyors
+    if not bm_conveyors:
+        return 0, 0
+    bm_et = _bm_et
+    bm_env = _bm_env
+    harvesters = bm_et[_IDX_HARVESTER]
+    foundries = bm_et[_IDX_FOUNDRY]
+    ti_harv = harvesters & bm_env[_IDX_ENV_ORE_TI]
+
     conv_target = _building_conv_target
-    bm_conv_ti = _bm_conv_ti
-    bm_conv_refined = _bm_conv_refined
-    mask = _bm_conveyors
-    while mask:
-        lsb = mask & -mask
-        cn = lsb.bit_length() - 1
-        tn = conv_target[cn]
-        if tn >= 0:
-            tbit = 1 << tn
-            if bm_conv_ti & lsb:
-                ti_fed |= tbit
-            if bm_conv_refined & lsb:
-                ax_fed |= tbit
-        mask ^= lsb
+    tiles = _width * _height
+    w = _width
+    board = _board_mask
+    cardinal = (
+        bm_et[_IDX_CONVEYOR]
+        | bm_et[_IDX_ARMOURED_CONVEYOR]
+        | bm_et[_IDX_SPLITTER]
+    )
+    dir_mask = _bm_dir
+    convs_e = cardinal & dir_mask[_DIR_INT[Direction.EAST]]
+    convs_w = cardinal & dir_mask[_DIR_INT[Direction.WEST]]
+    convs_s = cardinal & dir_mask[_DIR_INT[Direction.SOUTH]]
+    convs_n = cardinal & dir_mask[_DIR_INT[Direction.NORTH]]
+    bridges = bm_et[_IDX_BRIDGE]
+    nlc = _not_left_col
+    nrc = _not_right_col
+    ntr = _not_top_row
+    nbr = _not_bottom_row
+
+    def adj_seed(src):
+        if not src:
+            return 0
+        adj = expand_manhattan(src) & bm_conveyors
+        pointing_back = (
+            (((src & nlc) >> 1) & convs_e)
+            | (((src & nrc) << 1) & convs_w)
+            | (((src & ntr) >> w) & convs_s)
+            | (((src & nbr) << w) & convs_n)
+        )
+        return adj & ~pointing_back
+
+    # Tiles that have at least one upstream conveyor (i.e., something points at them).
+    has_reverse = (
+        ((convs_e & nrc) << 1)
+        | ((convs_w & nlc) >> 1)
+        | ((convs_s & nbr) << w)
+        | ((convs_n & ntr) >> w)
+    ) & board
+    m = bridges
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        tn = conv_target[n]
+        if 0 <= tn < tiles:
+            has_reverse |= 1 << tn
+        m ^= lsb
+
+    ti_harv_adj = adj_seed(ti_harv)
+    foundry_adj = adj_seed(foundries)
+    ti_carry = (_bm_conv_ti & bm_conveyors) & (has_reverse | ti_harv_adj)
+    ax_carry = ((_bm_conv_raw_ax | _bm_conv_refined) & bm_conveyors) & (has_reverse | foundry_adj)
+
+    ti_seed = ti_harv_adj | ti_carry
+    ax_seed = foundry_adj | ax_carry
+    if not ti_seed and not ax_seed:
+        return 0, 0
+
+    def fwd(seed):
+        if not seed:
+            return 0
+        expanded = seed
+        cur = seed
+        for _ in range(4):
+            nxt = (
+                ((cur & convs_e & nrc) << 1)
+                | ((cur & convs_w & nlc) >> 1)
+                | ((cur & convs_s & nbr) << w)
+                | ((cur & convs_n & ntr) >> w)
+            ) & board & bm_conveyors & ~expanded
+            m = cur & bridges
+            while m:
+                lsb = m & -m
+                n = lsb.bit_length() - 1
+                tn = conv_target[n]
+                if 0 <= tn < tiles:
+                    tbit = 1 << tn
+                    if (bm_conveyors & tbit) and not (expanded & tbit):
+                        nxt |= tbit
+                m ^= lsb
+            if not nxt:
+                break
+            expanded |= nxt
+            cur = nxt
+        return expanded
+
+    # A turret placed cardinally adjacent to a Ti harvester (or foundry) is
+    # loaded directly by it, regardless of conveyor topology. Include those
+    # tiles unconditionally so they show up in placement candidates.
+    ti_fed = fwd(ti_seed) | expand_manhattan(ti_harv)
+    ax_fed = fwd(ax_seed) | expand_manhattan(foundries)
     return ti_fed, ax_fed
 
 
@@ -1508,9 +1601,7 @@ def _recompute_derived_loaded() -> None:
         return
     _recompute_loaded_cache_key = key
 
-    convs = _bm_conveyors
-    _bm_ti_fed = _conveyor_target_tiles(_bm_conv_ti & convs)
-    _bm_ax_fed = _conveyor_target_tiles(_bm_conv_refined & convs)
+    _bm_ti_fed, _bm_ax_fed = _compute_fed()
     _bm_ti_carrying, _bm_raw_ax_carrying, _bm_refined_carrying = _compute_carrying()
 
 
