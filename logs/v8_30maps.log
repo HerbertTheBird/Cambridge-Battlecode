@@ -1,0 +1,158 @@
+Gauntlet: bots/Hades2_v8 vs 2 opponent(s), 30 maps, 1 seed(s)
+Total matches: 120
+Threads: 12
+
+  [1/120] cold (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T981) [28.1s] | total: 1W-0L-0D
+  [2/120] binary_tree (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T618) [30.3s] | total: 1W-1L-0D
+  [3/120] chess (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T791) [41.7s] | total: 1W-2L-0D
+  [4/120] chess (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T752) [45.2s] | total: 2W-2L-0D
+  [5/120] donut (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T816) [57.4s] | total: 3W-2L-0D
+  [6/120] cold (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T1812) [89.9s] | total: 3W-3L-0D
+  [7/120] binary_tree (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [117.4s] | total: 4W-3L-0D
+  [8/120] drawing_circles_is_hard (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T1145) [78.5s] | total: 4W-4L-0D
+  [9/120] coffee (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [161.4s] | total: 5W-4L-0D
+  [10/120] galaxy (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T344) [16.5s] | total: 5W-5L-0D
+  [11/120] default_large1 (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [178.4s] | total: 6W-5L-0D
+  [12/120] galaxy (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T534) [25.2s] | total: 7W-5L-0D
+  [13/120] default_large1 (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [203.1s] | total: 7W-6L-0D
+  [14/120] first_sound (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T1733) [138.8s] | total: 7W-7L-0D
+  [15/120] donut (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [198.5s] | total: 7W-8L-0D
+  [16/120] drawing_circles_is_hard (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [188.6s] | total: 8W-8L-0D
+  [17/120] coffee (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [242.4s] | total: 8W-9L-0D
+  [18/120] first_sound (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T1606) [157.6s] | total: 8W-10L-0D
+  [19/120] git_branches (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [68.6s] | total: 8W-11L-0D
+  [20/120] git_branches (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [73.4s] | total: 9W-11L-0D
+  [21/120] building_blocks (seed 1) | bots/Hades2_v8 as SILVER: ERROR [300.1s]
+  [22/120] building_blocks (seed 1) | bots/Hades2_v8 as GOLD: ERROR [300.1s]
+  [23/120] hourglass (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T1101) [119.5s] | total: 9W-12L-0D
+  [24/120] flappy_bird (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [247.3s] | total: 9W-13L-0D
+  [25/120] hooks (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [162.4s] | total: 10W-13L-0D
+  [26/120] hooks (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [168.3s] | total: 10W-14L-0D
+  [27/120] mandelbrot (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [103.6s] | total: 10W-15L-0D
+  [28/120] landscape (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [111.3s] | total: 10W-16L-0D
+  [29/120] flappy_bird (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [293.7s] | total: 10W-17L-0D
+  [30/120] landscape (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [139.8s] | total: 11W-17L-0D
+  [31/120] hourglass (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [200.4s] | total: 11W-18L-0D
+  [32/120] gaussian (seed 1) | bots/Hades2_v8 as GOLD: ERROR [300.0s]
+  [33/120] gaussian (seed 1) | bots/Hades2_v8 as SILVER: ERROR [300.0s]
+  [34/120] mandelbrot (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [226.3s] | total: 12W-18L-0D
+  [35/120] settlement (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [118.7s] | total: 13W-18L-0D
+  [36/120] shish_kebab (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [118.5s] | total: 14W-18L-0D
+  [37/120] settlement (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [133.4s] | total: 14W-19L-0D
+  [38/120] shish_kebab (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [141.8s] | total: 15W-19L-0D
+  [39/120] thread_of_connection (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T491) [34.8s] | total: 16W-19L-0D
+  [40/120] socket (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [148.1s] | total: 17W-19L-0D
+  [41/120] socket (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [119.9s] | total: 17W-20L-0D
+  [42/120] spikes (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [89.3s] | total: 17W-21L-0D
+  [43/120] spikes (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [116.8s] | total: 18W-21L-0D
+  [44/120] the_great_divide (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [95.3s] | total: 19W-21L-0D
+  [45/120] vase (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T626) [26.7s] | total: 19W-22L-0D
+  [46/120] the_great_divide (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [96.6s] | total: 19W-23L-0D
+  [47/120] thread_of_connection (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T1083) [96.1s] | total: 19W-24L-0D
+  [48/120] pong (seed 1) | bots/Hades2_v8 as GOLD: ERROR [300.0s]
+  [49/120] tree_of_life (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T916) [68.8s] | total: 19W-25L-0D
+  [50/120] pong (seed 1) | bots/Hades2_v8 as SILVER: ERROR [300.0s]
+  [51/120] rush_bait (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [294.0s] | total: 20W-25L-0D
+  [52/120] binary_tree (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T571) [25.9s] | total: 21W-25L-0D
+  [53/120] binary_tree (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T499) [20.4s] | total: 22W-25L-0D
+  [54/120] rush_bait (seed 1) | bots/Hades2_v8 as SILVER: ERROR [300.0s]
+  [55/120] window_shopping (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T1533) [76.1s] | total: 23W-25L-0D
+  [56/120] chess (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T498) [16.6s] | total: 24W-25L-0D
+  [57/120] wasteland_oasis (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [94.0s] | total: 24W-26L-0D
+  [58/120] coffee (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T297) [7.1s] | total: 25W-26L-0D
+  [59/120] vase (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [106.3s] | total: 26W-26L-0D
+  [60/120] wasteland_oasis (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [101.0s] | total: 26W-27L-0D
+  [61/120] chess (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T1261) [67.4s] | total: 27W-27L-0D
+  [62/120] coffee (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T1223) [53.5s] | total: 27W-28L-0D
+  [63/120] tree_of_life (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: L -> bots/Hades (T2000) [178.6s] | total: 27W-29L-0D
+  [64/120] default_large1 (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T1433) [56.7s] | total: 28W-29L-0D
+  [65/120] window_shopping (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: L -> bots/Hades (T2000) [117.5s] | total: 28W-30L-0D
+  [66/120] drawing_circles_is_hard (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T500) [15.4s] | total: 29W-30L-0D
+  [67/120] drawing_circles_is_hard (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T238) [6.5s] | total: 30W-30L-0D
+  [68/120] cold (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [69.8s] | total: 30W-31L-0D
+  [69/120] donut (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T852) [42.7s] | total: 30W-32L-0D
+  [70/120] wasteland (seed 1) | bots/Hades2_v8 as GOLD vs bots/Hades: W -> bots/Hades2_v8 (T2000) [191.8s] | total: 31W-32L-0D
+  [71/120] default_large1 (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T1764) [89.6s] | total: 32W-32L-0D
+  [72/120] wasteland (seed 1) | bots/Hades2_v8 as SILVER vs bots/Hades: W -> bots/Hades2_v8 (T2000) [212.6s] | total: 33W-32L-0D
+  [73/120] gaussian (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T235) [33.6s] | total: 34W-32L-0D
+  [74/120] gaussian (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T311) [26.9s] | total: 35W-32L-0D
+  [75/120] galaxy (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T846) [73.0s] | total: 35W-33L-0D
+  [76/120] hooks (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T140) [7.1s] | total: 35W-34L-0D
+  [77/120] galaxy (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T887) [81.7s] | total: 36W-34L-0D
+  [78/120] cold (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [178.0s] | total: 37W-34L-0D
+  [79/120] first_sound (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T1832) [120.8s] | total: 38W-34L-0D
+  [80/120] first_sound (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [124.4s] | total: 39W-34L-0D
+  [81/120] git_branches (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [58.3s] | total: 39W-35L-0D
+  [82/120] donut (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [151.3s] | total: 39W-36L-0D
+  [83/120] hourglass (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T402) [27.2s] | total: 40W-36L-0D
+  [84/120] git_branches (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [113.1s] | total: 40W-37L-0D
+  [85/120] building_blocks (seed 1) | bots/Hades2_v8 as GOLD: ERROR [300.0s]
+  [86/120] landscape (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [85.5s] | total: 40W-38L-0D
+  [87/120] building_blocks (seed 1) | bots/Hades2_v8 as SILVER: ERROR [300.0s]
+  [88/120] mandelbrot (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [96.8s] | total: 41W-38L-0D
+  [89/120] hourglass (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T1409) [113.3s] | total: 42W-38L-0D
+  [90/120] settlement (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T638) [29.1s] | total: 42W-39L-0D
+  [91/120] flappy_bird (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [238.1s] | total: 42W-40L-0D
+  [92/120] landscape (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [129.6s] | total: 43W-40L-0D
+  [93/120] socket (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T814) [31.7s] | total: 44W-40L-0D
+  [94/120] flappy_bird (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [276.1s] | total: 44W-41L-0D
+  [95/120] hooks (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [207.0s] | total: 45W-41L-0D
+  [96/120] rush_bait (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [115.9s] | total: 45W-42L-0D
+  [97/120] mandelbrot (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T1604) [201.1s] | total: 46W-42L-0D
+  [98/120] shish_kebab (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [106.7s] | total: 47W-42L-0D
+  [99/120] shish_kebab (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [94.9s] | total: 48W-42L-0D
+  [100/120] thread_of_connection (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T179) [11.1s] | total: 49W-42L-0D
+  [101/120] thread_of_connection (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T354) [21.2s] | total: 50W-42L-0D
+  [102/120] tree_of_life (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T549) [22.1s] | total: 51W-42L-0D
+  [103/120] rush_bait (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [158.1s] | total: 52W-42L-0D
+  [104/120] vase (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T471) [11.9s] | total: 53W-42L-0D
+  [105/120] spikes (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [84.0s] | total: 53W-43L-0D
+  [106/120] tree_of_life (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T785) [33.7s] | total: 53W-44L-0D
+  [107/120] socket (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [143.2s] | total: 54W-44L-0D
+  [108/120] wasteland (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [36.5s] | total: 55W-44L-0D
+  [109/120] wasteland_oasis (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T855) [26.5s] | total: 55W-45L-0D
+  [110/120] the_great_divide (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [102.2s] | total: 55W-46L-0D
+  [111/120] wasteland (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [47.2s] | total: 55W-47L-0D
+  [112/120] pong (seed 1) | bots/Hades2_v8 as GOLD: ERROR [300.0s]
+  [113/120] spikes (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [162.1s] | total: 56W-47L-0D
+  [114/120] wasteland_oasis (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [84.8s] | total: 56W-48L-0D
+  [115/120] the_great_divide (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [134.1s] | total: 57W-48L-0D
+  [116/120] settlement (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [234.4s] | total: 57W-49L-0D
+  [117/120] vase (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [126.6s] | total: 58W-49L-0D
+  [118/120] pong (seed 1) | bots/Hades2_v8 as SILVER: ERROR [300.0s]
+  [119/120] window_shopping (seed 1) | bots/Hades2_v8 as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [141.5s] | total: 58W-50L-0D
+  [120/120] window_shopping (seed 1) | bots/Hades2_v8 as SILVER vs bots/Lethe: W -> bots/Hades2_v8 (T2000) [142.0s] | total: 59W-50L-0D
+Completed in 1323.3s
+
+=====================================================================================
+  GAUNTLET LEADERBOARD
+=====================================================================================
+    #  Bot                 ELO     W     L     D      WR    AvgT   Err
+  ---  --------------      ---    --    --    --      --    ----   ---
+    1  bots/Hades       1519.8    29    24     0   54.7%    1677     7
+    2  bots/Hades2_v8   1508.9    59    50     0   54.1%    1526    11
+    3  bots/Lethe       1471.3    21    35     0   37.5%    1383     4
+
+==========================================================================================
+  HEAD-TO-HEAD  (p = one-sided binomial test that main bot is better; lower = stronger)
+==========================================================================================
+  Main Bot        vs  Opponent           W     L     D         p
+  --------------  --  --------------    --    --    --    ------
+  bots/Hades2_v8  vs  bots/Lethe        35    21     0    0.0407
+  bots/Hades2_v8  vs  bots/Hades        24    29     0    0.7949
+
+================================================================================
+  PAIR BREAKDOWN for bots/Hades2_v8 (one pair = both sides on same map+seed)
+================================================================================
+  Opponent      2-0    1-1    0-2    D?   Pairs   PairWR
+  ----------    ---    ---    ---    --   -----   ------
+  bots/Hades      2     19      5     0      26    44.2%
+  bots/Lethe     12     11      5     0      28    62.5%
+
+============================================================
+  SIDE BREAKDOWN for bots/Hades2_v8
+============================================================
+  Side           W     L     D   Total      WR
+  ----------    --    --    --   -----    ----
+  GOLD (A)      32    23     0      55   58.2%
+  SILVER (B)    27    27     0      54   50.0%

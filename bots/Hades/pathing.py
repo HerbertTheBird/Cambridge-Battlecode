@@ -264,12 +264,14 @@ def closest_impl(
     targets: int,
     pos: Position | None = None,
     max_dist: int | None = None,
+    tiebreak_score=None,
 ) -> tuple[Position | None, int]:
     """Shared bitmask BFS for closest-target queries.
 
-    Returns the first target reached by Chebyshev distance, breaking ties by
-    lowest tile index. When `max_dist` is provided, the search stops after
-    exploring that many layers.
+    Returns the first target reached by Chebyshev distance. Ties at the same
+    distance are broken by `tiebreak_score(tile_index)` (lower wins) when
+    provided, otherwise by lowest tile index. When `max_dist` is provided, the
+    search stops after exploring that many layers.
     """
     if targets == 0:
         return None, -1
@@ -288,8 +290,22 @@ def closest_impl(
     while frontier:
         hit = frontier & targets
         if hit:
-            lsb = hit & -hit
-            n = lsb.bit_length() - 1
+            if tiebreak_score is None:
+                lsb = hit & -hit
+                n = lsb.bit_length() - 1
+            else:
+                best_n = -1
+                best_score = None
+                m = hit
+                while m:
+                    lsb = m & -m
+                    cn = lsb.bit_length() - 1
+                    m ^= lsb
+                    s = tiebreak_score(cn)
+                    if best_score is None or s < best_score:
+                        best_score = s
+                        best_n = cn
+                n = best_n
             return Position(n % w, n // w), dist
         if max_dist is not None and dist >= max_dist:
             break
@@ -324,12 +340,13 @@ class Pathing:
         targets: int,
         pos: Position | None = None,
         max_dist: int | None = None,
+        tiebreak_score=None,
     ) -> tuple[Position | None, int]:
-        return closest_impl(targets, pos=pos, max_dist=max_dist)
+        return closest_impl(targets, pos=pos, max_dist=max_dist, tiebreak_score=tiebreak_score)
 
-    def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
+    def closest(self, targets: int, pos: Position = None, tiebreak_score=None) -> tuple[Position | None, int]:
         """Find closest bit in *targets* from *pos* with the original full search."""
-        return self._closest_impl(targets, pos=pos, max_dist=None)
+        return self._closest_impl(targets, pos=pos, max_dist=None, tiebreak_score=tiebreak_score)
 
     def closest_within(
         self,
