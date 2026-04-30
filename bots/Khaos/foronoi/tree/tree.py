@@ -239,7 +239,7 @@ class Tree:
 
     @staticmethod
     def rotate_left(z):
-        """
+        r"""
         Rotate tree to the left.
 
         # T1, T2, T3 and T4 are subtrees.
@@ -281,7 +281,7 @@ class Tree:
 
     @staticmethod
     def rotate_right(z):
-        """
+        r"""
         Rotate tree to the right.
 
         # T1, T2, T3 and T4 are subtrees.
