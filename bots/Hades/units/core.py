@@ -35,7 +35,7 @@ def _spawn_toward_plan(core_pos: Position) -> bool:
 
     planned_dir = _spawn_plan[_num_spawned]
     for d in (planned_dir, planned_dir.rotate_left(), planned_dir.rotate_right()):
-        p = core_pos.add(d)
+        p = map_info.pos_add(core_pos, d)
         if rc.can_spawn(p):
             rc.spawn_builder(p)
             _num_spawned += 1

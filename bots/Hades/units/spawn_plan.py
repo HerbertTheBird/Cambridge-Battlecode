@@ -31,7 +31,7 @@ def dir_distance(a: Direction, b: Direction) -> int:
 
 
 def get_ray_endpoint(start: Position, direction: Direction, width: int, height: int, max_steps: int | None = None) -> Position:
-    dx, dy = direction.delta()
+    dx, dy = map_info._DIRECTION_DELTAS[direction]
     x, y = start.x, start.y
     steps = 0
     while True:
@@ -63,7 +63,7 @@ def _build_ti_near_mask(rc: Controller) -> int:
 def _ray_hits_mask(core_pos: Position, direction: Direction, width: int, height: int, mask: int) -> bool:
     if not mask:
         return False
-    dx, dy = direction.delta()
+    dx, dy = map_info._DIRECTION_DELTAS[direction]
     w = width
     x, y = core_pos.x + dx, core_pos.y + dy
     while 0 <= x < width and 0 <= y < height:

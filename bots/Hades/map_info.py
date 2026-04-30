@@ -142,6 +142,16 @@ _DIRECTION_DELTAS = {d: d.delta() for d in Direction}
 # Int-indexed version: _DIRECTION_DELTAS_I[dir_int] = (dx, dy)
 _DIRECTION_DELTAS_I = [d.delta() for d in Direction]
 
+_DIR_N  = _DIR_INT[Direction.NORTH]
+_DIR_NE = _DIR_INT[Direction.NORTHEAST]
+_DIR_E  = _DIR_INT[Direction.EAST]
+_DIR_SE = _DIR_INT[Direction.SOUTHEAST]
+_DIR_S  = _DIR_INT[Direction.SOUTH]
+_DIR_SW = _DIR_INT[Direction.SOUTHWEST]
+_DIR_W  = _DIR_INT[Direction.WEST]
+_DIR_NW = _DIR_INT[Direction.NORTHWEST]
+_DIR_C  = _DIR_INT[Direction.CENTRE]
+
 def pos_add(pos: Position, d: Direction) -> Position:
     """Fast Position.add() replacement using cached deltas."""
     dx, dy = _DIRECTION_DELTAS[d]
@@ -551,10 +561,10 @@ def _compute_fed() -> tuple[int, int]:
         | bm_et[_IDX_SPLITTER]
     )
     dir_mask = _bm_dir
-    convs_e = cardinal & dir_mask[_DIR_INT[Direction.EAST]]
-    convs_w = cardinal & dir_mask[_DIR_INT[Direction.WEST]]
-    convs_s = cardinal & dir_mask[_DIR_INT[Direction.SOUTH]]
-    convs_n = cardinal & dir_mask[_DIR_INT[Direction.NORTH]]
+    convs_e = cardinal & dir_mask[_DIR_E]
+    convs_w = cardinal & dir_mask[_DIR_W]
+    convs_s = cardinal & dir_mask[_DIR_S]
+    convs_n = cardinal & dir_mask[_DIR_N]
     bridges = bm_et[_IDX_BRIDGE]
     nlc = _not_left_col
     nrc = _not_right_col
@@ -648,10 +658,10 @@ def _conveyor_target_tiles(source_mask: int) -> int:
         | _bm_et[_IDX_SPLITTER]
     )
     targets = (
-        ((cardinal & dir_mask[_DIR_INT[Direction.EAST]] & _not_right_col) << 1)
-        | ((cardinal & dir_mask[_DIR_INT[Direction.WEST]] & _not_left_col) >> 1)
-        | ((cardinal & dir_mask[_DIR_INT[Direction.SOUTH]] & _not_bottom_row) << w)
-        | ((cardinal & dir_mask[_DIR_INT[Direction.NORTH]] & _not_top_row) >> w)
+        ((cardinal & dir_mask[_DIR_E] & _not_right_col) << 1)
+        | ((cardinal & dir_mask[_DIR_W] & _not_left_col) >> 1)
+        | ((cardinal & dir_mask[_DIR_S] & _not_bottom_row) << w)
+        | ((cardinal & dir_mask[_DIR_N] & _not_top_row) >> w)
     ) & board
 
     bridges = source_mask & _bm_et[_IDX_BRIDGE]
@@ -717,10 +727,10 @@ def _compute_conv_into_open_ore() -> int:
         return 0
     w = _width
     ore = (_bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]) & ~_bm_landlocked
-    right = convs & _bm_dir[_DIR_INT[Direction.EAST]] & ((_not_right_col & ore) >> 1)
-    left = convs & _bm_dir[_DIR_INT[Direction.WEST]] & ((_not_left_col & ore) << 1)
-    up = convs & _bm_dir[_DIR_INT[Direction.NORTH]] & ((_not_bottom_row & ore) << w)
-    down = convs & _bm_dir[_DIR_INT[Direction.SOUTH]] & ((_not_top_row & ore) >> w)
+    right = convs & _bm_dir[_DIR_E] & ((_not_right_col & ore) >> 1)
+    left = convs & _bm_dir[_DIR_W] & ((_not_left_col & ore) << 1)
+    up = convs & _bm_dir[_DIR_N] & ((_not_bottom_row & ore) << w)
+    down = convs & _bm_dir[_DIR_S] & ((_not_top_row & ore) >> w)
     result = right | left | up | down
     _conv_into_open_ore_cache_version = _struct_version
     _conv_into_open_ore_cache = result
@@ -740,17 +750,19 @@ def _carrying_expand(
     # Upstream (reverse chain).
     cur = seed
     for _ in range(3):
+        not_expanded = ~expanded
+        bridges_ne = bridges & not_expanded
         nxt = (
             ((cur & not_left_col) >> 1) & convs_e
             | ((cur & not_right_col) << 1) & convs_w
             | ((cur & not_top_row) >> w) & convs_s
             | ((cur & not_bottom_row) << w) & convs_n
-        ) & bm_conveyors & ~expanded
+        ) & bm_conveyors & not_expanded
         m = cur
         while m:
             lsb = m & -m
             n = lsb.bit_length() - 1
-            nxt |= reverse[n] & bridges & ~expanded
+            nxt |= reverse[n] & bridges_ne
             m ^= lsb
         if not nxt:
             break
@@ -808,10 +820,10 @@ def _compute_carrying() -> tuple[int, int, int]:
         | _bm_et[_IDX_SPLITTER]
     )
     dir_mask = _bm_dir
-    convs_e = cardinal & dir_mask[_DIR_INT[Direction.EAST]]
-    convs_w = cardinal & dir_mask[_DIR_INT[Direction.WEST]]
-    convs_s = cardinal & dir_mask[_DIR_INT[Direction.SOUTH]]
-    convs_n = cardinal & dir_mask[_DIR_INT[Direction.NORTH]]
+    convs_e = cardinal & dir_mask[_DIR_E]
+    convs_w = cardinal & dir_mask[_DIR_W]
+    convs_s = cardinal & dir_mask[_DIR_S]
+    convs_n = cardinal & dir_mask[_DIR_N]
     bridges = _bm_et[_IDX_BRIDGE]
     nlc = _not_left_col
     nrc = _not_right_col
@@ -853,10 +865,10 @@ def _compute_guard_conv() -> int:
         return 0
     w = _width
     ore = (_bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]) & ~_bm_landlocked
-    right = convs & _bm_dir[_DIR_INT[Direction.EAST]] & ((_not_right_col & ore)>>1)
-    left = convs & _bm_dir[_DIR_INT[Direction.WEST]] & ((_not_left_col & ore)<<1)
-    up = convs & _bm_dir[_DIR_INT[Direction.NORTH]] & ((_not_bottom_row & ore)<<w)
-    down = convs & _bm_dir[_DIR_INT[Direction.SOUTH]] & ((_not_top_row & ore)>>w)
+    right = convs & _bm_dir[_DIR_E] & ((_not_right_col & ore)>>1)
+    left = convs & _bm_dir[_DIR_W] & ((_not_left_col & ore)<<1)
+    up = convs & _bm_dir[_DIR_N] & ((_not_bottom_row & ore)<<w)
+    down = convs & _bm_dir[_DIR_S] & ((_not_top_row & ore)>>w)
     result = right | left | up | down
     _guard_conv_cache_version = _struct_version
     _guard_conv_cache = result
@@ -1530,6 +1542,10 @@ def _compute_route_targets() -> int:
                 if rev[n] & carrying:
                     _bm_dead_end |= lsb
                 m ^= lsb
+
+    # Dead ends must never be enemy conveyor tiles themselves (targets of enemy
+    # conveyors are still allowed).
+    _bm_dead_end &= ~(_bm_conveyors & ~bm_my)
 
     result = _bm_my_core_area | (reaches_core & ~unroutable & ~_bm_guard_conveyor)
     _route_targets_cache_key = key

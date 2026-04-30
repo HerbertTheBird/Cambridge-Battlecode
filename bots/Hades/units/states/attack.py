@@ -1147,6 +1147,119 @@ def _try_instant_preferred(preferred: int) -> bool:
     return False
 
 
+def _try_launcher_lockdown(target: Position) -> bool:
+    """If `target` is an enemy conveyor and a visible enemy builder is close
+    enough to heal it before we finish destroying it, place a launcher (adjacent
+    to this builder) on the buildable tile that covers the largest portion of
+    the conveyor's 3x3 (counting tiles also blocked by non-walkable buildings
+    or walls as already covered). Returns True if a launcher was built."""
+    if rc.get_action_cooldown() != 0:
+        return False
+    w = map_info._width
+    target_n = target.x + target.y * w
+    target_bit = 1 << target_n
+    enemy_team_bm = map_info._bm_team[1 - map_info._my_team_idx]
+    if not (target_bit & map_info._bm_conveyors & enemy_team_bm):
+        return False
+
+    # Only act when a visible enemy builder is near enough to out-heal us.
+    # We deal 2 damage/fire; a heal restores 4 HP. So if the enemy reaches an
+    # adjacent tile before we finish, they can save the conveyor.
+    visible_enemy_bots = map_info._bm_enemy_bots & map_info._bm_visible
+    if not visible_enemy_bots:
+        return False
+    _, enemy_dist = nav.closest(visible_enemy_bots)
+    if enemy_dist is None:
+        return False
+    hp = map_info._building_hp[target_n]
+    if hp <= 0 or hp // 2 <= enemy_dist - 2:
+        return False
+
+    bm_et = map_info._bm_et
+    my_team_idx = map_info._my_team_idx
+    my_team = map_info._bm_team[my_team_idx]
+    walkable_types = (
+        bm_et[map_info._IDX_ROAD]
+        | bm_et[map_info._IDX_CONVEYOR]
+        | bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | bm_et[map_info._IDX_SPLITTER]
+        | bm_et[map_info._IDX_BRIDGE]
+    )
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    non_walkable_buildings = map_info._bm_any_building & ~walkable_types
+
+    # Tiles already covered by an existing friendly launcher's 3x3 are
+    # effectively locked down — treat them as covered so we don't double up.
+    friendly_launchers = bm_et[map_info._IDX_LAUNCHER] & my_team
+    friendly_launcher_zone = (
+        map_info.expand_chebyshev(friendly_launchers) | friendly_launchers
+    )
+
+    target_zone = map_info.expand_chebyshev(target_bit) | target_bit
+    uncovered = target_zone & ~walls & ~non_walkable_buildings & ~friendly_launcher_zone
+    if not uncovered:
+        return False
+
+    my_pos = map_info._my_pos
+    my_n = my_pos.x + my_pos.y * w
+    my_bit = 1 << my_n
+    my_road = bm_et[map_info._IDX_ROAD] & my_team
+    target_adj = map_info.expand_chebyshev(target_bit) & ~target_bit
+
+    # Special case: only one uncovered tile and it's a neighbor of the target.
+    # A barrier (after destroying own road if needed) is cheaper and definitive.
+    if uncovered == (uncovered & -uncovered) and (uncovered & target_adj):
+        n = uncovered.bit_length() - 1
+        p = Position(n % w, n // w)
+        if uncovered & map_info._bm_friendly_bots:
+            pass  # can't build under a friendly bot; fall through to launcher
+        else:
+            if (uncovered & my_road) and rc.can_destroy(p):
+                rc.destroy(p)
+                map_info.update_at(p)
+            if rc.can_build_barrier(p):
+                log(f"AttackLockdown barrier at {p} for {target}")
+                rc.build_barrier(p)
+                map_info.update_at(p)
+                return True
+
+    # Launcher must be adjacent to the target conveyor AND in our build range.
+    candidates = map_info.expand_chebyshev(my_bit) & ~my_bit & target_adj
+    # Empty tiles or own roads (we'll destroy roads first; destroy is free).
+    candidates &= ((~map_info._bm_any_building) | my_road) & ~walls
+    candidates &= ~map_info._bm_friendly_bots & ~map_info._bm_enemy_bots
+    # Don't place a launcher on a tile under enemy turret threat.
+    candidates &= ~map_info._bm_enemy_turret_threat
+
+    best_p = None
+    best_lsb = 0
+    best_cover = 0
+    m = candidates
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        m ^= lsb
+        launcher_zone = map_info.expand_chebyshev(lsb) | lsb
+        cover = bin(uncovered & launcher_zone).count("1")
+        if cover > best_cover:
+            best_cover = cover
+            best_lsb = lsb
+            best_p = Position(n % w, n // w)
+
+    if best_p is None or best_cover == 0:
+        return False
+
+    if (best_lsb & my_road) and rc.can_destroy(best_p):
+        rc.destroy(best_p)
+        map_info.update_at(best_p)
+    if rc.can_build_launcher(best_p):
+        log(f"AttackLockdown launcher at {best_p} covering {best_cover}/{bin(uncovered).count('1')} of {target}")
+        rc.build_launcher(best_p)
+        map_info.update_at(best_p)
+        return True
+    return False
+
+
 def run():
     global cant_attack
     log("ATTACK")
@@ -1169,6 +1282,35 @@ def run():
         cant_attack |= preferred | fallback
         return
 
+    # Locally prefer fully secured tiles: if any candidate's entire 3x3 is
+    # sealed by walls / non-walkable buildings / our launcher zones, and one
+    # is reachable within 2 pathing steps, prefer the closest such tile.
+    walkable_types_pref = (
+        map_info._bm_et[map_info._IDX_ROAD]
+        | map_info._bm_et[map_info._IDX_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_SPLITTER]
+        | map_info._bm_et[map_info._IDX_BRIDGE]
+    )
+    non_walkable_pref = map_info._bm_any_building & ~walkable_types_pref
+    walls_pref = map_info._bm_env[map_info._IDX_ENV_WALL]
+    my_launchers_pref = (
+        map_info._bm_et[map_info._IDX_LAUNCHER]
+        & map_info._bm_team[my_team_idx]
+    )
+    launcher_zone_pref = (
+        map_info.expand_chebyshev(my_launchers_pref) | my_launchers_pref
+    )
+    sealed_pref = walls_pref | non_walkable_pref | launcher_zone_pref
+    not_sealed = ~sealed_pref & map_info._board_mask
+    # Chebyshev erosion: a tile is fully secured iff its 3x3 is in sealed_pref.
+    secured = ~map_info.expand_chebyshev(not_sealed) & map_info._board_mask
+    secured_candidates = secured & (preferred | fallback)
+    if secured_candidates:
+        sec_best, _ = nav.closest_within(secured_candidates, max_dist=2)
+        if sec_best is not None:
+            best = sec_best
+
     best_n = best.x + best.y * width
     best_bit = 1 << best_n
     direction, turret_type, _ = get_best_direction(best)
@@ -1177,6 +1319,12 @@ def run():
     is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
 
     log(f"Attack: best={best}, dir={direction}, type={turret_type}, fallback={is_fallback}")
+
+    # High-priority lockdown: if target is an enemy conveyor and we can drop a
+    # launcher that (combined with non-walkable buildings) covers the whole 3x3
+    # around it, do that this turn instead of firing.
+    if is_fallback and _try_launcher_lockdown(best):
+        return
 
     zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * width)
     zone = map_info.expand_chebyshev(zone)
@@ -1209,7 +1357,31 @@ def run():
             my_sentinels = map_info._bm_team[my_team_idx] & map_info._bm_et[map_info._IDX_SENTINEL]
             if my_sentinels & map_info._bm_seen_observed:
                 can_attack_despite_enemy = True
-        
+
+        # If every tile in target's 3x3 is a wall, non-walkable building, or
+        # inside one of our launchers' 3x3, no enemy can reach to heal — attack.
+        if not can_attack_despite_enemy:
+            walkable_types_run = (
+                map_info._bm_et[map_info._IDX_ROAD]
+                | map_info._bm_et[map_info._IDX_CONVEYOR]
+                | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+                | map_info._bm_et[map_info._IDX_SPLITTER]
+                | map_info._bm_et[map_info._IDX_BRIDGE]
+            )
+            non_walkable_run = map_info._bm_any_building & ~walkable_types_run
+            walls_run = map_info._bm_env[map_info._IDX_ENV_WALL]
+            my_launchers_run = (
+                map_info._bm_et[map_info._IDX_LAUNCHER]
+                & map_info._bm_team[my_team_idx]
+            )
+            launcher_zone_run = (
+                map_info.expand_chebyshev(my_launchers_run) | my_launchers_run
+            )
+            target_zone_run = map_info.expand_chebyshev(best_bit) | best_bit
+            sealed = walls_run | non_walkable_run | launcher_zone_run
+            if (target_zone_run & ~sealed) == 0:
+                can_attack_despite_enemy = True
+
         nav.move_to(best)
         if rc.can_fire(best):
             if (not enemy_bot_nearby or can_attack_despite_enemy) or rc.get_hp(best_id) <= 2:
