@@ -29,7 +29,6 @@ import cambc_pb2
 
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
-DEFAULT_MAP_DIRS = [SCRIPT_DIR / "maps", SCRIPT_DIR / "maps_mit"]
 
 
 def extract_map_bytes(replay_path: Path) -> bytes:
@@ -38,36 +37,6 @@ def extract_map_bytes(replay_path: Path) -> bytes:
     with open(replay_path, "rb") as f:
         replay.ParseFromString(f.read())
     return replay.map.SerializeToString()
-
-
-def _map_signature(m: cambc_pb2.Map) -> tuple:
-    """Canonical, hashable representation of a Map for equality checks."""
-    rows = tuple(tuple(row.tiles) for row in m.rows)
-    cores = tuple(sorted(
-        (c.team, c.position.x, c.position.y) for c in m.cores
-    ))
-    return (m.width, m.height, rows, cores)
-
-
-def find_map_name(map_bytes: bytes, search_dirs: list[Path]) -> str | None:
-    """Return the stem of a .map26 file whose contents match map_bytes, or None."""
-    target = cambc_pb2.Map()
-    target.ParseFromString(map_bytes)
-    target_sig = _map_signature(target)
-
-    for d in search_dirs:
-        if not d.is_dir():
-            continue
-        for map_path in sorted(d.glob("*.map26")):
-            candidate = cambc_pb2.Map()
-            try:
-                with open(map_path, "rb") as f:
-                    candidate.ParseFromString(f.read())
-            except Exception:
-                continue
-            if _map_signature(candidate) == target_sig:
-                return map_path.stem
-    return None
 
 
 def extract_to_file(
@@ -85,8 +54,7 @@ def extract_to_file(
     output_dir.mkdir(parents=True, exist_ok=True)
     map_bytes = extract_map_bytes(replay_path)
 
-    dirs = search_dirs if search_dirs is not None else DEFAULT_MAP_DIRS
-    identified = find_map_name(map_bytes, dirs)
+    identified = None
 
     out_path = output_dir / f"{identified or fallback_name}.map26"
     with open(out_path, "wb") as f:
