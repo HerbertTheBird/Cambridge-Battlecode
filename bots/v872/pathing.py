@@ -283,8 +283,6 @@ class Pathing:
         targets: int,
         pos: Position | None = None,
         max_dist: int | None = None,
-        avoid: int = 0,
-        side: bool = True,
     ) -> tuple[Position | None, int]:
         """Shared bitmask BFS for closest-target queries.
 
@@ -292,30 +290,13 @@ class Pathing:
         lowest tile index exactly as the previous implementation did. When
         `max_dist` is provided, the search stops after exploring that many
         layers.
-
-        `avoid` is an optional bitmask of tiles to additionally treat as
-        impassable (e.g. enemy can't path through tiles next to our launchers).
-
-        `side` selects whose perspective the passable mask reflects. True (the
-        default) is our perspective — uses the cached `_bm_passable_FFF` which
-        avoids enemy threat. False models the enemy's pathing: same blockers
-        minus the enemy's own threat (they wouldn't avoid it).
         """
         if targets == 0:
             return None, -1
         if pos is None:
             pos = map_info._my_pos
         w = map_info._width
-        if side:
-            passable = map_info._bm_passable_FFF
-        else:
-            passable = (
-                ~map_info.get_avoid(False, False, False, avoid_threat=False)
-                & map_info._board_mask
-            )
-        if avoid:
-            passable &= ~avoid
-        passable |= targets
+        passable = map_info._bm_passable_FFF | targets
         start = 1 << (pos.x + pos.y * w)
         if start & targets:
             return pos, 0
@@ -340,28 +321,18 @@ class Pathing:
             frontier = expanded & passable & ~visited
         return None, -1
 
-    def closest(
-        self,
-        targets: int,
-        pos: Position = None,
-        avoid: int = 0,
-        side: bool = True,
-    ) -> tuple[Position | None, int]:
+    def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
         """Find closest bit in *targets* from *pos* with the original full search."""
-        return self._closest_impl(targets, pos=pos, max_dist=None, avoid=avoid, side=side)
+        return self._closest_impl(targets, pos=pos, max_dist=None)
 
     def closest_within(
         self,
         targets: int,
         pos: Position | None = None,
         max_dist: int = 0,
-        avoid: int = 0,
-        side: bool = True,
     ) -> tuple[Position | None, int]:
         """Find the closest target if it is within `max_dist`, else (None, -1)."""
-        return self._closest_impl(
-            targets, pos=pos, max_dist=max_dist, avoid=avoid, side=side
-        )
+        return self._closest_impl(targets, pos=pos, max_dist=max_dist)
 
     def __init__(self, c: Controller):
         self.width = c.get_map_width()
@@ -478,9 +449,9 @@ class Pathing:
         new_pos = Position(px + dx, py + dy)
         if not map_info.in_bounds(new_pos):
             return False
+        id = rc.get_tile_building_id(new_pos)
         if rc.get_tile_builder_bot_id(new_pos) != None:
             return False
-        id = rc.get_tile_building_id(new_pos)
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0]:
             rc.destroy(new_pos)
             map_info.update_at(new_pos)

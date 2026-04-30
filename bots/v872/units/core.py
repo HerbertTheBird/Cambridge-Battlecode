@@ -35,7 +35,7 @@ def _spawn_toward_plan(core_pos: Position) -> bool:
 
     planned_dir = _spawn_plan[_num_spawned]
     for d in (planned_dir, planned_dir.rotate_left(), planned_dir.rotate_right()):
-        p = map_info.pos_add(core_pos, d)
+        p = core_pos.add(d)
         if rc.can_spawn(p):
             rc.spawn_builder(p)
             _num_spawned += 1
@@ -103,9 +103,7 @@ def _scan_nearby_builders(core_pos: Position, my_team):
 
 def run():
     global _spawn_plan
-    # if rc.get_current_round() == 100:
-        
-    #     rc.resign()
+    
     # Sync round info
     map_info.update()
     titanium, axionite = rc.get_global_resources()
