@@ -5,7 +5,6 @@ from cambc import *
 import units.builder
 from log import log
 import sys
-from units.states import attack
 rc: Controller = None
 nav: Pathing = None
 
@@ -21,37 +20,9 @@ def init(c: Controller):
     rc = c
     nav = units.builder.nav
 
-_cant_harvest_map: dict[int, int] = {}  # tile index -> round recorded
-CANT_HARVEST_TTL = 100
+cant_harvest = 0
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
-
-
-def cant_harvest():
-    """Bitmask of tiles we recently failed to harvest; entries expire after CANT_HARVEST_TTL rounds."""
-    current = rc.get_current_round()
-    result = 0
-    stale = []
-    for n, turn in _cant_harvest_map.items():
-        if turn + CANT_HARVEST_TTL < current:
-            stale.append(n)
-            continue
-        result |= 1 << n
-    for n in stale:
-        del _cant_harvest_map[n]
-    return result
-
-
-def _mark_cant_harvest(mask):
-    if not mask:
-        return
-    current = rc.get_current_round()
-    m = mask
-    while m:
-        lsb = m & -m
-        n = lsb.bit_length() - 1
-        _cant_harvest_map[n] = current
-        m ^= lsb
 def possible_ore():
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
@@ -73,8 +44,6 @@ def possible_ore():
         map_info._bm_team[my_team_idx]
         & ~map_info._bm_et[map_info._IDX_CONVEYOR]
         & ~map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        & ~map_info._bm_et[map_info._IDX_BRIDGE]
-        & ~map_info._bm_et[map_info._IDX_SPLITTER]
         & ~map_info._bm_et[map_info._IDX_ROAD]
         & ~map_info._bm_et[map_info._IDX_BARRIER]
         & ~map_info._bm_et[map_info._IDX_MARKER]
@@ -106,11 +75,11 @@ def harvestable_ore():
     ore = possible_ore()
     # units.builder.draw_mask(ore, 255, 0, 0)
     # units.builder.draw_mask(secured(), 0, 255, 0)
-    # units.builder.draw_mask(cant_harvest(), 0, 0, 255)
+    # units.builder.draw_mask(cant_harvest, 0, 0, 255)
     return (ore
             & ~map_info._bm_et[map_info._IDX_HARVESTER]
             & secured()
-            & ~cant_harvest())
+            & ~cant_harvest)
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -139,6 +108,7 @@ CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 
 def run():
+    global cant_harvest
     log("HARVEST")
 
     available = _cached_claims
@@ -148,7 +118,7 @@ def run():
     best_ore, _ = nav.closest(available)
     log("harvesting", best_ore)
     if best_ore is None:
-        _mark_cant_harvest(available)
+        cant_harvest |= available
         return
 
     w = map_info._width
@@ -182,13 +152,9 @@ def run():
     if not path:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
     if path is not None:
-        is_attack_adjacent = bool((1 << best_n) & map_info.expand_manhattan(attack.wanted_attack_tiles()))
-        if is_attack_adjacent:
-            _cost_map[best_n] = (rc.get_harvester_cost()[0], rc.get_current_round())
-        else:
-            _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
+        _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
     else:
-        _mark_cant_harvest(1 << (best_ore.x + best_ore.y * w))
+        cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
         log("cant route")
         return
     if _cost_map[best_n][0] > rc.get_global_resources()[0]:
@@ -209,7 +175,7 @@ def run():
                 map_info.update_at(best_ore)
             log("firing")
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore and not (map_info._bm_friendly_bots|map_info._bm_enemy_bots)&ore_bit:
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and (map_info._my_pos != best_ore or rc.get_move_cooldown() == 0):
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
     targets = set()

@@ -2,7 +2,7 @@ import map_info
 from cambc import Controller, Direction, Position, EntityType
 import units.builder as builder
 from log import DRAW_DEBUG, log
-import colorsys
+
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
 
@@ -19,7 +19,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 
 bridge_cost = 6
 barrier_cost = 15
-threat_cost = 2
+threat_cost = 20
 conveyor_end_cost = 4
 
 
@@ -537,10 +537,7 @@ class Pathing:
         while True:
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
-            # rc, gc, bc = colorsys.hsv_to_rgb((i%8)/8, 1, 1)
-
-            # builder.draw_mask(cur_frontier, int(rc*255), int(gc*255), int(bc*255))
-
+            # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             visited |= cur_frontier
             if cur_frontier == 0:
                 stuck_turns += 1
@@ -588,7 +585,7 @@ class Pathing:
                 if preferred_family == 0:
                     preferred_family = 2 #dont want to prefer straight over diag
                 # builder.draw_mask(from_mask, 255, 255, 0)
-                # log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
+                log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
                 best_dir = None
                 best_fam_abs = -1
                 while from_mask:
@@ -626,7 +623,7 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
-        # builder.draw_mask(map_info._bm_dead_end, 255, 0, 0)
+        # builder.draw_mask(avoid, 255, 0, 0)
 
         # builder.draw_mask(target_mask, 0, 255, 255)
         avoid &= ~start_mask
@@ -664,6 +661,8 @@ class Pathing:
             # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
+            if i > 1:
+                cur_frontier &= ~foundries
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
@@ -809,10 +808,10 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False, refined: bool = False):
-        log("conveyors from ", start, raw_axionite, refined)
+    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
+        log("conveyors from ", start, raw_axionite)
         w = self.width
-        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, refined)
+        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
             log("no target")
             return None
@@ -832,9 +831,9 @@ class Pathing:
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        # if DRAW_DEBUG:
-        #     self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-        #     self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
+            self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):
@@ -898,7 +897,7 @@ class Pathing:
         )
 
     def _get_conveyor_targets_and_avoid(
-        self, raw_axionite: bool, refined: bool = False
+        self, raw_axionite: bool
     ):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
@@ -906,14 +905,10 @@ class Pathing:
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
-            avoid |= map_info.expand_manhattan(map_info._bm_my_core_area)
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_AX])
             target = (map_info._bm_route_targets & ~map_info._bm_conv_raw_ax) | map_info._bm_my_core_area
-            if not refined:
-                my_idx = map_info._my_team_idx
-                target |= map_info._bm_et[map_info._IDX_FOUNDRY] & map_info._bm_team[my_idx]
             target &= ~ax_harvesters
             avoid |= ax_harvesters
             if not target:

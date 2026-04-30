@@ -93,37 +93,8 @@ _NUM_PLANES = 12  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum wel
 SCORE_THRESHOLD_FACTOR = 0
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
-WANTED_ATTACK_THRESHOLD = 48
 
-_cant_attack_map: dict[int, int] = {}  # tile index -> round recorded
-CANT_ATTACK_TTL = 100
-
-
-def cant_attack():
-    """Bitmask of tiles we recently failed to attack; entries expire after CANT_ATTACK_TTL rounds."""
-    current = rc.get_current_round()
-    result = 0
-    stale = []
-    for n, turn in _cant_attack_map.items():
-        if turn + CANT_ATTACK_TTL < current:
-            stale.append(n)
-            continue
-        result |= 1 << n
-    for n in stale:
-        del _cant_attack_map[n]
-    return result
-
-
-def _mark_cant_attack(mask):
-    if not mask:
-        return
-    current = rc.get_current_round()
-    m = mask
-    while m:
-        lsb = m & -m
-        n = lsb.bit_length() - 1
-        _cant_attack_map[n] = current
-        m ^= lsb
+cant_attack = 0
 
 
 # ---------------------------------------------------------------------------
@@ -723,16 +694,12 @@ def _turret_feed_chains(max_steps: int = 8) -> int:
     return result
 
 
-def _placement_candidates(require_feed: bool = True):
+def _placement_candidates():
     """Returns (sentinel_masks, gunner_masks): two tuples of 8 bitmasks, one
     per facing direction. Loader blockers are baked in:
       sentinel_masks[d] = tiles where a sentinel can face direction d
       gunner_masks[d]   = tiles where a gunner can face direction d
-    Gunners with 2+ loader directions get the full-360 exemption.
-
-    When require_feed is False, the harvester/foundry adjacency restriction is
-    omitted — exposes the full set of placement-legal tiles regardless of
-    whether they're currently fed. Used by wanted_attack_tiles()."""
+    Gunners with 2+ loader directions get the full-360 exemption."""
     my_team_idx = map_info._my_team_idx
     enemy_idx = 1 - my_team_idx
     my_team = map_info._bm_team[my_team_idx]
@@ -741,19 +708,16 @@ def _placement_candidates(require_feed: bool = True):
     bm_et = map_info._bm_et
     _ensure_attack_shift_plans()
 
-    if require_feed:
-        my_sentinels = bm_et[map_info._IDX_SENTINEL] & my_team
-        if my_sentinels:
-            taken_harvesters = map_info.expand_manhattan(my_sentinels) & bm_et[map_info._IDX_HARVESTER]
-        else:
-            taken_harvesters = 0
-        candidates = map_info._bm_ti_fed | map_info._bm_ax_fed | map_info._bm_ti_carrying | map_info._bm_refined_carrying
-        harvesters = (map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI] & ~taken_harvesters) | map_info._bm_et[map_info._IDX_FOUNDRY]
-        if harvesters:
-            candidates |= (map_info.expand_manhattan(harvesters))
-        candidates &= map_info._bm_seen_observed
+    my_sentinels = bm_et[map_info._IDX_SENTINEL] & my_team
+    if my_sentinels:
+        taken_harvesters = map_info.expand_manhattan(my_sentinels) & bm_et[map_info._IDX_HARVESTER]
     else:
-        candidates = map_info._bm_seen_observed & map_info._board_mask
+        taken_harvesters = 0
+    candidates = map_info._bm_ti_fed | map_info._bm_ax_fed
+    harvesters = (map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI] & ~taken_harvesters) | map_info._bm_et[map_info._IDX_FOUNDRY]
+    if harvesters:
+        candidates |= (map_info.expand_manhattan(harvesters))
+    candidates &= map_info._bm_seen_observed
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     empty = ~map_info._bm_any_building | map_info._bm_et[map_info._IDX_MARKER]
@@ -787,16 +751,16 @@ def _placement_candidates(require_feed: bool = True):
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
-        tracked_zone = map_info.expand_chebyshev(enemy_bots)
+        tracked_zone = enemy_bots
         danger = map_info.expand_chebyshev(tracked_zone)
         danger_for_clearable |= danger
-        if danger & my_bit:
+        if tracked_zone & my_bit:
             danger_for_clearable = map_info._board_mask #am being tracked
     candidates &= ~(danger_for_clearable & enemy_clearable)
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
-    candidates &= ~cant_attack()
+    candidates &= ~cant_attack
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     feed_chains = _turret_feed_chains()
@@ -828,50 +792,6 @@ def _placement_candidates(require_feed: bool = True):
     sentinel_masks = tuple(sentinel_cands & ~blockers[d] for d in range(8))
     gunner_masks = tuple(candidates & ~blockers[d] for d in range(8))
     return sentinel_masks, gunner_masks
-
-
-_wanted_attack_round = -1
-_wanted_attack_mask = 0
-
-
-def wanted_attack_tiles():
-    """Bitmask of tiles where a turret would score >= MIN_ATTACK_SCORE +
-    THREAT_PENALTY, computed against the broad placement set (no harvester/feed
-    adjacency restriction). Cached per round.
-
-    Used by secure/harvest to recognize ore tiles whose harvesting would unlock
-    a wanted attack position, and skip the routing-cost portion of affordability
-    checks for those tiles."""
-    global _wanted_attack_round, _wanted_attack_mask
-    r = rc.get_current_round()
-    if _wanted_attack_round == r:
-        return _wanted_attack_mask
-    _wanted_attack_round = r
-
-    sentinel_masks, gunner_masks = _placement_candidates(require_feed=False)
-    sent_any = 0
-    gun_any = 0
-    for d in range(8):
-        sent_any |= sentinel_masks[d]
-        gun_any |= gunner_masks[d]
-    if not (sent_any | gun_any):
-        _wanted_attack_mask = 0
-        return 0
-
-    enemy_team_bm, threat = _round_cache_enemy_inputs()
-    threshold = WANTED_ATTACK_THRESHOLD
-    result = 0
-    if sent_any:
-        sent_planes = _get_cached_sentinel_scores(enemy_team_bm, threat, sentinel_masks)
-        for d in range(8):
-            if sentinel_masks[d]:
-                result |= _ge_threshold_mask(sent_planes[d], threshold, sentinel_masks[d])
-    if gun_any:
-        gun_sum = _get_cached_gunner_sum(enemy_team_bm, threat, gunner_masks)
-        result |= _ge_threshold_mask(gun_sum, threshold, gun_any)
-
-    _wanted_attack_mask = result
-    return result
 
 
 def _get_attack_candidates():
@@ -1120,122 +1040,23 @@ def score():
     return 0
 
 
-def _try_instant_preferred(preferred: int) -> bool:
-    """Override: if a preferred tile is adjacent to a tile I can reach this
-    turn without placing a road (existing walkable infra or my current tile),
-    pick the highest-scoring such preferred and act on it directly."""
-    if not preferred:
-        return False
-
-    width = map_info._width
-    my_pos = map_info._my_pos
-    my_n = my_pos.x + my_pos.y * width
-    my_bit = 1 << my_n
-
-    walkable_infra = (
-        map_info._bm_my_core_area
-        | map_info._bm_et[map_info._IDX_ROAD]
-        | map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-    )
-    other_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_bit
-    walkable_infra &= ~other_bots
-
-    reach = map_info.expand_chebyshev(my_bit)
-    walkable_step1 = (walkable_infra & reach) | my_bit
-
-    near_walkable = map_info.expand_chebyshev(walkable_step1)
-    candidates = preferred & near_walkable
-    if not candidates:
-        return False
-
-    best_score = -1
-    best_pos = None
-    best_n = -1
-    best_dir = None
-    best_type = None
-    m = candidates
-    while m:
-        lsb = m & -m
-        n = lsb.bit_length() - 1
-        m ^= lsb
-        pos = Position(n % width, n // width)
-        d, t, score = get_best_direction(pos)
-        if score > best_score:
-            best_score = score
-            best_pos = pos
-            best_n = n
-            best_dir = d
-            best_type = t
-
-    if best_pos is None:
-        return False
-
-    best_bit = 1 << best_n
-    neighbors_of_best = map_info.expand_chebyshev(best_bit) & ~best_bit
-    valid_stands = walkable_step1 & neighbors_of_best
-    if not valid_stands:
-        return False
-
-    if valid_stands & my_bit:
-        target_bit = my_bit
-    else:
-        target_bit = valid_stands & -valid_stands
-
-    log(f"Attack-instant: best={best_pos}, dir={best_dir}, type={best_type}, score={best_score}")
-
-    if target_bit != my_bit:
-        target_n = target_bit.bit_length() - 1
-        target_pos = Position(target_n % width, target_n // width)
-        nav.move_to(target_pos)
-
-    my_team_idx = map_info._my_team_idx
-    best_id = map_info._building_id[best_n]
-    is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
-    if best_id and is_mine:
-        if (
-            not map_info.has_builder_bot(best_pos)
-            and rc.can_destroy(best_pos)
-            and rc.get_action_cooldown() == 0
-            and rc.get_unit_count() < GameConstants.MAX_TEAM_UNITS
-        ):
-            log(f"Attack-instant destroy own building at {best_pos}")
-            rc.destroy(best_pos)
-            map_info.update_at(best_pos)
-
-    if best_type == EntityType.GUNNER:
-        if rc.can_build_gunner(best_pos, best_dir):
-            rc.build_gunner(best_pos, best_dir)
-            map_info.update_at(best_pos)
-    else:
-        if rc.can_build_sentinel(best_pos, best_dir):
-            rc.build_sentinel(best_pos, best_dir)
-            map_info.update_at(best_pos)
-    return True
-
-
 def run():
+    global cant_attack
     log("ATTACK")
     preferred, fallback = _cached_claims
 
     if not preferred and not fallback:
         return
 
-    if _try_instant_preferred(preferred):
-        return
-
     width = map_info._width
     my_team_idx = map_info._my_team_idx
     best = None
-    units.builder.draw_mask(fallback, 255, 0, 0)
     if preferred:
         best, _ = nav.closest(preferred)
     if best is None and fallback:
         best, _ = nav.closest(fallback)
     if best is None:
-        _mark_cant_attack(preferred | fallback)
+        cant_attack |= preferred | fallback
         return
 
     best_n = best.x + best.y * width
