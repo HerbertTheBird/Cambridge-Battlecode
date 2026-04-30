@@ -11,7 +11,7 @@ _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, 
 COST_MAP_TTL = 100
 
 _unpathable_map: dict[int, int] = {}  # tile index -> round recorded
-UNPATHABLE_TTL = 100
+UNPATHABLE_TTL = 400
 
 
 def unpathable():
@@ -287,10 +287,14 @@ def run():
         return
     if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER) and (map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) == rc.get_team() or map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) == EntityType.MARKER or not map_info._building_id[target_conveyor[0].x+target_conveyor[0].y*width]):
         nav.move_to(target_conveyor[1])
+        if rc.can_heal(target_conveyor[0]):
+            rc.heal(target_conveyor[0])
+            map_info.update_at(target_conveyor[0])
+            return
         if map_info._my_pos == target_conveyor[1]:
             if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) != map_info._my_team and rc.can_fire(target_conveyor[1]):
                 rc.fire(target_conveyor[1])
-                map_info.update_at(target_conveyor[0])
+                map_info.update_at(target_conveyor[1])
         if rc.can_build_road(target_conveyor[0]):
             rc.build_road(target_conveyor[0])
             map_info.update_at(target_conveyor[0])

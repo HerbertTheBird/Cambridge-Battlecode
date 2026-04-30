@@ -595,26 +595,27 @@ def _compute_fed() -> tuple[int, int]:
         expanded = seed
         cur = seed
         for _ in range(4):
-            nxt = (
+            targets = (
                 ((cur & convs_e & nrc) << 1)
                 | ((cur & convs_w & nlc) >> 1)
                 | ((cur & convs_s & nbr) << w)
                 | ((cur & convs_n & ntr) >> w)
-            ) & board & bm_conveyors & ~expanded
+            ) & board
             m = cur & bridges
             while m:
                 lsb = m & -m
                 n = lsb.bit_length() - 1
                 tn = conv_target[n]
                 if 0 <= tn < tiles:
-                    tbit = 1 << tn
-                    if (bm_conveyors & tbit) and not (expanded & tbit):
-                        nxt |= tbit
+                    targets |= 1 << tn
                 m ^= lsb
-            if not nxt:
+            new_targets = targets & ~expanded
+            if not new_targets:
                 break
-            expanded |= nxt
-            cur = nxt
+            expanded |= new_targets
+            cur = new_targets & bm_conveyors
+            if not cur:
+                break
         return expanded
 
     # A turret placed cardinally adjacent to a Ti harvester (or foundry) is

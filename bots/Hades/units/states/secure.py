@@ -95,8 +95,8 @@ def score():
                 return 7.5
     if _cached_claims & ~_too_expensive():
         return 3
-    elif _cached_claims:
-        return 2
+    # elif _cached_claims:
+    #     return 2
     return 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
@@ -247,11 +247,11 @@ def run():
         _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))
         return
     if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
-        nav.move_adjacent(best_ore)
-        if rc.can_build_barrier(best_ore):
-            rc.build_barrier(best_ore)
-            map_info.update_at(best_ore)
-            _mark_cant_secure(1 << best_n)
+        # nav.move_adjacent(best_ore)
+        # if rc.can_build_barrier(best_ore):
+        #     rc.build_barrier(best_ore)
+        #     map_info.update_at(best_ore)
+        #     _mark_cant_secure(1 << best_n)
         return
     if path and not is_foundry:
         tn = path[1].x + path[1].y * w

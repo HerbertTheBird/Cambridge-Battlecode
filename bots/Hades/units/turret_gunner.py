@@ -33,7 +33,7 @@ _WEIGHTS = {
     EntityType.BARRIER: 4,
     EntityType.SPLITTER: 3,
     EntityType.CONVEYOR: 2,
-    EntityType.ROAD: 1,
+    EntityType.ROAD: 0,
     EntityType.BUILDER_BOT: 1,
     EntityType.MARKER: 0,
 }
@@ -70,10 +70,10 @@ def _should_stay():
         p = rc.get_position(uid)
         if max(abs(p.x - pos.x), abs(p.y - pos.y)) <= 2:
             return True
-    _, friendly_d = pathing.closest_impl(map_info._bm_friendly_bots, pos=pos, max_dist=4)
+    _, friendly_d = pathing.closest_impl(map_info._bm_friendly_bots & map_info._bm_visible, pos=pos, max_dist=4)
     if friendly_d < 0:
         return True
-    enemy_pos, _ = pathing.closest_impl(map_info._bm_enemy_bots, pos=pos, max_dist=friendly_d + 1)
+    enemy_pos, _ = pathing.closest_impl(map_info._bm_enemy_bots & map_info._bm_visible, pos=pos, max_dist=friendly_d + 1)
     if enemy_pos is not None:
         return True
     return False

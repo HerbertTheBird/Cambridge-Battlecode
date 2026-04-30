@@ -19,7 +19,7 @@ Step: TypeAlias = tuple[int, int, int, int]
 
 bridge_cost = 6
 barrier_cost = 15
-threat_cost = 2
+threat_cost = 20
 conveyor_end_cost = 4
 
 
@@ -578,8 +578,6 @@ class Pathing:
                         from_mask = all_covered
                 if from_mask & walkable:
                     from_mask &= walkable
-                if from_mask & ~start_mask:
-                    from_mask &= ~start_mask
                 border = (~nlc | ~nrc | ((1 << width) - 1) | (((1 << width) - 1)<<(w*(height-1)))) & board
                 border |= map_info._bm_friendly_bots
                 last_working_mask = from_mask

@@ -47,7 +47,7 @@ def _find_chase_target(damaged=True):
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
-    enemy_bots = map_info._bm_enemy_bots
+    enemy_bots = map_info._bm_enemy_bots & map_info._bm_visible
     if damaged:
         enemy_bots = enemy_bots & _very_damaged_targets()
     units.builder.draw_mask(enemy_bots, 255, 0, 0)
@@ -66,7 +66,7 @@ def _find_chase_target(damaged=True):
     # A friendly outside enemy_zone_4 has no enemy within 4 chebyshev, so
     # the per-friendly expansion below would be a no-op.
     enemy_zone_4 = map_info.expand_chebyshev(enemy_bots, 4)
-    mask = friendly_bots & ~my_bit & enemy_zone_4
+    mask = friendly_bots & ~my_bit & map_info._bm_visible & enemy_zone_4
 
     while mask:
         lsb = mask & -mask
@@ -160,8 +160,6 @@ def score():
         else:
             log("low priority heal", target)
             return 2.5
-    if _heal_targets():
-        return 1.5
     return 0
 
 
@@ -275,6 +273,6 @@ def run():
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None:
+        if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()

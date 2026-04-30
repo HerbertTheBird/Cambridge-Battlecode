@@ -22,7 +22,7 @@ def init(c: Controller):
     nav = units.builder.nav
 
 _cant_harvest_map: dict[int, int] = {}  # tile index -> round recorded
-CANT_HARVEST_TTL = 100
+CANT_HARVEST_TTL = 400
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
 
@@ -95,7 +95,7 @@ def possible_ore(allow_partial: bool = False):
         # Ore tiles with enemy adjacent: include if any-team harvester sits on them
         # AND at least one cardinal neighbor is not blocked (so we can still secure).
         any_harvester = (map_info._bm_team[my_team_idx] | map_info._bm_team[enemy_idx]) & map_info._bm_et[map_info._IDX_HARVESTER]
-        all_blocking = enemy_blocking | friendly_blocking | map_info._bm_env[map_info._IDX_ENV_WALL]
+        all_blocking = enemy_blocking | friendly_blocking | map_info._bm_env[map_info._IDX_ENV_WALL] | (map_info._bm_et[map_info._IDX_HARVESTER]&map_info._bm_team[1-my_team_idx])
         unblocked = map_info._board_mask & ~all_blocking
         neighbor_unblocked = (
             (unblocked << w)

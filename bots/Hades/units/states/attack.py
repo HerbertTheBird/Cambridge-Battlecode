@@ -70,7 +70,7 @@ GUNNER_BUILDING_SCORE[map_info._IDX_BREACH] = 120
 GUNNER_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 16
 GUNNER_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 8
-GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 16
+GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 12
 GUNNER_BUILDING_SCORE[map_info._IDX_BRIDGE] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_SPLITTER] = 4
 
@@ -784,10 +784,10 @@ def _placement_candidates(require_feed: bool = True):
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
-        tracked_zone = map_info.expand_chebyshev(enemy_bots)
+        tracked_zone = enemy_bots
         danger = map_info.expand_chebyshev(tracked_zone)
         danger_for_clearable |= danger
-        if danger & my_bit:
+        if tracked_zone & my_bit:
             danger_for_clearable = map_info._board_mask #am being tracked
     candidates &= ~(danger_for_clearable & enemy_clearable)
     if not candidates:
@@ -898,7 +898,6 @@ def _get_attack_candidates():
         return 0, 0
 
     sentinel_masks, gunner_masks = _placement_candidates()
-    units.builder.draw_mask(sentinel_masks[0], 255, 0, 0)
     if not can_afford_sent:
         sentinel_masks = _EMPTY_CANDIDATE_MASKS
     if not can_afford_gun:
@@ -1008,6 +1007,8 @@ def _ensure_round_cache():
     _round_cache_attack_candidates = _get_attack_candidates()
     if DRAW_DEBUG:
         preferred, fallback = _round_cache_attack_candidates
+        units.builder.draw_mask(fallback, 255, 0, 255)
+        units.builder.draw_mask(preferred, 0, 255, 255)
         if preferred | fallback:
             _draw_attack_candidates(preferred | fallback)
 
@@ -1228,6 +1229,8 @@ def run():
     my_team_idx = map_info._my_team_idx
     best = None
     units.builder.draw_mask(fallback, 255, 0, 0)
+    units.builder.draw_mask(preferred, 0, 255, 0)
+
     if preferred:
         best, _ = nav.closest(preferred)
     if best is None and fallback:
@@ -1255,13 +1258,8 @@ def run():
                 rc.fire(best)
                 map_info.update_at(best)
         if rc.get_position() == best and map_info._building_id[best_n] != best_id:
-            for d in map_info._DIRECTIONS:
-                if d == Direction.CENTRE:
-                    continue
-                if rc.can_move(d):
-                    rc.move(d)
-                    map_info.update_move()
-                    break
+            nav.move_adjacent(best)
+
     else:
         nav.move_adjacent(best)
         if best_id and is_mine:

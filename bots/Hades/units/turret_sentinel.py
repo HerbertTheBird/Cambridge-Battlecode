@@ -46,10 +46,10 @@ def _should_stay():
         p = rc.get_position(uid)
         if max(abs(p.x - my_pos.x), abs(p.y - my_pos.y)) <= 2:
             return True
-    _, friendly_d = pathing.closest_impl(map_info._bm_friendly_bots, pos=my_pos, max_dist=4)
+    _, friendly_d = pathing.closest_impl(map_info._bm_friendly_bots & map_info._bm_visible, pos=my_pos, max_dist=4)
     if friendly_d < 0:
         return True
-    enemy_pos, _ = pathing.closest_impl(map_info._bm_enemy_bots, pos=my_pos, max_dist=friendly_d + 1)
+    enemy_pos, _ = pathing.closest_impl(map_info._bm_enemy_bots & map_info._bm_visible, pos=my_pos, max_dist=friendly_d + 1)
     if enemy_pos is not None:
         return True
     return False
