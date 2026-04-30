@@ -52,7 +52,7 @@ def _mark_cant_harvest(mask):
         n = lsb.bit_length() - 1
         _cant_harvest_map[n] = current
         m ^= lsb
-def possible_ore():
+def possible_ore(allow_partial: bool = False):
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 750:
@@ -86,11 +86,25 @@ def possible_ore():
 
     enemy_blocked = map_info.expand_manhattan(enemy_blocking)
 
-    return (ore
+    base = (ore
             & ~landlocked
-            & ~enemy_blocked
             & ~friendly_blocking
             & ~map_info._bm_enemy_turret_threat)
+    result = base & ~enemy_blocked
+    if allow_partial:
+        # Ore tiles with enemy adjacent: include if any-team harvester sits on them
+        # AND at least one cardinal neighbor is not blocked (so we can still secure).
+        any_harvester = (map_info._bm_team[my_team_idx] | map_info._bm_team[enemy_idx]) & map_info._bm_et[map_info._IDX_HARVESTER]
+        all_blocking = enemy_blocking | friendly_blocking | map_info._bm_env[map_info._IDX_ENV_WALL]
+        unblocked = map_info._board_mask & ~all_blocking
+        neighbor_unblocked = (
+            (unblocked << w)
+            | (unblocked >> w)
+            | ((unblocked >> 1) & map_info._not_right_col)
+            | ((unblocked << 1) & map_info._not_left_col)
+        ) & map_info._board_mask
+        result |= base & enemy_blocked & any_harvester & neighbor_unblocked
+    return result
 def secured():
     my_team_idx = map_info._my_team_idx
     securing = ( map_info._bm_team[my_team_idx]

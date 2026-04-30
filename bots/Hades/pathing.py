@@ -260,6 +260,47 @@ def claim_subset(
         return claims & tie_me_zone
     return claims & ~others_first_other_zone & ~others_mask
 
+def closest_impl(
+    targets: int,
+    pos: Position | None = None,
+    max_dist: int | None = None,
+) -> tuple[Position | None, int]:
+    """Shared bitmask BFS for closest-target queries.
+
+    Returns the first target reached by Chebyshev distance, breaking ties by
+    lowest tile index. When `max_dist` is provided, the search stops after
+    exploring that many layers.
+    """
+    if targets == 0:
+        return None, -1
+    if pos is None:
+        pos = map_info._my_pos
+    w = map_info._width
+    passable = map_info._bm_passable_FFF | targets
+    start = 1 << (pos.x + pos.y * w)
+    if start & targets:
+        return pos, 0
+    visited = start
+    frontier = start
+    dist = 0
+    nlc = map_info._not_left_col
+    nrc = map_info._not_right_col
+    while frontier:
+        hit = frontier & targets
+        if hit:
+            lsb = hit & -hit
+            n = lsb.bit_length() - 1
+            return Position(n % w, n // w), dist
+        if max_dist is not None and dist >= max_dist:
+            break
+        visited |= frontier
+        dist += 1
+        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+        expanded = h | (h << w) | (h >> w)
+        frontier = expanded & passable & ~visited
+    return None, -1
+
+
 class Pathing:
 
 
@@ -284,42 +325,7 @@ class Pathing:
         pos: Position | None = None,
         max_dist: int | None = None,
     ) -> tuple[Position | None, int]:
-        """Shared bitmask BFS for closest-target queries.
-
-        Returns the first target reached by Chebyshev distance, breaking ties by
-        lowest tile index exactly as the previous implementation did. When
-        `max_dist` is provided, the search stops after exploring that many
-        layers.
-        """
-        if targets == 0:
-            return None, -1
-        if pos is None:
-            pos = map_info._my_pos
-        w = map_info._width
-        passable = map_info._bm_passable_FFF | targets
-        start = 1 << (pos.x + pos.y * w)
-        if start & targets:
-            return pos, 0
-        visited = start
-        frontier = start
-        dist = 0
-        nlc = map_info._not_left_col
-        nrc = map_info._not_right_col
-        while frontier:
-            hit = frontier & targets
-            if hit:
-                lsb = hit & -hit
-                n = lsb.bit_length() - 1
-
-                return Position(n % w, n // w), dist
-            if max_dist is not None and dist >= max_dist:
-                break
-            visited |= frontier
-            dist += 1
-            h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-            expanded = h | (h << w) | (h >> w)
-            frontier = expanded & passable & ~visited
-        return None, -1
+        return closest_impl(targets, pos=pos, max_dist=max_dist)
 
     def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
         """Find closest bit in *targets* from *pos* with the original full search."""
@@ -572,6 +578,8 @@ class Pathing:
                         from_mask = all_covered
                 if from_mask & walkable:
                     from_mask &= walkable
+                if from_mask & ~start_mask:
+                    from_mask &= ~start_mask
                 border = (~nlc | ~nrc | ((1 << width) - 1) | (((1 << width) - 1)<<(w*(height-1)))) & board
                 border |= map_info._bm_friendly_bots
                 last_working_mask = from_mask

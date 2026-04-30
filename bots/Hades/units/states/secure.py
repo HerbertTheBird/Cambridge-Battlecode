@@ -57,7 +57,7 @@ def _mark_cant_secure(mask):
 def securable_ore():
     """Bitmask of titanium ore tiles without a harvester and not forgotten."""
 
-    ore = possible_ore()
+    ore = possible_ore(allow_partial=True)
     return (ore | map_info._bm_et[map_info._IDX_FOUNDRY]) & ~secured()
 
 def _too_expensive():
@@ -190,6 +190,7 @@ def run():
             continue
 
         is_mine = bool(map_info._bm_team[my_team_idx] & pbit) if map_info._building_id[pn] else False
+        is_enemy = bool(map_info._bm_team[1-my_team_idx] & pbit) if map_info._building_id[pn] else False
         is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & pbit)
         is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
         if is_mine and (map_info._bm_et[map_info._IDX_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_BRIDGE]&pbit) and map_info._building_dir[pn] != map_info._DIR_INT[d.opposite()]:
@@ -199,9 +200,23 @@ def run():
         if is_mine and not is_road and not is_marker:
             # Has a real building (mine or enemy, not road/marker) — side is done
             continue
+        if is_enemy and not is_road and not is_marker:
+            # Enemy real building — can't build here, leave unsecured
+            continue
         unsecured |= pbit
     # units.builder.draw_mask(map_info._bm_team[my_team_idx], 255, 0, 0)
-    closest, _ = nav.closest(unsecured)
+    if is_foundry:
+        path = None
+    elif done_conveyor:
+        path = nav.calculate_conveyor_path(done_conveyor, is_raw_ax, True)
+    else:
+        path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
+    if unsecured.bit_count() == 1:
+        closest = Position((unsecured.bit_length()-1)%w, (unsecured.bit_length()-1)//w)
+    else:
+        if path and path[0].distance_squared(path[1]) > 1:
+            unsecured &= ~(1<<(path[0].x+path[0].y*w))
+        closest, _ = nav.closest(unsecured)
     if not closest:
         _mark_cant_secure(unsecured)
         return
@@ -212,12 +227,6 @@ def run():
             rc.fire(closest)
             map_info.update_at(closest)
         return
-    if is_foundry:
-        path = None
-    elif done_conveyor:
-        path = nav.calculate_conveyor_path(done_conveyor, is_raw_ax, True)
-    else:
-        path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
     if path is not None:
         is_conveyor = path[0].distance_squared(path[1]) == 1
 

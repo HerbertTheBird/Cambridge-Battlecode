@@ -275,6 +275,6 @@ def run():
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None and dist <= 4:
+        if best is not None:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()
