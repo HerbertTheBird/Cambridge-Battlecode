@@ -1075,9 +1075,37 @@ def run():
     zone = map_info.expand_chebyshev(zone)
     enemy_bot_nearby = bool(map_info._bm_enemy_bots & zone)
     if is_fallback:
+        can_attack_despite_enemy = False
+
+        # if we have >= 2 builder bots (including ourselves) close by (within 5 tiles)
+        # for only one opponent bot within 2 tiles we attack
+        my_pos = rc.get_position()
+        friendly_builders_nearby_count = 1  # Counting myself
+        my_team = rc.get_team()
+        for unit_id in rc.get_nearby_units():
+            # Note: get_nearby_units does not include self
+            if rc.get_team(unit_id) == my_team and rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT:
+                unit_pos = rc.get_position(unit_id)
+                if my_pos.distance_squared(unit_pos) <= 25:
+                    friendly_builders_nearby_count += 1
+
+        my_pos_bit = 1 << (my_pos.x + my_pos.y * width)
+        zone_2_tiles = map_info.expand_chebyshev(my_pos_bit, 2)
+        enemy_bots_in_zone_2 = map_info._bm_enemy_bots & zone_2_tiles
+        num_enemy_bots_very_close = bin(enemy_bots_in_zone_2).count('1')
+
+        if friendly_builders_nearby_count >= 2 and num_enemy_bots_very_close == 1:
+            can_attack_despite_enemy = True
+
+        # if allied sentinel in sight also attack instead of waiting for opponent to leave
+        if not can_attack_despite_enemy:
+            my_sentinels = map_info._bm_team[my_team_idx] & map_info._bm_et[map_info._IDX_SENTINEL]
+            if my_sentinels & map_info._bm_seen_observed:
+                can_attack_despite_enemy = True
+        
         nav.move_to(best)
         if rc.can_fire(best):
-            if not enemy_bot_nearby or rc.get_hp(best_id) <= 2:
+            if (not enemy_bot_nearby or can_attack_despite_enemy) or rc.get_hp(best_id) <= 2:
                 rc.fire(best)
                 map_info.update_at(best)
         if rc.get_position() == best and map_info._building_id[best_n] != best_id:
