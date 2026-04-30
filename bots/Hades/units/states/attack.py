@@ -98,6 +98,31 @@ WANTED_ATTACK_THRESHOLD = 48
 _cant_attack_map: dict[int, int] = {}  # tile index -> round recorded
 CANT_ATTACK_TTL = 100
 
+def _friendly_distance_score(n: int) -> int:
+    """Negative squared distance from tile n to the nearest friendly builder
+    bot. Since `closest_impl` prefers lower scores, negating biases the
+    tiebreak toward tiles that are FARTHEST from any friendly bot."""
+    fb = map_info._bm_friendly_bots
+    if not fb:
+        return 0
+    w = map_info._width
+    px = n % w
+    py = n // w
+    best = None
+    m = fb
+    while m:
+        lsb = m & -m
+        bn = lsb.bit_length() - 1
+        m ^= lsb
+        bx = bn % w
+        by = bn // w
+        dx = bx - px
+        dy = by - py
+        d2 = dx * dx + dy * dy
+        if best is None or d2 < best:
+            best = d2
+    return -best
+
 
 def cant_attack():
     """Bitmask of tiles we recently failed to attack; entries expire after CANT_ATTACK_TTL rounds."""
@@ -1228,10 +1253,11 @@ def run():
     my_team_idx = map_info._my_team_idx
     best = None
     units.builder.draw_mask(fallback, 255, 0, 0)
+    score_fn = _friendly_distance_score if map_info._bm_friendly_bots else None
     if preferred:
-        best, _ = nav.closest(preferred)
+        best, _ = nav.closest(preferred, tiebreak_score=score_fn)
     if best is None and fallback:
-        best, _ = nav.closest(fallback)
+        best, _ = nav.closest(fallback, tiebreak_score=score_fn)
     if best is None:
         _mark_cant_attack(preferred | fallback)
         return
