@@ -1,0 +1,95 @@
+Gauntlet: bots/Hades vs 1 opponent(s), 30 maps, 1 seed(s)
+Total matches: 60
+Threads: 12
+
+  [1/60] arena (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T83) [4.6s] | total: 0W-1L-0D
+  [2/60] arena (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T562) [23.2s] | total: 0W-2L-0D
+  [3/60] climbing_wall (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T675) [36.7s] | total: 1W-2L-0D
+  [4/60] battlebot (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T1144) [37.5s] | total: 2W-2L-0D
+  [5/60] chess (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T708) [43.2s] | total: 3W-2L-0D
+  [6/60] chess (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T704) [46.6s] | total: 4W-2L-0D
+  [7/60] coffee (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T867) [50.2s] | total: 4W-3L-0D
+  [8/60] cinnamon_roll (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [70.0s] | total: 5W-3L-0D
+  [9/60] corridors (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T527) [30.4s] | total: 6W-3L-0D
+  [10/60] corridors (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T418) [28.6s] | total: 7W-3L-0D
+  [11/60] custom_map (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T287) [11.6s] | total: 8W-3L-0D
+  [12/60] default_small1 (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T165) [5.5s] | total: 9W-3L-0D
+  [13/60] craters (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T417) [46.2s] | total: 10W-3L-0D
+  [14/60] craters (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T406) [44.0s] | total: 11W-3L-0D
+  [15/60] coffee (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T1279) [91.1s] | total: 12W-3L-0D
+  [16/60] default_small1 (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T612) [26.2s] | total: 13W-3L-0D
+  [17/60] battlebot (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [123.2s] | total: 14W-3L-0D
+  [18/60] cold (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [99.0s] | total: 14W-4L-0D
+  [19/60] default_small2 (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T671) [32.4s] | total: 15W-4L-0D
+  [20/60] gaussian (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T248) [13.7s] | total: 16W-4L-0D
+  [21/60] empty (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [59.7s] | total: 16W-5L-0D
+  [22/60] gaussian (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T311) [16.4s] | total: 17W-5L-0D
+  [23/60] cinnamon_roll (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [178.0s] | total: 18W-5L-0D
+  [24/60] empty (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [61.3s] | total: 19W-5L-0D
+  [25/60] hopscotch (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T420) [11.2s] | total: 20W-5L-0D
+  [26/60] default_small2 (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T1347) [97.6s] | total: 21W-5L-0D
+  [27/60] galaxy (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T1544) [92.2s] | total: 21W-6L-0D
+  [28/60] custom_map (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T958) [151.3s] | total: 22W-6L-0D
+  [29/60] hopscotch (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [59.0s] | total: 23W-6L-0D
+  [30/60] cold (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [202.7s] | total: 24W-6L-0D
+  [31/60] climbing_wall (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [249.3s] | total: 25W-6L-0D
+  [32/60] git_branches (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [77.5s] | total: 25W-7L-0D
+  [33/60] metropolitan_dystopia (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T1109) [60.6s] | total: 25W-8L-0D
+  [34/60] galaxy (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T1399) [119.4s] | total: 26W-8L-0D
+  [35/60] git_branches (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [85.9s] | total: 26W-9L-0D
+  [36/60] pls_buy_cucats_merch (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T406) [16.2s] | total: 26W-10L-0D
+  [37/60] pls_buy_cucats_merch (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T331) [15.9s] | total: 26W-11L-0D
+  [38/60] building_blocks (seed 1) | bots/Hades as GOLD: ERROR [300.0s]
+  [39/60] building_blocks (seed 1) | bots/Hades as SILVER: ERROR [300.1s]
+  [40/60] shrub (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T647) [41.6s] | total: 27W-11L-0D
+  [41/60] shrub (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T437) [22.0s] | total: 27W-12L-0D
+  [42/60] metropolitan_dystopia (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [151.5s] | total: 28W-12L-0D
+  [43/60] spikes (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [54.3s] | total: 28W-13L-0D
+  [44/60] minimaze (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [143.4s] | total: 29W-13L-0D
+  [45/60] shish_kebab (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [105.9s] | total: 30W-13L-0D
+  [46/60] thread_of_connection (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T312) [16.3s] | total: 31W-13L-0D
+  [47/60] thread_of_connection (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T252) [13.1s] | total: 32W-13L-0D
+  [48/60] shish_kebab (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [122.6s] | total: 33W-13L-0D
+  [49/60] pixel_forest (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T2000) [155.5s] | total: 33W-14L-0D
+  [50/60] minimaze (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [180.6s] | total: 34W-14L-0D
+  [51/60] tiles (seed 1) | bots/Hades as GOLD vs bots/Lethe: L -> bots/Lethe (T777) [32.3s] | total: 34W-15L-0D
+  [52/60] the_powerful_egg (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T875) [84.4s] | total: 35W-15L-0D
+  [53/60] the_powerful_egg (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T592) [56.9s] | total: 35W-16L-0D
+  [54/60] pixel_forest (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [192.5s] | total: 36W-16L-0D
+  [55/60] settlement (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [191.4s] | total: 37W-16L-0D
+  [56/60] tiles (seed 1) | bots/Hades as SILVER vs bots/Lethe: L -> bots/Lethe (T2000) [67.8s] | total: 37W-17L-0D
+  [57/60] settlement (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [219.2s] | total: 38W-17L-0D
+  [58/60] tree_of_life (seed 1) | bots/Hades as SILVER vs bots/Lethe: W -> bots/Hades (T2000) [135.7s] | total: 39W-17L-0D
+  [59/60] spikes (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [222.3s] | total: 40W-17L-0D
+  [60/60] tree_of_life (seed 1) | bots/Hades as GOLD vs bots/Lethe: W -> bots/Hades (T2000) [169.3s] | total: 41W-17L-0D
+Completed in 550.7s
+
+=====================================================================================
+  GAUNTLET LEADERBOARD
+=====================================================================================
+    #  Bot             ELO     W     L     D      WR    AvgT   Err
+  ---  ----------      ---    --    --    --      --    ----   ---
+    1  bots/Hades   1581.2    41    17     0   70.7%    1233     2
+    2  bots/Lethe   1418.8    17    41     0   29.3%    1233     2
+
+==========================================================================================
+  HEAD-TO-HEAD  (p = one-sided binomial test that main bot is better; lower = stronger)
+==========================================================================================
+  Main Bot    vs  Opponent       W     L     D         p
+  ----------  --  ----------    --    --    --    ------
+  bots/Hades  vs  bots/Lethe    41    17     0    0.0011
+
+================================================================================
+  PAIR BREAKDOWN for bots/Hades (one pair = both sides on same map+seed)
+================================================================================
+  Opponent      2-0    1-1    0-2    D?   Pairs   PairWR
+  ----------    ---    ---    ---    --   -----   ------
+  bots/Lethe     16      9      4     0      29    70.7%
+
+============================================================
+  SIDE BREAKDOWN for bots/Hades
+============================================================
+  Side           W     L     D   Total      WR
+  ----------    --    --    --   -----    ----
+  GOLD (A)      20     9     0      29   69.0%
+  SILVER (B)    21     8     0      29   72.4%
