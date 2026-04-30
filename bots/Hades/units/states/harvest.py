@@ -5,7 +5,6 @@ from cambc import *
 import units.builder
 from log import log
 import sys
-from units.states import attack
 rc: Controller = None
 nav: Pathing = None
 
@@ -14,7 +13,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
-    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots&map_info._bm_visible, available, tie_self=False)
+    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 def init(c: Controller):
     global rc, nav
@@ -22,7 +21,7 @@ def init(c: Controller):
     nav = units.builder.nav
 
 _cant_harvest_map: dict[int, int] = {}  # tile index -> round recorded
-CANT_HARVEST_TTL = 400
+CANT_HARVEST_TTL = 100
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
 
@@ -52,7 +51,7 @@ def _mark_cant_harvest(mask):
         n = lsb.bit_length() - 1
         _cant_harvest_map[n] = current
         m ^= lsb
-def possible_ore(allow_partial: bool = False):
+def possible_ore():
     w = map_info._width
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 750:
@@ -73,8 +72,6 @@ def possible_ore(allow_partial: bool = False):
         map_info._bm_team[my_team_idx]
         & ~map_info._bm_et[map_info._IDX_CONVEYOR]
         & ~map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        & ~map_info._bm_et[map_info._IDX_BRIDGE]
-        & ~map_info._bm_et[map_info._IDX_SPLITTER]
         & ~map_info._bm_et[map_info._IDX_ROAD]
         & ~map_info._bm_et[map_info._IDX_BARRIER]
         & ~map_info._bm_et[map_info._IDX_MARKER]
@@ -86,25 +83,11 @@ def possible_ore(allow_partial: bool = False):
 
     enemy_blocked = map_info.expand_manhattan(enemy_blocking)
 
-    base = (ore
+    return (ore
             & ~landlocked
+            & ~enemy_blocked
             & ~friendly_blocking
-            & ~map_info.expand_manhattan(map_info._bm_enemy_turret_threat))
-    result = base & ~enemy_blocked
-    if allow_partial:
-        # Ore tiles with enemy adjacent: include if any-team harvester sits on them
-        # AND at least one cardinal neighbor is not blocked (so we can still secure).
-        any_harvester = (map_info._bm_team[my_team_idx] | map_info._bm_team[enemy_idx]) & map_info._bm_et[map_info._IDX_HARVESTER]
-        all_blocking = enemy_blocking | friendly_blocking | map_info._bm_env[map_info._IDX_ENV_WALL] | (map_info._bm_et[map_info._IDX_HARVESTER]&map_info._bm_team[1-my_team_idx])
-        unblocked = map_info._board_mask & ~all_blocking
-        neighbor_unblocked = (
-            (unblocked << w)
-            | (unblocked >> w)
-            | ((unblocked >> 1) & map_info._not_right_col)
-            | ((unblocked << 1) & map_info._not_left_col)
-        ) & map_info._board_mask
-        result |= base & enemy_blocked & any_harvester & neighbor_unblocked
-    return result
+            & ~map_info._bm_enemy_turret_threat)
 def secured():
     my_team_idx = map_info._my_team_idx
     securing = ( map_info._bm_team[my_team_idx]
@@ -196,11 +179,7 @@ def run():
     if not path:
         path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
     if path is not None:
-        is_attack_adjacent = bool((1 << best_n) & map_info.expand_manhattan(attack.wanted_attack_tiles()))
-        if is_attack_adjacent:
-            _cost_map[best_n] = (rc.get_harvester_cost()[0], rc.get_current_round())
-        else:
-            _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
+        _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
     else:
         _mark_cant_harvest(1 << (best_ore.x + best_ore.y * w))
         log("cant route")
@@ -223,7 +202,7 @@ def run():
                 map_info.update_at(best_ore)
             log("firing")
             return
-        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and map_info._my_pos != best_ore and not (map_info._bm_friendly_bots|map_info._bm_enemy_bots)&ore_bit:
+        if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and (map_info._my_pos != best_ore or rc.get_move_cooldown() == 0):
             rc.destroy(best_ore)
             map_info.update_at(best_ore)
     targets = set()

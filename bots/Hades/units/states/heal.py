@@ -47,7 +47,7 @@ def _find_chase_target(damaged=True):
     """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
-    enemy_bots = map_info._bm_enemy_bots & map_info._bm_visible
+    enemy_bots = map_info._bm_enemy_bots
     if damaged:
         enemy_bots = enemy_bots & _very_damaged_targets()
     units.builder.draw_mask(enemy_bots, 255, 0, 0)
@@ -134,7 +134,7 @@ def _very_damaged_targets():
 
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
-    return _healable_mask() & (map_info._bm_damaged | (map_info._bm_et[map_info._IDX_SENTINEL] | map_info._bm_et[map_info._IDX_GUNNER]) & map_info._bm_enemy_turret_threat) & ~_very_damaged_targets()
+    return _healable_mask() & map_info._bm_damaged & ~_very_damaged_targets()
 
 
 _cached_chase_target = None  # set by score(), reused by run()
@@ -244,14 +244,6 @@ def _do_best_heal():
 
 def run():
     log("HEAL")
-    target = _cached_chase_target
-    if target is not None and _very_damaged_targets() & (1<<(target.x+target.y*map_info._width)):
-        ep = target
-        # _try_barrier_dead_ends()
-        log("best chase", target)
-        nav.move_to(ep)
-        _do_best_heal()
-        return
     very_damaged = _very_damaged_targets() & ~(map_info._bm_enemy_bots & map_info.expand_chebyshev(map_info._bm_friendly_bots))
     targets = very_damaged
     if targets:

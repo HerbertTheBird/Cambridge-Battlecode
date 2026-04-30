@@ -2,7 +2,7 @@ import map_info
 from cambc import Controller, Direction, Position, EntityType
 import units.builder as builder
 from log import DRAW_DEBUG, log
-import colorsys
+
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
 
@@ -260,63 +260,6 @@ def claim_subset(
         return claims & tie_me_zone
     return claims & ~others_first_other_zone & ~others_mask
 
-def closest_impl(
-    targets: int,
-    pos: Position | None = None,
-    max_dist: int | None = None,
-    tiebreak_score=None,
-) -> tuple[Position | None, int]:
-    """Shared bitmask BFS for closest-target queries.
-
-    Returns the first target reached by Chebyshev distance. Ties at the same
-    distance are broken by `tiebreak_score(tile_index)` (lower wins) when
-    provided, otherwise by lowest tile index. When `max_dist` is provided, the
-    search stops after exploring that many layers.
-    """
-    if targets == 0:
-        return None, -1
-    if pos is None:
-        pos = map_info._my_pos
-    w = map_info._width
-    passable = map_info._bm_passable_FFF | targets
-    start = 1 << (pos.x + pos.y * w)
-    if start & targets:
-        return pos, 0
-    visited = start
-    frontier = start
-    dist = 0
-    nlc = map_info._not_left_col
-    nrc = map_info._not_right_col
-    while frontier:
-        hit = frontier & targets
-        if hit:
-            if tiebreak_score is None:
-                lsb = hit & -hit
-                n = lsb.bit_length() - 1
-            else:
-                best_n = -1
-                best_score = None
-                m = hit
-                while m:
-                    lsb = m & -m
-                    cn = lsb.bit_length() - 1
-                    m ^= lsb
-                    s = tiebreak_score(cn)
-                    if best_score is None or s < best_score:
-                        best_score = s
-                        best_n = cn
-                n = best_n
-            return Position(n % w, n // w), dist
-        if max_dist is not None and dist >= max_dist:
-            break
-        visited |= frontier
-        dist += 1
-        h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-        expanded = h | (h << w) | (h >> w)
-        frontier = expanded & passable & ~visited
-    return None, -1
-
-
 class Pathing:
 
 
@@ -340,13 +283,47 @@ class Pathing:
         targets: int,
         pos: Position | None = None,
         max_dist: int | None = None,
-        tiebreak_score=None,
     ) -> tuple[Position | None, int]:
-        return closest_impl(targets, pos=pos, max_dist=max_dist, tiebreak_score=tiebreak_score)
+        """Shared bitmask BFS for closest-target queries.
 
-    def closest(self, targets: int, pos: Position = None, tiebreak_score=None) -> tuple[Position | None, int]:
+        Returns the first target reached by Chebyshev distance, breaking ties by
+        lowest tile index exactly as the previous implementation did. When
+        `max_dist` is provided, the search stops after exploring that many
+        layers.
+        """
+        if targets == 0:
+            return None, -1
+        if pos is None:
+            pos = map_info._my_pos
+        w = map_info._width
+        passable = map_info._bm_passable_FFF | targets
+        start = 1 << (pos.x + pos.y * w)
+        if start & targets:
+            return pos, 0
+        visited = start
+        frontier = start
+        dist = 0
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        while frontier:
+            hit = frontier & targets
+            if hit:
+                lsb = hit & -hit
+                n = lsb.bit_length() - 1
+
+                return Position(n % w, n // w), dist
+            if max_dist is not None and dist >= max_dist:
+                break
+            visited |= frontier
+            dist += 1
+            h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+            expanded = h | (h << w) | (h >> w)
+            frontier = expanded & passable & ~visited
+        return None, -1
+
+    def closest(self, targets: int, pos: Position = None) -> tuple[Position | None, int]:
         """Find closest bit in *targets* from *pos* with the original full search."""
-        return self._closest_impl(targets, pos=pos, max_dist=None, tiebreak_score=tiebreak_score)
+        return self._closest_impl(targets, pos=pos, max_dist=None)
 
     def closest_within(
         self,
@@ -560,10 +537,7 @@ class Pathing:
         while True:
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
-            # rc, gc, bc = colorsys.hsv_to_rgb((i%8)/8, 1, 1)
-
-            # builder.draw_mask(cur_frontier, int(rc*255), int(gc*255), int(bc*255))
-
+            # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             visited |= cur_frontier
             if cur_frontier == 0:
                 stuck_turns += 1
@@ -687,6 +661,8 @@ class Pathing:
             # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
+            if i > 1:
+                cur_frontier &= ~foundries
             frontier[slot] = 0
             visited_layers.append(cur_frontier)
             visited |= cur_frontier
@@ -832,10 +808,10 @@ class Pathing:
 
 
 
-    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False, refined: bool = False):
-        log("conveyors from ", start, raw_axionite, refined)
+    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
+        log("conveyors from ", start, raw_axionite)
         w = self.width
-        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, refined)
+        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
         if not target:
             log("no target")
             return None
@@ -921,7 +897,7 @@ class Pathing:
         )
 
     def _get_conveyor_targets_and_avoid(
-        self, raw_axionite: bool, refined: bool = False
+        self, raw_axionite: bool
     ):
         avoid = map_info.get_avoid(True, False, True)
         if raw_axionite:
@@ -929,14 +905,10 @@ class Pathing:
             target = self.raw_ax_foundry_sites()
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
-            avoid |= map_info.expand_manhattan(map_info._bm_my_core_area)
             return target, avoid
         else:
             ax_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_AX])
             target = (map_info._bm_route_targets & ~map_info._bm_conv_raw_ax) | map_info._bm_my_core_area
-            if not refined:
-                my_idx = map_info._my_team_idx
-                target |= map_info._bm_et[map_info._IDX_FOUNDRY] & map_info._bm_team[my_idx]
             target &= ~ax_harvesters
             avoid |= ax_harvesters
             if not target:
