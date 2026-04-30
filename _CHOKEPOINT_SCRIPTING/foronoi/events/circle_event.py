@@ -26,7 +26,7 @@ class CircleEvent(Event):
         self.is_valid = True
         self.point_triple = point_triple
         self.arc_triple = arc_triple
-        self._sort_key = (-(self.center.yd - self.radius), self.center.xd, 0)
+        self._sort_key = (-(self.center._yd - self.radius), self.center._xd, 0)
 
     def __repr__(self):
         return f"CircleEvent({self.point_triple}, y-radius={self.center.yd - self.radius:.2f}, y={self.center.yd:.2f}, radius={self.radius:.2f})"
@@ -88,13 +88,20 @@ class CircleEvent(Event):
     def create_circle(a, b, c):
 
         # Algorithm from O'Rourke 2ed p. 189
-        A = b.xd - a.xd
-        B = b.yd - a.yd
-        C = c.xd - a.xd
-        D = c.yd - a.yd
-        E = (b.xd - a.xd) * (a.xd + b.xd) + (b.yd - a.yd) * (a.yd + b.yd)
-        F = (c.xd - a.xd) * (a.xd + c.xd) + (c.yd - a.yd) * (a.yd + c.yd)
-        G = 2 * ((b.xd - a.xd) * (c.yd - b.yd) - (b.yd - a.yd) * (c.xd - b.xd))
+        ax = a._xd
+        ay = a._yd
+        bx = b._xd
+        by = b._yd
+        cx = c._xd
+        cy = c._yd
+
+        A = bx - ax
+        B = by - ay
+        C = cx - ax
+        D = cy - ay
+        E = (bx - ax) * (ax + bx) + (by - ay) * (ay + by)
+        F = (cx - ax) * (ax + cx) + (cy - ay) * (ay + cy)
+        G = 2 * ((bx - ax) * (cy - by) - (by - ay) * (cx - bx))
 
         if is_zero(G):
             # Points are all on one line (collinear), so no circle can be made
@@ -104,6 +111,6 @@ class CircleEvent(Event):
         x = (D * E - B * F) / G
         y = (A * F - C * E) / G
 
-        radius = sqrt((a.xd - x) ** 2 + (a.yd - y) ** 2)
+        radius = sqrt((ax - x) ** 2 + (ay - y) ** 2)
 
         return x, y, radius
