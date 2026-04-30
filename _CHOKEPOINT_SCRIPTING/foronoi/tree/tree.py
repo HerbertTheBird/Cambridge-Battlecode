@@ -16,9 +16,9 @@ class Tree:
             if key == node_key:
                 break
             elif key < node_key:
-                node = node.left
+                node = node._left
             else:
-                node = node.right
+                node = node._right
 
         # Return node, None if not found
         return node
@@ -44,9 +44,9 @@ class Tree:
                 if compare(node.data, query.data):
                     return node
 
-                left = Tree.find_value(node.left, query, compare, **kwargs)
+                left = Tree.find_value(node._left, query, compare, **kwargs)
                 if left is None:
-                    right = Tree.find_value(node.right, query, compare, **kwargs)
+                    right = Tree.find_value(node._right, query, compare, **kwargs)
                     return right
 
                 return left
@@ -55,14 +55,14 @@ class Tree:
                 # Normally, the three should go left and find the correct value there,
                 # but due to rounding errors, it sometimes takes the wrong turn. So if the left
                 # branch doesn't get a result, we try the other branch.
-                return Tree.find_value(node.left, query, compare, **kwargs) or \
-                       Tree.find_value(node.right, query, compare, **kwargs)
+                return Tree.find_value(node._left, query, compare, **kwargs) or \
+                       Tree.find_value(node._right, query, compare, **kwargs)
             else:
                 # Normally, the three should go right and find the correct value there,
                 # but due to rounding errors, it sometimes takes the wrong turn. So if the right
                 # branch doesn't get a result, we try the other branch.
-                return Tree.find_value(node.right, query, compare, **kwargs) or \
-                       Tree.find_value(node.left, query, compare, **kwargs)
+                return Tree.find_value(node._right, query, compare, **kwargs) or \
+                       Tree.find_value(node._left, query, compare, **kwargs)
 
     @staticmethod
     def find_leaf_node(root: Node, key, **kwargs):
@@ -85,22 +85,24 @@ class Tree:
                 return node
 
             node_key = node.get_key(**kwargs)
+            left = node._left
+            right = node._right
 
             # If we found the key, we choose a direction
             if key == node_key:
 
                 # We take the left path if possible
-                if node.left is not None:
-                    return node.left.maximum()
+                if left is not None:
+                    return left.maximum()
 
                 # Otherwise we take the right path
-                return node.right.minimum()
+                return right.minimum()
 
             # Normal binary search
             elif key < node_key:
-                node = node.left
+                node = left
             else:
-                node = node.right
+                node = right
 
         # Return node, None if not found
         return node
@@ -128,21 +130,24 @@ class Tree:
         # root = Tree.balance(root)
 
         # Case 1 - Left Left
-        if balance > 1 and node_key < root.left.get_key(**kwargs):
+        left = root._left
+        right = root._right
+
+        if balance > 1 and node_key < left.get_key(**kwargs):
             return Tree.rotate_right(root)
 
         # Case 2 - Right Right
-        if balance < -1 and node_key > root.right.get_key(**kwargs):
+        if balance < -1 and node_key > right.get_key(**kwargs):
             return Tree.rotate_left(root)
 
         # Case 3 - Left Right
-        if balance > 1 and node_key > root.left.get_key(**kwargs):
-            root.left = Tree.rotate_left(root.left)
+        if balance > 1 and node_key > left.get_key(**kwargs):
+            root.left = Tree.rotate_left(left)
             return Tree.rotate_right(root)
 
         # Case 4 - Right Left
-        if balance < -1 and node_key < root.right.get_key(**kwargs):
-            root.right = Tree.rotate_right(root.right)
+        if balance < -1 and node_key < right.get_key(**kwargs):
+            root.right = Tree.rotate_right(right)
             return Tree.rotate_left(root)
 
         return root
@@ -209,21 +214,25 @@ class Tree:
         # If the node is unbalanced, then try out the 4 cases
 
         # Case 1 - Left Left
-        if node.balance > 1 and node.left.balance >= 0:
+        balance = node.balance
+        left = node._left
+        right = node._right
+
+        if balance > 1 and left.balance >= 0:
             return Tree.rotate_right(node)
 
         # Case 2 - Right Right
-        if node.balance < -1 and node.right.balance <= 0:
+        if balance < -1 and right.balance <= 0:
             return Tree.rotate_left(node)
 
         # Case 3 - Left Right
-        if node.balance > 1 and node.left.balance < 0:
-            node.left = Tree.rotate_left(node.left)
+        if balance > 1 and left.balance < 0:
+            node.left = Tree.rotate_left(left)
             return Tree.rotate_right(node)
 
         # Case 4 - Right Left
-        if node.balance < -1 and node.right.balance > 0:
-            node.right = Tree.rotate_right(node.right)
+        if balance < -1 and right.balance > 0:
+            node.right = Tree.rotate_right(right)
             return Tree.rotate_left(node)
 
         return node
@@ -254,7 +263,7 @@ class Tree:
 
         # And point the parent back
         if grandparent is not None:
-            if z.is_left_child():
+            if grandparent._left is z:
                 grandparent.left = y
             else:
                 grandparent.right = y
@@ -296,7 +305,7 @@ class Tree:
 
         # And point the parent back
         if grandparent is not None:
-            if z.is_left_child():
+            if grandparent._left is z:
                 grandparent.left = y
             else:
                 grandparent.right = y

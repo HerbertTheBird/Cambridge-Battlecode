@@ -5,10 +5,10 @@ from foronoi.graph import Coordinate
 class Algebra:
     @staticmethod
     def distance(point_a, point_b):
-        x1 = point_a.xd
-        x2 = point_b.xd
-        y1 = point_a.yd
-        y2 = point_b.yd
+        x1 = point_a._xd
+        x2 = point_b._xd
+        y1 = point_a._yd
+        y2 = point_b._yd
 
         return math.hypot(x2 - x1, y2 - y1)
 
@@ -73,17 +73,17 @@ class Algebra:
 
     @staticmethod
     def calculate_angle(point, center):
-        dx = point.xd - center.xd
-        dy = point.yd - center.yd
+        dx = point._xd - center._xd
+        dy = point._yd - center._yd
         return math.degrees(math.atan2(dy, dx)) % 360
 
     @staticmethod
     def check_clockwise(a, b, c, center):
         _ = center
-        abx = b.xd - a.xd
-        aby = b.yd - a.yd
-        acx = c.xd - a.xd
-        acy = c.yd - a.yd
+        abx = b._xd - a._xd
+        aby = b._yd - a._yd
+        acx = c._xd - a._xd
+        acy = c._yd - a._yd
         return abx * acy - aby * acx < 0
 
 

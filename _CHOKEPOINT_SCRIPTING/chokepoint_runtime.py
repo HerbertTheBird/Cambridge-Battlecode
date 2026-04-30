@@ -117,6 +117,62 @@ def point_in_polygon(pt: Point, polygon: Sequence[Point], eps: float = 1e-9) -> 
     return inside
 
 
+def _mark_horizontal_boundary(row: List[bool], scale: int, x1: float, x2: float, eps: float) -> None:
+    width = len(row)
+    if width == 0:
+        return
+
+    start_x, end_x = sorted((x1, x2))
+    px_start = max(0, int(math.ceil(start_x * scale - 0.5 - eps * scale)))
+    px_end = min(width - 1, int(math.floor(end_x * scale - 0.5 + eps * scale)))
+    if px_start <= px_end:
+        row[px_start:px_end + 1] = [True] * (px_end - px_start + 1)
+
+
+def _mark_point_boundary(row: List[bool], scale: int, x: float, eps: float) -> None:
+    px = int(round(x * scale - 0.5))
+    if 0 <= px < len(row):
+        center_x = (px + 0.5) / scale
+        if abs(center_x - x) <= eps:
+            row[px] = True
+
+
+def _fill_scanline_from_polygon(row: List[bool], y: float, scale: int, polygon: Sequence[Point], eps: float = 1e-9) -> None:
+    crossings: List[float] = []
+    prev_x, prev_y = polygon[-1]
+
+    for cur_x, cur_y in polygon:
+        dy = cur_y - prev_y
+
+        if abs(dy) <= eps:
+            if abs(y - prev_y) <= eps:
+                _mark_horizontal_boundary(row, scale, prev_x, cur_x, eps)
+        else:
+            if ((prev_y > y) != (cur_y > y)):
+                crossings.append(prev_x + (y - prev_y) * (cur_x - prev_x) / dy)
+
+            if min(prev_y, cur_y) - eps <= y <= max(prev_y, cur_y) + eps:
+                x_on_edge = prev_x + (y - prev_y) * (cur_x - prev_x) / dy
+                _mark_point_boundary(row, scale, x_on_edge, eps)
+
+        prev_x, prev_y = cur_x, cur_y
+
+    crossings.sort()
+    inside = False
+    cross_index = 0
+    cross_count = len(crossings)
+
+    for px in range(len(row)):
+        if row[px]:
+            continue
+
+        x = (px + 0.5) / scale
+        while cross_index < cross_count and crossings[cross_index] < x - eps:
+            inside = not inside
+            cross_index += 1
+        row[px] = inside
+
+
 def make_mask(height: int, width: int, fill: bool = False) -> Mask:
     return [[fill for _ in range(width)] for _ in range(height)]
 
@@ -169,10 +225,7 @@ def build_analysis_mask(rows: int, cols: int, scale: int, polygon: Sequence[Poin
 
     for py in range(height):
         y = (py + 0.5) / scale
-        row = mask[py]
-        for px in range(width):
-            x = (px + 0.5) / scale
-            row[px] = point_in_polygon((x, y), polygon)
+        _fill_scanline_from_polygon(mask[py], y, scale, polygon)
 
     return mask
 

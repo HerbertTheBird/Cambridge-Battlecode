@@ -1,6 +1,5 @@
 from cambc import Controller, Position, EntityType, Direction
 import map_info
-import pathing
 from log import log, DRAW_DEBUG
 
 
@@ -34,8 +33,6 @@ def init(c: Controller):
 
 
 def _should_stay():
-    if rc.get_global_resources()[0] < rc.get_bridge_cost()[0]:
-        return True
     my_pos = rc.get_position()
     my_team = map_info._my_team
     for uid in rc.get_nearby_units(8):
@@ -46,13 +43,25 @@ def _should_stay():
         p = rc.get_position(uid)
         if max(abs(p.x - my_pos.x), abs(p.y - my_pos.y)) <= 2:
             return True
-    _, friendly_d = pathing.closest_impl(map_info._bm_friendly_bots, pos=my_pos, max_dist=4)
-    if friendly_d < 0:
+    # for dx, dy in CARDINAL_OFFSETS:
+    #     p = Position(my_pos.x + dx, my_pos.y + dy)
+    #     if map_info.in_bounds(p):
+    #         bid = rc.get_tile_building_id(p)
+    #         if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
+    #             return True
+    best_d = 8
+    closest_is_friendly = False
+    for uid in rc.get_nearby_units():
+        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
+            continue
+        p = rc.get_position(uid)
+        d = my_pos.distance_squared(p)
+        if best_d is None or d < best_d:
+            best_d = d
+            closest_is_friendly = (rc.get_team(uid) == my_team)
+    if best_d is None:
         return True
-    enemy_pos, _ = pathing.closest_impl(map_info._bm_enemy_bots, pos=my_pos, max_dist=friendly_d + 1)
-    if enemy_pos is not None:
-        return True
-    return False
+    return not closest_is_friendly
 
 
 def _ally_feeder_mask(max_steps: int = 6) -> int:
@@ -172,7 +181,7 @@ def run():
         weight = _WEIGHTS.get(etype, 0)
         if weight <= 0:
             continue
-        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER) and (harv_adj >> n) & 1:
+        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> n) & 1:
             weight += 1
         candidates.append((tile, weight, hp))
 

@@ -50,7 +50,7 @@ def _find_chase_target(damaged=True):
     enemy_bots = map_info._bm_enemy_bots
     if damaged:
         enemy_bots = enemy_bots & _very_damaged_targets()
-    units.builder.draw_mask(enemy_bots, 255, 0, 0)
+
     if not enemy_bots:
         # log("no enemies")
         if damaged:
@@ -66,7 +66,7 @@ def _find_chase_target(damaged=True):
     # A friendly outside enemy_zone_4 has no enemy within 4 chebyshev, so
     # the per-friendly expansion below would be a no-op.
     enemy_zone_4 = map_info.expand_chebyshev(enemy_bots, 4)
-    mask = friendly_bots & ~my_bit & enemy_zone_4
+    mask = friendly_bots & ~my_bit & map_info._bm_visible & enemy_zone_4
 
     while mask:
         lsb = mask & -mask
@@ -134,7 +134,7 @@ def _very_damaged_targets():
 
 def _heal_targets():
     """Bitmask of friendly damaged buildings."""
-    return _healable_mask() & (map_info._bm_damaged | (map_info._bm_et[map_info._IDX_SENTINEL] | map_info._bm_et[map_info._IDX_GUNNER]) & map_info._bm_enemy_turret_threat) & ~_very_damaged_targets()
+    return _healable_mask() & map_info._bm_damaged & ~_very_damaged_targets()
 
 
 _cached_chase_target = None  # set by score(), reused by run()
@@ -143,12 +143,12 @@ MAX_SCORE = 8
 
 
 def score():
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
-
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
+
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
 
     target = _cached_chase_target
     # log(target)
@@ -160,8 +160,6 @@ def score():
         else:
             log("low priority heal", target)
             return 2.5
-    if _heal_targets():
-        return 1.5
     return 0
 
 
@@ -246,19 +244,11 @@ def _do_best_heal():
 
 def run():
     log("HEAL")
-    target = _cached_chase_target
-    if target is not None and _very_damaged_targets() & (1<<(target.x+target.y*map_info._width)):
-        ep = target
-        # _try_barrier_dead_ends()
-        log("best chase", target)
-        nav.move_to(ep)
-        _do_best_heal()
-        return
-    very_damaged = _very_damaged_targets() & ~(map_info._bm_enemy_bots & map_info.expand_chebyshev(map_info._bm_friendly_bots))
+    very_damaged = _very_damaged_targets() & ~map_info._bm_enemy_bots
     targets = very_damaged
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None and dist <= map_info._building_hp[best.x+best.y*map_info._width]//2 + 1:
+        if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
             _do_best_heal()
             return
@@ -267,7 +257,6 @@ def run():
     if target is not None:
         ep = target
         # _try_barrier_dead_ends()
-        log("best chase", target)
         nav.move_to(ep)
         _do_best_heal()
         return
@@ -275,6 +264,6 @@ def run():
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None:
+        if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()

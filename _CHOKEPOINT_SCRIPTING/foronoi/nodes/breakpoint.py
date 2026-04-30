@@ -34,23 +34,25 @@ class Breakpoint:
 
     def does_intersect(self):
         i, j = self.breakpoint
-        return not (is_close(i.yd, j.yd) and j.xd < i.xd)
+        iy = i._yd
+        jy = j._yd
+        return not (is_close(iy, jy) and j._xd < i._xd)
 
     def get_intersection_x(self, l):
         i, j = self.breakpoint
-        a = i.xd
-        b = i.yd
-        c = j.xd
-        d = j.yd
+        a = i._xd
+        b = i._yd
+        c = j._xd
+        d = j._yd
         u = 2 * (b - l)
         v = 2 * (d - l)
 
-        if is_close(i.yd, j.yd) or is_zero(u - v):
-            return (i.xd + j.xd) / 2
-        if is_close(i.yd, l):
-            return i.xd
-        if is_close(j.yd, l):
-            return j.xd
+        if is_close(b, d) or is_zero(u - v):
+            return (a + c) / 2
+        if is_close(b, l):
+            return a
+        if is_close(d, l):
+            return c
 
         return -(sqrt(
             v * (a ** 2 * u - 2 * a * c * u + b ** 2 * (u - v) + c ** 2 * u)
@@ -75,37 +77,37 @@ class Breakpoint:
         p: Coordinate = i
 
         # First we replace some stuff to make it easier
-        a = i.xd
-        b = i.yd
-        c = j.xd
-        d = j.yd
+        a = i._xd
+        b = i._yd
+        c = j._xd
+        d = j._yd
         u = 2 * (b - l)
         v = 2 * (d - l)
 
-        result.xd = self.get_intersection_x(l)
+        result._xd = self.get_intersection_x(l)
 
         # Handle the case where the two points have the same y-coordinate (breakpoint is in the middle)
-        if is_close(i.yd, j.yd) or is_zero(u - v):
+        if is_close(b, d) or is_zero(u - v):
 
-            if j.xd < i.xd:
-                result.yd = max_y or float('inf')
+            if c < a:
+                result._yd = Coordinate._to_dec(max_y or float('inf'))
                 return result
 
         # Handle cases where one point's y-coordinate is the same as the sweep line
-        elif is_close(i.yd, l):
+        elif is_close(b, l):
             p = j
 
         # We have to re-evaluate this, since the point might have been changed
-        a = p.xd
-        b = p.yd
-        x = result.xd
+        a = p._xd
+        b = p._yd
+        x = result._xd
         u = 2 * (b - l)
 
         # Handle degenerate case where parabolas don't intersect
         if is_zero(u):
-            result.yd = float("inf")
+            result._yd = Coordinate._to_dec(float("inf"))
             return result
 
         # And we put everything back in y
-        result.yd = 1 / u * (x ** 2 - 2 * a * x + a ** 2 + b ** 2 - l ** 2)
+        result._yd = 1 / u * (x ** 2 - 2 * a * x + a ** 2 + b ** 2 - l ** 2)
         return result

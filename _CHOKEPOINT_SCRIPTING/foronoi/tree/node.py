@@ -157,15 +157,17 @@ class Node:
 
         # Walk up to the left until we are no longer a right child
         current = self
-        while current.is_right_child():
-            current = current.parent
+        parent = current.parent
+        while parent is not None and parent._right is current:
+            current = parent
+            parent = current.parent
 
         # Check there is a right branch
-        if current.parent is None or current.parent._right is None:
+        if parent is None or parent._right is None:
             return None
 
         # Step over to the right branch, and take the minimum
-        return current.parent._right.minimum()
+        return parent._right.minimum()
 
     @property
     def predecessor(self):
@@ -180,15 +182,17 @@ class Node:
 
         # Walk up to the right until we are no longer a left child
         current = self
-        while current.is_left_child():
-            current = current.parent
+        parent = current.parent
+        while parent is not None and parent._left is current:
+            current = parent
+            parent = current.parent
 
         # Check there is a left branch
-        if current.parent is None or current.parent._left is None:
+        if parent is None or parent._left is None:
             return None
 
         # Step over to the left branch, and take the maximum
-        return current.parent._left.maximum()
+        return parent._left.maximum()
 
     def replace_leaf(self, replacement, root):
         """
@@ -200,19 +204,18 @@ class Node:
         :return: (Node) The root of the updated tree
         """
 
+        parent = self.parent
+
         # Give the parent of the node to the replacement
         if replacement is not None:
-            replacement.parent = self.parent
+            replacement.parent = parent
 
-        # If node is left child, replace it by giving the parent a new left node
-        if self.is_left_child():
-            self.parent.left = replacement
-
-        # If node is right child, replace it by giving the parent a new right node
-        elif self.is_right_child():
-            self.parent.right = replacement
-
-        # Otherwise, replace the root
+        if parent is None:
+            root = replacement
+        elif parent._left is self:
+            parent.left = replacement
+        elif parent._right is self:
+            parent.right = replacement
         else:
             root = replacement
 
@@ -221,8 +224,8 @@ class Node:
             replacement.update_heights()
 
         # For empty replacement, start updating heights from the parent
-        elif self.parent is not None:
-            self.parent.update_heights()
+        elif parent is not None:
+            parent.update_heights()
 
         # Return the new tree. No need to return the replacement, because the
         # reference remains the same.

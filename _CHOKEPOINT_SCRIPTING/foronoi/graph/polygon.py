@@ -19,24 +19,22 @@ class Polygon(Subject):
         super().__init__()
         points = [Coordinate(x, y) for x, y in tuples]
         self.points = points
-        min_y = min([p.yd for p in self.points])
-        min_x = min([p.xd for p in self.points])
-        max_y = max([p.yd for p in self.points])
-        max_x = max([p.xd for p in self.points])
+        min_y = min(p._yd for p in self.points)
+        min_x = min(p._xd for p in self.points)
+        max_y = max(p._yd for p in self.points)
+        max_x = max(p._xd for p in self.points)
         center = Coordinate((max_x + min_x) / 2, (max_y + min_y) / 2)
         self.min_y, self.min_x, self.max_y, self.max_x, self.center = min_y, min_x, max_y, max_x, center
 
         self.points = self._order_points(self.points)
-        self.polygon_vertices = []
-        for point in self.points:
-            self.polygon_vertices.append(Vertex(point.xd, point.yd))
+        self.polygon_vertices = [Vertex(point._xd, point._yd) for point in self.points]
 
     def _order_points(self, points):
         clockwise = sorted(points, key=lambda point: (-180 - Algebra.calculate_angle(point, self.center)) % 360)
         return clockwise
 
     def _get_ordered_vertices(self, vertices):
-        vertices = [vertex for vertex in vertices if vertex.xd is not None]
+        vertices = [vertex for vertex in vertices if vertex._xd is not None]
         clockwise = sorted(vertices,
                            key=lambda vertex: (-180 - Algebra.calculate_angle(vertex, self.center)) % 360)
         return clockwise
@@ -109,7 +107,7 @@ class Polygon(Subject):
         return edges, vertices[:-1] + existing_vertices
 
     def get_coordinates(self):
-        return [(i.xd, i.yd) for i in self.points]
+        return [(i._xd, i._yd) for i in self.points]
 
     def finish_edges(self, edges, **kwargs):
         """
@@ -159,7 +157,7 @@ class Polygon(Subject):
         point = self._get_intersection_point(end, start)
 
         # Create vertex
-        v = Vertex(point.x, point.y) if point is not None else Vertex(None, None)
+        v = Vertex(point._xd, point._yd) if point is not None else Vertex(None, None)
         v.connected_edges.append(edge)
         edge.origin = v
         self.polygon_vertices.append(v)
@@ -167,17 +165,21 @@ class Polygon(Subject):
         return edge
 
     def _on_edge(self, point):
-        vertices = self.points + self.points[0:1]
-        for i in range(0, len(vertices) - 1):
-            dxc = point.xd - vertices[i].xd
-            dyc = point.yd - vertices[i].yd
-            dx1 = vertices[i + 1].xd - vertices[i].xd
-            dy1 = vertices[i + 1].yd - vertices[i].yd
+        prev = self.points[-1]
+        px = point._xd
+        py = point._yd
+
+        for cur in self.points:
+            dxc = px - prev._xd
+            dyc = py - prev._yd
+            dx1 = cur._xd - prev._xd
+            dy1 = cur._yd - prev._yd
 
             cross = dxc * dy1 - dyc * dx1
 
             if cross == 0:
                 return True
+            prev = cur
         return False
 
     def inside(self, point):
@@ -195,50 +197,42 @@ class Polygon(Subject):
             Whether the point is inside or not
         """
 
-        vertices = self.points + self.points[0:1]
-
-        x = point.xd
-        y = point.yd
+        x = point._xd
+        y = point._yd
         inside = False
 
-        for i in range(0, len(vertices) - 1):
-            j = i + 1
-            xi = vertices[i].xd
-            yi = vertices[i].yd
-            xj = vertices[j].xd
-            yj = vertices[j].yd
+        prev = self.points[-1]
+        for cur in self.points:
+            xi = prev._xd
+            yi = prev._yd
+            xj = cur._xd
+            yj = cur._yd
 
             intersect = ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
             if intersect:
                 inside = not inside
+            prev = cur
 
         return inside
 
     def _get_intersection_point(self, orig, end):
-        p = self.points + [self.points[0]]
-        points = []
-
-        point = None
-
-        for i in range(0, len(p) - 1):
-            intersection_point = Algebra.get_intersection(orig, end, p[i], p[i + 1])
-            if intersection_point:
-                points.append(intersection_point)
-
-        if not points:
+        if orig is None or end is None:
             return None
 
         max_distance = Algebra.distance(orig, end)
+        best_point = None
+        best_distance = None
+        prev = self.points[-1]
 
-        # Find the intersection point that is furthest away from the start
-        if points:
-            distances = [Algebra.distance(orig, p) for p in points]
-            indexed = [
-                (distance, candidate)
-                for distance, candidate in zip(distances, points)
-                if distance <= max_distance
-            ]
-            if indexed:
-                point = max(indexed, key=lambda item: item[0])[1]
+        for cur in self.points:
+            intersection_point = Algebra.get_intersection(orig, end, prev, cur)
+            prev = cur
+            if intersection_point is None:
+                continue
 
-        return point
+            distance = Algebra.distance(orig, intersection_point)
+            if distance <= max_distance and (best_distance is None or distance > best_distance):
+                best_point = intersection_point
+                best_distance = distance
+
+        return best_point
