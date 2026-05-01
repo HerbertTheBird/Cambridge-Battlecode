@@ -71,10 +71,10 @@ def not_blocked():
     ) & map_info._bm_team[my_team_idx]
     w = map_info._width
     conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&map_info._bm_team[my_team_idx] & ~map_info._bm_guard_conveyor
-    left_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.EAST]])&map_info._not_right_col)<<1
-    right_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.WEST]])&map_info._not_left_col)>>1
-    up_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.SOUTH]]))<<w
-    down_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.NORTH]]))>>w
+    left_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_E])&map_info._not_right_col)<<1
+    right_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_W])&map_info._not_left_col)>>1
+    up_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_S]))<<w
+    down_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_N]))>>w
     blocking = (
         (map_info._bm_team[1-my_team_idx]
         & ~map_info._bm_et[map_info._IDX_MARKER]

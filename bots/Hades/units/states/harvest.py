@@ -127,7 +127,7 @@ def run():
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
     path = None
     for dir in CARD:
-        pos = best_ore.add(dir)
+        pos = map_info.pos_add(best_ore, dir)
         if not map_info.in_bounds(pos):
             continue
         pn = pos.x + pos.y * w
@@ -146,7 +146,7 @@ def run():
             continue
         conv_dir = map_info._INT_DIR[d_idx]
         if conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & pbit):
-            path = nav.calculate_conveyor_path(pos.add(conv_dir), is_raw_ax, True)
+            path = nav.calculate_conveyor_path(map_info.pos_add(pos, conv_dir), is_raw_ax, True)
             if path is not None:
                 break
     if not path:

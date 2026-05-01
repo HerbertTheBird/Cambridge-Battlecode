@@ -132,7 +132,7 @@ def broadcast_symmetry():
     for d in Direction:
         if d == Direction.CENTRE:
             continue
-        p = my_pos.add(d)
+        p = map_info.pos_add(my_pos, d)
         if not map_info.in_bounds(p):
             continue
         if rc.can_place_marker(p):

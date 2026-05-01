@@ -186,6 +186,21 @@ def run():
     comms.broadcast_symmetry()
 
 
+def _try_mask(candidates):
+    w = map_info._width
+    mask = candidates
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        p = Position(n % w, n // w)
+        if rc.can_build_road(p):
+            rc.build_road(p)
+            map_info.update_at(p)
+            return True
+        mask ^= lsb
+    return False
+
+
 def try_road_spam():
     """Opportunistic road placement. Priority order:
       1. (Always) tiles adjacent to a friendly conveyor or on a friendly
@@ -210,19 +225,6 @@ def try_road_spam():
     avoid = map_info._bm_my_gunner_claims
     allowed_neighbors = my_neighbors & ~avoid
     draw_mask(avoid & my_neighbors, 255, 0, 0)
-
-    def _try_mask(candidates):
-        mask = candidates
-        while mask:
-            lsb = mask & -mask
-            n = lsb.bit_length() - 1
-            p = Position(n % w, n // w)
-            if rc.can_build_road(p):
-                rc.build_road(p)
-                map_info.update_at(p)
-                return True
-            mask ^= lsb
-        return False
 
     # Priority 1: pave around our conveyors (always, regardless of enemies)
     my_team_idx = map_info._my_team_idx
