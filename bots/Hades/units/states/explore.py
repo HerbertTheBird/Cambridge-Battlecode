@@ -1,6 +1,6 @@
 from collections import deque
 
-from main import USE_CHOKEPOINTS
+from _config import USE_CHOKEPOINTS
 import chokepoint
 import map_info
 from pathing import Pathing

@@ -15,9 +15,8 @@ import units.turret_launcher as launcher
 import map_info
 import comms
 import chokepoint
+from _config import USE_CHOKEPOINTS
 from log import log
-
-USE_CHOKEPOINTS = True
 
 ENABLE_PROFILER = False
 
