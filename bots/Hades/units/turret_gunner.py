@@ -17,18 +17,18 @@ CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 # Sentinel-style weights. Builder bots are intentionally absent from rotation
 # scoring per spec — they're only valid as a *current-direction* fire target.
 _WEIGHTS = {
-    EntityType.CORE: 35,
+    EntityType.CORE: 2,
     EntityType.BREACH: 60,
     EntityType.SENTINEL: 50,
     EntityType.LAUNCHER: 10,
     EntityType.HARVESTER: 0,
     EntityType.GUNNER: 40,
     EntityType.FOUNDRY: 55,
-    EntityType.BRIDGE: 4,
-    EntityType.ARMOURED_CONVEYOR: 4,
-    EntityType.BARRIER: 4,
-    EntityType.SPLITTER: 2,
-    EntityType.CONVEYOR: 1,
+    EntityType.BRIDGE: 5,
+    EntityType.ARMOURED_CONVEYOR: 1,
+    EntityType.BARRIER: 5,
+    EntityType.SPLITTER: 3,
+    EntityType.CONVEYOR: 4,
     EntityType.ROAD: 0,
     EntityType.MARKER: 0,
 }
