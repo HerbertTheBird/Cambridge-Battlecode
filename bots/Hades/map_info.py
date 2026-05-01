@@ -750,17 +750,19 @@ def _carrying_expand(
     # Upstream (reverse chain).
     cur = seed
     for _ in range(3):
+        not_expanded = ~expanded
+        bridges_ne = bridges & not_expanded
         nxt = (
             ((cur & not_left_col) >> 1) & convs_e
             | ((cur & not_right_col) << 1) & convs_w
             | ((cur & not_top_row) >> w) & convs_s
             | ((cur & not_bottom_row) << w) & convs_n
-        ) & bm_conveyors & ~expanded
+        ) & bm_conveyors & not_expanded
         m = cur
         while m:
             lsb = m & -m
             n = lsb.bit_length() - 1
-            nxt |= reverse[n] & bridges & ~expanded
+            nxt |= reverse[n] & bridges_ne
             m ^= lsb
         if not nxt:
             break
