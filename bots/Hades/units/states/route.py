@@ -173,7 +173,9 @@ def run():
         log("barrier fallback at", target)
         nav.move_adjacent(target)
         existing = map_info.type_at(target.x, target.y)
-        if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]:
+        # Destroy is free (no cooldown, no Ti) — do it even if we can't follow
+        # up with a barrier. Killing a feeding-enemy conveyor is the priority.
+        if existing in _BARRIER_DESTROYABLE and rc.can_destroy(target):
             rc.destroy(target)
             map_info.update_at(target)
         if rc.can_build_barrier(target):
