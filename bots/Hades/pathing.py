@@ -449,9 +449,9 @@ class Pathing:
         new_pos = Position(px + dx, py + dy)
         if not map_info.in_bounds(new_pos):
             return False
-        id = rc.get_tile_building_id(new_pos)
         if rc.get_tile_builder_bot_id(new_pos) != None:
             return False
+        id = rc.get_tile_building_id(new_pos)
         if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0]:
             rc.destroy(new_pos)
             map_info.update_at(new_pos)
