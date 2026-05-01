@@ -14,6 +14,7 @@ import units.turret_breach as breach
 import units.turret_launcher as launcher
 import map_info
 import comms
+import chokepoint
 from log import log
 
 ENABLE_PROFILER = False
@@ -138,6 +139,7 @@ class Player:
                 self.current_round = round_num
 
             self.me.run()
+            chokepoint.post_turn(c)
 
             self.current_round += 1
             
