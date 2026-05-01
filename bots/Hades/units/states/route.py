@@ -187,20 +187,8 @@ def run():
 
         my_pos = map_info._my_pos
         if max(abs(my_pos.x - output.x), abs(my_pos.y - output.y)) > 1:
-            best_dir = None
-            for d in Direction:
-                if d == Direction.CENTRE or not rc.can_move(d):
-                    continue
-                step = map_info.pos_add(my_pos, d)
-                if step == output:
-                    continue
-                if max(abs(step.x - output.x), abs(step.y - output.y)) <= 1:
-                    best_dir = d
-                    break
-            if best_dir is None:
+            if not nav.move_to_adjacent(output):
                 return False
-            rc.move(best_dir)
-            map_info.update_move()
 
         if is_my_road and rc.can_destroy(output):
             rc.destroy(output)

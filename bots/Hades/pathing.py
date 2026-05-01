@@ -471,7 +471,7 @@ class Pathing:
         self.DIRS = make_steps(raw_dirs)
         self.CONV = make_steps(raw_conv)
 
-    def move(self, dir: Direction):
+    def move(self, dir: Direction, build_road: bool = True):
         rc = self.rc
         px, py = map_info._my_pos.x, map_info._my_pos.y
         dx, dy = map_info._DIRECTION_DELTAS[dir]
@@ -485,7 +485,7 @@ class Pathing:
             rc.destroy(new_pos)
             map_info.update_at(new_pos)
             destroyed_barriers[new_pos] = rc.get_current_round()
-        if rc.can_build_road(new_pos):
+        if build_road and rc.can_build_road(new_pos):
             rc.build_road(new_pos)
             map_info.update_at(new_pos)
         if rc.can_move(dir):
@@ -835,7 +835,53 @@ class Pathing:
             self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
         return self.move(map_info.direction_to(s_pos, p_pos))
 
+    def move_to_adjacent(self, target: Position, avoid_turret: bool = True):
+        """Single-step move into the cheb-1 ring of target."""
+        rc = self.rc
+        my_pos = map_info._my_pos
 
+        adj_set = set()
+        for d in ALL_DIRS:
+            if d == Direction.CENTRE:
+                continue
+            p = map_info.pos_add(target, d)
+            if not map_info.in_bounds(p):
+                continue
+            if p == my_pos:
+                return False
+            if not map_info.is_passable(p):
+                continue
+            if rc.is_in_vision(p) and rc.get_tile_builder_bot_id(p):
+                continue
+            adj_set.add(p)
+        if not adj_set:
+            return False
+
+        threat = map_info._bm_enemy_launch_adj
+        if avoid_turret:
+            threat |= map_info._bm_enemy_turret_threat
+
+        w = self.width
+        safe_dir = None
+        risky_dir = None
+        for d in ALL_DIRS:
+            if d == Direction.CENTRE or not rc.can_move(d):
+                continue
+            step = map_info.pos_add(my_pos, d)
+            if step not in adj_set:
+                continue
+            bit = 1 << (step.x + step.y * w)
+            if bit & threat:
+                if risky_dir is None:
+                    risky_dir = d
+            else:
+                safe_dir = d
+                break
+
+        chosen = safe_dir if safe_dir is not None else risky_dir
+        if chosen is None:
+            return False
+        return self.move(chosen, build_road=False)
 
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
         log("conveyors from ", start, raw_axionite)
