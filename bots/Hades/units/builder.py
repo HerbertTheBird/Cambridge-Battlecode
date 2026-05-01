@@ -311,20 +311,19 @@ def run():
 
 
 def try_road_spam():
-    """If an enemy bot is within 4 pathing distance, build a road.
-    Priority: tile adjacent to enemy non-marker non-road building, then under
-    me, then any adjacent buildable tile. Action-cooldown gated."""
+    """Opportunistic road placement. Priority order:
+      1. (Always) tiles adjacent to a friendly conveyor or on a friendly
+         conveyor target — pave conveyor lanes regardless of enemies.
+      2. (Enemy within 4 pathing dist) tile adjacent to an enemy bot.
+      3. (Enemy within 4) tile adjacent to enemy non-marker non-road building.
+      4. (Enemy within 4) tile under me.
+      5. (Enemy within 4) any adjacent buildable tile.
+    Tiles covered by my gunners' current shooting rays are excluded.
+    Action-cooldown gated."""
     if rc.get_action_cooldown() != 0:
-        return False
-    enemy_bots = map_info._bm_enemy_bots
-    if not enemy_bots:
-        return False
-    closest_enemy, dist = nav.closest(enemy_bots)
-    if closest_enemy is None or dist > 4:
         return False
 
     w = map_info._width
-    h = map_info._height
     my_pos = map_info._my_pos
     my_x = my_pos.x
     my_y = my_pos.y
@@ -349,12 +348,29 @@ def try_road_spam():
             mask ^= lsb
         return False
 
-    if enemy_bots:
-        if _try_mask(map_info.expand_chebyshev(enemy_bots) & allowed_neighbors):
+    # Priority 1: pave around our conveyors (always, regardless of enemies)
+    my_team_idx = map_info._my_team_idx
+    friendly_convs = map_info._bm_conveyors & map_info._bm_team[my_team_idx]
+    if friendly_convs:
+        conv_zone = (
+            map_info.expand_chebyshev(friendly_convs)
+            | map_info._conveyor_target_tiles(friendly_convs)
+        )
+        if _try_mask(conv_zone & allowed_neighbors):
             return True
 
+    enemy_bots = map_info._bm_enemy_bots
+    if not enemy_bots:
+        return False
+    closest_enemy, dist = nav.closest(enemy_bots)
+    if closest_enemy is None or dist > 4:
+        return False
+
+    if _try_mask(map_info.expand_chebyshev(enemy_bots) & allowed_neighbors):
+        return True
+
     enemy_hard = (
-        map_info._bm_team[1 - map_info._my_team_idx]
+        map_info._bm_team[1 - my_team_idx]
         & ~map_info._bm_et[map_info._IDX_MARKER]
         & ~map_info._bm_et[map_info._IDX_ROAD]
     )

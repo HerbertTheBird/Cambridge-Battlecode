@@ -248,6 +248,8 @@ def run():
         best, dist = nav.closest(targets)
         if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
+            _do_best_heal()
+            return
     # Priority 1: chase an enemy near my conveyors
     target = _cached_chase_target
     if target is not None:
