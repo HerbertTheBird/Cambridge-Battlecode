@@ -169,13 +169,68 @@ def run():
         EntityType.ARMOURED_CONVEYOR,
     )
 
+    def _try_barrier_output(target_n):
+        output_n = map_info._building_conv_target[target_n]
+        if output_n < 0:
+            return False
+        output_bit = 1 << output_n
+        if output_bit & (map_info._bm_friendly_bots | map_info._bm_enemy_bots):
+            return False
+        output = Position(output_n % width, output_n // width)
+        output_type = map_info.type_at(output.x, output.y)
+        is_my_road = (
+            output_type == EntityType.ROAD
+            and map_info.team_at(output.x, output.y) == map_info._my_team
+        )
+        if output_type is not None and not is_my_road:
+            return False
+
+        my_pos = map_info._my_pos
+        if max(abs(my_pos.x - output.x), abs(my_pos.y - output.y)) > 1:
+            best_dir = None
+            for d in Direction:
+                if d == Direction.CENTRE or not rc.can_move(d):
+                    continue
+                step = map_info.pos_add(my_pos, d)
+                if step == output:
+                    continue
+                if max(abs(step.x - output.x), abs(step.y - output.y)) <= 1:
+                    best_dir = d
+                    break
+            if best_dir is None:
+                return False
+            rc.move(best_dir)
+            map_info.update_move()
+
+        if is_my_road and rc.can_destroy(output):
+            rc.destroy(output)
+            map_info.update_at(output)
+        if rc.can_build_barrier(output):
+            rc.build_barrier(output)
+            map_info.update_at(output)
+        return True
+
     def fallback_barrier(target):
         log("barrier fallback at", target)
+        target_n = target.x + target.y * width
+        target_feeds_enemy = bool((1 << target_n) & map_info._bm_feeding_enemy)
+        barrier_ready = (
+            rc.get_action_cooldown() == 0
+            and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]
+        )
+
+        if barrier_ready and _try_barrier_output(target_n):
+            return
+
         nav.move_adjacent(target)
         existing = map_info.type_at(target.x, target.y)
-        # Destroy is free (no cooldown, no Ti) — do it even if we can't follow
-        # up with a barrier. Killing a feeding-enemy conveyor is the priority.
-        if existing in _BARRIER_DESTROYABLE and rc.can_destroy(target):
+        # Only destroy the routed tile for free when it immediately cuts an
+        # enemy feed, or when we can still turn it into a barrier this turn.
+        if (
+            existing in _BARRIER_DESTROYABLE
+            and rc.can_destroy(target)
+            and (target_feeds_enemy or barrier_ready)
+        ):
             rc.destroy(target)
             map_info.update_at(target)
         if rc.can_build_barrier(target):
