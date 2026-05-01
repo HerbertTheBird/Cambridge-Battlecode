@@ -240,6 +240,34 @@ def _do_best_heal():
         rc.heal(best_heal)
 
 
+def try_build_road_anywhere():
+    """Low-priority filler: build a road on the tile under me if possible,
+    otherwise on any adjacent empty tile. Action-cooldown gated. Returns True
+    if a road was built."""
+    if rc.get_action_cooldown() != 0:
+        return False
+    my_pos = map_info._my_pos
+    if rc.can_build_road(my_pos):
+        rc.build_road(my_pos)
+        map_info.update_at(my_pos)
+        return True
+    w = map_info._width
+    h = map_info._height
+    for dx, dy in map_info._DIRECTION_DELTAS_I:
+        if dx == 0 and dy == 0:
+            continue
+        x = my_pos.x + dx
+        y = my_pos.y + dy
+        if not (0 <= x < w and 0 <= y < h):
+            continue
+        p = Position(x, y)
+        if rc.can_build_road(p):
+            rc.build_road(p)
+            map_info.update_at(p)
+            return True
+    return False
+
+
 def run():
     log("HEAL")
     very_damaged = _very_damaged_targets() & ~map_info._bm_enemy_bots
@@ -256,6 +284,7 @@ def run():
         nav.move_to(ep)
         # comms.mark(uid & ID_MASK, comm_flag)
         _do_best_heal()
+        try_build_road_anywhere()
         return
     very_damaged = _very_damaged_targets()
     targets = very_damaged if very_damaged else _heal_targets()
@@ -264,3 +293,4 @@ def run():
         if best is not None and dist <= 4:
             nav.move_adjacent(best, avoid_turret=False)
     _do_best_heal()
+    try_build_road_anywhere()

@@ -1869,6 +1869,9 @@ def get_avoid(
     mask = _bm_blocked
     if avoid_conveyors:
         mask |= (_bm_conveyors&~_bm_conv_into_open_ore) | _bm_conveyor_targets | _bm_my_core_area
+        enemy_roads = _bm_et[_IDX_ROAD] & _bm_team[1 - _my_team_idx]
+        if enemy_roads and _bm_enemy_bots:
+            mask |= enemy_roads & expand_chebyshev(_bm_enemy_bots)
     if avoid_ore:
         ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
         w = _width
