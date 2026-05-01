@@ -3,14 +3,11 @@ from cambc import *
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 import units.builder
 from log import DRAW_DEBUG, log
 
 rc: Controller = None
 nav: Pathing = None
-
-comm_flag = 7
 
 _SHIFT_PLAN_WIDTH = -1
 _SHIFT_PLAN_HEIGHT = -1
@@ -1140,14 +1137,12 @@ def _try_instant_preferred(preferred: int) -> bool:
             log(f"InstantAttack gunner at {best_pos} dir={best_dir} score={best_score}")
             rc.build_gunner(best_pos, best_dir)
             map_info.update_at(best_pos)
-            comms.mark(best_n, comm_flag)
             return True
     elif best_type == EntityType.SENTINEL:
         if rc.can_build_sentinel(best_pos, best_dir):
             log(f"InstantAttack sentinel at {best_pos} dir={best_dir} score={best_score}")
             rc.build_sentinel(best_pos, best_dir)
             map_info.update_at(best_pos)
-            comms.mark(best_n, comm_flag)
             return True
     return False
 
@@ -1417,5 +1412,3 @@ def run():
         if rc.can_build_sentinel(best, direction):
             rc.build_sentinel(best, direction)
             map_info.update_at(best)
-
-    comms.mark(best.x + best.y * map_info._width, comm_flag)

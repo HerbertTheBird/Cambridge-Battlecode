@@ -1,15 +1,12 @@
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 from cambc import *
 import units.builder
 from log import log
 import sys
 rc: Controller = None
 nav: Pathing = None
-
-comm_flag = 4
 
 def _my_claims():
     my_pos = map_info._my_pos
@@ -130,7 +127,7 @@ def run():
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
     path = None
     for dir in CARD:
-        pos = best_ore.add(dir)
+        pos = map_info.pos_add(best_ore, dir)
         if not map_info.in_bounds(pos):
             continue
         pn = pos.x + pos.y * w
@@ -149,7 +146,7 @@ def run():
             continue
         conv_dir = map_info._INT_DIR[d_idx]
         if conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & pbit):
-            path = nav.calculate_conveyor_path(pos.add(conv_dir), is_raw_ax, True)
+            path = nav.calculate_conveyor_path(map_info.pos_add(pos, conv_dir), is_raw_ax, True)
             if path is not None:
                 break
     if not path:
@@ -176,7 +173,6 @@ def run():
             if rc.can_fire(best_ore):
                 rc.fire(best_ore)
                 map_info.update_at(best_ore)
-            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             log("firing")
             return
         if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and (map_info._my_pos != best_ore or rc.get_move_cooldown() == 0):
@@ -199,4 +195,3 @@ def run():
     if rc.can_build_harvester(best_ore):
         rc.build_harvester(best_ore)
         map_info.update_at(best_ore)
-    comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
