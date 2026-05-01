@@ -135,12 +135,15 @@ _cached_chase_target = None  # set by score(), reused by run()
 
 MAX_SCORE = 8
 def score():
+    # Always refresh chase target so run() uses a current value when it falls
+    # through to the chase fallback (case 2 in run()). Previously this was
+    # skipped when score=8 returned early, leaving a stale target across turns.
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
+
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
-
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
 
     target = _cached_chase_target
     # log(target)
@@ -201,13 +204,31 @@ def score():
 #             map_info.update_at(p)
 #             return
 
+_HEAL_PRIORITY = [1] * 16  # default low priority for unknown types
+_HEAL_PRIORITY[map_info._IDX_ROAD] = 1
+_HEAL_PRIORITY[map_info._IDX_BARRIER] = 2
+_HEAL_PRIORITY[map_info._IDX_BRIDGE] = 2
+_HEAL_PRIORITY[map_info._IDX_SPLITTER] = 2
+_HEAL_PRIORITY[map_info._IDX_CONVEYOR] = 3
+_HEAL_PRIORITY[map_info._IDX_ARMOURED_CONVEYOR] = 4
+_HEAL_PRIORITY[map_info._IDX_HARVESTER] = 4
+_HEAL_PRIORITY[map_info._IDX_FOUNDRY] = 4
+_HEAL_PRIORITY[map_info._IDX_GUNNER] = 5
+_HEAL_PRIORITY[map_info._IDX_SENTINEL] = 5
+_HEAL_PRIORITY[map_info._IDX_BREACH] = 5
+_HEAL_PRIORITY[map_info._IDX_LAUNCHER] = 5
+_HEAL_PRIORITY[map_info._IDX_CORE] = 6
+
+
 def _do_best_heal():
-    """Heal the most damaged adjacent friendly building."""
+    """Heal the most-damaged adjacent friendly building, weighted by type
+    priority so cheap roads/markers don't preempt healing more valuable
+    conveyors, turrets, or the core when both are damaged."""
     w = map_info._width
     h = map_info._height
     healable = _healable_mask() & map_info._bm_damaged
     best_heal = None
-    best_heal_damage = -1
+    best_score = -1
     my_pos = map_info._my_pos
     my_x = my_pos.x
     my_y = my_pos.y
@@ -225,11 +246,13 @@ def _do_best_heal():
             continue
         hp = map_info._building_hp[n]
         et_idx = map_info._building_et_idx[n]
-        if et_idx >= 0:
-            damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
-            if damage > best_heal_damage:
-                best_heal_damage = damage
-                best_heal = p
+        if et_idx < 0:
+            continue
+        damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
+        score = damage * _HEAL_PRIORITY[et_idx]
+        if score > best_score:
+            best_score = score
+            best_heal = p
     if best_heal is not None:
         rc.heal(best_heal)
 
@@ -256,6 +279,12 @@ def run():
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None and dist <= 4:
-            nav.move_adjacent(best, avoid_turret=False)
+        if best is not None:
+            if dist <= 4:
+                nav.move_adjacent(best, avoid_turret=False)
+            else:
+                # No immediate heal but reachable damage exists — close the
+                # gap so we can heal next turn (otherwise heal score 8 made
+                # us pivot here for nothing).
+                nav.move_to(best)
     _do_best_heal()
