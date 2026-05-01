@@ -47,7 +47,7 @@ def init(c: Controller):
 
 
 SENTINEL_BUILDING_SCORE = [0] * map_info._NUM_ET
-SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 0
+SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 6
 SENTINEL_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 SENTINEL_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 16
 SENTINEL_BUILDING_SCORE[map_info._IDX_GUNNER] = 20
@@ -55,7 +55,7 @@ SENTINEL_BUILDING_SCORE[map_info._IDX_SENTINEL] = 20
 SENTINEL_BUILDING_SCORE[map_info._IDX_BREACH] = 24
 SENTINEL_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 8
 SENTINEL_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 8
-SENTINEL_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 12
+SENTINEL_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 4
 SENTINEL_BUILDING_SCORE[map_info._IDX_BARRIER] = 8
 SENTINEL_BUILDING_SCORE[map_info._IDX_BRIDGE] = 8
 SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 8
@@ -71,7 +71,7 @@ GUNNER_BUILDING_SCORE[map_info._IDX_SENTINEL] = 100
 GUNNER_BUILDING_SCORE[map_info._IDX_BREACH] = 120
 GUNNER_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 16
 GUNNER_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 4
-GUNNER_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 8
+GUNNER_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 16
 GUNNER_BUILDING_SCORE[map_info._IDX_BRIDGE] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_SPLITTER] = 4
@@ -95,7 +95,7 @@ _NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well
 SCORE_THRESHOLD_FACTOR = 0.25
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
-GUARD_CONVEYOR_BUFF = 6
+NON_GOOD_TILE_BUFF = 6
 
 cant_attack = 0
 
@@ -131,8 +131,6 @@ _GUNNER_SCORE_GROUPS = _build_score_groups(GUNNER_BUILDING_SCORE)
 _THREAT_PENALTY_BITS = _bits_of(THREAT_PENALTY)
 _SENT_CORE_BITS = _bits_of(SENTINEL_BUILDING_SCORE[map_info._IDX_CORE])
 _GUN_CORE_BITS = _bits_of(GUNNER_BUILDING_SCORE[map_info._IDX_CORE])
-_GUARD_BUFF_BITS = _bits_of(GUARD_CONVEYOR_BUFF)
-
 
 def _ensure_attack_shift_plans():
     """Precompute static shift plans used by the hot attack scorers."""
@@ -359,8 +357,6 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
     add_bits_to_planes = _add_bits_to_planes
     num_planes = _NUM_PLANES
     core_idx = map_info._IDX_CORE
-    team_masks = map_info._bm_team
-    my_team_idx = map_info._my_team_idx
     board_mask = map_info._board_mask
     pos_shifts = _SENTINEL_REACH_POS_SHIFTS
     neg_shifts = _SENTINEL_REACH_NEG_SHIFTS
@@ -368,7 +364,6 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
     core_mask = bm_et[core_idx] & enemy_team_bm
     type_contribs, _ = _enemy_score_group_masks(enemy_team_bm)
     sent_core_bits = _SENT_CORE_BITS
-    guard_buff_bits = _GUARD_BUFF_BITS
     threat_penalty_bits = _THREAT_PENALTY_BITS
 
     non_threat = board_mask & ~threat
@@ -416,14 +411,6 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
             if core_restricted:
                 add_bits_to_planes(planes, sent_core_bits, core_restricted)
         append_planes(planes)
-
-    friendly_guard = map_info._bm_guard_conveyor & team_masks[my_team_idx]
-    if friendly_guard and guard_buff_bits:
-        for d, planes in enumerate(all_planes):
-            m = sentinel_masks[d] & friendly_guard
-            if m:
-                add_bits_to_planes(planes, guard_buff_bits, m)
-                non_zero |= m
 
     if threat_penalty_bits:
         baked_base = non_threat & non_zero
@@ -480,11 +467,8 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
     add_planes_into = _add_planes_into
     num_planes = _NUM_PLANES
     board_mask = map_info._board_mask
-    team_masks = map_info._bm_team
-    my_team_idx = map_info._my_team_idx
     not_blocked = board_mask & ~_gunner_ray_blocked_mask()
     step_shifts = _GUNNER_STEP_SHIFTS
-    guard_buff_bits = _GUARD_BUFF_BITS
     threat_penalty_bits = _THREAT_PENALTY_BITS
 
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
@@ -571,18 +555,6 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
         if include_per_dir:
             append_planes(planes)
 
-    friendly_guard = map_info._bm_guard_conveyor & team_masks[my_team_idx]
-    if friendly_guard and guard_buff_bits:
-        m_sum = any_placeable & friendly_guard
-        if m_sum:
-            add_bits_to_planes(summed, guard_buff_bits, m_sum)
-            non_zero |= m_sum
-        if include_per_dir:
-            for d, planes in enumerate(all_planes):
-                m = gunner_masks[d] & friendly_guard
-                if m:
-                    add_bits_to_planes(planes, guard_buff_bits, m)
-
     if threat_penalty_bits:
         baked_base = non_threat & non_zero
         baked_sum = baked_base & any_placeable
@@ -635,6 +607,22 @@ def _best_gunner_direction_at(n: int, bit: int, enemy_team_bm: int, threat: int,
     return best_dir, best_score
 
 
+def _good_conveyor_mask() -> int:
+    """Friendly infra tiles we prefer not to replace with attack builds."""
+    my_team = map_info._bm_team[map_info._my_team_idx]
+    bm_et = map_info._bm_et
+    friendly_conveyors = (
+        bm_et[map_info._IDX_CONVEYOR]
+        | bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+    ) & my_team
+    friendly_bridges = bm_et[map_info._IDX_BRIDGE] & my_team
+    return friendly_bridges | (friendly_conveyors & ~map_info._bm_guard_conveyor)
+
+
+def _selection_bias_for_bit(bit: int) -> int:
+    return 0 if (_good_conveyor_mask() & bit) else NON_GOOD_TILE_BUFF
+
+
 # ---------------------------------------------------------------------------
 # Per-tile "best direction / best type" pick
 # ---------------------------------------------------------------------------
@@ -644,7 +632,9 @@ def get_best_direction(pos):
 
     Decide sentinel vs gunner using the gunner SUMMED-across-facings score as
     the decision basis (total lane value if a gunner sits here). Only descend
-    into gunner per-direction scores if gunner wins.
+    into gunner per-direction scores if gunner wins. Non-good tiles get a
+    uniform selection bias so friendly "good" conveyors/bridges are less
+    likely to be sacrificed for low-value attacks.
 
     Breach is ignored for now — never returned."""
     w = map_info._width
@@ -681,13 +671,17 @@ def get_best_direction(pos):
     gunner_placeable = bool(gunner_any & bit)
     # log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
 
-    if not gunner_placeable or best_s_score >= gun_sum:
-        return best_s_dir, EntityType.SENTINEL, best_s_score
+    bias = _selection_bias_for_bit(bit)
+    best_s_effective = best_s_score + bias if best_s_score > 0 else best_s_score
+    gun_effective = gun_sum + bias if gun_sum > 0 else gun_sum
+
+    if not gunner_placeable or best_s_effective >= gun_effective:
+        return best_s_dir, EntityType.SENTINEL, best_s_effective
 
     # Gunner wins: now pick its best facing locally for this tile only.
     enemy_team_bm, threat = _round_cache_enemy_inputs()
     best_g_dir, _best_g_score = _best_gunner_direction_at(n, bit, enemy_team_bm, threat, gunner_masks)
-    return best_g_dir, EntityType.GUNNER, gun_sum
+    return best_g_dir, EntityType.GUNNER, gun_effective
 
 
 # ---------------------------------------------------------------------------
@@ -895,7 +889,9 @@ def _get_attack_candidates():
     direction score, OR whose gunner summed-across-facings score, is within
     SCORE_THRESHOLD_FACTOR of the per-track best. Sentinel and gunner tracks
     are on different scales (sentinel = single-dir, gunner = sum of 8) so
-    thresholds are computed independently per track."""
+    thresholds are computed independently per track. Friendly "good"
+    conveyors/bridges must clear an extra NON_GOOD_TILE_BUFF margin, which is
+    equivalent to buffing every other tile by that amount."""
     can_afford_sent = _round_cache_can_afford_sent
     can_afford_gun = _round_cache_can_afford_gun
     if not can_afford_sent and not can_afford_gun:
@@ -960,14 +956,26 @@ def _get_attack_candidates():
     # threshold > THREAT_PENALTY to exclude those.
     sent_threshold = max(int(sent_max * SCORE_THRESHOLD_FACTOR), MIN_ATTACK_SCORE+THREAT_PENALTY)
     gun_threshold = max(int(gun_max * SCORE_THRESHOLD_FACTOR), MIN_ATTACK_SCORE+THREAT_PENALTY)
-    _round_cache_threshold = max(sent_threshold, gun_threshold)
+    bias = NON_GOOD_TILE_BUFF
+    _round_cache_threshold = max(sent_threshold, gun_threshold) + bias
+    good_conveyors = _good_conveyor_mask()
     keep = 0
     if sent_max > 0:
         for d in range(8):
             if sentinel_masks[d]:
-                keep |= _ge_threshold_mask(sent_planes_by_dir[d], sent_threshold, sentinel_masks[d])
+                sent_good = sentinel_masks[d] & good_conveyors
+                sent_other = sentinel_masks[d] & ~good_conveyors
+                if sent_other:
+                    keep |= _ge_threshold_mask(sent_planes_by_dir[d], sent_threshold, sent_other)
+                if sent_good:
+                    keep |= _ge_threshold_mask(sent_planes_by_dir[d], sent_threshold + bias, sent_good)
     if gun_max > 0 and gun_sum_plane is not None:
-        keep |= _ge_threshold_mask(gun_sum_plane, gun_threshold, gunner_any)
+        gun_good = gunner_any & good_conveyors
+        gun_other = gunner_any & ~good_conveyors
+        if gun_other:
+            keep |= _ge_threshold_mask(gun_sum_plane, gun_threshold, gun_other)
+        if gun_good:
+            keep |= _ge_threshold_mask(gun_sum_plane, gun_threshold + bias, gun_good)
     filtered &= keep
     if not filtered:
         return 0, 0
