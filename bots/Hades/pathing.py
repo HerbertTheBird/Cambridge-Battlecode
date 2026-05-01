@@ -911,6 +911,9 @@ class Pathing:
             self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
+    # 1.0 for full cost, lower = discounted cost to more proactively start routes
+    CONVEYOR_COST_DISCOUNT = 0.7
+
     def conveyor_cost(self, dist, scaling=None):
         if scaling is None:
             scaling = self.rc.get_scale_percent() / 100
@@ -918,7 +921,7 @@ class Pathing:
             return None
         # Arithmetic-series equivalent of:
         #   sum(3 * (scaling + 0.01 * k) for k in range(dist))
-        return 3 * dist * scaling + 0.015 * dist * (dist - 1)
+        return (3 * dist * scaling + 0.015 * dist * (dist - 1)) * self.CONVEYOR_COST_DISCOUNT
     def raw_ax_foundry_sites_old(self):
         w = map_info._width
         my_idx = map_info._my_team_idx

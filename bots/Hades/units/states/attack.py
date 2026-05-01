@@ -32,8 +32,6 @@ _EMPTY_CANDIDATE_MASKS = (0,) * 8
 
 _SENTINEL_SCORE_CACHE_KEY = None
 _SENTINEL_SCORE_CACHE = None
-_GUNNER_SUM_CACHE_KEY = None
-_GUNNER_SUM_CACHE = None
 _GUNNER_PER_DIR_CACHE_KEY = None
 _GUNNER_PER_DIR_CACHE = None
 
@@ -69,10 +67,10 @@ GUNNER_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 56
 GUNNER_BUILDING_SCORE[map_info._IDX_GUNNER] = 100
 GUNNER_BUILDING_SCORE[map_info._IDX_SENTINEL] = 100
 GUNNER_BUILDING_SCORE[map_info._IDX_BREACH] = 120
-GUNNER_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 16
+GUNNER_BUILDING_SCORE[map_info._IDX_LAUNCHER] = 14
 GUNNER_BUILDING_SCORE[map_info._IDX_CONVEYOR] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_ARMOURED_CONVEYOR] = 4
-GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 16
+GUNNER_BUILDING_SCORE[map_info._IDX_BARRIER] = 14
 GUNNER_BUILDING_SCORE[map_info._IDX_BRIDGE] = 4
 GUNNER_BUILDING_SCORE[map_info._IDX_SPLITTER] = 4
 
@@ -90,12 +88,21 @@ _NON_CORE_TYPE_INDICES = (
     map_info._IDX_SPLITTER,
 )
 
-_NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
+_NUM_PLANES = 9  # max 511; per-dir scores stay well under in realistic cases
 
 SCORE_THRESHOLD_FACTOR = 0.25
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
 NON_GOOD_TILE_BUFF = 6
+
+# Gunner-only knobs. Distance discount: enemy at ray-step k counts as
+# round(score * 0.9^k); k=0 is the tile directly in front of the gunner.
+# Rotation bonus: each direction at a tile gains (sum_8_directions >> 3),
+# approximating 0.1 * total — represents value accessible by rotating.
+_DISCOUNT_NUM = 9
+_DISCOUNT_DEN = 10
+_MAX_DISCOUNT_STEPS = 3  # gunner ray length (vision radius squared 13)
+_ROTATION_SHIFT = 3
 
 cant_attack = 0
 
@@ -125,12 +132,38 @@ def _build_score_groups(score_table):
             groups.setdefault(s, []).append(t_idx)
     return [(s, _bits_of(s), tuple(idxs)) for s, idxs in groups.items()]
 
+
+def _step_score(score, step):
+    """Round-half-up integer of score * (_DISCOUNT_NUM / _DISCOUNT_DEN)^step."""
+    val = score
+    for _ in range(step):
+        val = (val * _DISCOUNT_NUM + _DISCOUNT_DEN // 2) // _DISCOUNT_DEN
+    return val
+
+
+def _step_bits_tuple(score):
+    """Tuple of bit-position tuples for the discounted score at each ray step."""
+    return tuple(_bits_of(_step_score(score, k)) for k in range(_MAX_DISCOUNT_STEPS))
+
+
+def _build_gunner_score_groups(score_table):
+    """Same shape as _build_score_groups, but `bits` is a per-step tuple of
+    bit-position tuples — one entry per ray step, holding the bits of the
+    discounted score at that step."""
+    groups: dict[int, list[int]] = {}
+    for t_idx in _NON_CORE_TYPE_INDICES:
+        s = score_table[t_idx]
+        if s:
+            groups.setdefault(s, []).append(t_idx)
+    return [(s, _step_bits_tuple(s), tuple(idxs)) for s, idxs in groups.items()]
+
+
 _SENTINEL_SCORE_GROUPS = _build_score_groups(SENTINEL_BUILDING_SCORE)
-_GUNNER_SCORE_GROUPS = _build_score_groups(GUNNER_BUILDING_SCORE)
+_GUNNER_SCORE_GROUPS = _build_gunner_score_groups(GUNNER_BUILDING_SCORE)
 
 _THREAT_PENALTY_BITS = _bits_of(THREAT_PENALTY)
 _SENT_CORE_BITS = _bits_of(SENTINEL_BUILDING_SCORE[map_info._IDX_CORE])
-_GUN_CORE_BITS = _bits_of(GUNNER_BUILDING_SCORE[map_info._IDX_CORE])
+_GUN_CORE_BITS_BY_STEP = _step_bits_tuple(GUNNER_BUILDING_SCORE[map_info._IDX_CORE])
 
 def _ensure_attack_shift_plans():
     """Precompute static shift plans used by the hot attack scorers."""
@@ -305,34 +338,16 @@ def _get_cached_sentinel_scores(enemy_team_bm: int, threat: int, sentinel_masks:
     return _SENTINEL_SCORE_CACHE
 
 
-def _get_cached_gunner_sum(enemy_team_bm: int, threat: int, gunner_masks: tuple[int, ...]):
-    """Gunner summed score plane, cached across rounds by exact masks."""
-    global _GUNNER_SUM_CACHE_KEY, _GUNNER_SUM_CACHE
-
-    key = (map_info._struct_version, gunner_masks)
-    if key != _GUNNER_SUM_CACHE_KEY:
-        _, _GUNNER_SUM_CACHE = _compute_gunner_dir_scores(
-            enemy_team_bm, threat, gunner_masks, include_per_dir=False
-        )
-        _GUNNER_SUM_CACHE_KEY = key
-    return _GUNNER_SUM_CACHE
-
-
 def _get_cached_gunner_per_dir(enemy_team_bm: int, threat: int, gunner_masks: tuple[int, ...]):
     """Gunner per-direction planes, cached across rounds by exact masks."""
     global _GUNNER_PER_DIR_CACHE_KEY, _GUNNER_PER_DIR_CACHE
-    global _GUNNER_SUM_CACHE_KEY, _GUNNER_SUM_CACHE
 
     key = (map_info._struct_version, gunner_masks)
     if key != _GUNNER_PER_DIR_CACHE_KEY:
-        per_dir, summed = _compute_gunner_dir_scores(
-            enemy_team_bm, threat, gunner_masks, include_per_dir=True
+        _GUNNER_PER_DIR_CACHE = _compute_gunner_dir_scores(
+            enemy_team_bm, threat, gunner_masks
         )
-        _GUNNER_PER_DIR_CACHE = per_dir
         _GUNNER_PER_DIR_CACHE_KEY = key
-        # Keep sum cache coherent for the same key.
-        _GUNNER_SUM_CACHE = summed
-        _GUNNER_SUM_CACHE_KEY = key
     return _GUNNER_PER_DIR_CACHE
 
 
@@ -446,21 +461,25 @@ def _gunner_ray_blocked_mask():
     return _GUNNER_BLOCKED_MASK
 
 
-def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_dir=True):
-    """Compute per-tile gunner score planes. Returns (per_dir, summed):
-      per_dir: list of 8 plane-lists, one per facing direction. Reading position
-        n from the d-th inner list gives the gunner's score if placed at n
-        facing d — 0 if n is not a valid placement for d (per gunner_masks[d]).
-      summed: single plane-list holding the tile-wise sum of the raw
-        (pre-penalty) per-direction scores, representing total lane value if a
-        gunner is placed at that tile. 0 on tiles not placeable as a gunner.
+def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks):
+    """For each of 8 facing directions, compute a per-tile gunner score plane
+    list. Returns: list of 8 plane-lists (list[list[int]]). Reading position n
+    from the d-th inner list yields the gunner's score if placed at n facing
+    direction d — but ONLY if n is a valid placement tile for that direction
+    (per `gunner_masks[d]`); otherwise the score reads 0.
 
     Gunner rays are blocked by walls AND by allied non-road, non-marker
-    buildings. Scores come from GUNNER_BUILDING_SCORE. THREAT_PENALTY is baked
-    exactly ONCE at the end — once on the summed plane and once on each
-    per-direction plane — using the final non_zero union. This gives every
-    reached, placeable, non-threat tile a single-PEN gap on each plane
-    regardless of direction iteration order."""
+    buildings. Scores come from GUNNER_BUILDING_SCORE, applied with a per-step
+    distance discount (round(score * 0.9^k) for an enemy at ray-step k from
+    the gunner — k=0 is the adjacent tile). Each gunner tile additionally
+    gains a rotation bonus equal to (sum_of_8_directions >> _ROTATION_SHIFT),
+    weighting tiles whose other facings carry value too.
+
+    Core is single-counted per gunner per direction at the closest hit step
+    (matches prior behavior, just discounted by that step's factor).
+
+    THREAT_PENALTY is baked exactly once per plane at the end on non-threat
+    reached placeable tiles using the FINAL non_zero union."""
     bm_et = map_info._bm_et
     _ensure_attack_shift_plans()
     add_bits_to_planes = _add_bits_to_planes
@@ -472,43 +491,39 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
     threat_penalty_bits = _THREAT_PENALTY_BITS
 
     core_mask = bm_et[map_info._IDX_CORE] & enemy_team_bm
-    gun_core_bits = _GUN_CORE_BITS
+    gun_core_bits_by_step = _GUN_CORE_BITS_BY_STEP
     _, type_initial = _enemy_score_group_masks(enemy_team_bm)
 
     non_threat = board_mask & ~threat
     non_zero = 0
-    summed = [0] * num_planes
     all_planes = []
     append_planes = all_planes.append
-    any_placeable = 0
-    # Pre-extract type fields once: bits is constant across iterations, the
-    # bitmask values are mutated in-place per direction. This avoids
-    # rebuilding new_type_cur as a fresh list of tuples every BFS step.
     n_types = len(type_initial)
-    type_bits_arr = [t[1] for t in type_initial]
+    type_bits_by_step_arr = [t[1] for t in type_initial]
     type_bm_initial = [t[2] for t in type_initial]
     type_bms = [0] * n_types
     for d in range(8):
         planes = [0] * num_planes
         mask_d = gunner_masks[d]
-        any_placeable |= mask_d
         sm, soff, max_step = step_shifts[d]
         if not sm or max_step == 0 or not mask_d:
-            if include_per_dir:
-                append_planes(planes)
+            append_planes(planes)
             continue
         combined_sm = sm & not_blocked
         core_cur = core_mask
-        # Reset per-direction bm scratch in place — single buffer reused.
         for j in range(n_types):
             type_bms[j] = type_bm_initial[j]
-        core_reach = 0
+        core_seen = 0  # mask_d gunners that already had core scored at a closer step
         if soff >= 0:
-            for _ in range(max_step):
+            for step in range(max_step):
                 if core_cur:
                     core_cur = (core_cur & combined_sm) << soff
                     if core_cur:
-                        core_reach |= core_cur
+                        non_zero |= core_cur
+                        first_hits = core_cur & mask_d & ~core_seen
+                        if first_hits and gun_core_bits_by_step[step]:
+                            add_bits_to_planes(planes, gun_core_bits_by_step[step], first_hits)
+                            core_seen |= first_hits
                 any_alive = False
                 for j in range(n_types):
                     bm_t = type_bms[j]
@@ -521,16 +536,22 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
                         non_zero |= shifted
                         restricted = shifted & mask_d
                         if restricted:
-                            add_bits_to_planes(planes, type_bits_arr[j], restricted)
+                            step_bits = type_bits_by_step_arr[j][step]
+                            if step_bits:
+                                add_bits_to_planes(planes, step_bits, restricted)
                 if not core_cur and not any_alive:
                     break
         else:
             nsoff = -soff
-            for _ in range(max_step):
+            for step in range(max_step):
                 if core_cur:
                     core_cur = (core_cur & combined_sm) >> nsoff
                     if core_cur:
-                        core_reach |= core_cur
+                        non_zero |= core_cur
+                        first_hits = core_cur & mask_d & ~core_seen
+                        if first_hits and gun_core_bits_by_step[step]:
+                            add_bits_to_planes(planes, gun_core_bits_by_step[step], first_hits)
+                            core_seen |= first_hits
                 any_alive = False
                 for j in range(n_types):
                     bm_t = type_bms[j]
@@ -543,68 +564,33 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
                         non_zero |= shifted
                         restricted = shifted & mask_d
                         if restricted:
-                            add_bits_to_planes(planes, type_bits_arr[j], restricted)
+                            step_bits = type_bits_by_step_arr[j][step]
+                            if step_bits:
+                                add_bits_to_planes(planes, step_bits, restricted)
                 if not core_cur and not any_alive:
                     break
-        non_zero |= core_reach
-        if core_reach and gun_core_bits:
-            core_restricted = core_reach & mask_d
-            if core_restricted:
-                add_bits_to_planes(planes, gun_core_bits, core_restricted)
-        add_planes_into(summed, planes)
-        if include_per_dir:
-            append_planes(planes)
+        append_planes(planes)
+
+    # Rotation bonus: add (sum_8_dirs >> _ROTATION_SHIFT) to each direction's
+    # plane. Approximates 0.1 * total. Computed before threat penalty so the
+    # bonus reflects raw enemy-damage potential, not threat-tile preference.
+    summed = [0] * num_planes
+    for d_planes in all_planes:
+        add_planes_into(summed, d_planes)
+    bonus_planes = [0] * num_planes
+    for i in range(num_planes - _ROTATION_SHIFT):
+        bonus_planes[i] = summed[i + _ROTATION_SHIFT]
+    if any(bonus_planes):
+        for d_planes in all_planes:
+            add_planes_into(d_planes, bonus_planes)
 
     if threat_penalty_bits:
         baked_base = non_threat & non_zero
-        baked_sum = baked_base & any_placeable
-        if baked_sum:
-            add_bits_to_planes(summed, threat_penalty_bits, baked_sum)
-        if include_per_dir:
-            for d, planes in enumerate(all_planes):
-                baked = baked_base & gunner_masks[d]
-                if baked:
-                    add_bits_to_planes(planes, threat_penalty_bits, baked)
-    return (all_planes if include_per_dir else None), summed
-
-
-def _best_gunner_direction_at(n: int, bit: int, enemy_team_bm: int, threat: int, gunner_masks):
-    """Best gunner facing at a single tile, without building full-map per-dir planes."""
-    width = map_info._width
-    height = map_info._height
-    px = n % width
-    py = n // width
-    blocked = _gunner_ray_blocked_mask()
-    building_et_idx = map_info._building_et_idx
-    non_threat_tile = not (threat & bit)
-
-    best_dir = Direction.NORTH
-    best_score = -1
-    for d in range(8):
-        if not (gunner_masks[d] & bit):
-            continue
-        score = 0
-        hit_any = False
-        for dx, dy in map_info._GUNNER_RAYS[d]:
-            tx = px + dx
-            ty = py + dy
-            if not (0 <= tx < width and 0 <= ty < height):
-                break
-            tn = tx + ty * width
-            tbit = 1 << tn
-            if blocked & tbit:
-                break
-            if enemy_team_bm & tbit:
-                tile_score = GUNNER_BUILDING_SCORE[building_et_idx[tn]]
-                score += tile_score
-                if tile_score:
-                    hit_any = True
-        if hit_any and non_threat_tile:
-            score += THREAT_PENALTY
-        if score > best_score:
-            best_score = score
-            best_dir = map_info._DIRECTIONS[d]
-    return best_dir, best_score
+        for d, planes in enumerate(all_planes):
+            baked = baked_base & gunner_masks[d]
+            if baked:
+                add_bits_to_planes(planes, threat_penalty_bits, baked)
+    return all_planes
 
 
 def _good_conveyor_mask() -> int:
@@ -630,11 +616,10 @@ def _selection_bias_for_bit(bit: int) -> int:
 def get_best_direction(pos):
     """Pick (Direction, turret_type, score) for a turret at pos.
 
-    Decide sentinel vs gunner using the gunner SUMMED-across-facings score as
-    the decision basis (total lane value if a gunner sits here). Only descend
-    into gunner per-direction scores if gunner wins. Non-good tiles get a
-    uniform selection bias so friendly "good" conveyors/bridges are less
-    likely to be sacrificed for low-value attacks.
+    Sentinel and gunner both use their best valid-placement direction score
+    as the decision basis. Non-good tiles get a uniform selection bias so
+    friendly "good" conveyors/bridges are less likely to be sacrificed for
+    low-value attacks.
 
     Breach is ignored for now — never returned."""
     w = map_info._width
@@ -643,45 +628,41 @@ def get_best_direction(pos):
     bit = 1 << n
 
     _ensure_sentinel_planes()
-    _ensure_gunner_scores(include_per_dir=False)
+    _ensure_gunner_scores()
     sent_planes_by_dir = _round_cache_sentinel_planes
-    gun_sum_plane = _round_cache_gunner_sum
+    gun_planes_by_dir = _round_cache_gunner_planes
     sentinel_masks = _round_cache_placement_masks[0]
     gunner_masks = _round_cache_placement_masks[1]
-    gunner_any = _round_cache_gunner_any
 
     directions = map_info._DIRECTIONS
-
-    # log("AT POSITION", pos)
 
     # Sentinel: best valid-placement direction at pos.
     best_s_dir, best_s_score = Direction.NORTH, -1
     for d in range(8):
         if not (sentinel_masks[d] & bit):
-            # log("  SENT", directions[d], "not a valid placement")
             continue
         s = _read_score(sent_planes_by_dir[d], n)
-        # log("  SENT", directions[d], "score", s)
         if s > best_s_score:
             best_s_score = s
             best_s_dir = directions[d]
 
-    # Gunner: sum plane is the decision basis.
-    gun_sum = _read_score(gun_sum_plane, n) if gun_sum_plane is not None else 0
-    gunner_placeable = bool(gunner_any & bit)
-    # log("  GUN sum", gun_sum, "placeable" if gunner_placeable else "not placeable")
+    # Gunner: best valid-placement direction at pos.
+    best_g_dir, best_g_score = Direction.NORTH, -1
+    for d in range(8):
+        if not (gunner_masks[d] & bit):
+            continue
+        s = _read_score(gun_planes_by_dir[d], n)
+        if s > best_g_score:
+            best_g_score = s
+            best_g_dir = directions[d]
 
     bias = _selection_bias_for_bit(bit)
     best_s_effective = best_s_score + bias if best_s_score > 0 else best_s_score
-    gun_effective = gun_sum + bias if gun_sum > 0 else gun_sum
+    best_g_effective = best_g_score + bias if best_g_score > 0 else best_g_score
 
-    if not gunner_placeable or best_s_effective >= gun_effective:
+    if best_g_score < 0 or best_s_effective >= best_g_effective:
         return best_s_dir, EntityType.SENTINEL, best_s_effective
-
-    # Gunner wins: now pick its best facing locally for this tile only.
-    enemy_team_bm, threat = _round_cache_enemy_inputs()
-    best_g_dir, _best_g_score = _best_gunner_direction_at(n, bit, enemy_team_bm, threat, gunner_masks)
-    return best_g_dir, EntityType.GUNNER, gun_effective
+    return best_g_dir, EntityType.GUNNER, best_g_effective
 
 
 # ---------------------------------------------------------------------------
@@ -923,9 +904,6 @@ def _get_attack_candidates():
     for d in range(8):
         gunner_any |= gunner_masks[d]
         sent_any |= sentinel_masks[d]
-    global _round_cache_sentinel_any, _round_cache_gunner_any
-    _round_cache_sentinel_any = sent_any
-    _round_cache_gunner_any = gunner_any
     filtered = gunner_any | sent_any
     if not filtered:
         return 0, 0
@@ -940,11 +918,15 @@ def _get_attack_candidates():
                 if s > sent_max:
                     sent_max = s
     gun_max = 0
-    gun_sum_plane = None
+    gun_planes_by_dir = None
     if gunner_any and can_afford_gun:
-        _ensure_gunner_scores(include_per_dir=False)
-        gun_sum_plane = _round_cache_gunner_sum
-        gun_max = _max_score_in_mask(gun_sum_plane, gunner_any)
+        _ensure_gunner_scores()
+        gun_planes_by_dir = _round_cache_gunner_planes
+        for d in range(8):
+            if gunner_masks[d]:
+                s = _max_score_in_mask(gun_planes_by_dir[d], gunner_masks[d])
+                if s > gun_max:
+                    gun_max = s
 
     global _round_cache_threshold
     _round_cache_threshold = 0
@@ -969,13 +951,15 @@ def _get_attack_candidates():
                     keep |= _ge_threshold_mask(sent_planes_by_dir[d], sent_threshold, sent_other)
                 if sent_good:
                     keep |= _ge_threshold_mask(sent_planes_by_dir[d], sent_threshold + bias, sent_good)
-    if gun_max > 0 and gun_sum_plane is not None:
-        gun_good = gunner_any & good_conveyors
-        gun_other = gunner_any & ~good_conveyors
-        if gun_other:
-            keep |= _ge_threshold_mask(gun_sum_plane, gun_threshold, gun_other)
-        if gun_good:
-            keep |= _ge_threshold_mask(gun_sum_plane, gun_threshold + bias, gun_good)
+    if gun_max > 0 and gun_planes_by_dir is not None:
+        for d in range(8):
+            if gunner_masks[d]:
+                gun_good = gunner_masks[d] & good_conveyors
+                gun_other = gunner_masks[d] & ~good_conveyors
+                if gun_other:
+                    keep |= _ge_threshold_mask(gun_planes_by_dir[d], gun_threshold, gun_other)
+                if gun_good:
+                    keep |= _ge_threshold_mask(gun_planes_by_dir[d], gun_threshold + bias, gun_good)
     filtered &= keep
     if not filtered:
         return 0, 0
@@ -1003,29 +987,22 @@ _round_cache_round = -1
 _round_cache_attack_candidates = (0, 0)
 _round_cache_sentinel_planes = None    # list of 8 plane-lists, one per direction
 _round_cache_gunner_planes = None      # list of 8 plane-lists, one per direction
-_round_cache_gunner_sum = None         # single plane-list: sum across 8 facings
 _round_cache_threshold = 0
 _round_cache_placement_masks = [None, None]  # [sentinel_masks tuple, gunner_masks tuple]
 _round_cache_can_afford_sent = False
 _round_cache_can_afford_gun = False
-_round_cache_sentinel_any = 0
-_round_cache_gunner_any = 0
 
 
 def _ensure_round_cache():
     global _round_cache_round, _round_cache_attack_candidates
-    global _round_cache_sentinel_planes, _round_cache_gunner_planes, _round_cache_gunner_sum
+    global _round_cache_sentinel_planes, _round_cache_gunner_planes
     global _round_cache_can_afford_sent, _round_cache_can_afford_gun
-    global _round_cache_sentinel_any, _round_cache_gunner_any
     r = rc.get_current_round()
     if _round_cache_round == r:
         return
     _round_cache_round = r
     _round_cache_sentinel_planes = None
     _round_cache_gunner_planes = None
-    _round_cache_gunner_sum = None
-    _round_cache_sentinel_any = 0
-    _round_cache_gunner_any = 0
     ti = rc.get_global_resources()[0]
     _round_cache_can_afford_sent = ti >= rc.get_sentinel_cost()[0]
     _round_cache_can_afford_gun = ti >= rc.get_gunner_cost()[0]
@@ -1053,24 +1030,14 @@ def _ensure_sentinel_planes():
     _round_cache_sentinel_planes = _get_cached_sentinel_scores(enemy_team_bm, threat, sentinel_masks)
 
 
-def _ensure_gunner_scores(include_per_dir=False):
-    """Lazily build gunner score planes once per round."""
-    global _round_cache_gunner_planes, _round_cache_gunner_sum
-    if _round_cache_gunner_sum is not None and (
-        _round_cache_gunner_planes is not None or not include_per_dir
-    ):
+def _ensure_gunner_scores():
+    """Lazily build gunner per-direction score planes once per round."""
+    global _round_cache_gunner_planes
+    if _round_cache_gunner_planes is not None:
         return
     enemy_team_bm, threat = _round_cache_enemy_inputs()
     gunner_masks = _round_cache_placement_masks[1]
-    _round_cache_gunner_sum = _get_cached_gunner_sum(enemy_team_bm, threat, gunner_masks)
-    if include_per_dir:
-        _round_cache_gunner_planes = _get_cached_gunner_per_dir(enemy_team_bm, threat, gunner_masks)
-
-
-def _ensure_score_planes():
-    """Compatibility wrapper for callers that need the full score cache."""
-    _ensure_sentinel_planes()
-    _ensure_gunner_scores(include_per_dir=True)
+    _round_cache_gunner_planes = _get_cached_gunner_per_dir(enemy_team_bm, threat, gunner_masks)
 
 
 # ---------------------------------------------------------------------------
