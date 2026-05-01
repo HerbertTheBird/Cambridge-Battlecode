@@ -1391,6 +1391,80 @@ def _compute_route_reaches_core() -> tuple[int, tuple[int, ...]]:
     return result
 
 
+def turret_could_possibly_be_fed(pos: Position, max_steps: int = 16) -> bool:
+    """Conservative visible-graph check for whether a turret at `pos` could
+    still plausibly be fed by my economy.
+
+    This intentionally gives the benefit of the doubt:
+      - Any unseen cardinal-adjacent tile could still hide a direct source or
+        feeder conveyor, so that keeps the result True.
+      - Any known upstream feeder that is currently off-screen also keeps the
+        result True.
+      - A visible loaded feeder conveyor immediately counts as possible.
+
+    It only returns False when the currently visible local upstream structure
+    proves there is no plausible path from my harvesters/foundries into the
+    turret.
+    """
+    if not in_bounds(pos):
+        return False
+
+    visible = _bm_visible
+    sources = (_bm_et[_IDX_HARVESTER] | _bm_et[_IDX_FOUNDRY])
+    loaded = (_bm_conv_ti | _bm_conv_refined)
+
+    def adjacent_bits(n: int) -> int:
+        bit = 1 << n
+        adj = 0
+        if bit & _not_left_col:
+            adj |= bit >> 1
+        if bit & _not_right_col:
+            adj |= bit << 1
+        if bit & _not_top_row:
+            adj |= bit >> _width
+        if bit & _not_bottom_row:
+            adj |= bit << _width
+        return adj
+
+    visiting: set[int] = set()
+
+    def node_possible(n: int, depth: int) -> bool:
+        bit = 1 << n
+
+        if (bit & _bm_conveyors) and (bit & visible) and (bit & loaded):
+            return True
+
+        adj = adjacent_bits(n)
+        if adj & visible & sources:
+            return True
+        if adj & ~visible:
+            return True
+
+        if depth <= 0 or n in visiting:
+            return False
+
+        feeders = _conv_reverse[n]
+        if not feeders:
+            return False
+        if feeders & ~visible:
+            return True
+
+        visiting.add(n)
+        m = feeders & visible
+        while m:
+            lsb = m & -m
+            feeder_n = lsb.bit_length() - 1
+            if node_possible(feeder_n, depth - 1):
+                visiting.remove(n)
+                return True
+            m ^= lsb
+        visiting.remove(n)
+        return False
+
+    start_n = pos.x + pos.y * _width
+    return node_possible(start_n, max_steps)
+
+
 def _compute_route_targets() -> int:
     """Bitmask of tiles the route state can path toward.
 

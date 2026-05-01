@@ -9,6 +9,7 @@ nav: Pathing = None
 my_pos: Position = None
 my_team: Team = None
 _no_ammo_turns: int = 0
+_invalid_upstream_turns: int = 0
 _attackable_by_dir: dict = {}
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
@@ -34,11 +35,12 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc, nav, my_pos, my_team, _no_ammo_turns, _attackable_by_dir
+    global rc, nav, my_pos, my_team, _no_ammo_turns, _invalid_upstream_turns, _attackable_by_dir
     rc = c
     nav = Pathing(c)
     my_pos = rc.get_position()
     _no_ammo_turns = 0
+    _invalid_upstream_turns = 0
     my_team = map_info._my_team
     _attackable_by_dir = {
         d: set(rc.get_attackable_tiles_from(my_pos, d, EntityType.GUNNER))
@@ -205,10 +207,18 @@ def _choose_rotate_dir():
 
 
 def run():
-    global _no_ammo_turns
+    global _no_ammo_turns, _invalid_upstream_turns
     map_info.update()
 
-    if rc.get_ammo_amount() < 2:
+    if not map_info.turret_could_possibly_be_fed(rc.get_position()):
+        _invalid_upstream_turns += 1
+        if _invalid_upstream_turns >= 3 and not _should_stay() and rc.get_ammo_amount() == 0:
+            rc.self_destruct()
+            return
+    else:
+        _invalid_upstream_turns = 0
+
+    if rc.get_ammo_amount() == 0:
         _no_ammo_turns += 1
         if _no_ammo_turns >= 16 and not _should_stay():
             rc.self_destruct()

@@ -7,6 +7,7 @@ from log import log
 rc: Controller = None
 nav: Pathing = None
 _no_ammo_turns = 0
+_invalid_upstream_turns = 0
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
@@ -30,9 +31,11 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc, nav
+    global rc, nav, _no_ammo_turns, _invalid_upstream_turns
     rc = c
     nav = Pathing(c)
+    _no_ammo_turns = 0
+    _invalid_upstream_turns = 0
 
 
 def _should_stay():
@@ -148,8 +151,16 @@ def _resolve_target_on_tile(tile: Position):
 
 
 def run():
-    global _no_ammo_turns
+    global _no_ammo_turns, _invalid_upstream_turns
     map_info.update()
+
+    if not map_info.turret_could_possibly_be_fed(rc.get_position()):
+        _invalid_upstream_turns += 1
+        if _invalid_upstream_turns >= 4 and not _should_stay() and rc.get_ammo_amount() == 0:
+            rc.self_destruct()
+            return
+    else:
+        _invalid_upstream_turns = 0
 
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
