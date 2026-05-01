@@ -81,7 +81,7 @@ def _should_stay():
         return False
     if friendly_d == -1:
         return True
-    return enemy_d <= friendly_d
+    return enemy_d <= friendly_d + 1
 
 
 def _ally_feeder_mask(max_steps: int = 6) -> int:

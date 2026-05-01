@@ -339,6 +339,7 @@ class Pathing:
             h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
             expanded = h | (h << w) | (h >> w)
             frontier = expanded & passable & ~visited
+            passable |= targets #must take a step out if in avoid
         return None, -1
 
     def closest(

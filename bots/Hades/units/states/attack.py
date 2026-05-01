@@ -1344,25 +1344,55 @@ def run():
 
         # Lead-metric refinement: among (preferred|fallback) tiles within 2
         # pathing steps of me, pick the one maximizing
-        # (enemy's BFS dist to it - my BFS dist to it). Biases toward tiles
-        # where we have the largest head start.
+        # (enemy's BFS dist to a tile adjacent to it - my BFS dist to it).
+        # Their distance uses adjacency because enemies threaten the conveyor
+        # by being adjacent (heal range), not by standing on it.
+        # Identity: BFS dist from cand to closest enemy = D; the BFS
+        # predecessor of cand is a neighbor at D-1 from that enemy and no
+        # neighbor/enemy pair is closer, so min(dist(neighbor, enemy)) = D-1
+        # exactly (edge case: D=0 means enemy on cand, neighbors at dist 1).
         all_candidates = eff_preferred | eff_fallback
         best_lead = None
         best_lead_tile = None
         remaining = all_candidates
+        lead_log = []
+        # Treat our friendly launchers' 3x3 zones as impassable for the enemy —
+        # any enemy entering one gets yeeted, so for security purposes the
+        # zones are effectively walls. Same convention as _try_launcher_lockdown.
+        _friendly_launchers_lead = (
+            map_info._bm_et[map_info._IDX_LAUNCHER] & map_info._bm_team[my_team_idx]
+        )
+        _friendly_launcher_zone_lead = (
+            map_info.expand_chebyshev(_friendly_launchers_lead) | _friendly_launchers_lead
+        )
         while remaining:
             cand, my_d = nav.closest_within(remaining, max_dist=2)
             if cand is None:
                 break
             cand_n = cand.x + cand.y * width
             remaining &= ~(1 << cand_n)
-            _, their_d = nav.closest(map_info._bm_enemy_bots, pos=cand, side=False)
-            if their_d == -1:
+            _, d_to_cand = nav.closest(
+                map_info._bm_enemy_bots,
+                pos=cand,
+                avoid=_friendly_launcher_zone_lead,
+                side=False,
+            )
+            if d_to_cand == -1:
                 their_d = 1 << 30
+                their_d_str = "inf"
+            elif d_to_cand == 0:
+                their_d = 1
+                their_d_str = "1"
+            else:
+                their_d = d_to_cand - 1
+                their_d_str = str(their_d)
             lead = their_d - my_d
+            lead_log.append(f"{cand}:my={my_d},their={their_d_str},lead={lead}")
             if best_lead is None or lead > best_lead:
                 best_lead = lead
                 best_lead_tile = cand
+        if lead_log:
+            log(f"Attack lead-metric: [{'; '.join(lead_log)}] -> pick={best_lead_tile} lead={best_lead}")
         if best_lead_tile is not None:
             best = best_lead_tile
 
