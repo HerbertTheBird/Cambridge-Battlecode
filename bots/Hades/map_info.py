@@ -920,11 +920,27 @@ def update_at(pos: Position) -> None:
     get_bridge_target = rc.get_bridge_target
     get_stored_resource = rc.get_stored_resource
 
-    # Core-area tiles are owned by build_core_areas(); leave them alone.
-    if (_bm_my_core_area | _bm_their_core_area) & bit:
-        return
-
     nbit = ~bit
+
+    # Core-area tiles are owned by build_core_areas(); leave their structural
+    # state alone, but still refresh shared core HP / damage flags from any
+    # visible core tile.
+    if (_bm_my_core_area | _bm_their_core_area) & bit:
+        entity_id = get_tile_building_id(pos)
+        et_idx = building_et_idx[n]
+        if entity_id is not None and et_idx == _IDX_CORE:
+            hp = get_hp(entity_id)
+            building_hp[n] = hp
+            max_hp = _MAX_HP_BY_IDX[et_idx]
+            if hp < max_hp:
+                _bm_damaged |= bit
+            else:
+                _bm_damaged &= nbit
+            if hp < max_hp - 2:
+                _bm_very_damaged |= bit
+            else:
+                _bm_very_damaged &= nbit
+        return
 
     # --- Environment / seen / symmetry tracking ---
     _bm_seen_observed |= bit
