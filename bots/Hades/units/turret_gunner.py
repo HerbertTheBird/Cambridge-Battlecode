@@ -1,8 +1,11 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment
 import map_info
+import pathing
+from pathing import Pathing
 from log import log
 
 rc: Controller = None
+nav: Pathing = None
 my_pos: Position = None
 my_team: Team = None
 _no_ammo_turns: int = 0
@@ -31,8 +34,9 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc, my_pos, my_team, _no_ammo_turns, _attackable_by_dir
+    global rc, nav, my_pos, my_team, _no_ammo_turns, _attackable_by_dir
     rc = c
+    nav = Pathing(c)
     my_pos = rc.get_position()
     _no_ammo_turns = 0
     my_team = map_info._my_team
@@ -58,19 +62,17 @@ def _should_stay():
     #         bid = rc.get_tile_building_id(p)
     #         if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
     #             return True
-    best_d = 8
-    closest_is_friendly = False
-    for uid in rc.get_nearby_units():
-        if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
-            continue
-        p = rc.get_position(uid)
-        d = pos.distance_squared(p)
-        if best_d is None or d < best_d:
-            best_d = d
-            closest_is_friendly = (rc.get_team(uid) == my_team)
-    if best_d is None:
+    # Closest builder bot by pathing distance: if a friendly is strictly closer
+    # than any enemy, we're in their way — leave. Otherwise stay.
+    _, enemy_d = nav.closest_within(map_info._bm_enemy_bots, max_dist=8)
+    _, friendly_d = nav.closest_within(map_info._bm_friendly_bots, max_dist=8)
+    if enemy_d == -1 and friendly_d == -1:
         return True
-    return not closest_is_friendly
+    if enemy_d == -1:
+        return False
+    if friendly_d == -1:
+        return True
+    return enemy_d <= friendly_d
 
 
 def _ally_feeder_mask(max_steps: int = 6) -> int:

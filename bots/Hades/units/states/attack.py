@@ -1153,7 +1153,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
     to this builder) on the buildable tile that covers the largest portion of
     the conveyor's 3x3 (counting tiles also blocked by non-walkable buildings
     or walls as already covered). Returns True if a launcher was built."""
-    if rc.get_action_cooldown() != 0:
+    if rc.get_action_cooldown() != 0 or rc.get_global_resources()[0] < rc.get_launcher_cost()[0]:
         return False
     w = map_info._width
     target_n = target.x + target.y * w
@@ -1170,9 +1170,11 @@ def _try_launcher_lockdown(target: Position) -> bool:
         return False
     _, enemy_dist = nav.closest(visible_enemy_bots)
     if enemy_dist is None:
+        # log("no enemies")
         return False
     hp = map_info._building_hp[target_n]
     if hp <= 0 or hp // 2 <= enemy_dist - 2:
+        # log("they are too far")
         return False
 
     bm_et = map_info._bm_et
@@ -1198,6 +1200,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
     target_zone = map_info.expand_chebyshev(target_bit) | target_bit
     uncovered = target_zone & ~walls & ~non_walkable_buildings & ~friendly_launcher_zone
     if not uncovered:
+        # log("all covered")
         return False
 
     my_pos = map_info._my_pos
@@ -1218,7 +1221,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
                 rc.destroy(p)
                 map_info.update_at(p)
             if rc.can_build_barrier(p):
-                log(f"AttackLockdown barrier at {p} for {target}")
+                # log(f"AttackLockdown barrier at {p} for {target}")
                 rc.build_barrier(p)
                 map_info.update_at(p)
                 return True
@@ -1229,7 +1232,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
     candidates &= ((~map_info._bm_any_building) | my_road) & ~walls
     candidates &= ~map_info._bm_friendly_bots & ~map_info._bm_enemy_bots
     # Don't place a launcher on a tile under enemy turret threat.
-    candidates &= ~map_info._bm_enemy_turret_threat
+    candidates &= ~map_info._bm_enemy_hard_threat
 
     best_p = None
     best_lsb = 0
@@ -1247,6 +1250,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
             best_p = Position(n % w, n // w)
 
     if best_p is None or best_cover == 0:
+        # log("exit1")
         return False
 
     if (best_lsb & my_road) and rc.can_destroy(best_p):
@@ -1257,6 +1261,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
         rc.build_launcher(best_p)
         map_info.update_at(best_p)
         return True
+    # log("exit2")
     return False
 
 
