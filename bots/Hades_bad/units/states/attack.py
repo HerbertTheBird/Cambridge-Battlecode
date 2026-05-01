@@ -3,14 +3,11 @@ from cambc import *
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 import units.builder
 from log import DRAW_DEBUG, log
 
 rc: Controller = None
 nav: Pathing = None
-
-comm_flag = 7
 
 _SHIFT_PLAN_WIDTH = -1
 _SHIFT_PLAN_HEIGHT = -1
@@ -64,7 +61,7 @@ SENTINEL_BUILDING_SCORE[map_info._IDX_SPLITTER] = 8
 # Gunners snipe single high-value lanes: big bonus for core + backline turrets,
 # smaller gain on clustered infra (sentinels already out-damage them there).
 GUNNER_BUILDING_SCORE = [0] * map_info._NUM_ET
-GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 128
+GUNNER_BUILDING_SCORE[map_info._IDX_CORE] = 256
 GUNNER_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 GUNNER_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 56
 GUNNER_BUILDING_SCORE[map_info._IDX_GUNNER] = 100
@@ -91,13 +88,41 @@ _NON_CORE_TYPE_INDICES = (
     map_info._IDX_SPLITTER,
 )
 
-_NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
+_NUM_PLANES = 12  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well under this
 
-SCORE_THRESHOLD_FACTOR = 0.25
+SCORE_THRESHOLD_FACTOR = 0
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
 
-cant_attack = 0
+_cant_attack_map: dict[int, int] = {}  # tile index -> round recorded
+CANT_ATTACK_TTL = 100
+
+
+def cant_attack():
+    """Bitmask of tiles we recently failed to attack; entries expire after CANT_ATTACK_TTL rounds."""
+    current = rc.get_current_round()
+    result = 0
+    stale = []
+    for n, turn in _cant_attack_map.items():
+        if turn + CANT_ATTACK_TTL < current:
+            stale.append(n)
+            continue
+        result |= 1 << n
+    for n in stale:
+        del _cant_attack_map[n]
+    return result
+
+
+def _mark_cant_attack(mask):
+    if not mask:
+        return
+    current = rc.get_current_round()
+    m = mask
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        _cant_attack_map[n] = current
+        m ^= lsb
 
 
 # ---------------------------------------------------------------------------
@@ -754,7 +779,7 @@ def _placement_candidates():
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
-        tracked_zone = map_info.expand_chebyshev(enemy_bots)
+        tracked_zone = enemy_bots
         danger = map_info.expand_chebyshev(tracked_zone)
         danger_for_clearable |= danger
         if tracked_zone & my_bit:
@@ -763,7 +788,7 @@ def _placement_candidates():
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
 
-    candidates &= ~cant_attack
+    candidates &= ~cant_attack()
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     feed_chains = _turret_feed_chains()
@@ -991,7 +1016,7 @@ def _draw_attack_candidates(filtered):
         n = lsb.bit_length() - 1
         x, y = n % w, n // w
         direction, turret_type, score = get_best_direction(Position(x, y))
-        log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
+        # log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
         dx, dy = dir_deltas[direction]
         ex, ey = x + dx, y + dy
         if turret_type == EntityType.GUNNER:
@@ -1044,7 +1069,6 @@ def score():
 
 
 def run():
-    global cant_attack
     log("ATTACK")
     preferred, fallback = _cached_claims
 
@@ -1059,7 +1083,7 @@ def run():
     if best is None and fallback:
         best, _ = nav.closest(fallback)
     if best is None:
-        cant_attack |= preferred | fallback
+        _mark_cant_attack(preferred | fallback)
         return
 
     best_n = best.x + best.y * width
@@ -1091,7 +1115,12 @@ def run():
     else:
         nav.move_adjacent(best)
         if best_id and is_mine:
-            if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
+            if (
+                not map_info.has_builder_bot(best)
+                and rc.can_destroy(best)
+                and rc.get_action_cooldown() == 0
+                and rc.get_unit_count() < GameConstants.MAX_TEAM_UNITS
+            ):
                 log(f"Attack destroy own building at {best}")
                 rc.destroy(best)
                 map_info.update_at(best)
@@ -1105,5 +1134,3 @@ def run():
         if rc.can_build_sentinel(best, direction):
             rc.build_sentinel(best, direction)
             map_info.update_at(best)
-
-    comms.mark(best.x + best.y * map_info._width, comm_flag)

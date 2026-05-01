@@ -1,18 +1,44 @@
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 from cambc import *
 import units.builder
 from log import log
 import sys
 rc: Controller = None
 nav: Pathing = None
-comm_flag = 5
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
 
-unpathable = 0
+_unpathable_map: dict[int, int] = {}  # tile index -> round recorded
+UNPATHABLE_TTL = 100
+
+
+def unpathable():
+    """Bitmask of tiles we recently failed to route to; entries expire after UNPATHABLE_TTL rounds."""
+    current = rc.get_current_round()
+    result = 0
+    stale = []
+    for n, turn in _unpathable_map.items():
+        if turn + UNPATHABLE_TTL < current:
+            stale.append(n)
+            continue
+        result |= 1 << n
+    for n in stale:
+        del _unpathable_map[n]
+    return result
+
+
+def _mark_unpathable(mask):
+    if not mask:
+        return
+    current = rc.get_current_round()
+    m = mask
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        _unpathable_map[n] = current
+        m ^= lsb
 
 
 def _prefer_armoured_conveyor() -> bool:
@@ -118,8 +144,9 @@ def cant_claim():
 def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
-    avoid = _too_expensive() | cant_claim() | unpathable
-    avoid &= ~(map_info._bm_feeding_enemy&~unpathable)
+    unpath = unpathable()
+    avoid = _too_expensive() | cant_claim() | unpath
+    avoid &= ~(map_info._bm_feeding_enemy&~unpath)
     not_blocked_mask = not_blocked()
     candidates = (
         _dead_end_conveyors()
@@ -133,10 +160,10 @@ _cached_claims = 0
 MAX_SCORE = 7.75
 def score():
     global _cached_claims
-    units.builder.draw_mask(map_info._bm_dead_end, 0, 0, 255)
+    # units.builder.draw_mask(map_info._bm_dead_end, 0, 0, 255)
     _cached_claims = _my_claims()
 
-    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
+    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 6)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
     if important&_cached_claims:
         log("IMPORTANT")
         _cached_claims &= important
@@ -144,12 +171,10 @@ def score():
     return 5 if _cached_claims else 0
 
 def run():
-
-    global unpathable
     log("ROUTE")
     candidates = _cached_claims
     high_priority = False
-    important = map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
+    important = ~map_info._bm_guard_conveyor&map_info.expand_chebyshev(map_info._bm_enemy_bots, 5)&~(map_info._bm_team[map_info._my_team_idx]&(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY]))|map_info._bm_feeding_enemy
 
     if important & candidates:
         high_priority = True
@@ -161,7 +186,7 @@ def run():
     best, _ = nav.closest(candidates)
     if best is None:
         log("no closest???")
-        unpathable |= candidates
+        _mark_unpathable(candidates)
         return
 
     _BARRIER_DESTROYABLE = (
@@ -181,7 +206,6 @@ def run():
         if rc.can_build_barrier(target):
             rc.build_barrier(target)
             map_info.update_at(target)
-        comms.mark(target.x + target.y * map_info._width, comm_flag)
 
     best_bit = 1 << (best.x + best.y * width)
     is_harvester = bool(map_info._bm_et[map_info._IDX_HARVESTER] & best_bit)
@@ -206,7 +230,7 @@ def run():
             if high_priority:
                 fallback_barrier(best)
                 return
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return
         target_conveyor = [path[0], path[1]]
     else:
@@ -219,7 +243,7 @@ def run():
             if high_priority:
                 fallback_barrier(best)
                 return
-            unpathable |= best_bit
+            _mark_unpathable(best_bit)
             return
         target_conveyor = [path[0], path[1]]
     cost = nav.conveyor_cost(path[2])
@@ -231,7 +255,6 @@ def run():
             if high_priority:
                 fallback_barrier(best)
                 return
-            comms.mark(best.x + best.y * map_info._width, comm_flag)
             return
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
@@ -244,7 +267,6 @@ def run():
             if rc.can_build_foundry(target_conveyor[0]):
                 rc.build_foundry(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     near_enemy = False
     if target_conveyor[0].distance_squared(target_conveyor[1]) == 1:
@@ -259,7 +281,6 @@ def run():
         if rc.can_fire(target):
             rc.fire(target)
             map_info.update_at(target)
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     if near_enemy and not (map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) == rc.get_team() and map_info.type_at(target_conveyor[1].x, target_conveyor[1].y) != EntityType.MARKER) and (map_info.team_at(target_conveyor[0].x, target_conveyor[0].y) == rc.get_team() and map_info.type_at(target_conveyor[0].x, target_conveyor[0].y) != EntityType.MARKER):
         nav.move_to(target_conveyor[1])
@@ -270,7 +291,6 @@ def run():
         if rc.can_build_road(target_conveyor[0]):
             rc.build_road(target_conveyor[0])
             map_info.update_at(target_conveyor[0])
-        comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     def attempt_build():
         destroy = target_conveyor[0]
@@ -291,4 +311,3 @@ def run():
     attempt_build()
     nav.move_to(target_conveyor[0])
     attempt_build()
-    comms.mark(best.x + best.y * map_info._width, comm_flag)

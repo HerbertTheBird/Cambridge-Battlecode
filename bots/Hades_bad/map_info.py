@@ -179,7 +179,7 @@ _building_et_idx: list[int] = []
 _building_hp: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
-_conv_reverse: list[int] = []   # reverse[tn] = bitmask of my conveyors whose output target is tile tn
+_conv_reverse: list[int] = []   # reverse[tn] = bitmask of all conveyors (any team) whose output target is tile tn
 
 # Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
 _bm_et: list[int] = []      # one bitmask per EntityType
@@ -209,7 +209,7 @@ _bm_feeding_enemy: int = 0      # loaded conveyors whose target is an enemy gunn
 _bm_enemy_soft_threat: int = 0    # tiles enemy sentinels can shoot (low dps) (update only in update)
 _bm_enemy_hard_threat: int = 0    # tiles enemy gunners/breaches can shoot (high dps) (update only in update)
 _bm_my_gunner_claims: int = 0     # tiles already covered by one of my gunners' current ray (update only in update)
-_bm_guard_conveyor: int = 0   # CONVEYOR|ARMOURED_CONVEYOR tiles whose target is an ore tile
+_bm_guard_conveyor: int = 0   # CONVEYOR|ARMOURED_CONVEYOR tiles whose target is an ore tile with a harvester (any team)
 _bm_conv_into_open_ore: int = 0   # CONVEYOR|ARMOURED_CONVEYOR tiles whose target is an open (non-landlocked) ore tile
 _bm_conv_by_dir: list[int] = [0] * 8  # per facing: CONVEYOR|ARMOURED_CONVEYOR tiles with that direction
 _bm_ti_fed: int = 0              # target tiles of conveyors observed carrying titanium
@@ -741,8 +741,7 @@ _guard_conv_cache: int = 0
 
 def _compute_guard_conv() -> int:
     """Bitmask of CONVEYOR|ARMOURED_CONVEYOR tiles whose output target is a
-    titanium/axionite ore tile not occupied by a conveyor-type building (conveyor,
-    armoured conveyor, bridge, splitter) or a sentinel/gunner/breach/foundry."""
+    titanium/axionite ore tile occupied by a harvester (any team)."""
     global _guard_conv_cache_version, _guard_conv_cache
     if _struct_version == _guard_conv_cache_version:
         return _guard_conv_cache
@@ -752,7 +751,7 @@ def _compute_guard_conv() -> int:
         _guard_conv_cache = 0
         return 0
     w = _width
-    ore = (_bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]) & ~_bm_landlocked
+    ore = (_bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]) & _bm_et[_IDX_HARVESTER]
     right = convs & _bm_dir[_DIR_INT[Direction.EAST]] & ((_not_right_col & ore)>>1)
     left = convs & _bm_dir[_DIR_INT[Direction.WEST]] & ((_not_left_col & ore)<<1)
     up = convs & _bm_dir[_DIR_INT[Direction.NORTH]] & ((_not_bottom_row & ore)<<w)
@@ -982,7 +981,7 @@ def update_at(pos: Position) -> None:
     if direction is not None:
         _bm_dir[new_dir_idx] |= bit
 
-    if _IS_CONVEYOR[et_idx] and new_tn >= 0 and team_idx == _my_team_idx:
+    if _IS_CONVEYOR[et_idx] and new_tn >= 0:
         _conv_reverse[new_tn] |= bit
 
     max_hp = _MAX_HP_BY_IDX[et_idx]

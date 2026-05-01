@@ -1,7 +1,6 @@
 from cambc import Controller, Position, EntityType, Direction
 import map_info
-from log import log, DRAW_DEBUG
-
+from log import log
 
 rc: Controller = None
 _no_ammo_turns = 0
@@ -20,9 +19,9 @@ _WEIGHTS = {
     EntityType.BRIDGE: 4,
     EntityType.ARMOURED_CONVEYOR: 4,
     EntityType.BARRIER: 4,
-    EntityType.SPLITTER: 3,
-    EntityType.CONVEYOR: 2,
-    EntityType.ROAD: 1,
+    EntityType.SPLITTER: 2,
+    EntityType.CONVEYOR: 1,
+    EntityType.ROAD: 0,
     EntityType.MARKER: 0,
 }
 
@@ -33,8 +32,6 @@ def init(c: Controller):
 
 
 def _should_stay():
-    if rc.get_global_resources()[0] < rc.get_bridge_cost()[0]:
-        return True
     my_pos = rc.get_position()
     my_team = map_info._my_team
     for uid in rc.get_nearby_units(8):
@@ -51,7 +48,7 @@ def _should_stay():
     #         bid = rc.get_tile_building_id(p)
     #         if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
     #             return True
-    best_d = None
+    best_d = 8
     closest_is_friendly = False
     for uid in rc.get_nearby_units():
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
@@ -167,7 +164,6 @@ def run():
 
     w = map_info._width
     feeder_mask = _ally_feeder_mask()
-    harv_adj = map_info.expand_manhattan(map_info._bm_et[map_info._IDX_HARVESTER])
 
     candidates = []  # (pos, weight, hp)
     for tile in rc.get_attackable_tiles():
@@ -183,8 +179,6 @@ def run():
         weight = _WEIGHTS.get(etype, 0)
         if weight <= 0:
             continue
-        if etype in (EntityType.BARRIER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR) and (harv_adj >> n) & 1:
-            weight += 1
         candidates.append((tile, weight, hp))
 
     if not candidates:
@@ -192,19 +186,17 @@ def run():
             rc.self_destruct()
         return
 
-    other_mask = _other_sentinel_attack_mask()
-    def _key(c):
-        tile, weight, hp = c
-        one_shot = hp <= 18
-        # +0.5 keeps one-shot priority *within* a weight tier without letting a
-        # one-shot road outvalue a non-one-shot core.
-        score = weight + (0.5 if one_shot else 0)
-        in_focus = bool(other_mask & (1 << (tile.x + tile.y * w)))
-        # secondary: prefer focused tiles (other sentinel can also hit).
-        # tertiary: one-shots use full damage on the chunkiest kill; otherwise
-        # finish soft targets first.
-        return (-score, 0 if in_focus else 1, -hp if one_shot else hp)
-    candidates.sort(key=_key)
-    best = candidates[0][0]
+    one_shots = [c for c in candidates if c[2] <= 18]
+    if one_shots:
+        # Highest weight, then highest HP (use the full damage on a chunky kill)
+        one_shots.sort(key=lambda c: (-c[1], -c[2]))
+        best = one_shots[0][0]
+    else:
+        other_mask = _other_sentinel_attack_mask()
+        focus = [c for c in candidates if other_mask & (1 << (c[0].x + c[0].y * w))]
+        pool = focus if focus else candidates
+        # Highest weight, then lowest HP (finish softer targets first)
+        pool.sort(key=lambda c: (-c[1], c[2]))
+        best = pool[0][0]
 
     rc.fire(best)

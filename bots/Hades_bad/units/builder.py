@@ -1,4 +1,4 @@
-from cambc import Controller, Position
+from cambc import Controller, Direction, Position
 
 import map_info
 import pathing
@@ -7,14 +7,13 @@ import comms
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
-import units.states.disrupt  as disrupt
 import units.states.harvest  as harvest
 import units.states.route    as route
 import units.states.heal     as heal
 import units.states.attack   as attack
 import units.states.secure   as secure
 
-from log import DRAW_DEBUG
+from log import DRAW_DEBUG, log
 
 
 rc: Controller
@@ -22,7 +21,7 @@ nav: Pathing = None
 
 # Sorted in descending order of max score to allow early break in selection loop
 states = tuple(sorted(
-    [explore, disrupt, harvest, route, heal, attack, secure],
+    [explore, harvest, route, heal, attack, secure],
     key=lambda s: s.MAX_SCORE,
     reverse=True
 ))
@@ -37,19 +36,6 @@ INITIAL_EXPLORE_TIMEOUT = 30
 _initial_explore_calculated = False
 _initial_explore_target: Position | None = None
 _initial_explore_round = -1
-
-# Comms-based claims
-claimed_targets = [0] * (len(states) + 1)   # target bitmask per comm flag
-claimed_senders = [0] * (len(states) + 1)   # sender position bitmask per comm flag
-_target_rounds = [dict() for _ in range(len(states) + 1)]
-_sender_rounds = [dict() for _ in range(len(states) + 1)]
-
-# Vision-based claims
-crowded_claims = [0] * (len(states) + 1)    # locally observed crowded targets per comm flag
-_crowded_seen_rounds = [dict() for _ in range(len(states) + 1)]
-_crowded_claim_rounds = [dict() for _ in range(len(states) + 1)]
-_active_target_flag = 0
-_active_target_idx = -1
 
 
 def init(c: Controller):
@@ -97,93 +83,12 @@ def _adjacent_friendly_builder_count(target_idx: int) -> int:
     return count
 
 
-def handle_comms(current_round: int):
-    w = map_info._width
-    visible = map_info._bm_visible
-    for v, sender_pos, _marker_pos, _marker_id, estimated_turn in comms.get_new_messages():
+def handle_comms():
+    if map_info._solved_sym:
+        return
+    for v, _sender_pos, _marker_pos, _marker_id, _estimated_turn in comms.get_new_messages():
         sym = comms.decode_sym(v)
         map_info.update_symmetry_from_comms(sym)
-        if estimated_turn + 3 < current_round:
-            continue
-        idx = comms.decode_location(v)
-        flag = comms.decode_type(v)
-        claimed_targets[flag] |= 1 << idx
-        _target_rounds[flag][idx] = estimated_turn
-        if map_info.in_bounds(sender_pos):
-            sn = sender_pos.x + sender_pos.y * w
-            claimed_senders[flag] |= 1 << sn
-            _sender_rounds[flag][sn] = estimated_turn
-    for i, rounds in enumerate(_target_rounds):
-        expired = [
-            idx for idx, t in rounds.items()
-            if (visible & (1 << idx)) and t + 3 < current_round
-        ]
-        for idx in expired:
-            del rounds[idx]
-            claimed_targets[i] &= ~(1 << idx)
-    for i in range(len(claimed_senders)):
-        expired = [idx for idx, t in _sender_rounds[i].items() if t + 20 < current_round]
-        for idx in expired:
-            del _sender_rounds[i][idx]
-            claimed_senders[i] &= ~(1 << idx)
-
-
-def _update_crowded_claims(current_round: int):
-    # Clear stale crowded claims
-    for flag in range(len(crowded_claims)):
-        stale = [idx for idx, seen_round in _crowded_claim_rounds[flag].items() if seen_round + 2 < current_round]
-        for idx in stale:
-            _clear_crowded_claim(flag, idx)
-            
-    flag = _active_target_flag
-    idx = _active_target_idx
-
-    # If we don't have active target position, no need to check crowdedness
-    if flag == 0 or idx < 0 or flag == heal.comm_flag:
-        return
-
-    # If active target not visible, can't check crowdedness
-    bit = 1 << idx
-    if not (map_info._bm_visible & bit):
-        return
-
-    # If 2 or more ally builders are adjacent to target, check crowdedness
-    if _adjacent_friendly_builder_count(idx) >= 2:
-        prev_round = _crowded_seen_rounds[flag].get(idx)
-        _crowded_seen_rounds[flag][idx] = current_round
-        
-        # Only mark crowded if target also crowded last turn
-        if prev_round == current_round - 1 or (crowded_claims[flag] & bit):
-            crowded_claims[flag] |= bit
-            _crowded_claim_rounds[flag][idx] = current_round
-            
-    # Otherwise, no longer crowded
-    else:
-        _clear_crowded_claim(flag, idx)
-
-
-def exclude_crowded_claims(flag: int, mask: int) -> int:
-    return mask & ~crowded_claims[flag]
-
-
-def _clear_crowded_claim(flag: int, idx: int):
-    crowded_claims[flag] &= ~(1 << idx)
-    _crowded_seen_rounds[flag].pop(idx, None)
-    _crowded_claim_rounds[flag].pop(idx, None)
-
-
-def register_active_target(flag: int, target: Position | None):
-    global _active_target_flag, _active_target_idx
-    if target is None or flag == heal.comm_flag:
-        return
-    _active_target_flag = flag
-    _active_target_idx = target.x + target.y * map_info._width
-
-
-def clear_active_target():
-    global _active_target_flag, _active_target_idx
-    _active_target_flag = 0
-    _active_target_idx = -1
 
 
 def _compute_voronoi_harvest_zone():
@@ -250,9 +155,17 @@ def _update_initial_explore(current_round: int):
         if current_round <= INITIAL_SPAWN_COUNT + 1 and map_info._my_core is not None:
             # Choose explore direction based on where we are relative to core
             spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
+            if spawn_dir == Direction.CENTRE:
+                # Builder spawned on the centre core tile — fall back to the
+                # direction from the core toward the map centre so we still
+                # head somewhere useful instead of looping in place.
+                map_centre = Position(map_info._width // 2, map_info._height // 2)
+                spawn_dir = map_info.direction_to(map_info._my_core, map_centre)
+                if spawn_dir == Direction.CENTRE:
+                    spawn_dir = Direction.NORTH
             _initial_explore_target = get_ray_endpoint(map_info._my_pos, spawn_dir, map_info._width, map_info._height, max_steps=INITIAL_EXPLORE_MAX_STEPS)
             _initial_explore_round = current_round
-        
+
         _initial_explore_calculated = True
 
     # Auto-clear stale initial target if we couldn't reach it in time
@@ -273,24 +186,20 @@ def select_best_state():
         if score > best_score:
             best_score = score
             best_state = state
-
+    log("best score", best_score)
     return best_state
 
 
 def run():
-    global _active_target_flag, _active_target_idx
-
     # Sync round info
     current_round = rc.get_current_round()
-    map_info.update()
+    map_info.update(recompute=False)
+    handle_comms()
+    map_info.recompute_derived()
     _update_harvest_zone()
 
     # First few builder bots derive explore target from spawn position
     _update_initial_explore(current_round)
-
-    # Check if active target from last turn is crowded by allies
-    _update_crowded_claims(current_round)
-    clear_active_target()
 
     # If we broke barrier last turn, try rebuilding first
     pathing.rebuild_broken_barriers(rc)
@@ -305,3 +214,6 @@ def run():
     # Fall back to healing self
     if rc.can_heal(map_info._my_pos):
         rc.heal(map_info._my_pos)
+
+    # Broadcast symmetry via a marker on the first available adjacent tile
+    comms.broadcast_symmetry()

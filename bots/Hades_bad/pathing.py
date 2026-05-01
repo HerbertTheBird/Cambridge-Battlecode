@@ -585,7 +585,7 @@ class Pathing:
                 if preferred_family == 0:
                     preferred_family = 2 #dont want to prefer straight over diag
                 # builder.draw_mask(from_mask, 255, 255, 0)
-                log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
+                # log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
                 best_dir = None
                 best_fam_abs = -1
                 while from_mask:
@@ -623,7 +623,7 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
-        # builder.draw_mask(avoid, 255, 0, 0)
+        # builder.draw_mask(map_info._bm_dead_end, 255, 0, 0)
 
         # builder.draw_mask(target_mask, 0, 255, 255)
         avoid &= ~start_mask
@@ -831,9 +831,9 @@ class Pathing:
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        if DRAW_DEBUG:
-            self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-            self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
+        # if DRAW_DEBUG:
+        #     self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
+        #     self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):
