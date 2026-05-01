@@ -65,7 +65,7 @@ def _should_stay():
     # Closest builder bot by pathing distance: if a friendly is strictly closer
     # than any enemy, we're in their way — leave. Otherwise stay.
     _, enemy_d = nav.closest_within(map_info._bm_enemy_bots, max_dist=8)
-    _, friendly_d = nav.closest_within(map_info._bm_friendly_bots, max_dist=8)
+    _, friendly_d = nav.closest_within(map_info._bm_friendly_bots, max_dist=4)
     if enemy_d == -1 and friendly_d == -1:
         return True
     if enemy_d == -1:
