@@ -820,11 +820,36 @@ def _placement_candidates():
     danger_for_clearable = map_info._bm_enemy_launch_adj
     enemy_bots = map_info._bm_enemy_bots
     if enemy_bots:
-        tracked_zone = map_info.expand_chebyshev(enemy_bots)
-        danger = map_info.expand_chebyshev(tracked_zone)
+        # 2-step BFS from enemy bots through their passable graph, treating our
+        # launcher 3x3s as impassable (they get thrown back). Layer 1 = tracked
+        # zone (am I being tracked?); layer 2 = danger.
+        my_launchers = bm_et[map_info._IDX_LAUNCHER] & my_team
+        my_launcher_zone = (
+            map_info.expand_chebyshev(my_launchers) | my_launchers
+        )
+        enemy_passable = (
+            ~map_info.get_avoid(False, False, False, avoid_threat=False)
+            & map_info._board_mask
+            & ~my_launcher_zone
+        )
+        visited = enemy_bots
+        frontier = enemy_bots
+        next_frontier = (
+            map_info.expand_chebyshev(frontier) & enemy_passable & ~visited
+        )
+        visited |= next_frontier
+        tracked_zone = visited
+        frontier = next_frontier
+        if frontier:
+            next_frontier = (
+                map_info.expand_chebyshev(frontier) & enemy_passable & ~visited
+            )
+            visited |= next_frontier
+        danger = visited
+
         danger_for_clearable |= danger
         if tracked_zone & my_bit:
-            danger_for_clearable = map_info._board_mask #am being tracked
+            danger_for_clearable = map_info._board_mask  # am being tracked
     candidates &= ~(danger_for_clearable & enemy_clearable)
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
@@ -1195,13 +1220,19 @@ def _try_instant_preferred(preferred: int) -> bool:
 
 
 def _try_launcher_lockdown(target: Position) -> bool:
-    """If `target` is an enemy conveyor and a visible enemy builder is close
-    enough to heal it before we finish destroying it, place a launcher (adjacent
-    to this builder) on the buildable tile that covers the largest portion of
-    the conveyor's 3x3 (counting tiles also blocked by non-walkable buildings
-    or walls as already covered). Returns True if a launcher was built."""
-    if rc.get_action_cooldown() != 0 or rc.get_global_resources()[0] < rc.get_launcher_cost()[0]:
+    """If `target` is an enemy conveyor and a visible enemy builder would heal
+    it before we finish destroying it, look for an adjacent buildable tile
+    where placing a launcher (or barrier) maximally increases the closest
+    enemy bot's pathing distance to us. Tiebreak: barrier > launcher (cheaper).
+    Skip placement if no candidate strictly increases the distance."""
+    if rc.get_action_cooldown() != 0:
         return False
+    ti_have, _ = rc.get_global_resources()
+    can_afford_barrier = ti_have >= rc.get_barrier_cost()[0]
+    can_afford_launcher = ti_have >= rc.get_launcher_cost()[0]
+    if not can_afford_barrier and not can_afford_launcher:
+        return False
+
     w = map_info._width
     target_n = target.x + target.y * w
     target_bit = 1 << target_n
@@ -1209,118 +1240,126 @@ def _try_launcher_lockdown(target: Position) -> bool:
     if not (target_bit & map_info._bm_conveyors & enemy_team_bm):
         return False
 
-    # Only act when a visible enemy builder is near enough to out-heal us.
-    # We deal 2 damage/fire; a heal restores 4 HP. So if the enemy reaches an
-    # adjacent tile before we finish, they can save the conveyor.
     visible_enemy_bots = map_info._bm_enemy_bots & map_info._bm_visible
     if not visible_enemy_bots:
-        return False
-    # Enemy can't path through tiles in our launchers' 3x3 (gets thrown back).
-    # Use side=False so the BFS reflects the enemy's perspective (they don't
-    # avoid their own threat).
-    my_launchers_avoid = (
-        map_info._bm_et[map_info._IDX_LAUNCHER]
-        & map_info._bm_team[map_info._my_team_idx]
-    )
-    enemy_path_avoid = (
-        map_info.expand_chebyshev(my_launchers_avoid) | my_launchers_avoid
-    )
-    _, enemy_dist = nav.closest(
-        visible_enemy_bots, avoid=enemy_path_avoid, side=False
-    )
-    if enemy_dist is None or enemy_dist == -1:
-        # log("no enemies")
-        return False
-    hp = map_info._building_hp[target_n]
-    if hp <= 0 or hp // 2 <= enemy_dist - 2:
-        # log("they are too far")
         return False
 
     bm_et = map_info._bm_et
     my_team_idx = map_info._my_team_idx
     my_team = map_info._bm_team[my_team_idx]
-    walkable_types = (
-        bm_et[map_info._IDX_ROAD]
-        | bm_et[map_info._IDX_CONVEYOR]
-        | bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | bm_et[map_info._IDX_SPLITTER]
-        | bm_et[map_info._IDX_BRIDGE]
-    )
-    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
-    non_walkable_buildings = map_info._bm_any_building & ~walkable_types
 
-    # Tiles already covered by an existing friendly launcher's 3x3 are
-    # effectively locked down — treat them as covered so we don't double up.
+    # Existing friendly launcher 3x3s are already impassable to the enemy.
     friendly_launchers = bm_et[map_info._IDX_LAUNCHER] & my_team
     friendly_launcher_zone = (
         map_info.expand_chebyshev(friendly_launchers) | friendly_launchers
     )
 
-    target_zone = map_info.expand_chebyshev(target_bit) | target_bit
-    uncovered = target_zone & ~walls & ~non_walkable_buildings & ~friendly_launcher_zone
-    if not uncovered:
-        # log("all covered")
+    # Baseline enemy distance: BFS starts at the target conveyor and finds the
+    # closest enemy bot through the enemy's passable mask (side=False).
+    _, baseline_dist = nav.closest(
+        visible_enemy_bots, pos=target, avoid=friendly_launcher_zone, side=False
+    )
+    if baseline_dist == -1:
+        return False  # already unreachable; nothing to lock down
+
+    hp = map_info._building_hp[target_n]
+    if hp <= 0:
         return False
+    my_n_for_gate = map_info._my_pos.x + map_info._my_pos.y * w
+    on_target = (my_n_for_gate == target_n)
+    if on_target and hp // 2 <= baseline_dist - 2:
+        return False  # already in firing position and will finish before they arrive
+
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    my_road = bm_et[map_info._IDX_ROAD] & my_team
+    my_barrier = bm_et[map_info._IDX_BARRIER] & my_team
 
     my_pos = map_info._my_pos
-    my_n = my_pos.x + my_pos.y * w
-    my_bit = 1 << my_n
-    my_road = bm_et[map_info._IDX_ROAD] & my_team
-    target_adj = map_info.expand_chebyshev(target_bit) & ~target_bit
+    my_bit = 1 << (my_pos.x + my_pos.y * w)
 
-    # Special case: only one uncovered tile and it's a neighbor of the target.
-    # A barrier (after destroying own road if needed) is cheaper and definitive.
-    if uncovered == (uncovered & -uncovered) and (uncovered & target_adj):
-        n = uncovered.bit_length() - 1
-        p = Position(n % w, n // w)
-        if uncovered & map_info._bm_friendly_bots:
-            pass  # can't build under a friendly bot; fall through to launcher
-        else:
-            if (uncovered & my_road) and rc.can_destroy(p):
-                rc.destroy(p)
-                map_info.update_at(p)
-            if rc.can_build_barrier(p):
-                # log(f"AttackLockdown barrier at {p} for {target}")
-                rc.build_barrier(p)
-                map_info.update_at(p)
-                return True
-
-    # Launcher must be adjacent to the target conveyor AND in our build range.
-    candidates = map_info.expand_chebyshev(my_bit) & ~my_bit & target_adj
-    # Empty tiles or own roads (we'll destroy roads first; destroy is free).
-    candidates &= ((~map_info._bm_any_building) | my_road) & ~walls
+    # Adjacent buildable tiles: empty, our own road, or our own barrier
+    # (the latter only used when placing a launcher; we'll destroy first).
+    candidates = map_info.expand_chebyshev(my_bit) & ~my_bit
+    candidates &= ((~map_info._bm_any_building) | my_road | my_barrier) & ~walls
     candidates &= ~map_info._bm_friendly_bots & ~map_info._bm_enemy_bots
-    # Don't place a launcher on a tile under enemy turret threat.
     candidates &= ~map_info._bm_enemy_hard_threat
+    if not candidates:
+        return False
 
-    best_p = None
-    best_lsb = 0
-    best_cover = 0
+    UNREACHABLE = 1 << 30
+
+    def _dist_with_extra(extra: int) -> int:
+        _, d = nav.closest(
+            visible_enemy_bots,
+            pos=target,
+            avoid=friendly_launcher_zone | extra,
+            side=False,
+        )
+        return UNREACHABLE if d == -1 else d
+
+    def _my_dist_with_extra(extra: int) -> int:
+        _, d = nav.closest(target_bit, avoid=extra, side=True)
+        return UNREACHABLE if d == -1 else d
+
+    my_baseline_dist = _my_dist_with_extra(0)
+
+    # Score every (candidate, kind) pair. Tuple sort key: (-delta, barrier_priority)
+    # — higher delta wins; on equal delta, barrier (priority 1) beats launcher (0).
+    log(f"AttackLockdown baseline_dist={baseline_dist} my_baseline={my_baseline_dist} target={target}")
+    options = []
     m = candidates
     while m:
         lsb = m & -m
         n = lsb.bit_length() - 1
         m ^= lsb
-        launcher_zone = map_info.expand_chebyshev(lsb) | lsb
-        cover = bin(uncovered & launcher_zone).count("1")
-        if cover > best_cover:
-            best_cover = cover
-            best_lsb = lsb
-            best_p = Position(n % w, n // w)
+        p = Position(n % w, n // w)
 
-    if best_p is None or best_cover == 0:
-        # log("exit1")
+        # Reject placements that detour our own approach to the target.
+        # Both barrier and launcher only block the lsb tile from our pathing.
+        my_new_dist = _my_dist_with_extra(lsb)
+        if my_new_dist > my_baseline_dist:
+            log(f"  skip @ {p}: my_dist {my_baseline_dist} -> {my_new_dist}")
+            continue
+
+        if can_afford_barrier and not (lsb & my_barrier):
+            barrier_dist = _dist_with_extra(lsb)
+            barrier_delta = barrier_dist - baseline_dist
+            log(f"  barrier @ {p}: {baseline_dist} -> {barrier_dist} (delta={barrier_delta})")
+            if barrier_delta >= 2:
+                options.append((barrier_delta, 1, "barrier", p, lsb))
+        if can_afford_launcher:
+            launcher_zone = map_info.expand_chebyshev(lsb) | lsb
+            launcher_dist = _dist_with_extra(launcher_zone)
+            launcher_delta = launcher_dist - baseline_dist
+            log(f"  launcher @ {p}: {baseline_dist} -> {launcher_dist} (delta={launcher_delta})")
+            if launcher_delta >= 3:
+                options.append((launcher_delta, 0, "launcher", p, lsb))
+
+    if not options:
         return False
+    options.sort(key=lambda o: (-o[0], -o[1]))
+    delta, _, kind, best_p, best_lsb = options[0]
 
-    if (best_lsb & my_road) and rc.can_destroy(best_p):
+    if (best_lsb & (my_road | my_barrier)) and rc.can_destroy(best_p):
         rc.destroy(best_p)
         map_info.update_at(best_p)
-    if rc.can_build_launcher(best_p):
-        log(f"AttackLockdown launcher at {best_p} covering {best_cover}/{bin(uncovered).count('1')} of {target}")
+
+    built = False
+    if kind == "barrier" and rc.can_build_barrier(best_p):
+        log(f"AttackLockdown barrier at {best_p} delta={delta} for {target}")
+        rc.build_barrier(best_p)
+        map_info.update_at(best_p)
+        built = True
+    elif kind == "launcher" and rc.can_build_launcher(best_p):
+        log(f"AttackLockdown launcher at {best_p} delta={delta} for {target}")
         rc.build_launcher(best_p)
         map_info.update_at(best_p)
+        built = True
+
+    if built:
+        # Build uses action cooldown; move cooldown is independent — keep advancing.
+        nav.move_to(target)
         return True
-    # log("exit2")
     return False
 
 
@@ -1390,9 +1429,8 @@ def run():
     if is_fallback and _try_launcher_lockdown(best):
         return
 
-    zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * width)
-    zone = map_info.expand_chebyshev(zone)
-    enemy_bot_nearby = bool(map_info._bm_enemy_bots & zone)
+    _, _enemy_bot_pathing_dist = nav.closest_within(map_info._bm_enemy_bots, max_dist=1)
+    enemy_bot_nearby = (_enemy_bot_pathing_dist != -1)
     if is_fallback:
         can_attack_despite_enemy = False
 
@@ -1408,10 +1446,15 @@ def run():
                 if my_pos.distance_squared(unit_pos) <= 25:
                     friendly_builders_nearby_count += 1
 
-        my_pos_bit = 1 << (my_pos.x + my_pos.y * width)
-        zone_2_tiles = map_info.expand_chebyshev(my_pos_bit, 2)
-        enemy_bots_in_zone_2 = map_info._bm_enemy_bots & zone_2_tiles
-        num_enemy_bots_very_close = bin(enemy_bots_in_zone_2).count('1')
+        # Count enemy bots reachable within 2 BFS steps via repeated closest-within calls.
+        _remaining_enemies = map_info._bm_enemy_bots
+        num_enemy_bots_very_close = 0
+        while _remaining_enemies:
+            _ep, _ed = nav.closest_within(_remaining_enemies, max_dist=2)
+            if _ep is None:
+                break
+            num_enemy_bots_very_close += 1
+            _remaining_enemies ^= 1 << (_ep.x + _ep.y * width)
 
         if friendly_builders_nearby_count >= 2 and num_enemy_bots_very_close == 1:
             can_attack_despite_enemy = True

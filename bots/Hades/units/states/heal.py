@@ -40,16 +40,24 @@ def _conv_zone():
     return visited
 
 
-def _find_chase_target():
+def _find_chase_target(damaged: bool = True):
     # log("find chase")
-    """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
+    """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None.
+
+    When `damaged` is True, only consider enemies sitting on one of our
+    very-damaged buildings; if none, retry with `damaged=False`."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
     enemy_bots = map_info._bm_enemy_bots
-    
+
     if not enemy_bots:
         log("no enemies")
         return None
+
+    if damaged:
+        enemy_bots = enemy_bots & _very_damaged_targets()
+        if not enemy_bots:
+            return _find_chase_target(damaged=False)
 
     friendly_bots = map_info._bm_friendly_bots
     my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
@@ -101,9 +109,9 @@ def _find_chase_target():
     # if dist < 6:
     #     return None
     n = closest_pos.x + closest_pos.y * w
-    if closest_pos.distance_squared(map_info._my_pos) < 5:
-        log("too close")
-        return None
+    # if closest_pos.distance_squared(map_info._my_pos) < 5:
+    #     log("too close")
+    #     return None
     return closest_pos
 
 
