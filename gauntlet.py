@@ -27,11 +27,13 @@ from tournament import (
     HeadToHead,
     MatchResult,
     binomial_p_value,
+    commit_glicko2_period,
     discover_maps,
     elo_expected,
     elo_update,
     run_match,
 )
+from stats_utils import bo9_win_probability, bo9_from_pair_outcomes
 
 
 # ── Gauntlet ────────────────────────────────────────────────────────────────
@@ -119,11 +121,9 @@ def run_gauntlet(
             print(f"\n  DRAW: {a_name} vs {b_name} on {mr.map_name} (seed {mr.seed})")
             print(f"  Engine output (last 20 lines):\n{tail}")
 
-        # ELO update
-        exp_a = elo_expected(stats[a_name].elo, stats[b_name].elo)
-        exp_b = 1.0 - exp_a
-        stats[a_name].elo = elo_update(stats[a_name].elo, exp_a, actual_a)
-        stats[b_name].elo = elo_update(stats[b_name].elo, exp_b, actual_b)
+        # Glicko-2: queue results; rating update happens once at end of period
+        stats[a_name].pending_results.append((b_name, actual_a))
+        stats[b_name].pending_results.append((a_name, actual_b))
 
         if mr.winner == main_bot:
             outcome = "W"
@@ -155,25 +155,30 @@ def run_gauntlet(
     elapsed = time.perf_counter() - match_started
     print(f"Completed in {elapsed:.1f}s")
 
+    # End of rating period: apply all Glicko-2 updates atomically
+    commit_glicko2_period(stats)
+
     return stats, results, h2h
 
 
 # ── Output ──────────────────────────────────────────────────────────────────
 
 def print_leaderboard(stats: dict[str, BotStats]) -> None:
-    ranked = sorted(stats.values(), key=lambda s: -s.elo)
+    ranked = sorted(stats.values(), key=lambda s: -s.rating.rating)
 
-    print(f"\n{'=' * 85}")
-    print("  GAUNTLET LEADERBOARD")
-    print(f"{'=' * 85}")
+    print(f"\n{'=' * 100}")
+    print("  GAUNTLET LEADERBOARD  (Glicko-2; RD = uncertainty; Bo9 = P(win first-to-5 match) given per-game WR)")
+    print(f"{'=' * 100}")
 
     name_w = max(len(s.name) for s in ranked) if ranked else 10
-    print(f"  {'#':>3}  {'Bot':{name_w}}  {'ELO':>7}  {'W':>4}  {'L':>4}  {'D':>4}  {'WR':>6}  {'AvgT':>6}  {'Err':>4}")
-    print(f"  {'---':>3}  {'-' * name_w}  {'---':>7}  {'--':>4}  {'--':>4}  {'--':>4}  {'--':>6}  {'----':>6}  {'---':>4}")
+    print(f"  {'#':>3}  {'Bot':{name_w}}  {'Rating':>8}  {'RD':>5}  {'W':>4}  {'L':>4}  {'D':>4}  {'WR':>6}  {'Bo9':>6}  {'AvgT':>6}  {'Err':>4}")
+    print(f"  {'---':>3}  {'-' * name_w}  {'------':>8}  {'--':>5}  {'--':>4}  {'--':>4}  {'--':>4}  {'--':>6}  {'---':>6}  {'----':>6}  {'---':>4}")
 
     for i, s in enumerate(ranked, 1):
-        print(f"  {i:>3}  {s.name:{name_w}}  {s.elo:>7.1f}  {s.wins:>4}  {s.losses:>4}  "
-              f"{s.draws:>4}  {s.win_rate:>5.1f}%  {s.avg_turns:>6.0f}  {s.errors:>4}")
+        bo9 = s.bo9_prob * 100
+        print(f"  {i:>3}  {s.name:{name_w}}  {s.rating.rating:>8.1f}  {s.rating.rd:>5.0f}  "
+              f"{s.wins:>4}  {s.losses:>4}  {s.draws:>4}  {s.win_rate:>5.1f}%  "
+              f"{bo9:>5.1f}%  {s.avg_turns:>6.0f}  {s.errors:>4}")
 
 
 def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead]) -> None:
@@ -181,17 +186,23 @@ def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead]) -> None:
     if not entries:
         return
 
-    print(f"\n{'=' * 90}")
-    print("  HEAD-TO-HEAD  (p = one-sided binomial test that main bot is better; lower = stronger)")
-    print(f"{'=' * 90}")
+    print(f"\n{'=' * 110}")
+    print("  HEAD-TO-HEAD  (p = one-sided binomial; Bo9 = P(main bot wins Bo9) given per-game WR)")
+    print(f"{'=' * 110}")
 
     name_w = max(max(len(e.bot_a), len(e.bot_b)) for e in entries) if entries else 10
-    print(f"  {'Main Bot':{name_w}}  vs  {'Opponent':{name_w}}  {'W':>4}  {'L':>4}  {'D':>4}  {'p':>8}")
-    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}  {'------':>8}")
+    print(f"  {'Main Bot':{name_w}}  vs  {'Opponent':{name_w}}  {'W':>4}  {'L':>4}  {'D':>4}  {'WR':>6}  {'Bo9':>6}  {'p':>8}")
+    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}  {'-----':>6}  {'---':>6}  {'------':>8}")
 
     for e in entries:
         p = binomial_p_value(e.a_wins, e.b_wins)
-        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}  {p:>8.4f}")
+        decisive = e.a_wins + e.b_wins
+        wr = e.a_wins / decisive if decisive else 0.0
+        bo9 = bo9_win_probability(wr) if decisive else 0.0
+        wr_str = f"{wr*100:.0f}%" if decisive else "-"
+        bo9_str = f"{bo9*100:.1f}%" if decisive else "-"
+        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}  "
+              f"{wr_str:>6}  {bo9_str:>6}  {p:>8.4f}")
 
 
 def print_side_breakdown(results: list[MatchResult], main_bot: str) -> None:
@@ -259,13 +270,15 @@ def print_pair_breakdown(results: list[MatchResult], main_bot: str, opponents: l
         else:
             counts[opp]["split"] += 1
 
-    print(f"\n{'=' * 80}")
-    print(f"  PAIR BREAKDOWN for {main_bot} (one pair = both sides on same map+seed)")
-    print(f"{'=' * 80}")
+    print(f"\n{'=' * 110}")
+    print(f"  PAIR BREAKDOWN for {main_bot} (pair = both sides on same map+seed; Bo9 from paired per-game WR; p = binomial)")
+    print(f"{'=' * 110}")
 
     name_w = max(len(o) for o in opponents) if opponents else 10
-    print(f"  {'Opponent':{name_w}}  {'2-0':>5}  {'1-1':>5}  {'0-2':>5}  {'D?':>4}  {'Pairs':>6}  {'PairWR':>7}")
-    print(f"  {'-' * name_w}  {'---':>5}  {'---':>5}  {'---':>5}  {'--':>4}  {'-----':>6}  {'------':>7}")
+    print(f"  {'Opponent':{name_w}}  {'2-0':>5}  {'1-1':>5}  {'0-2':>5}  {'D?':>4}  {'Pairs':>6}  "
+          f"{'PairWR':>7}  {'Bo9':>6}  {'p':>8}")
+    print(f"  {'-' * name_w}  {'---':>5}  {'---':>5}  {'---':>5}  {'--':>4}  {'-----':>6}  "
+          f"{'------':>7}  {'---':>6}  {'------':>8}")
 
     for opp in opponents:
         s = counts[opp]
@@ -277,7 +290,14 @@ def print_pair_breakdown(results: list[MatchResult], main_bot: str, opponents: l
         decisive = sweep + split + lost
         pair_wr = (sweep + 0.5 * split) / decisive * 100 if decisive else 0.0
         wr_str = f"{pair_wr:.1f}%" if decisive else "-"
-        print(f"  {opp:{name_w}}  {sweep:>5}  {split:>5}  {lost:>5}  {with_draw:>4}  {total:>6}  {wr_str:>7}")
+        bo9 = bo9_from_pair_outcomes(sweep, split, lost)
+        bo9_str = f"{bo9*100:.1f}%" if bo9 is not None else "-"
+        per_game_wins = 2 * sweep + split
+        per_game_losses = 2 * lost + split
+        p_val = binomial_p_value(per_game_wins, per_game_losses)
+        p_str = f"{p_val:.4f}" if (per_game_wins + per_game_losses) > 0 else "-"
+        print(f"  {opp:{name_w}}  {sweep:>5}  {split:>5}  {lost:>5}  {with_draw:>4}  "
+              f"{total:>6}  {wr_str:>7}  {bo9_str:>6}  {p_str:>8}")
 
 
 def print_map_breakdown(results: list[MatchResult], bots: list[str]) -> None:

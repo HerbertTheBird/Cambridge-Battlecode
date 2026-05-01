@@ -509,6 +509,145 @@ def print_summary_table(analyses: list[MapAnalysis], sort_key: str | None = None
     print()
 
 
+# ── Clustering (k-means on numeric feature vector) ───────────────────────────
+
+import random as _random
+
+
+_FEATURE_NAMES = (
+    "size", "openness", "wall_pct", "chokepoint",
+    "ore_total", "ti_count", "ax_count",
+    "ti_clustering", "ax_clustering",
+    "core_distance", "core_manhattan",
+    "a_nearest_ti", "a_nearest_ax",
+)
+
+
+def _feature_vector(a: MapAnalysis) -> list[float]:
+    return [
+        float(a.total_tiles),
+        float(a.openness),
+        float(a.wall_pct),
+        float(a.chokepoint_score),
+        float(a.titanium_ore_count + a.axionite_ore_count),
+        float(a.titanium_ore_count),
+        float(a.axionite_ore_count),
+        float(a.titanium_clustering or 0.0),
+        float(a.axionite_clustering or 0.0),
+        float(a.core_distance or 0.0),
+        float(a.core_manhattan or 0.0),
+        float(a.a_nearest_titanium_bfs or 0),
+        float(a.a_nearest_axionite_bfs or 0),
+    ]
+
+
+def _zscore_normalize(vectors: list[list[float]]) -> list[list[float]]:
+    """Z-score each column independently so features are comparable."""
+    n = len(vectors)
+    if n == 0:
+        return []
+    cols = list(zip(*vectors))
+    means = [sum(c) / n for c in cols]
+    stds = []
+    for c, m in zip(cols, means):
+        var = sum((x - m) ** 2 for x in c) / n
+        stds.append(math.sqrt(var) or 1.0)
+    return [
+        [(v - m) / s for v, m, s in zip(row, means, stds)]
+        for row in vectors
+    ]
+
+
+def _kmeans(points: list[list[float]], k: int, max_iter: int = 100, seed: int = 1) -> list[int]:
+    """Simple k-means. Returns cluster assignment per point. Uses deterministic seed."""
+    n = len(points)
+    if n == 0 or k <= 0:
+        return []
+    if k >= n:
+        return list(range(n))
+
+    rng = _random.Random(seed)
+    # k-means++ init
+    centroids: list[list[float]] = [points[rng.randrange(n)]]
+    while len(centroids) < k:
+        d2 = [min(sum((a - b) ** 2 for a, b in zip(p, c)) for c in centroids) for p in points]
+        total = sum(d2) or 1.0
+        r = rng.random() * total
+        cum = 0.0
+        chosen = points[-1]
+        for i, d in enumerate(d2):
+            cum += d
+            if cum >= r:
+                chosen = points[i]
+                break
+        centroids.append(chosen)
+
+    assignments = [0] * n
+    for _ in range(max_iter):
+        new_assign = []
+        for p in points:
+            best = 0
+            bd = float("inf")
+            for ci, c in enumerate(centroids):
+                d = sum((a - b) ** 2 for a, b in zip(p, c))
+                if d < bd:
+                    bd = d
+                    best = ci
+            new_assign.append(best)
+        if new_assign == assignments:
+            break
+        assignments = new_assign
+
+        # Recompute centroids
+        for ci in range(k):
+            pts = [points[i] for i, a in enumerate(assignments) if a == ci]
+            if not pts:
+                continue
+            centroids[ci] = [sum(col) / len(pts) for col in zip(*pts)]
+    return assignments
+
+
+def cluster_maps(analyses: list[MapAnalysis], k: int, seed: int = 1) -> list[int]:
+    """Return a cluster index for each MapAnalysis."""
+    raw = [_feature_vector(a) for a in analyses]
+    norm = _zscore_normalize(raw)
+    return _kmeans(norm, k, seed=seed)
+
+
+def print_clusters(analyses: list[MapAnalysis], assignments: list[int]) -> None:
+    by_cluster: dict[int, list[MapAnalysis]] = {}
+    for a, ci in zip(analyses, assignments):
+        by_cluster.setdefault(ci, []).append(a)
+
+    print(f"\n{'=' * 80}")
+    print(f"  MAP CLUSTERS  ({len(by_cluster)} clusters, {len(analyses)} maps)")
+    print(f"{'=' * 80}")
+
+    for ci in sorted(by_cluster):
+        members = by_cluster[ci]
+        # Cluster summary: average key features
+        avg_size = sum(m.total_tiles for m in members) / len(members)
+        avg_open = sum(m.openness for m in members) / len(members)
+        avg_choke = sum(m.chokepoint_score for m in members) / len(members)
+        avg_ti = sum(m.titanium_ore_count for m in members) / len(members)
+        avg_ax = sum(m.axionite_ore_count for m in members) / len(members)
+        avg_dist = sum((m.core_distance or 0) for m in members) / len(members)
+        # Pick representative: closest to centroid (= median-ish) by total tiles
+        rep = sorted(members, key=lambda m: m.total_tiles)[len(members) // 2]
+
+        print(f"\n  Cluster {ci}  ({len(members)} maps)")
+        print(f"    avg size={avg_size:.0f}  open={avg_open:.2f}  choke={avg_choke:.3f}  "
+              f"Ti={avg_ti:.1f}  Ax={avg_ax:.1f}  core-dist={avg_dist:.1f}")
+        print(f"    representative: {rep.name}")
+        names = sorted(m.name for m in members)
+        # Multi-column member list
+        col_w = max(len(n) for n in names) + 2
+        per_row = max(1, 96 // col_w)
+        for i in range(0, len(names), per_row):
+            chunk = names[i:i + per_row]
+            print("    " + "".join(n.ljust(col_w) for n in chunk))
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -521,6 +660,10 @@ def main() -> int:
         help="Sort summary table by this key.",
     )
     parser.add_argument("--summary-only", action="store_true", help="Only print summary table, skip individual reports.")
+    parser.add_argument("--cluster", type=int, default=None,
+                        help="Group maps into N k-means clusters by feature vector.")
+    parser.add_argument("--cluster-seed", type=int, default=1,
+                        help="Random seed for k-means init (default 1, deterministic).")
     args = parser.parse_args()
 
     target = Path(args.path)
@@ -542,12 +685,19 @@ def main() -> int:
         map_datas.append(md)
         analyses.append(analyze_map(md))
 
-    if not args.summary_only:
+    if not args.summary_only and not args.cluster:
         for md, a in zip(map_datas, analyses):
             print_analysis(a, show_ascii=args.ascii, md=md)
 
-    if len(analyses) > 1:
+    if len(analyses) > 1 and not args.cluster:
         print_summary_table(analyses, sort_key=args.sort)
+
+    if args.cluster:
+        if args.cluster < 2:
+            print("--cluster N requires N >= 2.", file=sys.stderr)
+            return 1
+        assignments = cluster_maps(analyses, k=args.cluster, seed=args.cluster_seed)
+        print_clusters(analyses, assignments)
 
     return 0
 

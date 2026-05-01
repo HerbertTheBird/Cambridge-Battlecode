@@ -27,10 +27,17 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
 
+from stats_utils import (
+    Glicko2Rating,
+    GLICKO2_DEFAULT_RATING,
+    glicko2_update,
+    bo9_win_probability,
+)
 
-# ── ELO system ───────────────────────────────────────────────────────────────
 
-DEFAULT_ELO = 1500.0
+# ── Legacy ELO (kept for backwards compat — Glicko-2 is the primary system) ──
+
+DEFAULT_ELO = GLICKO2_DEFAULT_RATING
 K_FACTOR = 32.0
 
 
@@ -133,13 +140,27 @@ def run_match(bot_a: str, bot_b: str, map_path: Path, seed: int) -> MatchResult:
 @dataclass
 class BotStats:
     name: str
-    elo: float = DEFAULT_ELO
+    rating: Glicko2Rating = field(default_factory=Glicko2Rating)
+    pending_results: list = field(default_factory=list)  # (opp_BotStats, score) for current period
     wins: int = 0
     losses: int = 0
     draws: int = 0
     errors: int = 0
     total_turns: int = 0
     match_count: int = 0
+
+    @property
+    def elo(self) -> float:
+        """Backwards-compat alias for the Glicko-2 rating value."""
+        return self.rating.rating
+
+    @elo.setter
+    def elo(self, value: float) -> None:
+        self.rating = Glicko2Rating(rating=value, rd=self.rating.rd, vol=self.rating.vol)
+
+    @property
+    def rd(self) -> float:
+        return self.rating.rd
 
     @property
     def win_rate(self) -> float:
@@ -149,6 +170,31 @@ class BotStats:
     @property
     def avg_turns(self) -> float:
         return self.total_turns / self.match_count if self.match_count else 0.0
+
+    @property
+    def bo9_prob(self) -> float:
+        """Probability of winning a Bo9 (first to 5 wins) given current per-game WR."""
+        n = self.wins + self.losses
+        if n == 0:
+            return 0.0
+        return bo9_win_probability(self.wins / n)
+
+
+def commit_glicko2_period(stats: dict[str, "BotStats"]) -> None:
+    """
+    Apply Glicko-2 rating updates from accumulated pending_results across all bots.
+    Reads opponent ratings as a snapshot (so order doesn't matter), then writes
+    new ratings. Should be called at the end of a "rating period" — for our
+    purposes, that's at the end of the tournament/gauntlet.
+    """
+    snapshot = {name: bs.rating for name, bs in stats.items()}
+    new_ratings: dict[str, Glicko2Rating] = {}
+    for name, bs in stats.items():
+        opps = [(snapshot[opp_name], score) for opp_name, score in bs.pending_results]
+        new_ratings[name] = glicko2_update(bs.rating, opps)
+    for name, bs in stats.items():
+        bs.rating = new_ratings[name]
+        bs.pending_results.clear()
 
 
 @dataclass
@@ -242,11 +288,9 @@ def run_tournament(
             print(f"\n  DRAW: {a_name} vs {b_name} on {mr.map_name} (seed {mr.seed})")
             print(f"  Engine output (last 20 lines):\n{tail}")
 
-        # ELO update
-        exp_a = elo_expected(stats[a_name].elo, stats[b_name].elo)
-        exp_b = 1.0 - exp_a
-        stats[a_name].elo = elo_update(stats[a_name].elo, exp_a, actual_a)
-        stats[b_name].elo = elo_update(stats[b_name].elo, exp_b, actual_b)
+        # Glicko-2: queue the result; rating update happens once at end of period
+        stats[a_name].pending_results.append((b_name, actual_a))
+        stats[b_name].pending_results.append((a_name, actual_b))
 
         if verbose:
             emoji = {a_name: "W", b_name: "L"}.get(mr.winner or "", "D")
@@ -281,25 +325,30 @@ def run_tournament(
     elapsed = time.perf_counter() - match_started
     print(f"Completed in {elapsed:.1f}s")
 
+    # End of rating period: apply all Glicko-2 updates atomically
+    commit_glicko2_period(stats)
+
     return stats, results, h2h
 
 
 # ── Output ───────────────────────────────────────────────────────────────────
 
 def print_leaderboard(stats: dict[str, BotStats]) -> None:
-    ranked = sorted(stats.values(), key=lambda s: -s.elo)
+    ranked = sorted(stats.values(), key=lambda s: -s.rating.rating)
 
-    print(f"\n{'=' * 85}")
-    print("  TOURNAMENT LEADERBOARD")
-    print(f"{'=' * 85}")
+    print(f"\n{'=' * 100}")
+    print("  TOURNAMENT LEADERBOARD  (Glicko-2 rating; RD = uncertainty; Bo9 = P(win first-to-5 match) given per-game WR)")
+    print(f"{'=' * 100}")
 
     name_w = max(len(s.name) for s in ranked) if ranked else 10
-    print(f"  {'#':>3}  {'Bot':{name_w}}  {'ELO':>7}  {'W':>4}  {'L':>4}  {'D':>4}  {'WR':>6}  {'AvgT':>6}  {'Err':>4}")
-    print(f"  {'---':>3}  {'-' * name_w}  {'---':>7}  {'--':>4}  {'--':>4}  {'--':>4}  {'--':>6}  {'----':>6}  {'---':>4}")
+    print(f"  {'#':>3}  {'Bot':{name_w}}  {'Rating':>8}  {'RD':>5}  {'W':>4}  {'L':>4}  {'D':>4}  {'WR':>6}  {'Bo9':>6}  {'AvgT':>6}  {'Err':>4}")
+    print(f"  {'---':>3}  {'-' * name_w}  {'------':>8}  {'--':>5}  {'--':>4}  {'--':>4}  {'--':>4}  {'--':>6}  {'---':>6}  {'----':>6}  {'---':>4}")
 
     for i, s in enumerate(ranked, 1):
-        print(f"  {i:>3}  {s.name:{name_w}}  {s.elo:>7.1f}  {s.wins:>4}  {s.losses:>4}  "
-              f"{s.draws:>4}  {s.win_rate:>5.1f}%  {s.avg_turns:>6.0f}  {s.errors:>4}")
+        bo9 = s.bo9_prob * 100
+        print(f"  {i:>3}  {s.name:{name_w}}  {s.rating.rating:>8.1f}  {s.rating.rd:>5.0f}  "
+              f"{s.wins:>4}  {s.losses:>4}  {s.draws:>4}  {s.win_rate:>5.1f}%  "
+              f"{bo9:>5.1f}%  {s.avg_turns:>6.0f}  {s.errors:>4}")
 
 
 def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead], stats: dict[str, BotStats]) -> None:
@@ -307,17 +356,23 @@ def print_head_to_head(h2h: dict[tuple[str, str], HeadToHead], stats: dict[str, 
     if not entries:
         return
 
-    print(f"\n{'=' * 90}")
-    print("  HEAD-TO-HEAD  (p = one-sided binomial test that A is better than B; lower = stronger)")
-    print(f"{'=' * 90}")
+    print(f"\n{'=' * 110}")
+    print("  HEAD-TO-HEAD  (p = one-sided binomial; Bo9 = P(A wins Bo9) given per-game WR)")
+    print(f"{'=' * 110}")
 
     name_w = max(max(len(e.bot_a), len(e.bot_b)) for e in entries) if entries else 10
-    print(f"  {'Bot A':{name_w}}  vs  {'Bot B':{name_w}}  {'A':>4}  {'B':>4}  {'D':>4}  {'p(A>B)':>8}")
-    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}  {'------':>8}")
+    print(f"  {'Bot A':{name_w}}  vs  {'Bot B':{name_w}}  {'A':>4}  {'B':>4}  {'D':>4}  {'WR(A)':>6}  {'Bo9(A)':>7}  {'p(A>B)':>8}")
+    print(f"  {'-' * name_w}  --  {'-' * name_w}  {'--':>4}  {'--':>4}  {'--':>4}  {'-----':>6}  {'------':>7}  {'------':>8}")
 
     for e in entries:
         p = binomial_p_value(e.a_wins, e.b_wins)
-        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}  {p:>8.4f}")
+        decisive = e.a_wins + e.b_wins
+        wr_a = e.a_wins / decisive if decisive else 0.0
+        bo9_a = bo9_win_probability(wr_a) if decisive else 0.0
+        wr_str = f"{wr_a*100:.0f}%" if decisive else "-"
+        bo9_str = f"{bo9_a*100:.1f}%" if decisive else "-"
+        print(f"  {e.bot_a:{name_w}}  vs  {e.bot_b:{name_w}}  {e.a_wins:>4}  {e.b_wins:>4}  {e.draws:>4}  "
+              f"{wr_str:>6}  {bo9_str:>7}  {p:>8.4f}")
 
 
 def print_map_breakdown(results: list[MatchResult], bots: list[str]) -> None:
