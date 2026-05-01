@@ -1215,8 +1215,20 @@ def _try_launcher_lockdown(target: Position) -> bool:
     visible_enemy_bots = map_info._bm_enemy_bots & map_info._bm_visible
     if not visible_enemy_bots:
         return False
-    _, enemy_dist = nav.closest(visible_enemy_bots)
-    if enemy_dist is None:
+    # Enemy can't path through tiles in our launchers' 3x3 (gets thrown back).
+    # Use side=False so the BFS reflects the enemy's perspective (they don't
+    # avoid their own threat).
+    my_launchers_avoid = (
+        map_info._bm_et[map_info._IDX_LAUNCHER]
+        & map_info._bm_team[map_info._my_team_idx]
+    )
+    enemy_path_avoid = (
+        map_info.expand_chebyshev(my_launchers_avoid) | my_launchers_avoid
+    )
+    _, enemy_dist = nav.closest(
+        visible_enemy_bots, avoid=enemy_path_avoid, side=False
+    )
+    if enemy_dist is None or enemy_dist == -1:
         # log("no enemies")
         return False
     hp = map_info._building_hp[target_n]
