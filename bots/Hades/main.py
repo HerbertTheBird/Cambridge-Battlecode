@@ -14,7 +14,10 @@ import units.turret_breach as breach
 import units.turret_launcher as launcher
 import map_info
 import comms
+import chokepoint
 from log import log
+
+USE_CHOKEPOINTS = True
 
 ENABLE_PROFILER = False
 
@@ -140,6 +143,9 @@ class Player:
             self.me.run()
 
             self.current_round += 1
+            
+            if USE_CHOKEPOINTS:
+                chokepoint.post_turn(c)
             
             end_time = time.perf_counter_ns()
             elapsed_us = end_time - start_time
