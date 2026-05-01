@@ -1531,6 +1531,10 @@ def _compute_route_targets() -> int:
                     _bm_dead_end |= lsb
                 m ^= lsb
 
+    # Dead ends must never be enemy conveyor tiles themselves (targets of enemy
+    # conveyors are still allowed).
+    _bm_dead_end &= ~(_bm_conveyors & ~bm_my)
+
     result = _bm_my_core_area | (reaches_core & ~unroutable & ~_bm_guard_conveyor)
     _route_targets_cache_key = key
     _route_targets_cache = (result, _bm_dead_end, _bm_feeding_enemy)
