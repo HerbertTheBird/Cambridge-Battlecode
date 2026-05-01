@@ -96,6 +96,7 @@ _NUM_PLANES = 9  # up to 8191; gunner CORE(480) + turrets keeps per-dir sum well
 SCORE_THRESHOLD_FACTOR = 0.25
 MIN_ATTACK_SCORE = 16
 THREAT_PENALTY = 4
+GUARD_CONVEYOR_BUFF = 6
 
 cant_attack = 0
 
@@ -131,6 +132,7 @@ _GUNNER_SCORE_GROUPS = _build_score_groups(GUNNER_BUILDING_SCORE)
 _THREAT_PENALTY_BITS = _bits_of(THREAT_PENALTY)
 _SENT_CORE_BITS = _bits_of(SENTINEL_BUILDING_SCORE[map_info._IDX_CORE])
 _GUN_CORE_BITS = _bits_of(GUNNER_BUILDING_SCORE[map_info._IDX_CORE])
+_GUARD_BUFF_BITS = _bits_of(GUARD_CONVEYOR_BUFF)
 
 
 def _ensure_attack_shift_plans():
@@ -383,6 +385,14 @@ def _compute_sentinel_dir_scores(enemy_team_bm, threat, sentinel_masks):
                 _add_bits_to_planes(planes, sent_core_bits, core_restricted)
         all_planes.append(planes)
 
+    friendly_guard = map_info._bm_guard_conveyor & map_info._bm_team[map_info._my_team_idx]
+    if friendly_guard and _GUARD_BUFF_BITS:
+        for d in range(8):
+            m = sentinel_masks[d] & friendly_guard
+            if m:
+                _add_bits_to_planes(all_planes[d], _GUARD_BUFF_BITS, m)
+                non_zero |= m
+
     if _THREAT_PENALTY_BITS:
         for d in range(8):
             baked = non_threat & non_zero & sentinel_masks[d]
@@ -517,6 +527,18 @@ def _compute_gunner_dir_scores(enemy_team_bm, threat, gunner_masks, include_per_
         _add_planes_into(summed, planes)
         if include_per_dir:
             all_planes.append(planes)
+
+    friendly_guard = map_info._bm_guard_conveyor & map_info._bm_team[map_info._my_team_idx]
+    if friendly_guard and _GUARD_BUFF_BITS:
+        m_sum = any_placeable & friendly_guard
+        if m_sum:
+            _add_bits_to_planes(summed, _GUARD_BUFF_BITS, m_sum)
+            non_zero |= m_sum
+        if include_per_dir:
+            for d in range(8):
+                m = gunner_masks[d] & friendly_guard
+                if m:
+                    _add_bits_to_planes(all_planes[d], _GUARD_BUFF_BITS, m)
 
     if _THREAT_PENALTY_BITS:
         baked_sum = non_threat & non_zero & any_placeable
