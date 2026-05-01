@@ -402,7 +402,7 @@ def main() -> int:
     hist_parser.add_argument("--type", choices=["ladder", "unrated"], dest="match_type", help="Filter by match type.")
 
     wr_parser = subparsers.add_parser("winrate", help="Win rate analysis.")
-    wr_parser.add_argument("--limit", type=int, default=50, help="Number of matches to analyze.")
+    wr_parser.add_argument("--limit", type=int, default=100, help="Number of matches to analyze.")
 
     scout_parser = subparsers.add_parser("scout", help="Scout an opponent team.")
     scout_parser.add_argument("team", help="Team name to search for.")
