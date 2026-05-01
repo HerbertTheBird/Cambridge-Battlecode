@@ -178,6 +178,16 @@ def direction_to(src: Position, dst: Position) -> Direction:
 
 _rc: Controller
 _width = _height = 0
+
+# Reserve enough Ti before any builder-bot build action that we can still
+# spawn another builder bot afterwards. Constant is the base bot Ti cost;
+# scaled at call time by the team's current cost scale.
+BUILDER_BOT_TI_RESERVE = 30
+
+
+def builder_ti_reserve() -> float:
+    return BUILDER_BOT_TI_RESERVE * _rc.get_scale_percent() / 100
+
 _prev_pos: Position = None
 _my_pos: Position = None           # cached rc.get_position(), updated on move
 _my_team: Team = None

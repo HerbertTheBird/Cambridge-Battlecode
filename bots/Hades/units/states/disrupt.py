@@ -72,6 +72,6 @@ def run():
         # Empty tile — move adjacent and build barrier
         nav.move_adjacent(best)
 
-    if rc.can_build_barrier(best):
+    if rc.can_build_barrier(best) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
         rc.build_barrier(best)
         map_info.update_at(best)

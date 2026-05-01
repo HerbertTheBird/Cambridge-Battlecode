@@ -101,7 +101,7 @@ def _can_afford_chokepoint(kind):
         cost_ti, cost_ax = rc.get_barrier_cost()
     else:
         cost_ti, cost_ax = rc.get_launcher_cost()
-    return ti >= cost_ti and ax >= cost_ax
+    return ti >= cost_ti + map_info.builder_ti_reserve() and ax >= cost_ax
 
 
 def _launcher_too_close(target):
@@ -180,8 +180,10 @@ def _try_clear_enemy_chokepoint_blocker(target):
 
 
 def _try_place_chokepoint_at(target, kind):
+    reserve = map_info.builder_ti_reserve()
+    ti_have = rc.get_global_resources()[0]
     if kind == chokepoint.BLOCKER_WALL:
-        if rc.can_build_barrier(target):
+        if rc.can_build_barrier(target) and ti_have >= rc.get_barrier_cost()[0] + reserve:
             rc.build_barrier(target)
             map_info.update_at(target)
             chokepoint.mark_completed(target)
@@ -189,7 +191,7 @@ def _try_place_chokepoint_at(target, kind):
                 chokepoint.debug(rc, f"passive build: built barrier at ({target.x},{target.y})")
             return True
     elif kind == chokepoint.BLOCKER_LAUNCHER:
-        if rc.can_build_launcher(target):
+        if rc.can_build_launcher(target) and ti_have >= rc.get_launcher_cost()[0] + reserve:
             rc.build_launcher(target)
             map_info.update_at(target)
             chokepoint.mark_completed(target)

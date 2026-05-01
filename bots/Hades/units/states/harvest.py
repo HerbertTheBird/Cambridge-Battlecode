@@ -192,6 +192,6 @@ def run():
         nav.move_to(targets)
     log("targets", targets, path[0])
     # Move to any adjacent tile and build harvester
-    if rc.can_build_harvester(best_ore):
+    if rc.can_build_harvester(best_ore) and rc.get_global_resources()[0] >= rc.get_harvester_cost()[0] + map_info.builder_ti_reserve():
         rc.build_harvester(best_ore)
         map_info.update_at(best_ore)

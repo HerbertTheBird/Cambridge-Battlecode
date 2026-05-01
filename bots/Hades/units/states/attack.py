@@ -977,8 +977,9 @@ def _ensure_round_cache():
     _round_cache_sentinel_planes = None
     _round_cache_gunner_planes = None
     ti = rc.get_global_resources()[0]
-    _round_cache_can_afford_sent = ti >= rc.get_sentinel_cost()[0]
-    _round_cache_can_afford_gun = ti >= rc.get_gunner_cost()[0]
+    reserve = map_info.builder_ti_reserve()
+    _round_cache_can_afford_sent = ti >= rc.get_sentinel_cost()[0] + reserve
+    _round_cache_can_afford_gun = ti >= rc.get_gunner_cost()[0] + reserve
     _round_cache_attack_candidates = _get_attack_candidates()
     if DRAW_DEBUG:
         preferred, fallback = _round_cache_attack_candidates
@@ -1152,14 +1153,16 @@ def _try_instant_preferred(preferred: int) -> bool:
             rc.destroy(best_pos)
             map_info.update_at(best_pos)
 
+    reserve = map_info.builder_ti_reserve()
+    ti_have = rc.get_global_resources()[0]
     if best_type == EntityType.GUNNER:
-        if rc.can_build_gunner(best_pos, best_dir):
+        if rc.can_build_gunner(best_pos, best_dir) and ti_have >= rc.get_gunner_cost()[0] + reserve:
             log(f"InstantAttack gunner at {best_pos} dir={best_dir} score={best_score}")
             rc.build_gunner(best_pos, best_dir)
             map_info.update_at(best_pos)
             return True
     elif best_type == EntityType.SENTINEL:
-        if rc.can_build_sentinel(best_pos, best_dir):
+        if rc.can_build_sentinel(best_pos, best_dir) and ti_have >= rc.get_sentinel_cost()[0] + reserve:
             log(f"InstantAttack sentinel at {best_pos} dir={best_dir} score={best_score}")
             rc.build_sentinel(best_pos, best_dir)
             map_info.update_at(best_pos)
@@ -1176,8 +1179,9 @@ def _try_launcher_lockdown(target: Position) -> bool:
     if rc.get_action_cooldown() != 0:
         return False
     ti_have, _ = rc.get_global_resources()
-    can_afford_barrier = ti_have >= rc.get_barrier_cost()[0]
-    can_afford_launcher = ti_have >= rc.get_launcher_cost()[0]
+    reserve = map_info.builder_ti_reserve()
+    can_afford_barrier = ti_have >= rc.get_barrier_cost()[0] + reserve
+    can_afford_launcher = ti_have >= rc.get_launcher_cost()[0] + reserve
     if not can_afford_barrier and not can_afford_launcher:
         return False
 
@@ -1293,12 +1297,14 @@ def _try_launcher_lockdown(target: Position) -> bool:
         map_info.update_at(best_p)
 
     built = False
-    if kind == "barrier" and rc.can_build_barrier(best_p):
+    reserve = map_info.builder_ti_reserve()
+    ti_have = rc.get_global_resources()[0]
+    if kind == "barrier" and rc.can_build_barrier(best_p) and ti_have >= rc.get_barrier_cost()[0] + reserve:
         log(f"AttackLockdown barrier at {best_p} delta={delta} for {target}")
         rc.build_barrier(best_p)
         map_info.update_at(best_p)
         built = True
-    elif kind == "launcher" and rc.can_build_launcher(best_p):
+    elif kind == "launcher" and rc.can_build_launcher(best_p) and ti_have >= rc.get_launcher_cost()[0] + reserve:
         log(f"AttackLockdown launcher at {best_p} delta={delta} for {target}")
         rc.build_launcher(best_p)
         map_info.update_at(best_p)
@@ -1522,14 +1528,16 @@ def run():
                     log(f"Attack destroy own building at {best}")
                     rc.destroy(best)
                     map_info.update_at(best)
+        reserve = map_info.builder_ti_reserve()
+        ti_have = rc.get_global_resources()[0]
         if turret_type == EntityType.GUNNER:
             log("gunner cost", rc.get_gunner_cost(), rc.get_global_resources())
-            if rc.can_build_gunner(best, direction):
+            if rc.can_build_gunner(best, direction) and ti_have >= rc.get_gunner_cost()[0] + reserve:
                 rc.build_gunner(best, direction)
                 map_info.update_at(best)
         else:
             log("sentinel cost", rc.get_sentinel_cost(), rc.get_global_resources())
-            if rc.can_build_sentinel(best, direction):
+            if rc.can_build_sentinel(best, direction) and ti_have >= rc.get_sentinel_cost()[0] + reserve:
                 rc.build_sentinel(best, direction)
                 map_info.update_at(best)
         break
