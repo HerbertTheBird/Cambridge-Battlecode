@@ -1,13 +1,10 @@
 import map_info
-import comms
 import units.builder
 from cambc import *
 from log import log
 
 rc: Controller = None
 nav = None
-
-comm_flag = 8
 
 CONV_CHASE_CHEB = 8
 ID_MASK = (1 << 12) - 1
@@ -41,17 +38,6 @@ def _conv_zone():
         frontier = expanded & passable & ~visited
         visited |= frontier
     return visited
-
-
-def _claimed_enemy_ids():
-    """Set of enemy ID hashes (mod 2^12) already claimed by other builders."""
-    claimed = set()
-    mask = units.builder.claimed_targets[comm_flag]
-    while mask:
-        lsb = mask & -mask
-        claimed.add(lsb.bit_length() - 1)
-        mask ^= lsb
-    return claimed
 
 
 def _find_chase_target():
@@ -256,7 +242,6 @@ def run():
         ep = target
         # _try_barrier_dead_ends()
         nav.move_to(ep)
-        # comms.mark(uid & ID_MASK, comm_flag)
         _do_best_heal()
         return
     very_damaged = _very_damaged_targets()

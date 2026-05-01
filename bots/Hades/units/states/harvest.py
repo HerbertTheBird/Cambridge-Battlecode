@@ -1,15 +1,12 @@
 import map_info
 import pathing
 from pathing import Pathing
-import comms
 from cambc import *
 import units.builder
 from log import log
 import sys
 rc: Controller = None
 nav: Pathing = None
-
-comm_flag = 4
 
 def _my_claims():
     my_pos = map_info._my_pos
@@ -176,7 +173,6 @@ def run():
             if rc.can_fire(best_ore):
                 rc.fire(best_ore)
                 map_info.update_at(best_ore)
-            comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
             log("firing")
             return
         if is_mine and rc.can_destroy(best_ore) and rc.get_action_cooldown() == 0 and (map_info._my_pos != best_ore or rc.get_move_cooldown() == 0):
@@ -199,4 +195,3 @@ def run():
     if rc.can_build_harvester(best_ore):
         rc.build_harvester(best_ore)
         map_info.update_at(best_ore)
-    comms.mark(best_ore.x + best_ore.y * map_info._width, comm_flag)
