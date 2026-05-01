@@ -242,7 +242,17 @@ def try_road_spam():
     if closest_enemy is None or dist > 4:
         return False
 
-    if _try_mask(map_info.expand_chebyshev(enemy_bots) & allowed_neighbors):
+    # Restrict near-enemy spam to tiles adjacent to any conveyor or harvester.
+    spam_sources = (
+        map_info._bm_conveyors
+        | map_info._bm_et[map_info._IDX_HARVESTER]
+    )
+    if not spam_sources:
+        return False
+    spam_zone = map_info.expand_chebyshev(spam_sources)
+    spam_neighbors = allowed_neighbors & spam_zone
+
+    if _try_mask(map_info.expand_chebyshev(enemy_bots) & spam_neighbors):
         return True
 
     enemy_hard = (
@@ -251,14 +261,14 @@ def try_road_spam():
         & ~map_info._bm_et[map_info._IDX_ROAD]
     )
     if enemy_hard:
-        if _try_mask(map_info.expand_chebyshev(enemy_hard) & allowed_neighbors):
+        if _try_mask(map_info.expand_chebyshev(enemy_hard) & spam_neighbors):
             return True
 
-    if not (avoid & my_bit) and rc.can_build_road(my_pos):
+    if (spam_zone & my_bit) and not (avoid & my_bit) and rc.can_build_road(my_pos):
         rc.build_road(my_pos)
         map_info.update_at(my_pos)
         return True
 
-    if _try_mask(allowed_neighbors):
+    if _try_mask(spam_neighbors):
         return True
     return False
