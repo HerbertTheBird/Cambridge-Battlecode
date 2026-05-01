@@ -1065,12 +1065,102 @@ def score():
     return 0
 
 
+def _try_instant_preferred(preferred: int) -> bool:
+    """Fast-path: if from my current tile (or one step onto an existing
+    road/conveyor of any team) I can place a turret on a preferred candidate
+    in my action radius, do so this turn. Picks the highest-scoring such
+    placement (must be non-zero and in `preferred`). Returns True if a turret
+    was built."""
+    if not preferred or rc.get_action_cooldown() != 0:
+        return False
+    bm_et = map_info._bm_et
+    w = map_info._width
+    my_team_idx = map_info._my_team_idx
+    my_team = map_info._bm_team[my_team_idx]
+    walkable_types = (
+        bm_et[map_info._IDX_ROAD]
+        | bm_et[map_info._IDX_CONVEYOR]
+        | bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | bm_et[map_info._IDX_SPLITTER]
+        | bm_et[map_info._IDX_BRIDGE]
+    )
+    my_n = map_info._my_pos.x + map_info._my_pos.y * w
+    my_bit = 1 << my_n
+    adj_walkable = (
+        map_info.expand_chebyshev(my_bit)
+        & walkable_types
+        & map_info._bm_passable_FFF
+    )
+    walkable_set = my_bit | adj_walkable
+    candidates = map_info.expand_chebyshev(walkable_set) & preferred
+    if not candidates:
+        return False
+
+    best_pos = None
+    best_score = 0
+    best_dir = None
+    best_type = None
+    m = candidates
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        m ^= lsb
+        pos = Position(n % w, n // w)
+        direction, ttype, score = get_best_direction(pos)
+        if score > best_score:
+            best_score = score
+            best_pos = pos
+            best_dir = direction
+            best_type = ttype
+    if best_pos is None or best_score <= 0:
+        return False
+
+    best_n = best_pos.x + best_pos.y * w
+    adj_to_best = map_info.expand_chebyshev(1 << best_n) & walkable_set
+    if not adj_to_best:
+        return False
+    if not (adj_to_best & my_bit):
+        lsb = adj_to_best & -adj_to_best
+        target_n = lsb.bit_length() - 1
+        target_pos = Position(target_n % w, target_n // w)
+        move_dir = map_info._my_pos.direction_to(target_pos)
+        if not rc.can_move(move_dir):
+            return False
+        rc.move(move_dir)
+        map_info.update_move()
+
+    best_id = map_info._building_id[best_n]
+    if best_id and (my_team & (1 << best_n)):
+        if not map_info.has_builder_bot(best_pos) and rc.can_destroy(best_pos):
+            rc.destroy(best_pos)
+            map_info.update_at(best_pos)
+
+    if best_type == EntityType.GUNNER:
+        if rc.can_build_gunner(best_pos, best_dir):
+            log(f"InstantAttack gunner at {best_pos} dir={best_dir} score={best_score}")
+            rc.build_gunner(best_pos, best_dir)
+            map_info.update_at(best_pos)
+            comms.mark(best_n, comm_flag)
+            return True
+    elif best_type == EntityType.SENTINEL:
+        if rc.can_build_sentinel(best_pos, best_dir):
+            log(f"InstantAttack sentinel at {best_pos} dir={best_dir} score={best_score}")
+            rc.build_sentinel(best_pos, best_dir)
+            map_info.update_at(best_pos)
+            comms.mark(best_n, comm_flag)
+            return True
+    return False
+
+
 def run():
     global cant_attack
     log("ATTACK")
     preferred, fallback = _cached_claims
 
     if not preferred and not fallback:
+        return
+
+    if preferred and _try_instant_preferred(preferred):
         return
 
     width = map_info._width
