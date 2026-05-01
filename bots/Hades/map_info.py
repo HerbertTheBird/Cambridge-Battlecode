@@ -895,8 +895,30 @@ def update_at(pos: Position) -> None:
     rc = _rc
     width = _width
     height = _height
-    n = pos.x + pos.y * width
+    x = pos.x
+    y = pos.y
+    n = x + y * width
     bit = 1 << n
+    bm_env = _bm_env
+    bm_et = _bm_et
+    bm_team = _bm_team
+    bm_dir = _bm_dir
+    building_id = _building_id
+    building_et_idx = _building_et_idx
+    building_hp = _building_hp
+    building_dir = _building_dir
+    building_conv_target = _building_conv_target
+    conv_reverse = _conv_reverse
+    has_dir = _HAS_DIR
+    is_conveyor = _IS_CONVEYOR
+    get_tile_env = rc.get_tile_env
+    get_tile_building_id = rc.get_tile_building_id
+    get_hp = rc.get_hp
+    get_entity_type = rc.get_entity_type
+    get_team = rc.get_team
+    get_direction = rc.get_direction
+    get_bridge_target = rc.get_bridge_target
+    get_stored_resource = rc.get_stored_resource
 
     # Core-area tiles are owned by build_core_areas(); leave them alone.
     if (_bm_my_core_area | _bm_their_core_area) & bit:
@@ -907,33 +929,33 @@ def update_at(pos: Position) -> None:
     # --- Environment / seen / symmetry tracking ---
     _bm_seen_observed |= bit
     if not (_bm_seen & bit):
-        env_idx = _ENV_INT[rc.get_tile_env(pos)]
-        _bm_env[env_idx] |= bit
+        env_idx = _ENV_INT[get_tile_env(pos)]
+        bm_env[env_idx] |= bit
         _bm_seen |= bit
         if _solved_sym:
             if _hor_sym:
-                fx, fy = width - 1 - pos.x, pos.y
+                fx, fy = width - 1 - x, y
             elif _ver_sym:
-                fx, fy = pos.x, height - 1 - pos.y
+                fx, fy = x, height - 1 - y
             else:
-                fx, fy = width - 1 - pos.x, height - 1 - pos.y
+                fx, fy = width - 1 - x, height - 1 - y
             fbit = 1 << (fx + fy * width)
-            _bm_env[env_idx] |= fbit
+            bm_env[env_idx] |= fbit
             _bm_seen |= fbit
         else:
-            rx = width - 1 - pos.x
-            ry = height - 1 - pos.y
+            rx = width - 1 - x
+            ry = height - 1 - y
             if _hor_sym:
-                fbit = 1 << (rx + pos.y * width)
-                if (_bm_seen & fbit) and not (_bm_env[env_idx] & fbit):
+                fbit = 1 << (rx + y * width)
+                if (_bm_seen & fbit) and not (bm_env[env_idx] & fbit):
                     _hor_sym = False
             if _ver_sym:
-                fbit = 1 << (pos.x + ry * width)
-                if (_bm_seen & fbit) and not (_bm_env[env_idx] & fbit):
+                fbit = 1 << (x + ry * width)
+                if (_bm_seen & fbit) and not (bm_env[env_idx] & fbit):
                     _ver_sym = False
             if _rot_sym:
                 fbit = 1 << (rx + ry * width)
-                if (_bm_seen & fbit) and not (_bm_env[env_idx] & fbit):
+                if (_bm_seen & fbit) and not (bm_env[env_idx] & fbit):
                     _rot_sym = False
         # Newly-observed walls block gunner rays in _compute_enemy_turret_threat
         # and _compute_my_gunner_claims, so invalidate those caches.
@@ -943,46 +965,46 @@ def update_at(pos: Position) -> None:
     # Walls can never hold buildings and never change. Skip the controller
     # building lookup and all building-state work — saves get_tile_building_id
     # calls (one of the heaviest controller methods in the profile).
-    if _bm_env[_IDX_ENV_WALL] & bit:
+    if bm_env[_IDX_ENV_WALL] & bit:
         return
 
     # --- Building state ---
-    entity_id = rc.get_tile_building_id(pos)
+    entity_id = get_tile_building_id(pos)
     if entity_id is not None and entity_id > _max_id_seen:
         _max_id_seen = entity_id
 
+    old_et_idx = building_et_idx[n]
     if entity_id is None:
         # No building — clear old
-        old_et_idx = _building_et_idx[n]
         if old_et_idx >= 0:
-            _bm_et[old_et_idx] &= nbit
+            bm_et[old_et_idx] &= nbit
             _bm_any_building &= nbit
-            _bm_team[0] &= nbit
-            _bm_team[1] &= nbit
-            if _HAS_DIR[old_et_idx]:
-                _bm_dir[_building_dir[n]] &= nbit
-            if _IS_CONVEYOR[old_et_idx]:
-                old_tn = _building_conv_target[n]
+            bm_team[0] &= nbit
+            bm_team[1] &= nbit
+            if has_dir[old_et_idx]:
+                bm_dir[building_dir[n]] &= nbit
+            if is_conveyor[old_et_idx]:
+                old_tn = building_conv_target[n]
                 if old_tn >= 0:
-                    _conv_reverse[old_tn] &= nbit
+                    conv_reverse[old_tn] &= nbit
                 _bm_conv_ti &= nbit
                 _bm_conv_raw_ax &= nbit
                 _bm_conv_refined &= nbit
-            _building_id[n] = 0
-            _building_et_idx[n] = -1
-            _building_hp[n] = 0
-            _building_dir[n] = -1
-            _building_conv_target[n] = -1
+            building_id[n] = 0
+            building_et_idx[n] = -1
+            building_hp[n] = 0
+            building_dir[n] = -1
+            building_conv_target[n] = -1
             _struct_version += 1
         _bm_damaged &= nbit
         _bm_very_damaged &= nbit
         return
 
     # Fast path: same building as before — skip re-reading type/team/direction
-    if _building_id[n] == entity_id:
-        et_idx = _building_et_idx[n]
-        hp = rc.get_hp(entity_id)
-        _building_hp[n] = hp
+    if building_id[n] == entity_id:
+        et_idx = old_et_idx
+        hp = get_hp(entity_id)
+        building_hp[n] = hp
         max_hp = _MAX_HP_BY_IDX[et_idx]
         if hp < max_hp:
             _bm_damaged |= bit
@@ -992,8 +1014,8 @@ def update_at(pos: Position) -> None:
             _bm_very_damaged |= bit
         else:
             _bm_very_damaged &= nbit
-        if _IS_CONVEYOR[et_idx]:
-            res = rc.get_stored_resource(entity_id)
+        if is_conveyor[et_idx]:
+            res = get_stored_resource(entity_id)
             if res is not None:
                 if res is _RT_AXIONITE:
                     _bm_conv_raw_ax |= bit
@@ -1017,85 +1039,83 @@ def update_at(pos: Position) -> None:
     if comms._marker_id_at[n] == entity_id:
         return
 
-    et = rc.get_entity_type(entity_id)
+    et = get_entity_type(entity_id)
     if et is _ET_MARKER:
-        if rc.get_team(entity_id) == _my_team:
+        if get_team(entity_id) == _my_team:
             message = comms.decode_visible_marker(entity_id, pos)
             if message is not None:
                 estimated_turn = comms.estimate_turn(entity_id)
                 _new_marker_messages.append((*message, estimated_turn))
         # Clear non-marker building state at this tile
-        old_et_idx = _building_et_idx[n]
         if old_et_idx >= 0:
-            _bm_et[old_et_idx] &= nbit
+            bm_et[old_et_idx] &= nbit
             _bm_any_building &= nbit
-            _bm_team[0] &= nbit
-            _bm_team[1] &= nbit
-            if _HAS_DIR[old_et_idx]:
-                _bm_dir[_building_dir[n]] &= nbit
-            if _IS_CONVEYOR[old_et_idx]:
-                old_tn = _building_conv_target[n]
+            bm_team[0] &= nbit
+            bm_team[1] &= nbit
+            if has_dir[old_et_idx]:
+                bm_dir[building_dir[n]] &= nbit
+            if is_conveyor[old_et_idx]:
+                old_tn = building_conv_target[n]
                 if old_tn >= 0:
-                    _conv_reverse[old_tn] &= nbit
+                    conv_reverse[old_tn] &= nbit
                 _bm_conv_ti &= nbit
                 _bm_conv_raw_ax &= nbit
                 _bm_conv_refined &= nbit
-            _building_id[n] = 0
-            _building_et_idx[n] = -1
-            _building_hp[n] = 0
-            _building_dir[n] = -1
-            _building_conv_target[n] = -1
+            building_id[n] = 0
+            building_et_idx[n] = -1
+            building_hp[n] = 0
+            building_dir[n] = -1
+            building_conv_target[n] = -1
             _struct_version += 1
         _bm_damaged &= nbit
         _bm_very_damaged &= nbit
         return
 
     # Different building — clear old state before writing new
-    old_et_idx = _building_et_idx[n]
     if old_et_idx >= 0:
-        _bm_et[old_et_idx] &= nbit
+        bm_et[old_et_idx] &= nbit
         _bm_any_building &= nbit
-        _bm_team[0] &= nbit
-        _bm_team[1] &= nbit
-        if _HAS_DIR[old_et_idx]:
-            _bm_dir[_building_dir[n]] &= nbit
-        if _IS_CONVEYOR[old_et_idx]:
-            old_tn = _building_conv_target[n]
+        bm_team[0] &= nbit
+        bm_team[1] &= nbit
+        if has_dir[old_et_idx]:
+            bm_dir[building_dir[n]] &= nbit
+        if is_conveyor[old_et_idx]:
+            old_tn = building_conv_target[n]
             if old_tn >= 0:
-                _conv_reverse[old_tn] &= nbit
+                conv_reverse[old_tn] &= nbit
             _bm_conv_ti &= nbit
             _bm_conv_raw_ax &= nbit
             _bm_conv_refined &= nbit
 
     et_idx = _ET_INT[et]
-    direction = rc.get_direction(entity_id) if _HAS_DIR[et_idx] else None
-    team_val = rc.get_team(entity_id)
+    direction = get_direction(entity_id) if has_dir[et_idx] else None
+    team_val = get_team(entity_id)
     team_idx = _TM_INT[team_val]
 
     target = None
     if et is _ET_BRIDGE:
-        target = rc.get_bridge_target(entity_id)
-    elif _IS_CONVEYOR[et_idx] and direction is not None:
+        target = get_bridge_target(entity_id)
+    elif is_conveyor[et_idx] and direction is not None:
         dx, dy = _DIRECTION_DELTAS_I[_DIR_INT[direction]]
-        target = Position(pos.x + dx, pos.y + dy)
+        target = Position(x + dx, y + dy)
 
-    _building_id[n] = entity_id
-    _building_et_idx[n] = et_idx
-    hp = rc.get_hp(entity_id)
-    _building_hp[n] = hp
+    building_id[n] = entity_id
+    building_et_idx[n] = et_idx
+    hp = get_hp(entity_id)
+    building_hp[n] = hp
     new_dir_idx = _DIR_INT[direction] if direction is not None else -1
-    _building_dir[n] = new_dir_idx
+    building_dir[n] = new_dir_idx
     new_tn = (target.x + target.y * width) if target is not None else -1
-    _building_conv_target[n] = new_tn
+    building_conv_target[n] = new_tn
 
-    _bm_et[et_idx] |= bit
-    _bm_team[team_idx] |= bit
+    bm_et[et_idx] |= bit
+    bm_team[team_idx] |= bit
     _bm_any_building |= bit
     if direction is not None:
-        _bm_dir[new_dir_idx] |= bit
+        bm_dir[new_dir_idx] |= bit
 
-    if _IS_CONVEYOR[et_idx] and new_tn >= 0 and team_idx == _my_team_idx:
-        _conv_reverse[new_tn] |= bit
+    if is_conveyor[et_idx] and new_tn >= 0 and team_idx == _my_team_idx:
+        conv_reverse[new_tn] |= bit
 
     max_hp = _MAX_HP_BY_IDX[et_idx]
     if hp < max_hp:
@@ -1107,8 +1127,8 @@ def update_at(pos: Position) -> None:
     else:
         _bm_very_damaged &= nbit
 
-    if _IS_CONVEYOR[et_idx]:
-        res = rc.get_stored_resource(entity_id)
+    if is_conveyor[et_idx]:
+        res = get_stored_resource(entity_id)
         if res is not None:
             if res is _RT_AXIONITE:
                 _bm_conv_raw_ax |= bit
