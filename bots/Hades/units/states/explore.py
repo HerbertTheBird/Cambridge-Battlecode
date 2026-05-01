@@ -16,13 +16,13 @@ explore_target = None
 _explore_target_from_initial = False
 
 
-_CHOKEPOINT_REPLACEABLE = frozenset({
+_CHOKEPOINT_OWN_DESTROYABLE = frozenset({
     EntityType.ROAD,
-    EntityType.MARKER,
+})
+_CHOKEPOINT_ENEMY_CLEARABLE = frozenset({
+    EntityType.ROAD,
     EntityType.CONVEYOR,
-    EntityType.ARMOURED_CONVEYOR,
     EntityType.BRIDGE,
-    EntityType.SPLITTER,
 })
 _CHOKEPOINT_LAUNCHER_CLEARANCE = 4
 
@@ -110,6 +110,21 @@ def _launcher_too_close(target):
     return bool(nearby & map_info._bm_et[map_info._IDX_LAUNCHER])
 
 
+def _enemy_clearable_chokepoint_blocker(target):
+    etype = map_info.type_at(target.x, target.y)
+    if etype not in _CHOKEPOINT_ENEMY_CLEARABLE:
+        return False
+    team = map_info.team_at(target.x, target.y)
+    return team is not None and team != map_info._my_team
+
+
+def _wait_for_chokepoint_if_enabled():
+    if units.builder.WAIT_FOR_CHOKEPOINT:
+        units.builder.wait_for_chokepoint()
+        return True
+    return False
+
+
 def _target_unavailable(target, kind):
     n = target.x + target.y * map_info._width
     bit = 1 << n
@@ -133,7 +148,10 @@ def _target_unavailable(target, kind):
     if etype is None:
         return False
 
-    if etype in _CHOKEPOINT_REPLACEABLE and team == map_info._my_team:
+    if etype in _CHOKEPOINT_OWN_DESTROYABLE and team == map_info._my_team:
+        return False
+
+    if _enemy_clearable_chokepoint_blocker(target) and units.builder.WAIT_FOR_CHOKEPOINT:
         return False
 
     chokepoint.abandon_target(target)
@@ -142,18 +160,26 @@ def _target_unavailable(target, kind):
 
 def _clear_replaceable(target):
     etype = map_info.type_at(target.x, target.y)
-    if etype in _CHOKEPOINT_REPLACEABLE and map_info.team_at(target.x, target.y) == map_info._my_team:
+    if etype in _CHOKEPOINT_OWN_DESTROYABLE and map_info.team_at(target.x, target.y) == map_info._my_team:
         if rc.can_destroy(target):
             rc.destroy(target)
             map_info.update_at(target)
 
 
-def _try_build_chokepoint_at(target, kind):
-    if _target_unavailable(target, kind):
+def _try_clear_enemy_chokepoint_blocker(target):
+    if not _enemy_clearable_chokepoint_blocker(target):
+        return False
+    if map_info._my_pos != target:
         return False
 
-    _clear_replaceable(target)
+    if rc.can_fire(target):
+        rc.fire(target)
+        map_info.update_at(target)
 
+    return _wait_for_chokepoint_if_enabled()
+
+
+def _try_place_chokepoint_at(target, kind):
     if kind == chokepoint.BLOCKER_WALL:
         if rc.can_build_barrier(target):
             rc.build_barrier(target)
@@ -174,13 +200,48 @@ def _try_build_chokepoint_at(target, kind):
     return False
 
 
-def _try_passive_chokepoint_build():
-    def wait_here():
-        if units.builder.WAIT_FOR_CHOKEPOINT:
-            units.builder.wait_for_chokepoint()
-            return True
+def _try_build_chokepoint_at(target, kind):
+    if _target_unavailable(target, kind):
         return False
 
+    if _try_clear_enemy_chokepoint_blocker(target):
+        return True
+
+    _clear_replaceable(target)
+    return _try_place_chokepoint_at(target, kind)
+
+
+def _try_step_toward_chokepoint_target(target, kind, my_pos):
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            stand = Position(target.x + dx, target.y + dy)
+            if not map_info.in_bounds(stand):
+                continue
+            if max(abs(stand.x - my_pos.x), abs(stand.y - my_pos.y)) > 1:
+                continue
+            if stand == my_pos:
+                continue
+            if stand == target and not _enemy_clearable_chokepoint_blocker(target):
+                continue
+
+            move_dir = map_info.direction_to(my_pos, stand)
+            if not rc.can_move(move_dir):
+                continue
+
+            rc.move(move_dir)
+            map_info.update_move()
+            built = _try_build_chokepoint_at(target, kind)
+            if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
+                chokepoint.debug(
+                    rc,
+                    f"passive build: moved toward {kind} target ({target.x},{target.y}); built={built}",
+                )
+            return True
+
+    return False
+
+
+def _try_passive_chokepoint_build():
     if not chokepoint.analysis_complete():
         if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
             chokepoint.debug(
@@ -191,33 +252,21 @@ def _try_passive_chokepoint_build():
             )
         return False
 
-    claims = chokepoint.claim_targets()
+    my_pos = map_info._my_pos
+    claims = chokepoint.claim_targets_near(my_pos, 2)
     if not claims:
         if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
             chokepoint.debug(
                 rc,
-                "passive build: analysis complete, no open claimed chokepoint targets",
+                "passive build: analysis complete, no local claimed chokepoint targets",
                 key="passive:no_claims",
                 interval=chokepoint.CHOKEPOINT_DEBUG_INTERVAL_ROUNDS,
             )
         return False
 
     w = map_info._width
-    my_pos = map_info._my_pos
-    my_bit = 1 << (my_pos.x + my_pos.y * w)
-    local = claims & map_info.expand_chebyshev(my_bit, 2)
-    if not local:
-        if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
-            chokepoint.debug(
-                rc,
-                f"passive build: {claims.bit_count()} open targets, none within local build radius",
-                key="passive:no_local_claims",
-                interval=chokepoint.CHOKEPOINT_DEBUG_INTERVAL_ROUNDS,
-            )
-        return False
-
     targets = []
-    mask = local
+    mask = claims
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
@@ -238,8 +287,20 @@ def _try_passive_chokepoint_build():
             )
         return False
 
+    blocked_targets = [
+        item
+        for item in targets
+        if _enemy_clearable_chokepoint_blocker(item[1])
+    ]
+    if units.builder.WAIT_FOR_CHOKEPOINT:
+        for _dist, target, kind in blocked_targets:
+            if _try_build_chokepoint_at(target, kind):
+                return True
+            if _try_step_toward_chokepoint_target(target, kind, my_pos):
+                return True
+
     if rc.get_action_cooldown() != 0:
-        return wait_here()
+        return _wait_for_chokepoint_if_enabled()
 
     affordable_targets = [
         item
@@ -255,7 +316,7 @@ def _try_passive_chokepoint_build():
                 key="passive:waiting_resources",
                 interval=chokepoint.CHOKEPOINT_DEBUG_INTERVAL_ROUNDS,
             )
-        return wait_here()
+        return _wait_for_chokepoint_if_enabled()
 
     for _dist, target, kind in affordable_targets:
         if _target_unavailable(target, kind):
@@ -263,31 +324,48 @@ def _try_passive_chokepoint_build():
         if _try_build_chokepoint_at(target, kind):
             return True
 
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                stand = Position(target.x + dx, target.y + dy)
-                if not map_info.in_bounds(stand):
-                    continue
-                if max(abs(stand.x - my_pos.x), abs(stand.y - my_pos.y)) > 1:
-                    continue
-                if stand == my_pos:
-                    continue
-                if stand == target:
-                    continue
+        if _try_step_toward_chokepoint_target(target, kind, my_pos):
+            return True
 
-                move_dir = map_info.direction_to(my_pos, stand)
-                if not rc.can_move(move_dir):
-                    continue
+    return False
 
-                rc.move(move_dir)
-                map_info.update_move()
-                built = _try_build_chokepoint_at(target, kind)
-                if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
-                    chokepoint.debug(
-                        rc,
-                        f"passive build: moved toward {kind} target ({target.x},{target.y}); built={built}",
-                    )
+
+def try_passive_chokepoint_action_only():
+    if rc.get_action_cooldown() != 0:
+        return False
+    if not chokepoint.analysis_complete():
+        return False
+
+    my_pos = map_info._my_pos
+    claims = chokepoint.claim_targets_near(my_pos, 2)
+    if not claims:
+        return False
+
+    w = map_info._width
+    targets = []
+    mask = claims
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        target = Position(n % w, n // w)
+        kind = chokepoint.blocker_kind_at(target)
+        if kind is not None and not _target_unavailable(target, kind):
+            targets.append((max(abs(target.x - my_pos.x), abs(target.y - my_pos.y)), target, kind))
+        mask ^= lsb
+
+    targets.sort(key=lambda item: item[0])
+    for _dist, target, kind in targets:
+        if _enemy_clearable_chokepoint_blocker(target):
+            if my_pos == target and rc.can_fire(target):
+                rc.fire(target)
+                map_info.update_at(target)
                 return True
+            continue
+
+        if not _can_afford_chokepoint(kind):
+            continue
+        if _try_build_chokepoint_at(target, kind):
+            return True
 
     return False
 

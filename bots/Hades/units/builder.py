@@ -4,6 +4,7 @@ import map_info
 import pathing
 from pathing import Pathing
 import comms
+from _config import USE_CHOKEPOINTS
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
@@ -20,7 +21,7 @@ from log import DRAW_DEBUG
 rc: Controller
 nav: Pathing = None
 
-WAIT_FOR_CHOKEPOINT = False
+WAIT_FOR_CHOKEPOINT = True
 _waiting_for_chokepoint = False
 
 # Sorted in descending order of max score to allow early break in selection loop
@@ -182,6 +183,9 @@ def run():
     # Run state-specific logic
     best_state = select_best_state()
     best_state.run()
+
+    if USE_CHOKEPOINTS:
+        explore.try_passive_chokepoint_action_only()
 
     if _waiting_for_chokepoint:
         return

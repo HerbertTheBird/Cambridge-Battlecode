@@ -17,6 +17,7 @@ from geometry_core import (
     build_free_mask,
     build_obstacle_mask,
     clip_polygon_against_half_plane,
+    is_axis_aligned_rectangle,
     point_in_polygon,
     raster_scale_from_spacing,
     rectangle_polygon,
@@ -81,6 +82,7 @@ CHOKEPOINT_MAX_STAGES_PER_TICK = 16
 CHOKEPOINT_MAX_SWEEP_EVENTS_PER_TICK = 64
 CHOKEPOINT_MAX_FINISH_EDGES_PER_TICK = 48
 CHOKEPOINT_MAX_EXTRACT_EDGES_PER_TICK = 192
+CHOKEPOINT_BUDGET_CHECK_INTERVAL = 8
 CHOKEPOINT_DEBUG_MAX_LIVE_VORONOI_EDGES = 96
 CHOKEPOINT_DEBUG_MAX_GRAPH_EDGES = 160
 CHOKEPOINT_DEBUG_MAX_SITE_GUIDES = 24
@@ -146,10 +148,11 @@ class AnalyzerState:
     raw_vertex_radius: Dict[VertexId, float] = field(default_factory=dict)
     raw_vertices: Dict[VertexId, Point] = field(default_factory=dict)
     raw_edges: Set[Tuple[VertexId, VertexId]] = field(default_factory=set)
-    raw_vertex_ids_by_point: Dict[Point, VertexId] = field(default_factory=dict)
+    raw_vertex_ids_by_point: Dict[Tuple[int, int], VertexId] = field(default_factory=dict)
 
     pruned_vertices: Dict[VertexId, Point] = field(default_factory=dict)
     pruned_edges: Set[Tuple[VertexId, VertexId]] = field(default_factory=set)
+    pruned_adj: Dict[VertexId, Set[VertexId]] = field(default_factory=dict)
     radius: Dict[VertexId, float] = field(default_factory=dict)
 
     region_nodes: Set[VertexId] = field(default_factory=set)
@@ -183,66 +186,66 @@ class AnalyzerState:
         self.free_boundary_verticals = verticals
         self.free_boundary_horizontals = horizontals
 
-    def sample_segment(self, start: Point, end: Point, spacing: float) -> List[Point]:
-        x1, y1 = start
-        x2, y2 = end
-        out: List[Point] = []
-        seg_len = math.hypot(x2 - x1, y2 - y1)
-        steps = max(1, int(math.ceil(seg_len / spacing)))
-        for k in range(steps + 1):
-            t = k / steps
-            out.append((
-                round(x1 + t * (x2 - x1), 4),
-                round(y1 + t * (y2 - y1), 4),
-            ))
-        return out
-
     def collect_boundary_samples(self, spacing: float) -> List[Point]:
-        samples: Set[Point] = set()
+        samples: Set[Tuple[int, int]] = set()
         spacing = max(spacing, 1.0 / max(self.raster_scale, 1))
         for start, end in self.free_boundary_segments:
-            for point in self.sample_segment(start, end, spacing):
-                samples.add(point)
-        return sorted(samples)
+            x1, y1 = start
+            x2, y2 = end
+            seg_len = math.hypot(x2 - x1, y2 - y1)
+            steps = max(1, int(math.ceil(seg_len / spacing)))
+            for k in range(steps + 1):
+                t = k / steps
+                samples.add(self.quantize_key(
+                    x1 + t * (x2 - x1),
+                    y1 + t * (y2 - y1),
+                ))
+        return [(x * 0.0001, y * 0.0001) for x, y in samples]
 
-    def quantize_point(self, x: float, y: float, digits: int = 4) -> Point:
-        return (round(x, digits), round(y, digits))
-
-    def point_is_inside_free_space(self, pt: Point) -> bool:
-        if not self.free_mask:
-            return False
-        x, y = pt
-        height = len(self.free_mask)
-        width = len(self.free_mask[0]) if height else 0
-        if width == 0 or height == 0:
-            return False
-        if x < 0.0 or y < 0.0 or x > self.cfg.cols or y > self.cfg.rows:
-            return False
-        px = min(width - 1, max(0, int(math.floor(x * self.raster_scale))))
-        py = min(height - 1, max(0, int(math.floor(y * self.raster_scale))))
-        return self.free_mask[py][px]
+    def quantize_key(self, x: float, y: float) -> Tuple[int, int]:
+        return (int(x * 10000.0 + 0.5), int(y * 10000.0 + 0.5))
 
     def segment_is_inside_free_space(self, p1: Point, p2: Point) -> bool:
-        seg_len = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
-        if seg_len < 1e-6:
+        free_mask = self.free_mask
+        if not free_mask:
             return False
-        steps = max(5, int(math.ceil(seg_len * self.raster_scale * 2)))
+        height = len(free_mask)
+        width = len(free_mask[0]) if height else 0
+        if width == 0 or height == 0:
+            return False
+
+        scale = self.raster_scale
+        cols = self.cfg.cols
+        rows = self.cfg.rows
+        if p1[0] < 0.0 or p1[1] < 0.0 or p2[0] < 0.0 or p2[1] < 0.0:
+            return False
+        if p1[0] > cols or p2[0] > cols or p1[1] > rows or p2[1] > rows:
+            return False
+        x1 = min(width - 1, int(p1[0] * scale))
+        y1 = min(height - 1, int(p1[1] * scale))
+        x2 = min(width - 1, int(p2[0] * scale))
+        y2 = min(height - 1, int(p2[1] * scale))
+
+        dx = x2 - x1
+        dy = y2 - y1
+        steps = max(abs(dx), abs(dy))
+        if steps == 0:
+            return False
+
+        # Integer DDA over the raster mask avoids allocating sampled float points
+        # for every Voronoi edge.
+        last_x = x1
+        last_y = y1
         for k in range(1, steps):
-            t = k / steps
-            pt = (
-                p1[0] + t * (p2[0] - p1[0]),
-                p1[1] + t * (p2[1] - p1[1]),
-            )
-            if not self.point_is_inside_free_space(pt):
+            px = x1 + (dx * k) // steps
+            py = y1 + (dy * k) // steps
+            if px == last_x and py == last_y:
+                continue
+            last_x = px
+            last_y = py
+            if not free_mask[py][px]:
                 return False
         return True
-
-    def build_adjacency(self, edges: Set[Tuple[VertexId, VertexId]]) -> Dict[VertexId, Set[VertexId]]:
-        adj: Dict[VertexId, Set[VertexId]] = defaultdict(set)
-        for a, b in edges:
-            adj[a].add(b)
-            adj[b].add(a)
-        return adj
 
     def compute_radius(self, pt: Point) -> float:
         segments = self.free_boundary_segments
@@ -282,18 +285,24 @@ class AnalyzerState:
         return math.sqrt(best_sq)
 
     def prune_graph(self, isolated_radius_threshold: float) -> None:
-        active_edges: Set[Tuple[VertexId, VertexId]] = set(self.raw_edges)
-        active_vertices: Set[VertexId] = set()
+        active_edges: Set[Tuple[VertexId, VertexId]] = self.raw_edges
+        adj: Dict[VertexId, Set[VertexId]] = defaultdict(set)
         for a, b in active_edges:
-            active_vertices.add(a)
-            active_vertices.add(b)
+            adj[a].add(b)
+            adj[b].add(a)
+        active_vertices: Set[VertexId] = set(adj.keys())
 
-        self.radius = {
-            vid: self.raw_vertex_radius.get(vid, self.compute_radius(self.raw_vertices[vid]))
-            for vid in active_vertices
-        }
-        adj = self.build_adjacency(active_edges)
+        radius: Dict[VertexId, float] = {}
+        raw_radius = self.raw_vertex_radius
+        raw_vertices = self.raw_vertices
+        for vid in active_vertices:
+            r = raw_radius.get(vid)
+            if r is None:
+                r = self.compute_radius(raw_vertices[vid])
+            radius[vid] = r
+        self.radius = radius
         leaves: deque[int] = deque(v for v in active_vertices if len(adj[v]) == 1)
+        keep_pruned_edges = CHOKEPOINT_DRAW_DEBUG or CHOKEPOINT_DEBUG_PRINTS
 
         while leaves:
             leaf = leaves.popleft()
@@ -304,8 +313,9 @@ class AnalyzerState:
 
             parent = next(iter(adj[leaf]))
             if self.radius[leaf] < self.radius[parent]:
-                edge = (leaf, parent) if leaf < parent else (parent, leaf)
-                active_edges.discard(edge)
+                if keep_pruned_edges:
+                    edge = (leaf, parent) if leaf < parent else (parent, leaf)
+                    active_edges.discard(edge)
                 adj[parent].discard(leaf)
                 adj[leaf].discard(parent)
                 active_vertices.discard(leaf)
@@ -316,38 +326,54 @@ class AnalyzerState:
             if len(adj[v]) == 0 and self.radius[v] < isolated_radius_threshold:
                 active_vertices.discard(v)
 
-        self.pruned_edges = {
-            e for e in active_edges
-            if e[0] in active_vertices and e[1] in active_vertices
-        }
+        if keep_pruned_edges:
+            self.pruned_edges = {
+                e for e in active_edges
+                if e[0] in active_vertices and e[1] in active_vertices
+            }
+        else:
+            self.pruned_edges.clear()
         self.pruned_vertices = {
             v: self.raw_vertices[v] for v in active_vertices
         }
+        self.pruned_adj = {
+            v: {nb for nb in adj.get(v, set()) if nb in active_vertices}
+            for v in active_vertices
+        }
         self.radius = {v: self.radius[v] for v in active_vertices}
-
-    def chebyshev(self, v1: VertexId, v2: VertexId) -> float:
-        x1, y1 = self.pruned_vertices[v1]
-        x2, y2 = self.pruned_vertices[v2]
-        return max(abs(x2 - x1), abs(y2 - y1))
-
-    def is_locally_maximal(self, vid: VertexId) -> bool:
-        r_a = self.radius[vid]
-        for other in self.pruned_vertices:
-            if other == vid:
-                continue
-            if self.chebyshev(vid, other) <= r_a and self.radius[other] >= r_a:
-                return False
-        return True
 
     def identify_region_nodes(self, region_min_radius: float) -> None:
         self.region_nodes.clear()
-        adj = self.build_adjacency(self.pruned_edges)
-        for vid in self.pruned_vertices:
+        adj = self.pruned_adj
+        vertices = self.pruned_vertices
+        radius = self.radius
+        cell_size = max(1.0, region_min_radius)
+        grid: Dict[Tuple[int, int], List[VertexId]] = defaultdict(list)
+        for vid, (x, y) in vertices.items():
+            grid[(int(x // cell_size), int(y // cell_size))].append(vid)
+
+        def is_locally_maximal_fast(vid: VertexId) -> bool:
+            x, y = vertices[vid]
+            r_a = radius[vid]
+            cx = int(x // cell_size)
+            cy = int(y // cell_size)
+            span = int(math.ceil(r_a / cell_size))
+            for gy in range(cy - span, cy + span + 1):
+                for gx in range(cx - span, cx + span + 1):
+                    for other in grid.get((gx, gy), ()):
+                        if other == vid:
+                            continue
+                        ox, oy = vertices[other]
+                        if max(abs(ox - x), abs(oy - y)) <= r_a and radius[other] >= r_a:
+                            return False
+            return True
+
+        for vid in vertices:
             degree = len(adj.get(vid, set()))
             if degree != 2:
                 self.region_nodes.add(vid)
                 continue
-            if self.radius[vid] >= region_min_radius and self.is_locally_maximal(vid):
+            if radius[vid] >= region_min_radius and is_locally_maximal_fast(vid):
                 self.region_nodes.add(vid)
 
     def _round_point_to_tile(self, pt: Point) -> Optional[Cell]:
@@ -365,7 +391,7 @@ class AnalyzerState:
         if not self.region_nodes:
             return
 
-        adj = self.build_adjacency(self.pruned_edges)
+        adj = self.pruned_adj
         visited_edges: Set[Tuple[VertexId, VertexId]] = set()
 
         for start in sorted(self.region_nodes):
@@ -388,10 +414,13 @@ class AnalyzerState:
                     seen.add(cur)
                     if cur in self.region_nodes and cur != start:
                         break
-                    nexts = [x for x in adj.get(cur, set()) if x != prev]
-                    if not nexts:
+                    nxt = None
+                    for maybe_next in adj.get(cur, set()):
+                        if maybe_next != prev:
+                            nxt = maybe_next
+                            break
+                    if nxt is None:
                         break
-                    nxt = nexts[0]
                     e2 = (cur, nxt) if cur < nxt else (nxt, cur)
                     visited_edges.add(e2)
                     prev, cur = cur, nxt
@@ -634,17 +663,17 @@ class AnalyzerState:
                 identity,
             )
 
-        key_to_vid: Dict[Point, VertexId] = {}
+        key_to_vid: Dict[Tuple[int, int], VertexId] = {}
         new_vertices: Dict[VertexId, Point] = {}
         new_radius: Dict[VertexId, float] = {}
 
         def add_vertex(pt: Point, src_vid: Optional[VertexId]) -> VertexId:
-            key = self.quantize_point(pt[0], pt[1])
+            key = self.quantize_key(pt[0], pt[1])
             vid = key_to_vid.get(key)
             if vid is None:
                 vid = len(key_to_vid)
                 key_to_vid[key] = vid
-                new_vertices[vid] = key
+                new_vertices[vid] = (key[0] * 0.0001, key[1] * 0.0001)
             if radius_map is not None and src_vid is not None:
                 new_radius[vid] = max(new_radius.get(vid, 0.0), radius_map.get(src_vid, 0.0))
             return vid
@@ -793,6 +822,7 @@ class AnalyzerState:
         self.analysis_tile_mask = 0
         self.pruned_vertices.clear()
         self.pruned_edges.clear()
+        self.pruned_adj.clear()
         self.radius.clear()
         self.region_nodes.clear()
         self.choke_nodes.clear()
@@ -809,6 +839,30 @@ class AnalyzerState:
             return False
 
         scale = self.raster_scale
+        if not CHOKEPOINT_DIAGONAL_MOVEMENT:
+            min_area_cells = max(1, int(math.ceil(CHOKEPOINT_MIN_OBSTACLE_AREA)))
+            kept_obstacles = self.filter_obstacle_cells_by_area(min_area_cells)
+            if not kept_obstacles:
+                return False
+            self.obstacles = kept_obstacles
+            self.analysis_mask = build_analysis_mask(
+                self.cfg.rows,
+                self.cfg.cols,
+                scale,
+                self.analysis_poly,
+            )
+            self.kept_obstacle_mask = build_obstacle_mask(
+                kept_obstacles,
+                self.cfg.rows,
+                self.cfg.cols,
+                scale,
+                self.analysis_mask,
+            )
+            self.free_mask = build_free_mask(self.analysis_mask, self.kept_obstacle_mask)
+            self.free_boundary_segments = boundary_segments_from_mask(self.free_mask, scale)
+            self.prepare_free_boundary_segments()
+            return True
+
         self.analysis_mask = build_analysis_mask(
             self.cfg.rows,
             self.cfg.cols,
@@ -842,23 +896,45 @@ class AnalyzerState:
         self.prepare_free_boundary_segments()
         return any(any(row) for row in self.kept_obstacle_mask)
 
-    def site_radius_for_edge_point(self, pt: Point, edge) -> Optional[float]:
-        best = float("inf")
-        twin = edge.twin
-        for site in (edge.incident_point, twin.incident_point if twin is not None else None):
-            if site is None:
-                continue
-            dx = pt[0] - float(site.xd)
-            dy = pt[1] - float(site.yd)
-            dist = math.hypot(dx, dy)
-            if dist < best:
-                best = dist
-        if best == float("inf"):
+    def filter_obstacle_cells_by_area(self, min_area_cells: int) -> Set[Cell]:
+        remaining = set(self.obstacles)
+        kept: Set[Cell] = set()
+
+        while remaining:
+            start = remaining.pop()
+            queue = [start]
+            cursor = 0
+            while cursor < len(queue):
+                r, c = queue[cursor]
+                cursor += 1
+                for neighbor in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
+                    if neighbor in remaining:
+                        remaining.remove(neighbor)
+                        queue.append(neighbor)
+
+            if len(queue) >= min_area_cells:
+                kept.update(queue)
+
+        return kept
+
+    def site_radius_for_sites(self, x: float, y: float, site_a, site_b) -> Optional[float]:
+        best_sq = float("inf")
+        if site_a is not None:
+            dx = x - float(site_a.xd)
+            dy = y - float(site_a.yd)
+            best_sq = dx * dx + dy * dy
+        if site_b is not None:
+            dx = x - float(site_b.xd)
+            dy = y - float(site_b.yd)
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < best_sq:
+                best_sq = dist_sq
+        if best_sq == float("inf"):
             return None
-        return best
+        return math.sqrt(best_sq)
 
     def get_or_create_raw_vid(self, pt: Point, radius: Optional[float] = None) -> VertexId:
-        key = self.quantize_point(pt[0], pt[1])
+        key = self.quantize_key(pt[0], pt[1])
         vid = self.raw_vertex_ids_by_point.get(key)
         if vid is not None:
             if radius is not None:
@@ -868,7 +944,7 @@ class AnalyzerState:
             return vid
         vid = len(self.raw_vertex_ids_by_point)
         self.raw_vertex_ids_by_point[key] = vid
-        self.raw_vertices[vid] = key
+        self.raw_vertices[vid] = (key[0] * 0.0001, key[1] * 0.0001)
         if radius is not None:
             self.raw_vertex_radius[vid] = radius
         return vid
@@ -949,20 +1025,16 @@ class AnalyzerState:
     def finish_voronoi_polygon(self) -> None:
         if self.voronoi is None:
             return
+        # We only consume clipped Voronoi edges; building the full polygon DCEL
+        # is useful for cell areas but costs a large single-turn spike here.
         self.voronoi.edges = self.voronoi_finished_edges
-        self.voronoi.edges, self.voronoi._vertices = self.voronoi.bounding_poly.finish_polygon(
-            self.voronoi.edges,
-            self.voronoi._vertices,
-            self.voronoi.sites,
-        )
         self.voronoi_finished_edges = []
-        if self.voronoi.remove_zero_length_edges:
-            self.voronoi.clean_up_zero_length_edges()
 
 
 _state: Optional[AnalyzerState] = None
-_completed_targets: Set[int] = set()
-_abandoned_targets: Set[int] = set()
+_target_mask: int = 0
+_completed_target_mask: int = 0
+_abandoned_target_mask: int = 0
 _last_visibility_sync_round: int = -1
 _debug_last_by_key: Dict[str, int] = {}
 
@@ -993,6 +1065,15 @@ def debug(controller: Optional[Controller], message: str, key: Optional[str] = N
 
 def _cell_to_index(r: int, c: int, width: int) -> int:
     return c + r * width
+
+
+def _refresh_target_mask(state: Optional[AnalyzerState]) -> None:
+    global _target_mask
+    mask = 0
+    if state is not None:
+        for idx in state.blocker_kind_by_index:
+            mask |= 1 << idx
+    _target_mask = mask
 
 
 def _index_to_position(idx: int, width: int) -> Position:
@@ -1167,6 +1248,19 @@ def _compute_analysis_polygon(cfg: GridConfig, symmetry: Optional[str], anchor: 
 
 
 def _analysis_polygon_mask(width: int, height: int, polygon: Sequence[Point]) -> int:
+    if is_axis_aligned_rectangle(polygon):
+        xs = [p[0] for p in polygon]
+        ys = [p[1] for p in polygon]
+        min_c = max(0, int(math.floor(min(xs))))
+        max_c = min(width - 1, int(math.ceil(max(xs)) - 1))
+        min_r = max(0, int(math.floor(min(ys))))
+        max_r = min(height - 1, int(math.ceil(max(ys)) - 1))
+        mask = 0
+        row_bits = ((1 << (max_c - min_c + 1)) - 1) << min_c if max_c >= min_c else 0
+        for r in range(min_r, max_r + 1):
+            mask |= row_bits << (r * width)
+        return mask
+
     mask = 0
     for r in range(height):
         for c in range(width):
@@ -1197,7 +1291,7 @@ def _snapshot_state() -> Optional[AnalyzerState]:
     analysis_tile_mask = _analysis_polygon_mask(width, height, analysis_poly)
 
     obstacles: Set[Cell] = set()
-    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL] & analysis_tile_mask
     while walls:
         lsb = walls & -walls
         idx = lsb.bit_length() - 1
@@ -1314,6 +1408,7 @@ def _step_geometry(state: AnalyzerState) -> None:
     if not ok:
         state.stage = STAGE_DONE
         state.blocker_kind_by_index.clear()
+        _refresh_target_mask(state)
         if not CHOKEPOINT_DRAW_DEBUG:
             state.release_final_analysis_state()
         return
@@ -1329,6 +1424,8 @@ def _step_voronoi_init(state: AnalyzerState) -> None:
     points = state.collect_boundary_samples(CHOKEPOINT_SAMPLE_SPACING)
     if len(points) < 4 or len(state.analysis_poly) < 3:
         state.stage = STAGE_DONE
+        state.blocker_kind_by_index.clear()
+        _refresh_target_mask(state)
         if not CHOKEPOINT_DRAW_DEBUG:
             state.release_final_analysis_state()
         return
@@ -1350,7 +1447,7 @@ def _step_voronoi_sweep(state: AnalyzerState, controller: Controller) -> None:
         return
     processed = 0
     while processed < CHOKEPOINT_MAX_SWEEP_EVENTS_PER_TICK:
-        if not _budget_remaining(controller):
+        if processed % CHOKEPOINT_BUDGET_CHECK_INTERVAL == 0 and not _budget_remaining(controller):
             return
         if not state.step_sweep_event():
             state.voronoi_finish_cursor = 0
@@ -1385,7 +1482,7 @@ def _step_voronoi_extract(state: AnalyzerState, controller: Controller) -> None:
     edges = state.voronoi.edges
     processed = 0
     while state.voronoi_edge_cursor < len(edges) and processed < CHOKEPOINT_MAX_EXTRACT_EDGES_PER_TICK:
-        if not _budget_remaining(controller):
+        if processed % CHOKEPOINT_BUDGET_CHECK_INTERVAL == 0 and not _budget_remaining(controller):
             return
 
         edge = edges[state.voronoi_edge_cursor]
@@ -1394,6 +1491,8 @@ def _step_voronoi_extract(state: AnalyzerState, controller: Controller) -> None:
 
         if edge.twin is None or edge.twin.incident_point is None:
             continue
+        site_a = edge.incident_point
+        site_b = edge.twin.incident_point
         origin = edge.get_origin()
         target = edge.twin.get_origin()
         if origin is None or target is None:
@@ -1404,8 +1503,8 @@ def _step_voronoi_extract(state: AnalyzerState, controller: Controller) -> None:
         if not state.segment_is_inside_free_space(p1, p2):
             continue
 
-        v1 = state.get_or_create_raw_vid(p1, state.site_radius_for_edge_point(p1, edge))
-        v2 = state.get_or_create_raw_vid(p2, state.site_radius_for_edge_point(p2, edge))
+        v1 = state.get_or_create_raw_vid(p1, state.site_radius_for_sites(p1[0], p1[1], site_a, site_b))
+        v2 = state.get_or_create_raw_vid(p2, state.site_radius_for_sites(p2[0], p2[1], site_a, site_b))
         if v1 == v2:
             continue
 
@@ -1454,6 +1553,7 @@ def _step_mirror(state: AnalyzerState) -> None:
     else:
         state.mirror_blocker_targets_only()
         state.release_final_analysis_state()
+    _refresh_target_mask(state)
     state.stage = STAGE_DONE
 
 
@@ -1466,13 +1566,12 @@ def _sync_visible_targets() -> None:
         return
     _last_visibility_sync_round = current_round
 
-    observed = map_info._bm_seen_observed
-    for idx, kind in _state.blocker_kind_by_index.items():
-        if idx in _completed_targets or idx in _abandoned_targets:
-            continue
-        bit = 1 << idx
-        if not (observed & bit):
-            continue
+    global _completed_target_mask, _abandoned_target_mask
+    mask = _target_mask & ~(_completed_target_mask | _abandoned_target_mask) & map_info._bm_seen_observed
+    while mask:
+        bit = mask & -mask
+        idx = bit.bit_length() - 1
+        mask ^= bit
 
         etype = map_info.type_at(idx % map_info._width, idx // map_info._width)
         team = map_info.team_at(idx % map_info._width, idx // map_info._width)
@@ -1483,13 +1582,13 @@ def _sync_visible_targets() -> None:
             etype == EntityType.BARRIER
             or etype == EntityType.LAUNCHER
         ):
-            _completed_targets.add(idx)
+            _completed_target_mask |= bit
             continue
 
         if etype in _VISIBLE_DISPOSABLE_TYPES:
             continue
 
-        _abandoned_targets.add(idx)
+        _abandoned_target_mask |= bit
 
 
 def analysis_complete() -> bool:
@@ -1504,26 +1603,43 @@ def blocker_kind_at(pos: Position) -> Optional[str]:
 
 
 def mark_completed(pos: Position) -> None:
-    _completed_targets.add(pos.x + pos.y * map_info._width)
+    global _completed_target_mask
+    _completed_target_mask |= 1 << (pos.x + pos.y * map_info._width)
 
 
 def abandon_target(pos: Position) -> None:
-    _abandoned_targets.add(pos.x + pos.y * map_info._width)
+    global _abandoned_target_mask
+    _abandoned_target_mask |= 1 << (pos.x + pos.y * map_info._width)
 
 
 def claim_targets() -> int:
     if not analysis_complete():
         return 0
     _sync_visible_targets()
-    mask = 0
-    for idx in _state.blocker_kind_by_index:
-        if idx in _completed_targets or idx in _abandoned_targets:
-            continue
-        mask |= 1 << idx
+    mask = _target_mask & ~(_completed_target_mask | _abandoned_target_mask)
     if not mask:
         return 0
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * map_info._width)
-    return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, mask, tie_self=True)
+    return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, mask)
+
+
+def claim_targets_near(pos: Position, chebyshev_radius: int) -> int:
+    if not analysis_complete():
+        return 0
+    _sync_visible_targets()
+    mask = _target_mask & ~(_completed_target_mask | _abandoned_target_mask)
+    if not mask:
+        return 0
+
+    local = 1 << (pos.x + pos.y * map_info._width)
+    for _ in range(chebyshev_radius):
+        local = map_info.expand_chebyshev(local)
+    mask &= local
+    if not mask:
+        return 0
+
+    my_mask = 1 << (pos.x + pos.y * map_info._width)
+    return pathing.voronoi_claim(my_mask, map_info._bm_friendly_bots, mask)
 
 
 def _stage_debug_summary(state: AnalyzerState) -> str:
@@ -1788,7 +1904,7 @@ def post_turn(controller: Controller) -> None:
         if CHOKEPOINT_DEBUG_PRINTS:
             _debug(
                 controller,
-                f"idle terminal: {_stage_debug_summary(state)} completed={len(_completed_targets)} abandoned={len(_abandoned_targets)}",
+                f"idle terminal: {_stage_debug_summary(state)} completed={_completed_target_mask.bit_count()} abandoned={_abandoned_target_mask.bit_count()}",
                 key=f"terminal:{state.stage}",
                 interval=CHOKEPOINT_DEBUG_INTERVAL_ROUNDS,
             )
@@ -1864,7 +1980,7 @@ def post_turn(controller: Controller) -> None:
         if CHOKEPOINT_DEBUG_PRINTS:
             _debug(
                 controller,
-                f"analysis complete: {_stage_debug_summary(state)} completed={len(_completed_targets)} abandoned={len(_abandoned_targets)}",
+                f"analysis complete: {_stage_debug_summary(state)} completed={_completed_target_mask.bit_count()} abandoned={_abandoned_target_mask.bit_count()}",
                 key="analysis_complete",
                 interval=999999,
             )
