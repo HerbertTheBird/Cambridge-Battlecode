@@ -20,6 +20,9 @@ from log import DRAW_DEBUG
 rc: Controller
 nav: Pathing = None
 
+WAIT_FOR_CHOKEPOINT = True
+_waiting_for_chokepoint = False
+
 # Sorted in descending order of max score to allow early break in selection loop
 states = tuple(sorted(
     [explore, disrupt, harvest, route, heal, attack, secure],
@@ -53,6 +56,11 @@ def draw_mask(mask, r, g, b):
         return
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
+
+
+def wait_for_chokepoint() -> None:
+    global _waiting_for_chokepoint
+    _waiting_for_chokepoint = True
 
 
 def handle_comms():
@@ -155,6 +163,9 @@ def select_best_state():
 
 
 def run():
+    global _waiting_for_chokepoint
+    _waiting_for_chokepoint = False
+
     # Sync round info
     current_round = rc.get_current_round()
     map_info.update(recompute=False)
@@ -171,6 +182,9 @@ def run():
     # Run state-specific logic
     best_state = select_best_state()
     best_state.run()
+
+    if _waiting_for_chokepoint:
+        return
 
     # Road-spam if an enemy is closing in
     try_road_spam()

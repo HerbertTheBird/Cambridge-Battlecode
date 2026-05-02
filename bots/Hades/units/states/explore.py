@@ -24,6 +24,7 @@ _CHOKEPOINT_REPLACEABLE = frozenset({
     EntityType.BRIDGE,
     EntityType.SPLITTER,
 })
+_CHOKEPOINT_LAUNCHER_CLEARANCE = 4
 
 def init(c: Controller):
     global rc, nav
@@ -103,6 +104,12 @@ def _can_afford_chokepoint(kind):
     return ti >= cost_ti and ax >= cost_ax
 
 
+def _launcher_too_close(target):
+    target_bit = 1 << (target.x + target.y * map_info._width)
+    nearby = map_info.expand_chebyshev(target_bit, _CHOKEPOINT_LAUNCHER_CLEARANCE)
+    return bool(nearby & map_info._bm_et[map_info._IDX_LAUNCHER])
+
+
 def _target_unavailable(target, kind):
     n = target.x + target.y * map_info._width
     bit = 1 << n
@@ -114,13 +121,17 @@ def _target_unavailable(target, kind):
         return True
 
     etype = map_info.type_at(target.x, target.y)
-    if etype is None:
-        return False
-
     team = map_info.team_at(target.x, target.y)
     if team == map_info._my_team and etype in (EntityType.BARRIER, EntityType.LAUNCHER):
         chokepoint.mark_completed(target)
         return True
+
+    if kind == chokepoint.BLOCKER_LAUNCHER and _launcher_too_close(target):
+        chokepoint.abandon_target(target)
+        return True
+
+    if etype is None:
+        return False
 
     if etype in _CHOKEPOINT_REPLACEABLE and team == map_info._my_team:
         return False
@@ -164,8 +175,12 @@ def _try_build_chokepoint_at(target, kind):
 
 
 def _try_passive_chokepoint_build():
-    if rc.get_action_cooldown() != 0:
+    def wait_here():
+        if units.builder.WAIT_FOR_CHOKEPOINT:
+            units.builder.wait_for_chokepoint()
+            return True
         return False
+
     if not chokepoint.analysis_complete():
         if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
             chokepoint.debug(
@@ -208,23 +223,41 @@ def _try_passive_chokepoint_build():
         n = lsb.bit_length() - 1
         target = Position(n % w, n // w)
         kind = chokepoint.blocker_kind_at(target)
-        if kind is not None and _can_afford_chokepoint(kind):
+        if kind is not None and not _target_unavailable(target, kind):
             targets.append((max(abs(target.x - my_pos.x), abs(target.y - my_pos.y)), target, kind))
         mask ^= lsb
 
     targets.sort(key=lambda item: item[0])
     if not targets:
         if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
-            ti, ax = rc.get_global_resources()
             chokepoint.debug(
                 rc,
-                f"passive build: local targets exist but none affordable; resources=({ti},{ax})",
-                key="passive:none_affordable",
+                "passive build: local targets exist but none are usable",
+                key="passive:none_usable",
                 interval=chokepoint.CHOKEPOINT_DEBUG_INTERVAL_ROUNDS,
             )
         return False
 
-    for _dist, target, kind in targets:
+    if rc.get_action_cooldown() != 0:
+        return wait_here()
+
+    affordable_targets = [
+        item
+        for item in targets
+        if _can_afford_chokepoint(item[2])
+    ]
+    if not affordable_targets:
+        if chokepoint.CHOKEPOINT_DEBUG_PRINTS:
+            ti, ax = rc.get_global_resources()
+            chokepoint.debug(
+                rc,
+                f"passive build: waiting on resources for {len(targets)} local chokepoint targets; resources=({ti},{ax})",
+                key="passive:waiting_resources",
+                interval=chokepoint.CHOKEPOINT_DEBUG_INTERVAL_ROUNDS,
+            )
+        return wait_here()
+
+    for _dist, target, kind in affordable_targets:
         if _target_unavailable(target, kind):
             continue
         if _try_build_chokepoint_at(target, kind):
