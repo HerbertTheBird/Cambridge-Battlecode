@@ -1,13 +1,12 @@
 from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
 import map_info
-from log import log
+
 
 rc: Controller = None
 my_pos: Position = None
 my_team: Team = None
 last_fired_round: int = 0
 skipped_firing_turns: int = 0
-adjacent_tiles: tuple[Position, ...] = ()
 
 # --- Ported from dragonfruit/globals.py ---
 TURRET_TYPES = {EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH}
@@ -17,14 +16,12 @@ INF = 999999
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
 
-def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
-    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
-
-
 def _should_stay():
     """Block self-destruct when a harvester is adjacent, no bots are nearby,
     or the closest visible builder bot is an enemy."""
-    for p in adjacent_tiles:
+    pos = rc.get_position()
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(pos.x + dx, pos.y + dy)
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
@@ -35,7 +32,7 @@ def _should_stay():
         if rc.get_entity_type(uid) != EntityType.BUILDER_BOT:
             continue
         p = rc.get_position(uid)
-        d = my_pos.distance_squared(p)
+        d = pos.distance_squared(p)
         if best_d is None or d < best_d:
             best_d = d
             closest_is_friendly = (rc.get_team(uid) == my_team)
@@ -45,10 +42,9 @@ def _should_stay():
 
 
 def init(c: Controller):
-    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns, adjacent_tiles
+    global rc, my_pos, my_team, last_fired_round, skipped_firing_turns
     rc = c
     my_pos = rc.get_position()
-    adjacent_tiles = _adjacent_cardinals(my_pos)
     last_fired_round = rc.get_current_round()
     skipped_firing_turns = 0
     my_team = map_info._my_team
@@ -283,7 +279,7 @@ def choose_rotate_dir(enemies) -> Direction | None:
             continue
 
         dist = my_pos.distance_squared(tpos)
-        desired_dir = map_info.direction_to(my_pos, tpos)
+        desired_dir = my_pos.direction_to(tpos)
 
         if desired_dir == current_dir:
             continue
@@ -302,11 +298,11 @@ def run():
     map_info.update()
     enemies = get_enemy_units()
     target = choose_gunner_target()
-    log(f"gunner target: {target}")
+    pass # log(f"gunner target: {target}")
 
     if target is not None and rc.can_fire(target):
         rc.fire(target)
-        log(f"gunner fired at {target}")
+        pass # log(f"gunner fired at {target}")
         last_fired_round = rc.get_current_round()
         skipped_firing_turns = 0
 
@@ -316,7 +312,7 @@ def run():
         if rotate_dir is not None and rc.can_rotate(rotate_dir):
             rc.rotate(rotate_dir)
             skipped_firing_turns = 0
-            log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
+            pass # log(f"gunner rotated toward adjacent enemy turret: {rotate_dir}")
 
     if rc.get_action_cooldown() == 0:
         skipped_firing_turns += 1

@@ -1,11 +1,9 @@
 from cambc import Controller, Position, EntityType, Direction
 import map_info
-from log import log
 
-rc: Controller = None
+
+rc = None
 _no_ammo_turns = 0
-_my_pos: Position | None = None
-_adjacent_tiles: tuple[Position, ...] = ()
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
 
@@ -29,19 +27,15 @@ _WEIGHTS = {
 
 
 def init(c: Controller):
-    global rc, _my_pos, _adjacent_tiles
+    global rc
     rc = c
-    _my_pos = rc.get_position()
-    _adjacent_tiles = _adjacent_cardinals(_my_pos)
 
 
-def _adjacent_cardinals(pos: Position) -> tuple[Position, ...]:
-    return tuple(Position(pos.x + dx, pos.y + dy) for dx, dy in CARDINAL_OFFSETS)
-
-
-def _should_stay(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
+def _should_stay():
+    my_pos = rc.get_position()
     my_team = map_info._my_team
-    for p in adjacent_tiles:
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if map_info.in_bounds(p):
             bid = rc.get_tile_building_id(p)
             if bid and rc.get_entity_type(bid) == EntityType.HARVESTER:
@@ -64,10 +58,12 @@ def _should_stay(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
     return not closest_is_friendly
 
 
-def _get_feeder_positions(my_pos: Position, adjacent_tiles: tuple[Position, ...]):
+def _get_feeder_positions():
     """Return set of positions that feed this sentinel (don't shoot these)."""
+    my_pos = rc.get_position()
     feeders = set()
-    for p in adjacent_tiles:
+    for dx, dy in CARDINAL_OFFSETS:
+        p = Position(my_pos.x + dx, my_pos.y + dy)
         if not map_info.in_bounds(p):
             continue
         bid = rc.get_tile_building_id(p)
@@ -121,7 +117,6 @@ def _prune_conveyor_targets(target_positions):
                 if conv_pos not in invalid_sabotage_locations:
                     front_positions.append(conv_pos)
                     invalid_sabotage_locations.add(conv_pos)
-                    # rc.draw_indicator_dot(conv, 0, 0, 255)
 
             # Propagate up conveyor chain
             for _ in range(4):
@@ -134,7 +129,6 @@ def _prune_conveyor_targets(target_positions):
                         if conv_pos not in invalid_sabotage_locations:
                             new_front.append(conv_pos)
                             invalid_sabotage_locations.add(conv_pos)
-                            # rc.draw_indicator_dot(conv, 0, 0, 255)
                 front_positions = new_front
 
     # Prune targets that are in invalid_sabotage_locations
@@ -148,11 +142,10 @@ def _prune_conveyor_targets(target_positions):
 
 def run():
     global _no_ammo_turns
-    map_info.update()
 
     if rc.get_ammo_amount() < 10:
         _no_ammo_turns += 1
-        if _no_ammo_turns >= 10 and not _should_stay(_my_pos, _adjacent_tiles):
+        if _no_ammo_turns >= 10 and not _should_stay():
             rc.self_destruct()
             return
     else:
@@ -163,7 +156,7 @@ def run():
     if rc.get_ammo_amount() < 5:
         return
 
-    feeders = _get_feeder_positions(_my_pos, _adjacent_tiles)
+    feeders = _get_feeder_positions()
     best_target = None
     best_score = 0
 
@@ -180,7 +173,7 @@ def run():
             best_target = tile
 
     if best_target is None:
-        if not _should_stay(_my_pos, _adjacent_tiles):
+        if not _should_stay():
             rc.self_destruct()
         return
 

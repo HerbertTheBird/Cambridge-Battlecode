@@ -1,7 +1,7 @@
 from cambc import Controller, Position, Team
 
 import map_info
-from log import log
+
 
 rc: Controller = None
 my_pos: Position = None
@@ -14,4 +14,4 @@ def init(c: Controller):
     my_team = map_info._my_team
 
 def run():
-    map_info.update()
+    pass

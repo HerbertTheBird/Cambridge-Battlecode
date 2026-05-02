@@ -1,14 +1,9 @@
-from cambc import Controller, Position, Direction, EntityType, Environment, GameError
-
-from enum import Enum
-import random
-import sys
+from cambc import Controller, Position
 
 import map_info
 import pathing
 from pathing import Pathing
 import comms
-import comms_positional
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
@@ -18,8 +13,6 @@ import units.states.route    as route
 import units.states.heal     as heal
 import units.states.sabotage as sabotage
 import units.states.attack   as attack
-
-from log import DRAW_DEBUG, log
 
 
 rc: Controller
@@ -155,12 +148,6 @@ def handle_comms():
                 del _sender_rounds[i][idx]
                 claimed_senders[i] &= ~(1 << idx)
 
-def draw_mask(mask, r, g, b):
-    if not DRAW_DEBUG:
-        return
-    for p in map_info.iter_mask(mask):
-        rc.draw_indicator_dot(p, r, g, b)
-
 _harvest_zone_final = False
 
 # First-tick ray explore target (derived from spawn tile relative to core).
@@ -211,7 +198,7 @@ def run():
         if rc.get_current_round() > INITIAL_SPAWN_COUNT + 1:
             _initial_explore_done = True
         elif map_info._my_core is not None:
-            spawn_dir = map_info.direction_to(map_info._my_core, map_info._my_pos)
+            spawn_dir = map_info._my_core.direction_to(map_info._my_pos)
             _initial_explore_target = get_ray_endpoint(
                 map_info._my_pos, spawn_dir, map_info._width, map_info._height,
                 max_steps=INITIAL_EXPLORE_MAX_STEPS,

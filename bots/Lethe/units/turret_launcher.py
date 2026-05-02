@@ -2,7 +2,7 @@ from cambc import Controller, Position, Team
 
 import comms
 import map_info
-from log import log
+
 
 rc: Controller = None
 my_pos: Position = None
@@ -103,7 +103,7 @@ def _try_execute_launch_order() -> bool:
             continue
 
         rc.launch(matched_pos, target)
-        log(f"launcher executed order from {sender_pos} to {target}")
+        pass # log(f"launcher executed order from {sender_pos} to {target}")
         _drop_order(marker_id)
         if rc.can_destroy(marker_pos):
             rc.destroy(marker_pos)
@@ -138,7 +138,7 @@ def _try_throw_enemy_away() -> bool:
 
     _score, bot_pos, tile = best
     rc.launch(bot_pos, tile)
-    log(f"launcher threw enemy from {bot_pos} to {tile}")
+    pass # log(f"launcher threw enemy from {bot_pos} to {tile}")
     return True
 
 def run():

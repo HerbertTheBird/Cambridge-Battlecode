@@ -5,7 +5,7 @@ import comms
 import units.builder
 import units.states.attack as attack
 from cambc import *
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -63,14 +63,14 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     targets = units.builder.exclude_crowded_claims(comm_flag, _sabotage_targets())
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets, map_info._bm_passable_FFF)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets)
 
 MAX_SCORE = 5
 def score():
     return 5 if _my_claims() else 0
 
 def run():
-    log("SABOTAGE")
+    pass # log("SABOTAGE")
     targets = _my_claims()
 
     if not targets:
@@ -82,9 +82,19 @@ def run():
     units.builder.register_active_target(comm_flag, best)
 
     # Move onto the tile and fire
-    nav.move_to({best})
+    nav.move_to(best)
+
+    width = map_info._width
+    zone = 1 << (map_info._my_pos.x + map_info._my_pos.y * width)
+    zone = map_info.expand_chebyshev(zone)
+    enemy_bot_nearby = bool(map_info._bm_enemy_bots & zone)
+
+    best_n = best.x + best.y * width
+    best_id = map_info._building_id[best_n]
+
     if rc.can_fire(best):
-        rc.fire(best)
-        map_info.update_at(best)
+        if not enemy_bot_nearby or (best_id and rc.get_hp(best_id) <= 2):
+            rc.fire(best)
+            map_info.update_at(best)
 
     comms.mark(best.x + best.y * map_info._width, comm_flag)

@@ -4,7 +4,7 @@ from pathing import Pathing
 import comms
 import units.builder
 from cambc import *
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -31,7 +31,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     targets = units.builder.exclude_crowded_claims(comm_flag, _disruptable_ore())
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets, map_info._bm_passable_FFF)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], targets)
 
 MAX_SCORE = 2
 def score():
@@ -40,7 +40,7 @@ def score():
     return 2 if _my_claims() else 0
 
 def run():
-    log("DISRUPT")
+    pass # log("DISRUPT")
     available = _my_claims()
     if not available:
         return

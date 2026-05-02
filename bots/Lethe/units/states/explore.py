@@ -4,7 +4,7 @@ import comms
 import units.builder
 from cambc import *
 import random
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -91,7 +91,7 @@ def generate_explore_target():
 
 def run():
     global explore_target, _explore_target_from_initial
-    log("EXPLORE")
+    pass # log("EXPLORE")
     if units.builder._initial_explore_target is not None:
         if map_info._my_pos.distance_squared(units.builder._initial_explore_target) <= 18:
             units.builder._initial_explore_target = None

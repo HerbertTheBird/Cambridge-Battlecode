@@ -1,14 +1,5 @@
-import heapq
 import map_info
-from cambc import Controller, Direction, Position, EntityType, ResourceType, Environment
-import comms
-import math
-from collections.abc import Collection
-import time
-import units.builder as builder
-import sys
-from functools import lru_cache
-from log import DRAW_DEBUG, log
+from cambc import Controller, Direction, Position, EntityType
 
 ALL_DIRS = list(Direction)
 ALL_DIRS_DELTAS = [(d, d.delta()) for d in ALL_DIRS]
@@ -62,14 +53,15 @@ def rebuild_broken_barriers(rc: Controller):
             break
     if rebuilt_pos is not None:
         destroyed_barriers.pop(rebuilt_pos, None)
-def voronoi_claim(my_mask, others_mask, claims, passable=None):
+def voronoi_claim(my_mask, others_mask, claims):
     if not claims:
         return 0
     if not others_mask:
         return claims
-    if passable is None:
-        passable = map_info._bm_passable_FFF
-    passable |= claims
+    w = map_info._width
+    board = (1 << (w * map_info._height)) - 1
+    avoid = map_info.get_avoid(False, False, False)
+    passable = (~avoid & board) | claims
 
     my_front = my_mask & passable
     other_front = others_mask & passable
@@ -122,7 +114,9 @@ class Pathing:
         if pos is None:
             pos = map_info._my_pos
         w = map_info._width
-        passable = map_info._bm_passable_FFF | targets
+        board = (1 << (w * map_info._height)) - 1
+        avoid = map_info.get_avoid(False, False, False)
+        passable = (~avoid & board) |  targets
         start = 1 << (pos.x + pos.y * w)
         if start & targets:
             return pos, 0
@@ -132,6 +126,10 @@ class Pathing:
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
         while frontier:
+            dist += 1
+            h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
+            expanded = h | (h << w) | (h >> w)
+            frontier = expanded & passable & ~visited
             hit = frontier & targets
             if hit:
                 lsb = hit & -hit
@@ -139,10 +137,6 @@ class Pathing:
 
                 return Position(n % w, n // w), dist
             visited |= frontier
-            dist += 1
-            h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
-            expanded = h | (h << w) | (h >> w)
-            frontier = expanded & passable & ~visited
         return None, -1
 
     def __init__(self, c: Controller):
@@ -311,17 +305,11 @@ class Pathing:
         if avoid_turret:
             threat |= map_info._bm_enemy_turret_threat
         threat &= ~start_mask
-        # builder.draw_mask(target_mask, 0, 255, 255)
-        # builder.draw_mask(avoid, 255, 0, 255)
-
-        # builder.draw_mask(barriers, 0, 0, 255)
-
+        
         walkable = (map_info._bm_et[map_info._IDX_ROAD]
                     | map_info._bm_conveyors
                     | map_info._bm_my_core_area
                     | start_mask)
-
-        start_time = time.perf_counter_ns()
 
         nlc = map_info._not_left_col
         nrc = map_info._not_right_col
@@ -361,23 +349,18 @@ class Pathing:
         while True:
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
-            # builder.draw_mask(cur_frontier, (i*64)%256, 0, 0)
             visited |= cur_frontier
             if cur_frontier == 0:
                 stuck_turns += 1
                 i += 1
                 if stuck_turns >= cycle_len:
-                    log("bfs move miss")
+                    pass # log("bfs move miss")
                     return None
                 continue
             else:
                 stuck_turns = 0
             hit = cur_frontier & can_move_to
             if hit:
-                end_time = time.perf_counter_ns()
-                log("bfs time " + str((end_time - start_time) / 1000) + "us")
-                
-                
                 cx = start_n % width
                 cy = start_n // width
                 start_pos = Position(cx, cy)
@@ -401,8 +384,7 @@ class Pathing:
                 preferred_family = 0 if last_fam == 0 else -last_fam if last_fam == last_last_fam else last_fam
                 if preferred_family == 0:
                     preferred_family = 2 #dont want to prefer straight over diag
-                # builder.draw_mask(from_mask, 255, 255, 0)
-                log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
+                pass # log("preferred family", preferred_family, self.last_dir, self.last_last_dir)
                 best_dir = None
                 while from_mask:
                     check_bit = from_mask & -from_mask
@@ -438,12 +420,7 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
-        # builder.draw_mask(avoid, 255, 0, 0)
-
-        # builder.draw_mask(target_mask, 0, 255, 255)
         avoid &= ~start_mask
-
-        start_time = time.perf_counter_ns()
 
         if end_cost_mask:
             t_end = target_mask & end_cost_mask
@@ -474,7 +451,7 @@ class Pathing:
         visited_layers: list[int] = []
         i = 0
         while True:
-            # log("route",i,file=sys.stderr)
+            # pass # log("route",i,file=sys.stderr)
             slot = i % cycle_len
             cur_frontier = frontier[slot] & ~visited
             frontier[slot] = 0
@@ -483,8 +460,6 @@ class Pathing:
 
             hit = cur_frontier & start_mask
             if hit:
-                end_time = time.perf_counter_ns()
-                log("bfs time " + str((end_time - start_time) / 1000) + "us")
                 start_bit = hit & -hit
                 s_idx = start_bit.bit_length() - 1
                 cx = s_idx % width
@@ -571,7 +546,7 @@ class Pathing:
         return self.move_to(adj, **kwargs)
 
     def move_to(self, target: Position | set[Position], avoid_empty: bool = False, avoid_turret: bool = True):
-        log("move to", target)
+        pass # log("move to", target)
         if isinstance(target, Position):
             target_set = {target}
         else:
@@ -582,17 +557,7 @@ class Pathing:
         # if avoid_empty:
         #     avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
         my_pos = map_info._my_pos
-        targets_not_adjacent = True
-        if my_pos in target_set:
-            targets_not_adjacent = False
-        else:
-            my_x = my_pos.x
-            my_y = my_pos.y
-            for t in target_set:
-                if max(abs(my_x - t.x), abs(my_y - t.y)) <= 1:
-                    targets_not_adjacent = False
-                    break
-        if target_set == self.target_p and my_pos == self.prev_pos and targets_not_adjacent:
+        if target_set == self.target_p and my_pos == self.prev_pos and my_pos not in target_set and all(max(abs(my_pos.x - t.x), abs(my_pos.y - t.y)) > 1 for t in target_set):
             self.stuck_turns += 1
         else:
             self.prev_pos = my_pos
@@ -615,14 +580,12 @@ class Pathing:
         s_pos, p_pos, _ = result
         if s_pos == p_pos:
             return False
-        if DRAW_DEBUG:
-            self.rc.draw_indicator_line(s_pos, p_pos, 0, 255, 255)
-        return self.move(map_info.direction_to(s_pos, p_pos))
+        return self.move(s_pos.direction_to(p_pos))
 
 
 
     def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
-        log("conveyors from ", start, raw_axionite)
+        pass # log("conveyors from ", start, raw_axionite)
         w = self.width
         if update:
             target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite, start.x + start.y * map_info._width)
@@ -645,9 +608,6 @@ class Pathing:
         if result is None:
             return None
         s_pos, p_pos, dist = result
-        if DRAW_DEBUG:
-            self.rc.draw_indicator_line(s_pos, p_pos, 255, 0, 255)
-            self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
     def conveyor_cost(self, dist, scaling=None):
@@ -655,9 +615,11 @@ class Pathing:
             scaling = self.rc.get_scale_percent() / 100
         if dist is None or dist < 0:
             return None
-        # Arithmetic-series equivalent of:
-        #   sum(3 * (scaling + 0.01 * k) for k in range(dist))
-        return 3 * dist * scaling + 0.015 * dist * (dist - 1)
+        cost = 0
+        for _ in range(dist):
+            cost += 3 * scaling
+            scaling += 0.01
+        return cost
     def raw_ax_foundry_sites(self):
         w = map_info._width
         my_idx = map_info._my_team_idx

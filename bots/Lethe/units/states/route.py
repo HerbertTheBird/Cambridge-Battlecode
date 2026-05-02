@@ -4,7 +4,7 @@ from pathing import Pathing
 import comms
 from cambc import *
 import units.builder
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -143,7 +143,7 @@ def _my_claims():
     avoid = avoid_mask()
     candidates = (_dead_end_conveyors() | _orphan_harvesters() | _orphan_foundries()) & ~avoid
     candidates = units.builder.exclude_crowded_claims(comm_flag, candidates)
-    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates, map_info._bm_passable_FFF)
+    return pathing.voronoi_claim(my_mask, units.builder.claimed_senders[comm_flag], candidates)
 
 _cached_claims = 0  # set by score(), reused by run()
 
@@ -156,11 +156,11 @@ def score():
 def run():
 
     global unpathable
-    log("ROUTE")
+    pass # log("ROUTE")
     candidates = _cached_claims
 
     if not candidates:
-        log("no candidates")
+        pass # log("no candidates")
         return
     width = map_info._width
     height = map_info._height
@@ -170,7 +170,7 @@ def run():
     foundries = _orphan_foundries() & ~avoid
     best, _ = nav.closest(candidates)
     if best is None:
-        log("no closest???")
+        pass # log("no closest???")
         unpathable |= candidates
         return
     units.builder.register_active_target(comm_flag, best)
@@ -211,7 +211,6 @@ def run():
         if target_zone & map_info._bm_enemy_bots:
             can_heal_road = True
         path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
-        log("PATH", path)
         if path is None:
             unpathable |= best_bit
             return
@@ -237,7 +236,6 @@ def run():
         comms.mark(best.x + best.y * map_info._width, comm_flag)
         return
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
-    # units.builder.draw_mask(foundry_sites, 255, 0, 0)
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit):
         foundry_cost = rc.get_foundry_cost()[0]
@@ -261,7 +259,7 @@ def run():
     if not is_refined:
         _cost_map[best_n] = cost
         if rc.get_global_resources()[0] < cost:
-            log("can't afford", cost)
+            pass # log("can't afford", cost)
             comms.mark(best.x + best.y * map_info._width, comm_flag)
             return
     if near_enemy:
@@ -294,7 +292,7 @@ def run():
             map_info.update_at(destroy)
             built = True
         elif not bridge:
-            direction = map_info.direction_to(destroy, next)
+            direction = destroy.direction_to(next)
             if _can_build_preferred_conveyor(destroy, direction):
                 _build_preferred_conveyor(destroy, direction)
                 map_info.update_at(destroy)
@@ -307,18 +305,18 @@ def run():
         last_unloaded_bit = 0
         visited = 0
         while True:
-            log("at", cur_n%width, cur_n//width)
-            log("next", conv_target[cur_n]%width, conv_target[cur_n]//width)
+            pass # log("at", cur_n%width, cur_n//width)
+            pass # log("next", conv_target[cur_n]%width, conv_target[cur_n]//width)
             cur_bit = 1 << cur_n
             if visited & cur_bit:
-                log("cycle detected")
+                pass # log("cycle detected")
                 break
             visited |= cur_bit
             if (map_info._bm_routable & cur_bit) and not (map_info._bm_conv_loaded & cur_bit):
                 last_unloaded_bit = cur_bit
             tn = conv_target[cur_n]
             if tn < 0 or tn >= tiles:
-                log("invalid target", tn)
+                pass # log("invalid target", tn)
                 break
             tbit = 1 << tn
             if not (map_info._bm_conveyors & tbit):
@@ -326,6 +324,6 @@ def run():
             cur_n = tn
         if last_unloaded_bit:
             map_info._bm_conv_loaded |= last_unloaded_bit
-            log("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
+            pass # log("set loaded", (last_unloaded_bit.bit_length() - 1) % width, (last_unloaded_bit.bit_length() - 1) // width)
 
     comms.mark(best.x + best.y * map_info._width, comm_flag)

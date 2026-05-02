@@ -4,7 +4,7 @@ from pathing import Pathing
 import comms
 from cambc import *
 import units.builder
-from log import log
+
 
 rc: Controller = None
 nav: Pathing = None
@@ -16,7 +16,7 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = units.builder.exclude_crowded_claims(comm_flag, harvestable_ore() & ~_too_expensive())
-    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available, map_info._bm_passable_FFF)
+    return available & ~pathing.voronoi_claim(units.builder.claimed_senders[comm_flag], my_mask, available)
 
 def init(c: Controller):
     global rc, nav
@@ -25,7 +25,6 @@ def init(c: Controller):
 
 cant_harvest = 0
 _cost_map: dict[int, int] = {}  # tile index -> min titanium cost to harvest
-_cached_claims = 0
 def possible_ore():
     ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI]
     if (map_info._bm_team[map_info._my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER] & map_info._bm_env[map_info._IDX_ENV_ORE_TI]) and rc.get_current_round() >= 1000:
@@ -82,29 +81,29 @@ def _too_expensive():
     ti = rc.get_global_resources()[0]
     result = 0
     for n, cost in _cost_map.items():
-        # log(n%map_info._width, n//map_info._width, cost)
+        # pass # log(n%map_info._width, n//map_info._width, cost)
         if cost > ti:
             result |= 1 << n
     return result
 
 MAX_SCORE = 3
 def score():
-    global _cached_claims
-    _cached_claims = _my_claims()
-    return 3 if _cached_claims else 0
+    return 3 if _my_claims() else 0
 
 CARD = [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
 
 
 def run():
     global cant_harvest
-    log("HARVEST")
+    pass # log("HARVEST")
     # Quick check: can we build a harvester on a diagonal ore that's already secured?
     w = map_info._width
     my_team_idx = map_info._my_team_idx
+    ore_mask = possible_ore()
     wall_mask = map_info._bm_env[map_info._IDX_ENV_WALL]
     road_mask = map_info._bm_et[map_info._IDX_ROAD]
     marker_mask = map_info._bm_et[map_info._IDX_MARKER]
+    harvester_mask = map_info._bm_et[map_info._IDX_HARVESTER]
     has_building = map_info._bm_any_building
 
     my_pos = map_info._my_pos
@@ -140,7 +139,6 @@ def run():
             cant_harvest |= pbit
             continue
         cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05)
-        log("diagonal ore at", p, "cost", cost)
         _cost_map[pn] = cost
         if cost > rc.get_global_resources()[0]:
             continue
@@ -154,7 +152,7 @@ def run():
         comms.mark(pn, comm_flag)
         return
 
-    available = _cached_claims
+    available = _my_claims()
     if not available:
         return
 
@@ -246,9 +244,9 @@ def run():
         pbit = 1 << (p.x + p.y * w)
         if map_info.is_passable(p):
             targets.add(p)
-    log("all secured")
+    pass # log("all secured")
     if targets:
-        log("attempt move?", targets)
+        pass # log("attempt move?", targets)
         nav.move_to(targets)
 
     if ore_id:
