@@ -2,6 +2,11 @@ from voronoi_core.observers.observer import Observer
 
 
 class Subject:
+    # Slotting these gives subclasses without their own __slots__ (Algorithm,
+    # Polygon) faster access to the four observer-state attributes; the
+    # subclasses themselves still get __dict__ for their own state.
+    __slots__ = ("_observers", "_children", "_root_sender", "_child_sender")
+
     def __init__(self):
         self._observers = []
         self._children = []

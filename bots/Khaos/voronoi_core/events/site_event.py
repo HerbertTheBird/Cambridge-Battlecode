@@ -1,9 +1,13 @@
 from voronoi_core.graph.point import Point
 from voronoi_core.events.event import Event
-from voronoi_core.observers.subject import Subject
 
 
-class SiteEvent(Event, Subject):
+class SiteEvent(Event):
+    # Subject inheritance was inert here -- Event.__init__ never chains via
+    # super(), so Subject.__init__ was never reached and no observer attrs
+    # were set. Dropping it lets us add __slots__ without a multi-inheritance
+    # layout conflict (Event has __slots__).
+    __slots__ = ("point",)
     circle_event = False
 
     def __init__(self, point: Point):

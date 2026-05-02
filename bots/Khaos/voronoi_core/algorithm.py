@@ -290,7 +290,7 @@ class Algorithm(Subject):
 
         # 2. Search the beach line tree for the arc above the point
         arc_node_above_point = Tree.find_leaf_node(self.status_tree, key=point_i.xd, sweep_line=self.sweep_line)
-        arc_above_point = arc_node_above_point.get_value()
+        arc_above_point = arc_node_above_point.data
 
         # Remove potential false alarm
         if arc_above_point.circle_event is not None:
@@ -412,16 +412,20 @@ class Algorithm(Subject):
             # raise Exception("Oh.")
             return
 
-        # Delete all circle events involving arc from the event queue.
-        def remove(neighbor_event):
-            if neighbor_event is None:
-                return None
-            if self._observers:
-                self.notify_observers(Message.DEBUG, payload=f"Circle event for {neighbor_event.yd} removed.")
-            return neighbor_event.remove()
-
-        remove(predecessor.get_value().circle_event)
-        remove(successor.get_value().circle_event)
+        # Delete all circle events involving arc from the event queue. Inlined
+        # (vs. an inner closure) to avoid building a closure and to hoist
+        # self._observers as a local for the (almost always empty) check.
+        _obs = self._observers
+        pred_circle = predecessor.data.circle_event
+        if pred_circle is not None:
+            if _obs:
+                self.notify_observers(Message.DEBUG, payload=f"Circle event for {pred_circle.yd} removed.")
+            pred_circle.remove()
+        succ_circle = successor.data.circle_event
+        if succ_circle is not None:
+            if _obs:
+                self.notify_observers(Message.DEBUG, payload=f"Circle event for {succ_circle.yd} removed.")
+            succ_circle.remove()
 
         # 2. Create half-edge records
 
@@ -476,21 +480,26 @@ class Algorithm(Subject):
         node_a, node_b, node_c = triple_left
         node_d, node_e, node_f = triple_right
 
-        left_event = CircleEvent.create_circle_event(node_a, node_b, node_c, sweep_line=self.sweep_line)
-        right_event = CircleEvent.create_circle_event(node_d, node_e, node_f, sweep_line=self.sweep_line)
+        sweep_line = self.sweep_line
+        left_event = CircleEvent.create_circle_event(node_a, node_b, node_c, sweep_line=sweep_line)
+        right_event = CircleEvent.create_circle_event(node_d, node_e, node_f, sweep_line=sweep_line)
+
+        # Hoist self._observers once; the inner observer-payload formatting is
+        # only worth doing if at least one observer is actually attached.
+        _obs = self._observers
 
         # Check if the circles converge
         if left_event:
             if not Algebra.check_clockwise(node_a.data.origin, node_b.data.origin, node_c.data.origin,
                                            left_event.center):
-                if self._observers:
+                if _obs:
                     self.notify_observers(Message.DEBUG, payload=f"Circle {left_event.point_triple} not clockwise.")
                 left_event = None
 
         if right_event:
             if not Algebra.check_clockwise(node_d.data.origin, node_e.data.origin, node_f.data.origin,
                                            right_event.center):
-                if self._observers:
+                if _obs:
                     self.notify_observers(Message.DEBUG, payload=f"Circle {right_event.point_triple} not clockwise.")
                 right_event = None
 
@@ -502,7 +511,7 @@ class Algorithm(Subject):
             self.event_queue.put(right_event)
             node_e.data.circle_event = right_event
 
-        if self._observers:
+        if _obs:
             if left_event is not None:
                 self.notify_observers(Message.DEBUG,
                                       payload=f"Left circle event created for {left_event.yd}. Arcs: {left_event.point_triple}")
@@ -513,7 +522,8 @@ class Algorithm(Subject):
         return left_event, right_event
 
     def _register_breakpoint_node(self, node):
-        if node is None or not isinstance(node, InternalNode):
+        # InternalNode has no subclasses; type() is is faster than isinstance.
+        if node is None or type(node) is not InternalNode:
             return
         self.breakpoint_index[node.data.breakpoint] = node
 
@@ -558,7 +568,7 @@ class Algorithm(Subject):
             root = Tree.balance_and_propagate(root)
 
             # Find the left breakpoint
-            breakpoint_tuple = (predecessor.get_value().origin, arc_node.get_value().origin)
+            breakpoint_tuple = (predecessor.data.origin, arc_node.data.origin)
             breakpoint: InternalNode = self._find_breakpoint_node(root, breakpoint_tuple, sweep_line=sweep_line)
 
             # Update the breakpoint
@@ -566,7 +576,7 @@ class Algorithm(Subject):
             if breakpoint is not None:
                 updated = self._retarget_breakpoint(
                     breakpoint,
-                    (breakpoint.get_value().breakpoint[0], successor.get_value().origin),
+                    (breakpoint.data.breakpoint[0], successor.data.origin),
                 )
             else:
                 updated = None
@@ -589,7 +599,7 @@ class Algorithm(Subject):
             root = Tree.balance_and_propagate(root)
 
             # Find the right breakpoint
-            breakpoint_tuple = (arc_node.get_value().origin, successor.get_value().origin)
+            breakpoint_tuple = (arc_node.data.origin, successor.data.origin)
             breakpoint: InternalNode = self._find_breakpoint_node(root, breakpoint_tuple, sweep_line=sweep_line)
 
             # Update the breakpoint
@@ -597,7 +607,7 @@ class Algorithm(Subject):
             if breakpoint is not None:
                 updated = self._retarget_breakpoint(
                     breakpoint,
-                    (predecessor.get_value().origin, breakpoint.get_value().breakpoint[1]),
+                    (predecessor.data.origin, breakpoint.data.breakpoint[1]),
                 )
             else:
                 updated = None
