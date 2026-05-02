@@ -64,9 +64,13 @@ class HalfEdge:
         # The point of which this edge is the border
         self.incident_point = incident_point
 
-        # the twin of this edge
-        self._twin = None
-        self.twin = twin
+        # the twin of this edge -- bypass the property setter (which does
+        # essentially the same work but with descriptor dispatch).
+        if twin is not None:
+            twin._twin = self
+            self._twin = twin
+        else:
+            self._twin = None
 
         # Next and previous
         self.next = None
@@ -108,13 +112,16 @@ class HalfEdge:
         -------
         origin: Coordinate
         """
-        if isinstance(self.origin, Vertex):
-            if self.origin.xd is None or self.origin.yd is None:
+        # type(...) is Vertex is faster than isinstance() and Vertex has no
+        # subclasses in this codebase, so the behaviour is identical.
+        origin = self.origin
+        if type(origin) is Vertex:
+            if origin._xd is None or origin._yd is None:
                 return None
-            return self.origin
+            return origin
 
         if y is not None:
-            return self.origin.get_intersection(y, max_y=max_y)
+            return origin.get_intersection(y, max_y=max_y)
 
         return None
 

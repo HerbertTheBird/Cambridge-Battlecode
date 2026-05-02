@@ -66,9 +66,9 @@ class CircleEvent(Event):
             return None
 
         # Get arcs from the nodes
-        left_arc: Arc = left_node.get_value()
-        middle_arc: Arc = middle_node.get_value()
-        right_arc: Arc = right_node.get_value()
+        left_arc: Arc = left_node.data
+        middle_arc: Arc = middle_node.data
+        right_arc: Arc = right_node.data
 
         # Get the points from the arcs
         a, b, c = left_arc.origin, middle_arc.origin, right_arc.origin
@@ -78,8 +78,13 @@ class CircleEvent(Event):
         if circle:
             x, y, radius = circle
 
-            # Return circle event
-            return CircleEvent(center=Coordinate(x, y), radius=radius, arc_node=middle_node, point_triple=(a, b, c),
+            # Skip Coordinate.__init__ + the two to_number() calls; we already
+            # have the coordinates as the right numeric type from create_circle.
+            center = Coordinate.__new__(Coordinate)
+            center._xd = x
+            center._yd = y
+
+            return CircleEvent(center=center, radius=radius, arc_node=middle_node, point_triple=(a, b, c),
                                arc_triple=(left_arc, middle_arc, right_arc))
 
         return None
@@ -99,18 +104,25 @@ class CircleEvent(Event):
         B = by - ay
         C = cx - ax
         D = cy - ay
-        E = (bx - ax) * (ax + bx) + (by - ay) * (ay + by)
-        F = (cx - ax) * (ax + cx) + (cy - ay) * (ay + cy)
-        G = 2 * ((bx - ax) * (cy - by) - (by - ay) * (cx - bx))
+
+        # G = 2 * ((bx-ax)*(cy-by) - (by-ay)*(cx-bx))
+        # Using cy-by = D - B and cx-bx = C - A:
+        #   = 2 * (A*(D-B) - B*(C-A)) = 2 * (A*D - B*C)
+        G = 2 * (A * D - B * C)
 
         if is_zero(G):
             # Points are all on one line (collinear), so no circle can be made
             return False
 
+        E = A * (ax + bx) + B * (ay + by)
+        F = C * (ax + cx) + D * (ay + cy)
+
         # Center and radius of the circle
         x = (D * E - B * F) / G
         y = (A * F - C * E) / G
 
-        radius = sqrt((ax - x) ** 2 + (ay - y) ** 2)
+        rdx = ax - x
+        rdy = ay - y
+        radius = sqrt(rdx * rdx + rdy * rdy)
 
         return x, y, radius

@@ -19,16 +19,20 @@ from voronoi_core.tree.tree import Tree
 
 
 class EventQueue:
-    __slots__ = ("_heap",)
+    __slots__ = ("_heap", "_counter")
 
     def __init__(self):
         self._heap = []
+        # Counter is appended to the heap key so heapq never needs to fall
+        # back to comparing event objects (which would call event.__lt__).
+        self._counter = 0
 
     def put(self, item):
-        heapq.heappush(self._heap, item)
+        self._counter += 1
+        heapq.heappush(self._heap, (item._sort_key, self._counter, item))
 
     def get(self):
-        return heapq.heappop(self._heap)
+        return heapq.heappop(self._heap)[2]
 
     def empty(self):
         return not self._heap

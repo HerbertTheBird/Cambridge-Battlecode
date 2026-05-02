@@ -1,3 +1,5 @@
+import math
+
 from voronoi_core.graph import Coordinate, Vertex, HalfEdge
 from voronoi_core.graph.algebra import Algebra
 
@@ -28,6 +30,28 @@ class Polygon(Subject):
 
         self.points = self._order_points(self.points)
         self.polygon_vertices = [Vertex(point._xd, point._yd) for point in self.points]
+
+        # Pre-compute polygon edges as flat float tuples for hot inside() and
+        # _get_intersection_point() loops. These avoid 4 attribute lookups per
+        # edge per call and let the inner math run in pure float.
+        self._edge_pts = self._build_edge_pts()
+        # Sweep-line position used by _finish_edge() never changes after init.
+        self._finish_sweep_line = self.min_y - abs(self.max_y)
+
+    def _build_edge_pts(self):
+        pts = self.points
+        edges = []
+        if not pts:
+            return edges
+        prev = pts[-1]
+        for cur in pts:
+            xi = float(prev._xd)
+            yi = float(prev._yd)
+            xj = float(cur._xd)
+            yj = float(cur._yd)
+            edges.append((xi, yi, xj, yj, xj - xi, yj - yi))
+            prev = cur
+        return edges
 
     def _order_points(self, points):
         clockwise = sorted(points, key=lambda point: (-180 - Algebra.calculate_angle(point, self.center)) % 360)
@@ -144,14 +168,15 @@ class Polygon(Subject):
         return resulting_edges
 
     def _finish_edge(self, edge):
-        # Sweep line position
-        sweep_line = self.min_y - abs(self.max_y)
+        # Sweep line position (cached at construction; never changes).
+        sweep_line = self._finish_sweep_line
+        max_y = self.max_y
 
         # Start should be a breakpoint
-        start = edge.get_origin(y=sweep_line, max_y=self.max_y)
+        start = edge.get_origin(y=sweep_line, max_y=max_y)
 
         # End should be a vertex
-        end = edge.twin.get_origin(y=sweep_line, max_y=self.max_y)
+        end = edge.twin.get_origin(y=sweep_line, max_y=max_y)
 
         # Get point of intersection
         point = self._get_intersection_point(end, start)
@@ -197,21 +222,14 @@ class Polygon(Subject):
             Whether the point is inside or not
         """
 
-        x = point._xd
-        y = point._yd
+        x = float(point._xd)
+        y = float(point._yd)
         inside = False
 
-        prev = self.points[-1]
-        for cur in self.points:
-            xi = prev._xd
-            yi = prev._yd
-            xj = cur._xd
-            yj = cur._yd
-
-            intersect = ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
-            if intersect:
-                inside = not inside
-            prev = cur
+        for xi, yi, _xj, yj, dx, dy in self._edge_pts:
+            if (yi > y) != (yj > y):
+                if x < dx * (y - yi) / dy + xi:
+                    inside = not inside
 
         return inside
 
@@ -219,20 +237,53 @@ class Polygon(Subject):
         if orig is None or end is None:
             return None
 
-        max_distance = Algebra.distance(orig, end)
+        # Operate in pure float so that Decimal x float arithmetic doesn't
+        # raise (and so we save a function-call layer over Algebra).
+        ox = float(orig._xd)
+        oy = float(orig._yd)
+        ex = float(end._xd)
+        ey = float(end._yd)
+
+        dx_ray = ex - ox
+        dy_ray = ey - oy
+        max_distance = math.hypot(dx_ray, dy_ray)
+        if max_distance == 0.0:
+            dir_x = dx_ray
+            dir_y = dy_ray
+        else:
+            dir_x = dx_ray / max_distance
+            dir_y = dy_ray / max_distance
+        neg_dir_y = -dir_y
+
         best_point = None
         best_distance = None
-        prev = self.points[-1]
 
-        for cur in self.points:
-            intersection_point = Algebra.get_intersection(orig, end, prev, cur)
-            prev = cur
-            if intersection_point is None:
+        for p1x, p1y, _p2x, _p2y, v2x, v2y in self._edge_pts:
+            denom = v2x * neg_dir_y + v2y * dir_x
+            if denom == 0.0:
                 continue
 
-            distance = Algebra.distance(orig, intersection_point)
-            if distance <= max_distance and (best_distance is None or distance > best_distance):
-                best_point = intersection_point
-                best_distance = distance
+            v1x = ox - p1x
+            v1y = oy - p1y
 
-        return best_point
+            t1 = (v2x * v1y - v2y * v1x) / denom
+            t2 = (v1x * neg_dir_y + v1y * dir_x) / denom
+
+            if not (t1 > 0.0 and 0.0 <= t2 <= 1.0):
+                continue
+
+            # The direction is a unit vector, so distance from orig to the
+            # intersection is just |t1|, and t1 is positive here.
+            if t1 <= max_distance and (best_distance is None or t1 > best_distance):
+                best_point = (ox + t1 * dir_x, oy + t1 * dir_y)
+                best_distance = t1
+
+        if best_point is None:
+            return None
+
+        # Bypass Coordinate.__init__ (and its to_number() calls); we already
+        # know the coordinates are valid floats.
+        c = Coordinate.__new__(Coordinate)
+        c._xd = best_point[0]
+        c._yd = best_point[1]
+        return c
