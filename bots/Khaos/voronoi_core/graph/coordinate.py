@@ -16,8 +16,8 @@ class Coordinate:
         y: float
             The y-coordinate
         """
-        self._xd: Decimal = Coordinate._to_dec(x)
-        self._yd: Decimal = Coordinate._to_dec(y)
+        self._xd = to_number(x)
+        self._yd = to_number(y)
 
     def __sub__(self, other):
         return Coordinate(x=self.xd - other.xd, y=self.yd - other.yd)
@@ -63,7 +63,7 @@ class Coordinate:
         value: float
             The x-coordinate as float
         """
-        self._xd = Coordinate._to_dec(value)
+        self._xd = to_number(value)
 
     @y.setter
     def y(self, value):
@@ -75,7 +75,7 @@ class Coordinate:
         value: float
             The y-coordinate as float
         """
-        self._yd = Coordinate._to_dec(value)
+        self._yd = to_number(value)
 
     @property
     def xy(self):
@@ -103,7 +103,7 @@ class Coordinate:
 
     @xd.setter
     def xd(self, value: float):
-        self._xd = Coordinate._to_dec(value)
+        self._xd = to_number(value)
 
     @property
     def yd(self):
@@ -119,4 +119,4 @@ class Coordinate:
 
     @yd.setter
     def yd(self, value: float):
-        self._yd = Coordinate._to_dec(value)
+        self._yd = to_number(value)

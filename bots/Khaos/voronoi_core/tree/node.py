@@ -102,7 +102,25 @@ class Node:
         """
         Recalculate the height of the node.
         """
-        self._height = self.calculate_height()
+        # Inlined calculate_height: avoids the recursive .height property
+        # dispatch on each child and the calculate_height() method call here.
+        left = self._left
+        if left is None:
+            lh = 0
+        else:
+            lh = left._height
+            if lh is None:
+                lh = left.calculate_height()
+                left._height = lh
+        right = self._right
+        if right is None:
+            rh = 0
+        else:
+            rh = right._height
+            if rh is None:
+                rh = right.calculate_height()
+                right._height = rh
+        self._height = 1 + (lh if lh > rh else rh)
 
     def update_heights(self):
         """
@@ -227,9 +245,11 @@ class Node:
         if parent is None:
             root = replacement
         elif parent._left is self:
-            parent.left = replacement
+            # replacement.parent already set above; bypass the .left setter
+            # to avoid a redundant parent reassignment.
+            parent._left = replacement
         elif parent._right is self:
-            parent.right = replacement
+            parent._right = replacement
         else:
             root = replacement
 

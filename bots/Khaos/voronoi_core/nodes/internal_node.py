@@ -11,7 +11,7 @@ class InternalNode(Node):
     def get_key(self, sweep_line=None):
         return self.data.get_intersection_x(sweep_line)
 
-    def get_value(self, **kwargs):
+    def get_value(self, sweep_line=None):
         return self.data
 
     def get_label(self):

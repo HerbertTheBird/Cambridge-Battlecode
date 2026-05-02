@@ -2,7 +2,7 @@ import math
 from decimal import Decimal
 
 from voronoi_core.graph.coordinate import Coordinate
-from voronoi_core.numeric import is_close, is_zero, sqrt
+from voronoi_core.numeric import is_close, is_zero, sqrt, to_number
 
 
 class Breakpoint:
@@ -32,13 +32,13 @@ class Breakpoint:
     def tuple_name(self):
         return self.breakpoint[0].name + self.breakpoint[1].name
 
-    def does_intersect(self):
+    def does_intersect(self, _is_close=is_close):
         i, j = self.breakpoint
         iy = i._yd
         jy = j._yd
-        return not (is_close(iy, jy) and j._xd < i._xd)
+        return not (_is_close(iy, jy) and j._xd < i._xd)
 
-    def get_intersection_x(self, l):
+    def get_intersection_x(self, l, _is_close=is_close, _is_zero=is_zero, _sqrt=sqrt):
         i, j = self.breakpoint
         a = i._xd
         b = i._yd
@@ -46,21 +46,24 @@ class Breakpoint:
         d = j._yd
         u = 2 * (b - l)
         v = 2 * (d - l)
+        diff_uv = u - v
 
-        if is_close(b, d) or is_zero(u - v):
+        if _is_close(b, d) or _is_zero(diff_uv):
             return (a + c) / 2
-        if is_close(b, l):
+        if _is_close(b, l):
             return a
-        if is_close(d, l):
+        if _is_close(d, l):
             return c
 
-        return -(sqrt(
-            v * (a ** 2 * u - 2 * a * c * u + b ** 2 * (u - v) + c ** 2 * u)
-            + d ** 2 * u * (v - u)
-            + l ** 2 * (u - v) ** 2
-        ) + a * v - c * u) / (u - v)
+        return -(_sqrt(
+            v * (a * a * u - 2 * a * c * u + b * b * diff_uv + c * c * u)
+            + d * d * u * (-diff_uv)
+            + l * l * diff_uv * diff_uv
+        ) + a * v - c * u) / diff_uv
 
-    def get_intersection(self, l, max_y=None):
+    def get_intersection(self, l, max_y=None,
+                         _is_close=is_close, _is_zero=is_zero, _sqrt=sqrt,
+                         _to_number=to_number):
         """
         Calculate the coordinates of the intersection
         Modified from https://www.cs.hmc.edu/~mbrubeck/voronoi.html
@@ -74,40 +77,58 @@ class Breakpoint:
 
         # Initialize the resulting point
         result = Coordinate()
-        p: Coordinate = i
 
-        # First we replace some stuff to make it easier
+        # Inline get_intersection_x to avoid recomputing a, b, c, d, u, v.
         a = i._xd
         b = i._yd
         c = j._xd
         d = j._yd
         u = 2 * (b - l)
         v = 2 * (d - l)
+        diff_uv = u - v
 
-        result._xd = self.get_intersection_x(l)
+        bd_close = _is_close(b, d)
+        uv_zero = _is_zero(diff_uv)
+        bl_close = _is_close(b, l)
+        dl_close = _is_close(d, l)
+
+        if bd_close or uv_zero:
+            x = (a + c) / 2
+        elif bl_close:
+            x = a
+        elif dl_close:
+            x = c
+        else:
+            x = -(_sqrt(
+                v * (a * a * u - 2 * a * c * u + b * b * diff_uv + c * c * u)
+                + d * d * u * (-diff_uv)
+                + l * l * diff_uv * diff_uv
+            ) + a * v - c * u) / diff_uv
+
+        result._xd = x
+
+        # Pick the parabola whose y-value we evaluate at x.
+        p = i
 
         # Handle the case where the two points have the same y-coordinate (breakpoint is in the middle)
-        if is_close(b, d) or is_zero(u - v):
-
+        if bd_close or uv_zero:
             if c < a:
-                result._yd = Coordinate._to_dec(max_y or float('inf'))
+                result._yd = _to_number(max_y or float('inf'))
                 return result
-
         # Handle cases where one point's y-coordinate is the same as the sweep line
-        elif is_close(b, l):
+        elif bl_close:
             p = j
 
         # We have to re-evaluate this, since the point might have been changed
-        a = p._xd
-        b = p._yd
-        x = result._xd
-        u = 2 * (b - l)
+        a2 = p._xd
+        b2 = p._yd
+        u2 = 2 * (b2 - l)
 
         # Handle degenerate case where parabolas don't intersect
-        if is_zero(u):
-            result._yd = Coordinate._to_dec(float("inf"))
+        if _is_zero(u2):
+            result._yd = _to_number(float("inf"))
             return result
 
         # And we put everything back in y
-        result._yd = 1 / u * (x ** 2 - 2 * a * x + a ** 2 + b ** 2 - l ** 2)
+        result._yd = (x * x - 2 * a2 * x + a2 * a2 + b2 * b2 - l * l) / u2
         return result

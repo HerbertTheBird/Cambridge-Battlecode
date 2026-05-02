@@ -24,7 +24,7 @@ class Tree:
         return node
 
     @staticmethod
-    def find_value(root: Node, query: Node, compare=lambda x, y: x == y, **kwargs):
+    def find_value(root: Node, query: Node, compare=lambda x, y: x == y, sweep_line=None):
         """
         Find an item using a query node and a comparison function.
 
@@ -32,21 +32,21 @@ class Tree:
         :param query: The query
         :param compare: (lambda) Lambda expression to compare the node against the query. Will be called as
         compare(node.data, query.data).
-        :param kwargs: Optional arguments to be passed to the get_key() functions
+        :param sweep_line: Sweep line position passed through to get_key().
         :return: (Node or None) Returns the node that corresponds to the query or None
         """
-        key = query.get_key(**kwargs)
+        key = query.get_key(sweep_line=sweep_line)
         node = root
         while node is not None:
-            node_key = node.get_key(**kwargs)
+            node_key = node.get_key(sweep_line=sweep_line)
             if key == node_key:
 
                 if compare(node.data, query.data):
                     return node
 
-                left = Tree.find_value(node._left, query, compare, **kwargs)
+                left = Tree.find_value(node._left, query, compare, sweep_line=sweep_line)
                 if left is None:
-                    right = Tree.find_value(node._right, query, compare, **kwargs)
+                    right = Tree.find_value(node._right, query, compare, sweep_line=sweep_line)
                     return right
 
                 return left
@@ -55,17 +55,17 @@ class Tree:
                 # Normally, the three should go left and find the correct value there,
                 # but due to rounding errors, it sometimes takes the wrong turn. So if the left
                 # branch doesn't get a result, we try the other branch.
-                return Tree.find_value(node._left, query, compare, **kwargs) or \
-                       Tree.find_value(node._right, query, compare, **kwargs)
+                return Tree.find_value(node._left, query, compare, sweep_line=sweep_line) or \
+                       Tree.find_value(node._right, query, compare, sweep_line=sweep_line)
             else:
                 # Normally, the three should go right and find the correct value there,
                 # but due to rounding errors, it sometimes takes the wrong turn. So if the right
                 # branch doesn't get a result, we try the other branch.
-                return Tree.find_value(node._right, query, compare, **kwargs) or \
-                       Tree.find_value(node._left, query, compare, **kwargs)
+                return Tree.find_value(node._right, query, compare, sweep_line=sweep_line) or \
+                       Tree.find_value(node._left, query, compare, sweep_line=sweep_line)
 
     @staticmethod
-    def find_leaf_node(root: Node, key, **kwargs):
+    def find_leaf_node(root: Node, key, sweep_line=None):
         """
         Follows a path downward between the internal nodes using the key until it
         reaches a leaf node. If it is unclear which path to take, the left path is
@@ -73,20 +73,20 @@ class Tree:
 
         :param root: (Node) The root of the (sub)tree to travel down
         :param key: The key to use to determine the path
-        :param kwargs: Optional arguments passed to the get_key() functions
+        :param sweep_line: Sweep line position passed through to get_key().
         :return: (Node) The node found at the end of the journey
         """
 
         node = root
         while node is not None:
-
-            # If the node is a leaf, we have found a leaf
-            if node.is_leaf():
-                return node
-
-            node_key = node.get_key(**kwargs)
             left = node._left
             right = node._right
+
+            # is_leaf() inlined: avoid a method call per iteration.
+            if left is None and right is None:
+                return node
+
+            node_key = node.get_key(sweep_line=sweep_line)
 
             # If we found the key, we choose a direction
             if key == node_key:
@@ -223,7 +223,10 @@ class Tree:
             # Case 3 - Left Right (left.balance < 0)
             if left.balance >= 0:
                 return Tree.rotate_right(node)
-            node.left = Tree.rotate_left(left)
+            # rotate_left already wires the new root into node._left via the
+            # grandparent reparent step, so the explicit `node.left = ...`
+            # assignment would just redundantly set parent/_left again.
+            Tree.rotate_left(left)
             return Tree.rotate_right(node)
 
         if balance < -1:
@@ -232,7 +235,7 @@ class Tree:
             # Case 4 - Right Left  (right.balance > 0)
             if right.balance <= 0:
                 return Tree.rotate_left(node)
-            node.right = Tree.rotate_right(right)
+            Tree.rotate_right(right)
             return Tree.rotate_left(node)
 
         return node
@@ -255,22 +258,26 @@ class Tree:
         :return: (Node) The new root of the sub tree
         """
         grandparent = z.parent
-        y = z.right
-        T2 = y.left
+        y = z._right
+        T2 = y._left
 
         # Appoint new parent to root of sub tree
         y.parent = grandparent
 
-        # And point the parent back
+        # And point the parent back. We bypass the .left/.right setters since
+        # they would redundantly reassign y.parent (already set above).
         if grandparent is not None:
             if grandparent._left is z:
-                grandparent.left = y
+                grandparent._left = y
             else:
-                grandparent.right = y
+                grandparent._right = y
 
-        # Perform rotation
-        y.left = z
-        z.right = T2
+        # Perform rotation. Bypass setters and manage parent pointers directly.
+        y._left = z
+        z.parent = y
+        z._right = T2
+        if T2 is not None:
+            T2.parent = z
 
         # Update heights (z has to be updated first, because it is a child of y)
         z.update_height()
@@ -297,22 +304,26 @@ class Tree:
         :return: (Node) The new root of the sub tree
         """
         grandparent = z.parent
-        y = z.left
-        T3 = y.right
+        y = z._left
+        T3 = y._right
 
         # Appoint new parent to root of sub tree
         y.parent = grandparent
 
-        # And point the parent back
+        # And point the parent back. Bypass the .left/.right setters since they
+        # would redundantly reassign y.parent (already set above).
         if grandparent is not None:
             if grandparent._left is z:
-                grandparent.left = y
+                grandparent._left = y
             else:
-                grandparent.right = y
+                grandparent._right = y
 
-        # Perform rotation
-        y.right = z
-        z.left = T3
+        # Perform rotation. Bypass setters and manage parent pointers directly.
+        y._right = z
+        z.parent = y
+        z._left = T3
+        if T3 is not None:
+            T3.parent = z
 
         # Update heights (z has to be updated first, because it is a child of y)
         z.update_height()

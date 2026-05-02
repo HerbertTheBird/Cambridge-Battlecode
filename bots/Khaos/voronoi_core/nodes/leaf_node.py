@@ -10,12 +10,11 @@ class LeafNode(Node):
         return f"Leaf({self.data}, left={self.left}, right={self.right})"
 
     def get_key(self, sweep_line=None):
-        return self.data.origin.xd
+        # Direct _xd access skips the property descriptor.
+        return self.data.origin._xd
 
-    def get_value(self, **kwargs):
+    def get_value(self, sweep_line=None):
         return self.data
 
     def get_label(self):
         return f"{self.data.origin.name}"
-
-
