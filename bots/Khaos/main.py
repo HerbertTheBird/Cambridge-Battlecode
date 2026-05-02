@@ -18,7 +18,7 @@ import chokepoint
 from _config import USE_CHOKEPOINTS
 from log import log
 
-ENABLE_PROFILER = True
+ENABLE_PROFILER = False
 
 if ENABLE_PROFILER:
     import cProfile
