@@ -392,7 +392,7 @@ def try_road_spam():
     my_neighbors = map_info.expand_chebyshev(my_bit) & ~my_bit
 
     # Don't build roads where my own gunners are shooting through.
-    avoid = map_info._bm_my_gunner_claims
+    avoid = map_info._bm_my_gunner_claims | map_info._bm_enemy_hard_threat
     allowed_neighbors = my_neighbors & ~avoid
     draw_mask(avoid & my_neighbors, 255, 0, 0)
 

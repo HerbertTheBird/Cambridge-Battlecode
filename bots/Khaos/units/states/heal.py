@@ -245,10 +245,12 @@ def _find_chase_target_main(damaged: bool = True):
     if not filtered:
         filtered = enemy_bots
         return None
+
     nearby = filtered & map_info.expand_chebyshev(my_bit, 8)
     if not nearby:
         log("too far")
         return None
+
     # Enumerate all reachable enemies within max_dist=8 by repeatedly removing
     # the previous closest. Then tiebreak the minimum-BFS-distance set by
     # chebyshev distance to my conveyors (lowest priority — closer wins).
@@ -263,10 +265,10 @@ def _find_chase_target_main(damaged: bool = True):
     if not enumerated:
         log("no closest")
         return None
-    min_d = min(d for d, _ in enumerated)
-    tied = [p for d, p in enumerated if d == min_d]
-    if len(tied) == 1:
-        return tied[0]
+    # min_d = min(d for d, _ in enumerated)
+    tied = [p for d, p in enumerated]
+    # if len(tied) == 1:
+    #     return tied[0]
     my_convs = map_info._bm_conveyors & map_info._bm_team[map_info._my_team_idx]
     best = None
     best_cd = None
