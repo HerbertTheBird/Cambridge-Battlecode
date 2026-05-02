@@ -147,105 +147,188 @@ def run():
         return
     w = map_info._width
     my_team_idx = map_info._my_team_idx
-    best_ore, _ = nav.closest(available)
-    if not best_ore:
-        log("secure exit: nav.closest returned None over", available.bit_count(), "tiles")
-        _mark_cant_secure(available)
-        return
-    log("dist", _)
-    log("best secure", best_ore)
-    if best_ore.distance_squared(rc.get_position()) <= 5:
-        check_region = map_info.expand_chebyshev(1<<(rc.get_position().x+rc.get_position().y*w), 2)
-        securing = ( map_info._bm_team[my_team_idx]
-            & ~map_info._bm_et[map_info._IDX_ROAD]
-            & ~map_info._bm_et[map_info._IDX_MARKER]
-            & ~map_info._bm_guard_conveyor
-        | map_info._bm_env[map_info._IDX_ENV_WALL]) |  map_info._bm_team[1-my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER]
-        bottom_row = ((1<<w)-1)<<w*(map_info._height-1)
-        top_row = ((1<<w)-1)
-        
-        to_check = check_region&available
-        loc_best = None
-        def dirs_covered(n_bit):
-            score = 0
-            if n_bit & ~map_info._not_left_col:
-                score += 1
-            if n_bit & ~map_info._not_right_col:
-                score += 1
-            if n_bit & bottom_row:
-                score += 1
-            if n_bit & top_row:
-                score += 1
-            if (n_bit & map_info._not_left_col)<<1 & securing:
-                score += 1
-            if (n_bit & map_info._not_right_col)>>1 & securing:
-                score += 1
-            if n_bit>>w & securing:
-                score += 1
-            if n_bit<<w & securing:
-                score += 1
-            return score
-        mx_score = dirs_covered(1<<(best_ore.x+best_ore.y*w))
-        log("initial score", mx_score)
-        while to_check:
-            n_bit = (to_check&-to_check)
-            n = n_bit.bit_length()-1
-            score = dirs_covered(n_bit)
-            log("new score", score, n%w, n//w)
-            if score > mx_score:
-                mx_score = score
-                loc_best = Position(n%w, n//w)
-            to_check ^= n_bit
-        if loc_best:
-            best_ore = loc_best
-    log(best_ore)
-    is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY]&(1<<(best_ore.x+best_ore.y*w)))
-    log("is foundry", is_foundry)
+
+    best_ore = None
+    path = None
+    is_foundry = False
+    is_raw_ax = False
+    is_conveyor = False
+    unsecured = 0
+    closest = None
+    closest_n = -1
+    done_conveyor = None
+    is_enemy_blocking = False
+    is_enemy_harvester = False
+
+    while available:
+        candidate, _ = nav.closest(available)
+        if not candidate:
+            log("secure exit: nav.closest returned None over", available.bit_count(), "tiles")
+            _mark_cant_secure(available)
+            return
+        log("dist", _)
+        log("best secure", candidate)
+        if candidate.distance_squared(rc.get_position()) <= 5:
+            check_region = map_info.expand_chebyshev(1<<(rc.get_position().x+rc.get_position().y*w), 2)
+            securing = ( map_info._bm_team[my_team_idx]
+                & ~map_info._bm_et[map_info._IDX_ROAD]
+                & ~map_info._bm_et[map_info._IDX_MARKER]
+                & ~map_info._bm_guard_conveyor
+            | map_info._bm_env[map_info._IDX_ENV_WALL]) |  map_info._bm_team[1-my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER]
+            bottom_row = ((1<<w)-1)<<w*(map_info._height-1)
+            top_row = ((1<<w)-1)
+
+            to_check = check_region&available
+            loc_best = None
+            def dirs_covered(n_bit):
+                score = 0
+                if n_bit & ~map_info._not_left_col:
+                    score += 1
+                if n_bit & ~map_info._not_right_col:
+                    score += 1
+                if n_bit & bottom_row:
+                    score += 1
+                if n_bit & top_row:
+                    score += 1
+                if (n_bit & map_info._not_left_col)<<1 & securing:
+                    score += 1
+                if (n_bit & map_info._not_right_col)>>1 & securing:
+                    score += 1
+                if n_bit>>w & securing:
+                    score += 1
+                if n_bit<<w & securing:
+                    score += 1
+                return score
+            mx_score = dirs_covered(1<<(candidate.x+candidate.y*w))
+            log("initial score", mx_score)
+            while to_check:
+                n_bit = (to_check&-to_check)
+                n = n_bit.bit_length()-1
+                score = dirs_covered(n_bit)
+                log("new score", score, n%w, n//w)
+                if score > mx_score:
+                    mx_score = score
+                    loc_best = Position(n%w, n//w)
+                to_check ^= n_bit
+            if loc_best:
+                candidate = loc_best
+        log(candidate)
+        cand_n = candidate.x + candidate.y * w
+        cand_bit = 1 << cand_n
+        cand_is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY]&cand_bit)
+        log("is foundry", cand_is_foundry)
+        cand_is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & cand_bit)
+
+        cand_unsecured = 0
+        cand_done_conveyor = None
+        for d in CARD:
+            p = map_info.pos_add(candidate, d)
+            if not map_info.in_bounds(p):
+                continue
+            pn = p.x + p.y * w
+            pbit = 1 << pn
+            if map_info._bm_env[map_info._IDX_ENV_WALL] & pbit:
+                continue
+            is_mine = bool(map_info._bm_team[my_team_idx] & pbit) if map_info._building_id[pn] else False
+            is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & pbit)
+            is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
+            log("checking", p, is_mine, is_road, is_marker, map_info._building_id[pn])
+            if is_mine and (map_info._bm_et[map_info._IDX_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_BRIDGE]&pbit) and map_info._building_dir[pn] != map_info._DIR_INT[d.opposite()]:
+                cand_done_conveyor = p
+            if is_mine and map_info._bm_et[map_info._IDX_BRIDGE]&pbit:
+                cand_done_conveyor = p
+            if is_mine and not is_road and not is_marker:
+                continue
+            cand_unsecured |= pbit
+        cand_closest, _ = nav.closest(cand_unsecured)
+        if not cand_closest:
+            _mark_cant_secure(cand_unsecured | cand_bit)
+            log("exit 3, retrying")
+            available &= ~cand_bit
+            continue
+        cand_closest_n = cand_closest.x + cand_closest.y * w
+        cand_is_enemy_blocking = bool(
+            map_info._building_id[cand_closest_n]
+            and not (map_info._bm_team[my_team_idx]&(1<<cand_closest_n))
+            and not (map_info._bm_et[map_info._IDX_MARKER]&(1<<cand_closest_n))
+        )
+        cand_is_enemy_harvester = bool(
+            map_info._bm_et[map_info._IDX_HARVESTER]
+            & map_info._bm_team[1 - my_team_idx]
+            & cand_bit
+        )
+        if cand_is_enemy_blocking or cand_is_enemy_harvester:
+            best_ore = candidate
+            path = None
+            is_foundry = cand_is_foundry
+            is_raw_ax = cand_is_raw_ax
+            is_conveyor = False
+            unsecured = cand_unsecured
+            closest = cand_closest
+            closest_n = cand_closest_n
+            done_conveyor = cand_done_conveyor
+            is_enemy_blocking = cand_is_enemy_blocking
+            is_enemy_harvester = cand_is_enemy_harvester
+            break
+
+        if cand_done_conveyor:
+            cand_path = nav.calculate_conveyor_path(cand_done_conveyor, cand_is_raw_ax, True)
+        else:
+            cand_path = nav.calculate_conveyor_path(candidate, cand_is_raw_ax)
+        cand_is_conveyor = False
+        if cand_path is not None:
+            cand_is_conveyor = cand_path[0].distance_squared(cand_path[1]) == 1
+
+            unsecured_conv_cost = rc.get_conveyor_cost()[0]*(cand_unsecured.bit_count()-1)
+            harvester_cost = rc.get_harvester_cost()[0]
+            cost_estimate = unsecured_conv_cost + harvester_cost
+            scale_estimate = (cand_unsecured.bit_count()-1)*0.01 + 0.05
+            if cand_is_conveyor:
+                start_piece_cost = rc.get_conveyor_cost()[0]
+                scale_estimate += 0.01
+            else:
+                start_piece_cost = rc.get_bridge_cost()[0]
+                scale_estimate += 0.1
+            cost_estimate += start_piece_cost * CONVEYOR_COST_DISCOUNT
+            reserve_cost = map_info.builder_ti_reserve()
+            cost_estimate += reserve_cost * CONVEYOR_COST_DISCOUNT
+            path_cost = nav.conveyor_cost(cand_path[2], rc.get_scale_percent()/100+scale_estimate)
+            total_cost = cost_estimate + path_cost
+            _cost_map[cand_n] = (total_cost, rc.get_current_round())
+            log("secure cost: path_len", cand_path[2], "unsecured_conv", unsecured_conv_cost, "harvester", harvester_cost, "start_piece", start_piece_cost, "reserve", reserve_cost, "path", path_cost, "total", total_cost, "ti", rc.get_global_resources()[0], "unsecured", cand_unsecured.bit_count(), "is_conveyor", cand_is_conveyor)
+        if cand_path is None and not secure_now:
+            log("CANT SECURE", candidate, cand_done_conveyor, "— retrying")
+            _mark_cant_secure(cand_bit)
+            available &= ~cand_bit
+            continue
+        if cand_path is not None and not secure_now and _cost_map[cand_n][0] > rc.get_global_resources()[0]:
+            log("too expensive", candidate, _cost_map[cand_n][0], rc.get_global_resources()[0], "— retrying")
+            available &= ~cand_bit
+            continue
+        best_ore = candidate
+        path = cand_path
+        is_foundry = cand_is_foundry
+        is_raw_ax = cand_is_raw_ax
+        is_conveyor = cand_is_conveyor
+        unsecured = cand_unsecured
+        closest = cand_closest
+        closest_n = cand_closest_n
+        done_conveyor = cand_done_conveyor
+        is_enemy_blocking = False
+        is_enemy_harvester = False
+        break
+
     if best_ore is None:
-        _mark_cant_secure(available)
         return
 
     best_n = best_ore.x + best_ore.y * w
-    is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
+
     if map_info._my_pos.distance_squared(best_ore) > 13:
         log("secure: dist", map_info._my_pos.distance_squared(best_ore), "> 13, moving to", best_ore)
         nav.move_to(best_ore)
         return
-    # --- Secure each cardinal side ---
-    unsecured = 0
-    done_conveyor = None
-    for d in CARD:
-        p = map_info.pos_add(best_ore, d)
-        if not map_info.in_bounds(p):
-            continue
 
-        pn = p.x + p.y * w
-        pbit = 1 << pn
-
-        # Wall — done
-        if map_info._bm_env[map_info._IDX_ENV_WALL] & pbit:
-            continue
-
-        is_mine = bool(map_info._bm_team[my_team_idx] & pbit) if map_info._building_id[pn] else False
-        is_road = bool(map_info._bm_et[map_info._IDX_ROAD] & pbit)
-        is_marker = bool(map_info._bm_et[map_info._IDX_MARKER] & pbit)
-        log("checking", p, is_mine, is_road, is_marker, map_info._building_id[pn])
-        if is_mine and (map_info._bm_et[map_info._IDX_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]&pbit or map_info._bm_et[map_info._IDX_BRIDGE]&pbit) and map_info._building_dir[pn] != map_info._DIR_INT[d.opposite()]:
-            done_conveyor = p
-        if is_mine and map_info._bm_et[map_info._IDX_BRIDGE]&pbit:
-            done_conveyor = p
-        if is_mine and not is_road and not is_marker:
-            # Has a real building (mine or enemy, not road/marker) — side is done
-            continue
-        unsecured |= pbit
-    # units.builder.draw_mask(map_info._bm_team[my_team_idx], 255, 0, 0)
-    closest, _ = nav.closest(unsecured)
-    if not closest:
-        _mark_cant_secure(unsecured)
-        log("exit 3")
-        return
-    closest_n = closest.x+closest.y*w
-    if map_info._building_id[closest_n] and not (map_info._bm_team[my_team_idx]&(1<<closest_n)) and not (map_info._bm_et[map_info._IDX_MARKER]&(1<<closest_n)):
+    if is_enemy_blocking:
         nav.move_to(closest)
         if rc.can_fire(closest):
             rc.fire(closest)
@@ -253,14 +336,7 @@ def run():
         log("exit 2")
         return
 
-    is_enemy_harvester = bool(
-        map_info._bm_et[map_info._IDX_HARVESTER]
-        & map_info._bm_team[1 - my_team_idx]
-        & (1 << best_n)
-    )
     if is_enemy_harvester:
-        # Enemy-owned harvester at the target — wrap it in barriers instead of
-        # paving conveyors. Skips the path conveyor entirely.
         log("enemy harvester at", best_ore, "— barrier wrap")
         def _build_barrier_at(p):
             if rc.can_destroy(p) and rc.get_action_cooldown() == 0:
@@ -281,37 +357,6 @@ def run():
             _build_barrier_at(closest)
         return
 
-    if done_conveyor:
-        path = nav.calculate_conveyor_path(done_conveyor, is_raw_ax, True)
-    else:
-        path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
-    if path is not None:
-        is_conveyor = path[0].distance_squared(path[1]) == 1
-
-        unsecured_conv_cost = rc.get_conveyor_cost()[0]*(unsecured.bit_count()-1)
-        harvester_cost = rc.get_harvester_cost()[0]
-        cost_estimate = unsecured_conv_cost + harvester_cost
-        scale_estimate = (unsecured.bit_count()-1)*0.01 + 0.05
-        if is_conveyor:
-            start_piece_cost = rc.get_conveyor_cost()[0]
-            scale_estimate += 0.01
-        else:
-            start_piece_cost = rc.get_bridge_cost()[0]
-            scale_estimate += 0.1
-        cost_estimate += start_piece_cost * CONVEYOR_COST_DISCOUNT
-        reserve_cost = map_info.builder_ti_reserve()
-        cost_estimate += reserve_cost * CONVEYOR_COST_DISCOUNT
-        path_cost = nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate)
-        total_cost = cost_estimate + path_cost
-        _cost_map[best_n] = (total_cost, rc.get_current_round())
-        log("secure cost: path_len", path[2], "unsecured_conv", unsecured_conv_cost, "harvester", harvester_cost, "start_piece", start_piece_cost, "reserve", reserve_cost, "path", path_cost, "total", total_cost, "ti", rc.get_global_resources()[0], "unsecured", unsecured.bit_count(), "is_conveyor", is_conveyor)
-    elif not secure_now:
-        log("CANT SECURE", best_ore, done_conveyor)
-        _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))
-        return
-    if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
-        log("too expensive", best_ore, _cost_map[best_n][0], rc.get_global_resources()[0])
-        return
     if path and not is_foundry:
         tn = path[1].x + path[1].y * w
         if not done_conveyor and is_conveyor and path[0] == closest and rc.get_position().distance_squared(path[1]) <= 2 and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):

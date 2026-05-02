@@ -279,20 +279,37 @@ class Pathing:
 
 
 
+    def _coerce_start(self, pos) -> int:
+        """Convert `pos` to a start bitmask. Accepts None (defaults to my_pos),
+        a single Position, an int (already-mask), or any iterable of Positions."""
+        w = map_info._width
+        if pos is None:
+            my = map_info._my_pos
+            return 1 << (my.x + my.y * w)
+        if isinstance(pos, Position):
+            return 1 << (pos.x + pos.y * w)
+        if isinstance(pos, int):
+            return pos
+        mask = 0
+        for p in pos:
+            mask |= 1 << (p.x + p.y * w)
+        return mask
+
     def _closest_impl(
         self,
         targets: int,
-        pos: Position | None = None,
+        start: int,
         max_dist: int | None = None,
         avoid: int = 0,
         side: bool = True,
     ) -> tuple[Position | None, int]:
         """Shared bitmask BFS for closest-target queries.
 
-        Returns the first target reached by Chebyshev distance, breaking ties by
-        lowest tile index exactly as the previous implementation did. When
-        `max_dist` is provided, the search stops after exploring that many
-        layers.
+        BFS expands outward from any bit set in `start` simultaneously and
+        returns the first target reached by Chebyshev distance, breaking ties
+        by lowest tile index. Distance is the BFS layer count from the nearest
+        start tile. When `max_dist` is provided, the search stops after
+        exploring that many layers.
 
         `avoid` is an optional bitmask of tiles to additionally treat as
         impassable (e.g. enemy can't path through tiles next to our launchers).
@@ -302,10 +319,8 @@ class Pathing:
         avoids enemy threat. False models the enemy's pathing: same blockers
         minus the enemy's own threat (they wouldn't avoid it).
         """
-        if targets == 0:
+        if targets == 0 or start == 0:
             return None, -1
-        if pos is None:
-            pos = map_info._my_pos
         w = map_info._width
         if side:
             passable = map_info._bm_passable_FFF
@@ -318,9 +333,6 @@ class Pathing:
             passable &= ~avoid
         if side:
             passable |= targets
-        start = 1 << (pos.x + pos.y * w)
-        if start & targets:
-            return pos, 0
         visited = start
         frontier = start
         dist = 0
@@ -331,7 +343,6 @@ class Pathing:
             if hit:
                 lsb = hit & -hit
                 n = lsb.bit_length() - 1
-
                 return Position(n % w, n // w), dist
             if max_dist is not None and dist >= max_dist:
                 break
@@ -340,30 +351,40 @@ class Pathing:
             h = frontier | ((frontier & nrc) << 1) | ((frontier & nlc) >> 1)
             expanded = h | (h << w) | (h >> w)
             frontier = expanded & passable & ~visited
-            passable |= targets #must take a step out if in avoid
         return None, -1
 
     def closest(
         self,
         targets: int,
-        pos: Position = None,
+        pos=None,
         avoid: int = 0,
         side: bool = True,
     ) -> tuple[Position | None, int]:
-        """Find closest bit in *targets* from *pos* with the original full search."""
-        return self._closest_impl(targets, pos=pos, max_dist=None, avoid=avoid, side=side)
+        """Find closest bit in *targets* from *pos* with full search.
+
+        `pos` accepts None (defaults to my_pos), a single Position, a bitmask
+        int, or any iterable of Positions — BFS expands from all start tiles
+        simultaneously and returns the closest target."""
+        return self._closest_impl(
+            targets, start=self._coerce_start(pos), max_dist=None,
+            avoid=avoid, side=side,
+        )
 
     def closest_within(
         self,
         targets: int,
-        pos: Position | None = None,
+        pos=None,
         max_dist: int = 0,
         avoid: int = 0,
         side: bool = True,
     ) -> tuple[Position | None, int]:
-        """Find the closest target if it is within `max_dist`, else (None, -1)."""
+        """Find the closest target if it is within `max_dist`, else (None, -1).
+
+        `pos` accepts None, a Position, a bitmask int, or an iterable of
+        Positions (see `closest`)."""
         return self._closest_impl(
-            targets, pos=pos, max_dist=max_dist, avoid=avoid, side=side
+            targets, start=self._coerce_start(pos), max_dist=max_dist,
+            avoid=avoid, side=side,
         )
 
     def __init__(self, c: Controller):
@@ -655,9 +676,9 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
-        builder.draw_mask(avoid, 255, 0, 0)
+        # builder.draw_mask(avoid, 255, 0, 0)
 
-        builder.draw_mask(target_mask, 0, 255, 255)
+        # builder.draw_mask(target_mask, 0, 255, 255)
         avoid &= ~start_mask
 
         if end_cost_mask:
