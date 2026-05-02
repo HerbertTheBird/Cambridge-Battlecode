@@ -140,10 +140,12 @@ def _healable_mask():
 def _mutual_sentinel_threat():
     """Bitmask of MY sentinels that can shoot an enemy sentinel which can also
     shoot them back. Treated as 'very damaged' for heal priority so we rush in
-    to keep them alive through the trade."""
+    to keep them alive through the trade. Sentinels already adjacent (cheb 1)
+    to a friendly builder bot are excluded — they're already covered."""
     my_idx = map_info._my_team_idx
     enemy_idx = 1 - my_idx
     my_sents = map_info._bm_et[map_info._IDX_SENTINEL] & map_info._bm_team[my_idx]
+    my_sents &= ~map_info.expand_chebyshev(map_info._bm_friendly_bots)
     enemy_sents = map_info._bm_et[map_info._IDX_SENTINEL] & map_info._bm_team[enemy_idx]
     if not my_sents or not enemy_sents:
         return 0
