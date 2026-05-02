@@ -98,11 +98,13 @@ def run():
     log("secure now?", secure_now)
     # units.builder.draw_mask(cant_secure(), 255, 255, 255)
     if not available:
+        log("secure exit: no available, claims=", _cached_claims.bit_count())
         return
     w = map_info._width
     my_team_idx = map_info._my_team_idx
     best_ore, _ = nav.closest(available)
     if not best_ore:
+        log("secure exit: nav.closest returned None over", available.bit_count(), "tiles")
         _mark_cant_secure(available)
         return
     log("dist", _)
@@ -112,6 +114,7 @@ def run():
         securing = ( map_info._bm_team[my_team_idx]
             & ~map_info._bm_et[map_info._IDX_ROAD]
             & ~map_info._bm_et[map_info._IDX_MARKER]
+            & ~map_info._bm_guard_conveyor
         | map_info._bm_env[map_info._IDX_ENV_WALL]) |  map_info._bm_team[1-my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER]
         bottom_row = ((1<<w)-1)<<w*(map_info._height-1)
         top_row = ((1<<w)-1)
@@ -160,6 +163,7 @@ def run():
     best_n = best_ore.x + best_ore.y * w
     is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
     if map_info._my_pos.distance_squared(best_ore) > 13:
+        log("secure: dist", map_info._my_pos.distance_squared(best_ore), "> 13, moving to", best_ore)
         nav.move_to(best_ore)
         return
     # --- Secure each cardinal side ---
@@ -239,16 +243,23 @@ def run():
     if path is not None:
         is_conveyor = path[0].distance_squared(path[1]) == 1
 
-        cost_estimate = rc.get_conveyor_cost()[0]*(unsecured.bit_count()-1) + rc.get_harvester_cost()[0]
+        unsecured_conv_cost = rc.get_conveyor_cost()[0]*(unsecured.bit_count()-1)
+        harvester_cost = rc.get_harvester_cost()[0]
+        cost_estimate = unsecured_conv_cost + harvester_cost
         scale_estimate = (unsecured.bit_count()-1)*0.01 + 0.05
         if is_conveyor:
-            cost_estimate += rc.get_conveyor_cost()[0]
+            start_piece_cost = rc.get_conveyor_cost()[0]
             scale_estimate += 0.01
         else:
-            cost_estimate += rc.get_bridge_cost()[0]
+            start_piece_cost = rc.get_bridge_cost()[0]
             scale_estimate += 0.1
-        cost_estimate += map_info.builder_ti_reserve()
-        _cost_map[best_n] = (cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate), rc.get_current_round())
+        cost_estimate += start_piece_cost
+        reserve_cost = map_info.builder_ti_reserve()
+        cost_estimate += reserve_cost
+        path_cost = nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate)
+        total_cost = cost_estimate + path_cost
+        _cost_map[best_n] = (total_cost, rc.get_current_round())
+        log("secure cost: path_len", path[2], "unsecured_conv", unsecured_conv_cost, "harvester", harvester_cost, "start_piece", start_piece_cost, "reserve", reserve_cost, "path", path_cost, "total", total_cost, "ti", rc.get_global_resources()[0], "unsecured", unsecured.bit_count(), "is_conveyor", is_conveyor)
     elif not secure_now:
         log("CANT SECURE", best_ore, done_conveyor)
         _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))

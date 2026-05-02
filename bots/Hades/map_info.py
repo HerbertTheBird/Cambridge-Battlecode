@@ -1507,7 +1507,7 @@ def _compute_route_targets() -> int:
     """Bitmask of tiles the route state can path toward.
 
     Route targets = my conveyors whose downstream chain reaches my core area,
-    minus any that are part of a connected run of 4+ believed-loaded conveyors,
+    minus any that are part of a connected run of 3+ believed-loaded conveyors,
     minus guard conveyors. My core area is always routable.
 
     Side effect: sets `_bm_dead_end` to the targets of any *loaded* conveyor
@@ -1614,12 +1614,12 @@ def _compute_route_targets() -> int:
             if run_visible_arr is not None and (visible_loaded_mine & lsb):
                 rv = p_visible + 1
                 run_visible_arr[n] = rv
-                if rv >= 4:
+                if rv >= 3:
                     ext_roots |= lsb
-            if rl >= 4:
-                if rl == 4:
+            if rl >= 3:
+                if rl == 3:
                     cur = n
-                    for _ in range(4):
+                    for _ in range(3):
                         unroutable |= 1 << cur
                         cur = conv_target[cur]
                         if cur < 0:
@@ -1629,7 +1629,7 @@ def _compute_route_targets() -> int:
 
         # builder.draw_mask(unroutable, 255, 0, 0)
 
-        # --- A visible 4-run jams the full chain: extend through all my conveyors
+        # --- A visible 3-run jams the full chain: extend through all my conveyors
         # both upstream and downstream from each ext_root.
         if ext_roots:
             extended = ext_roots
@@ -1653,8 +1653,8 @@ def _compute_route_targets() -> int:
             unroutable |= extended
 
     # Color conveyors by unroutability reason (later draws win when overlapping):
-    #   red     = part of a loaded run of 4+ along the chain toward core
-    #   white   = propagated from a visible 4-run (already drawn above)
+    #   red     = part of a loaded run of 3+ along the chain toward core
+    #   white   = propagated from a visible 3-run (already drawn above)
     #   orange  = my conveyor whose chain does not reach the core
     #   magenta = guard conveyor (points into open ore)
     # builder.draw_mask(my_convs & ~reaches_core, 255, 128, 0)
