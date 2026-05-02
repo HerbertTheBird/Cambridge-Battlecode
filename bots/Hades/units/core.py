@@ -7,7 +7,7 @@ rc: Controller
 
 # --- Configurable ---
 SCALE_MULT = 1
-DEFENSE_FRIENDLY_RADIUS_SQ = 20
+DEFENSE_FRIENDLY_RADIUS_SQ = 36
 
 _spawn_plan: list[Direction] | None = None
 _num_spawned = 0
