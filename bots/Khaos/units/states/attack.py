@@ -772,10 +772,12 @@ def _placement_candidates():
         my_launcher_zone = (
             map_info.expand_chebyshev(my_launchers) | my_launchers
         )
+        my_barriers = bm_et[map_info._IDX_BARRIER] & my_team
         enemy_passable = (
             ~map_info.get_avoid(False, False, False, enemy_pov=True)
             & map_info._board_mask
             & ~my_launcher_zone
+            & ~my_barriers
         )
         visited = enemy_bots
         frontier = enemy_bots
@@ -1031,7 +1033,7 @@ def _draw_attack_candidates(filtered):
         n = lsb.bit_length() - 1
         x, y = n % w, n // w
         direction, turret_type, score = get_best_direction(Position(x, y))
-        log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
+        # log(f"Candidate at ({x}, {y}): dir={direction}, type={turret_type}, score={score}")
         dx, dy = dir_deltas[direction]
         ex, ey = x + dx, y + dy
         if turret_type == EntityType.GUNNER:
@@ -1379,8 +1381,13 @@ def run():
         _friendly_launchers_lead = (
             map_info._bm_et[map_info._IDX_LAUNCHER] & map_info._bm_team[my_team_idx]
         )
+        _friendly_barriers_lead = (
+            map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
+        )
         _friendly_launcher_zone_lead = (
-            map_info.expand_chebyshev(_friendly_launchers_lead) | _friendly_launchers_lead
+            map_info.expand_chebyshev(_friendly_launchers_lead)
+            | _friendly_launchers_lead
+            | _friendly_barriers_lead
         )
         while remaining:
             cand, my_d = nav.closest_within(remaining, max_dist=2)
