@@ -4,6 +4,7 @@ import map_info
 import pathing
 from pathing import Pathing
 import comms
+from _config import USE_CHOKEPOINTS
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
@@ -19,6 +20,9 @@ from log import DRAW_DEBUG
 
 rc: Controller
 nav: Pathing = None
+
+WAIT_FOR_CHOKEPOINT = True
+_waiting_for_chokepoint = False
 
 # Sorted in descending order of max score to allow early break in selection loop
 states = tuple(sorted(
@@ -53,6 +57,11 @@ def draw_mask(mask, r, g, b):
         return
     for p in map_info.iter_mask(mask):
         rc.draw_indicator_dot(p, r, g, b)
+
+
+def wait_for_chokepoint() -> None:
+    global _waiting_for_chokepoint
+    _waiting_for_chokepoint = True
 
 
 def handle_comms():
@@ -155,6 +164,9 @@ def select_best_state():
 
 
 def run():
+    global _waiting_for_chokepoint
+    _waiting_for_chokepoint = False
+
     # Sync round info
     current_round = rc.get_current_round()
     map_info.update(recompute=False)
@@ -172,6 +184,11 @@ def run():
     best_state = select_best_state()
     best_state.run()
 
+    if USE_CHOKEPOINTS:
+        explore.try_passive_chokepoint_action_only()
+
+    if _waiting_for_chokepoint:
+        return
     # Road-spam if an enemy is closing in
     try_road_spam()
 
@@ -182,8 +199,81 @@ def run():
     if rc.can_heal(map_info._my_pos):
         rc.heal(map_info._my_pos)
 
+    # Tear down any of our own conveyors/bridges that are feeding an enemy turret
+    _destroy_enemy_feeders()
+
     # Broadcast symmetry via a marker on the first available adjacent tile
     comms.broadcast_symmetry()
+
+
+def _destroy_enemy_feeders():
+    """End-of-turn cleanup over the 3x3 around me (8 directions + own tile):
+    if a friendly conveyor / armoured conveyor / bridge outputs onto a tile
+    occupied by an enemy turret (gunner/sentinel/breach/launcher), destroy
+    it. destroy() does not cost action cooldown, so if cooldown was already
+    0 we then drop a road on the freed tile. Exits after the first action."""
+    w = map_info._width
+    my_pos = map_info._my_pos
+    my_bit = 1 << (my_pos.x + my_pos.y * w)
+    region = map_info.expand_chebyshev(my_bit)
+
+    my_team_idx = map_info._my_team_idx
+    my_feeders = (
+        map_info._bm_et[map_info._IDX_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+        | map_info._bm_et[map_info._IDX_BRIDGE]
+    ) & map_info._bm_team[my_team_idx] & region
+    if not my_feeders:
+        return
+
+    enemy_turrets = (
+        map_info._bm_et[map_info._IDX_GUNNER]
+        | map_info._bm_et[map_info._IDX_SENTINEL]
+        | map_info._bm_et[map_info._IDX_BREACH]
+        | map_info._bm_et[map_info._IDX_LAUNCHER]
+    ) & map_info._bm_team[1 - my_team_idx]
+    if not enemy_turrets:
+        return
+
+    mask = my_feeders
+    while mask:
+        lsb = mask & -mask
+        if map_info._conveyor_target_tiles(lsb) & enemy_turrets:
+            n = lsb.bit_length() - 1
+            p = Position(n % w, n // w)
+            if rc.can_destroy(p):
+                rc.destroy(p)
+                map_info.update_at(p)
+                if rc.get_action_cooldown() == 0:
+                    enemy_bots = map_info._bm_enemy_bots
+                    threatened = enemy_bots and (lsb & map_info.expand_chebyshev(enemy_bots, 2))
+                    reserve = map_info.builder_ti_reserve()
+                    ti_have = rc.get_global_resources()[0]
+                    if threatened and rc.can_build_barrier(p) and ti_have >= rc.get_barrier_cost()[0] + reserve:
+                        rc.build_barrier(p)
+                        map_info.update_at(p)
+                    elif rc.can_build_road(p) and ti_have >= rc.get_road_cost()[0] + reserve:
+                        rc.build_road(p)
+                        map_info.update_at(p)
+                return
+        mask ^= lsb
+
+
+def _try_mask(candidates):
+    w = map_info._width
+    mask = candidates
+    road_cost = rc.get_road_cost()[0]
+    reserve = map_info.builder_ti_reserve()
+    while mask:
+        lsb = mask & -mask
+        n = lsb.bit_length() - 1
+        p = Position(n % w, n // w)
+        if rc.can_build_road(p) and rc.get_global_resources()[0] >= road_cost + reserve:
+            rc.build_road(p)
+            map_info.update_at(p)
+            return True
+        mask ^= lsb
+    return False
 
 
 def try_road_spam():
@@ -210,19 +300,6 @@ def try_road_spam():
     avoid = map_info._bm_my_gunner_claims
     allowed_neighbors = my_neighbors & ~avoid
     draw_mask(avoid & my_neighbors, 255, 0, 0)
-
-    def _try_mask(candidates):
-        mask = candidates
-        while mask:
-            lsb = mask & -mask
-            n = lsb.bit_length() - 1
-            p = Position(n % w, n // w)
-            if rc.can_build_road(p):
-                rc.build_road(p)
-                map_info.update_at(p)
-                return True
-            mask ^= lsb
-        return False
 
     # Priority 1: pave around our conveyors (always, regardless of enemies)
     my_team_idx = map_info._my_team_idx
@@ -264,7 +341,7 @@ def try_road_spam():
         if _try_mask(map_info.expand_chebyshev(enemy_hard) & spam_neighbors):
             return True
 
-    if (spam_zone & my_bit) and not (avoid & my_bit) and rc.can_build_road(my_pos):
+    if (spam_zone & my_bit) and not (avoid & my_bit) and rc.can_build_road(my_pos) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
         rc.build_road(my_pos)
         map_info.update_at(my_pos)
         return True

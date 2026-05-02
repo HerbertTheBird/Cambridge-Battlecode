@@ -7,7 +7,7 @@ rc: Controller
 
 # --- Configurable ---
 SCALE_MULT = 1
-DEFENSE_FRIENDLY_RADIUS_SQ = 20
+DEFENSE_FRIENDLY_RADIUS_SQ = 36
 
 _spawn_plan: list[Direction] | None = None
 _num_spawned = 0
@@ -35,7 +35,7 @@ def _spawn_toward_plan(core_pos: Position) -> bool:
 
     planned_dir = _spawn_plan[_num_spawned]
     for d in (planned_dir, planned_dir.rotate_left(), planned_dir.rotate_right()):
-        p = core_pos.add(d)
+        p = map_info.pos_add(core_pos, d)
         if rc.can_spawn(p):
             rc.spawn_builder(p)
             _num_spawned += 1
@@ -94,7 +94,7 @@ def _scan_nearby_builders(core_pos: Position, my_team):
                 has_close_ally = True
         else:
             d = p.distance_squared(core_pos)
-            if closest_enemy_d is None or d < closest_enemy_d:
+            if (closest_enemy_d is None or d < closest_enemy_d) and d <= 20:
                 closest_enemy_d = d
                 closest_enemy = p
 
@@ -103,7 +103,9 @@ def _scan_nearby_builders(core_pos: Position, my_team):
 
 def run():
     global _spawn_plan
-    
+    # if rc.get_current_round() == 900:
+        
+    #     rc.resign()
     # Sync round info
     map_info.update()
     titanium, axionite = rc.get_global_resources()

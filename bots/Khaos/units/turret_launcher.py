@@ -1,148 +1,193 @@
 from cambc import Controller, Position, Team
 
-import comms
 import map_info
 from log import log
 
 rc: Controller = None
-my_pos: Position = None
 my_team: Team = None
-ORDER_MAX_AGE = 5
-_launch_orders: list[tuple[int, Position, Position, int, int]] = []
-_seen_order_marker_ids: set[int] = set()
+_is_chokepoint_launcher: bool | None = None
+
 
 def init(c: Controller):
-    global rc, my_pos, my_team, _launch_orders, _seen_order_marker_ids
+    global rc, my_team, _is_chokepoint_launcher
     rc = c
-    my_pos = rc.get_position()
     my_team = map_info._my_team
-    _launch_orders = []
-    _seen_order_marker_ids = set()
+    _is_chokepoint_launcher = None
 
-def _prune_orders(current_round: int) -> None:
-    global _launch_orders
-    _launch_orders = [
-        order
-        for order in _launch_orders
-        if current_round - order[4] < ORDER_MAX_AGE
-    ]
 
-def _enqueue_new_orders(current_round: int) -> None:
-    for v, sender_pos, marker_pos, marker_id, estimated_turn in comms.get_new_messages():
-        if comms.decode_type(v) != 0:
-            continue
-        if marker_id in _seen_order_marker_ids:
-            continue
-        _seen_order_marker_ids.add(marker_id)
-        _launch_orders.append((v, sender_pos, marker_pos, marker_id, estimated_turn))
+def _classify_launcher() -> None:
+    global _is_chokepoint_launcher
+    if _is_chokepoint_launcher is not None:
+        return
+    w = map_info._width
+    my_pos = rc.get_position()
+    my_bit = 1 << (my_pos.x + my_pos.y * w)
+    enemy_conveyors = map_info._bm_conveyors & map_info._bm_team[1 - map_info._my_team_idx]
+    adjacent = map_info.expand_chebyshev(my_bit) & ~my_bit
+    _is_chokepoint_launcher = not bool(adjacent & enemy_conveyors)
 
-def _drop_order(marker_id: int) -> None:
-    global _launch_orders
-    _launch_orders = [order for order in _launch_orders if order[3] != marker_id]
 
-def _adjacent_builders(team: Team | None = None) -> list[tuple[int, Position]]:
+def _adjacent_enemy_builders() -> list[tuple[int, Position]]:
     result = []
     my_pos = rc.get_position()
     for pos in rc.get_nearby_tiles(2):
-        if max(abs(pos.x - my_pos.x), abs(pos.y - my_pos.y)) > 1 or pos == my_pos:
+        if pos == my_pos:
+            continue
+        if max(abs(pos.x - my_pos.x), abs(pos.y - my_pos.y)) > 1:
             continue
         bot_id = rc.get_tile_builder_bot_id(pos)
         if bot_id is None:
             continue
-        if team is not None and rc.get_team(bot_id) != team:
+        if rc.get_team(bot_id) == my_team:
             continue
         result.append((bot_id, pos))
     return result
 
-def _protected_tiles() -> list[Position]:
-    my_team_mask = map_info._bm_team[map_info._my_team_idx]
-    protected = map_info._bm_my_core_area
-    protected |= (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-    ) & my_team_mask
-    return list(map_info.iter_mask(protected))
-
-def _score_landing(tile: Position, protected_tiles: list[Position], my_pos: Position) -> tuple[int, int, int]:
-    if not protected_tiles:
-        return (tile.distance_squared(my_pos), tile.distance_squared(my_pos), tile.distance_squared(my_pos))
-
-    min_dist = min(tile.distance_squared(anchor) for anchor in protected_tiles)
-    total_dist = sum(tile.distance_squared(anchor) for anchor in protected_tiles)
-    return (min_dist, total_dist, tile.distance_squared(my_pos))
-
-def _try_execute_launch_order() -> bool:
-    current_round = rc.get_current_round()
-    launcher_pos = rc.get_position()
-    _prune_orders(current_round)
-    _enqueue_new_orders(current_round)
-    adjacent_friendlies = _adjacent_builders(my_team)
-    if not adjacent_friendlies:
-        return False
-
-    for v, sender_pos, marker_pos, marker_id, estimated_turn in tuple(_launch_orders):
-        if estimated_turn + ORDER_MAX_AGE < current_round:
-            continue
-        if max(abs(sender_pos.x - launcher_pos.x), abs(sender_pos.y - launcher_pos.y)) > 1:
-            continue
-
-        target_idx = comms.decode_location(v)
-        target = Position(target_idx % map_info._width, target_idx // map_info._width)
-
-        matched_pos = None
-        for _builder_id, bot_pos in adjacent_friendlies:
-            if bot_pos == sender_pos:
-                matched_pos = bot_pos
-                break
-        if matched_pos is None:
-            continue
-
-        if not rc.can_launch(matched_pos, target):
-            continue
-
-        rc.launch(matched_pos, target)
-        log(f"launcher executed order from {sender_pos} to {target}")
-        _drop_order(marker_id)
-        if rc.can_destroy(marker_pos):
-            rc.destroy(marker_pos)
-            map_info.update_at(marker_pos)
-        return True
-
-    return False
 
 def _try_throw_enemy_away() -> bool:
-    enemy_team = Team.A if my_team == Team.B else Team.B
-    adjacent_enemies = _adjacent_builders(enemy_team)
+    adjacent_enemies = _adjacent_enemy_builders()
     if not adjacent_enemies:
         return False
 
+    w = map_info._width
     my_pos = rc.get_position()
-    protected_tiles = _protected_tiles()
-    best = None
+    my_bit = 1 << (my_pos.x + my_pos.y * w)
 
+    # Collect legal (bot_pos, tile) launches; keep one bot per destination tile.
+    launchable_map = {}
+    launchable_mask = 0
     for _enemy_id, bot_pos in adjacent_enemies:
         for tile in rc.get_attackable_tiles():
             if not rc.is_tile_passable(tile):
                 continue
             if not rc.can_launch(bot_pos, tile):
                 continue
+            tn = tile.x + tile.y * w
+            if tn in launchable_map:
+                continue
+            launchable_map[tn] = (bot_pos, tile)
+            launchable_mask |= 1 << tn
 
-            score = _score_landing(tile, protected_tiles, my_pos)
-            if best is None or score > best[0]:
-                best = (score, bot_pos, tile)
-
-    if best is None:
+    if not launchable_mask:
         return False
 
-    _score, bot_pos, tile = best
+    # For each candidate destination, Chebyshev flood-fill the region the
+    # launched bot could navigate using enemy-POV pathing, with unseen tiles
+    # treated as impassable. Smaller region = the bot is more contained
+    # post-launch, which is what we want.
+    forbidden = (
+        map_info.get_avoid(False, False, False, enemy_pov=True)
+        | (~map_info._bm_seen & map_info._board_mask)
+    )
+    passable = ~forbidden & map_info._board_mask
+
+    component_size: dict[int, int] = {}
+    handled = 0
+    m = launchable_mask
+    while m:
+        lsb = m & -m
+        m ^= lsb
+        n = lsb.bit_length() - 1
+        if handled & lsb:
+            continue
+        if not (lsb & passable):
+            # Destination is enemy-impassable itself (e.g. our core) — best.
+            component_size[n] = 0
+            handled |= lsb
+            continue
+        region = lsb
+        while True:
+            nxt = map_info.expand_chebyshev(region) & passable
+            if nxt == region:
+                break
+            region = nxt
+        size = bin(region).count("1")
+        rm = launchable_mask & region
+        while rm:
+            rl = rm & -rm
+            rm ^= rl
+            component_size[rl.bit_length() - 1] = size
+        handled |= region | lsb
+
+    # Tiebreak with the prior heuristic: prefer destinations farthest from
+    # (every conveyor) ∪ (launcher) in a wall-only Chebyshev BFS.
+    seed = map_info._bm_conveyors | my_bit
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    traversable = ~walls & map_info._board_mask
+    UNREACHED = 1 << 30
+    layer_of: dict[int, int] = {}
+    visited = seed
+    frontier = seed
+    layer_idx = 0
+    rm = seed & launchable_mask
+    while rm:
+        rl = rm & -rm
+        rm ^= rl
+        layer_of[rl.bit_length() - 1] = layer_idx
+    while frontier:
+        layer_idx += 1
+        next_frontier = map_info.expand_chebyshev(frontier) & traversable & ~visited
+        if not next_frontier:
+            break
+        rm = next_frontier & launchable_mask
+        while rm:
+            rl = rm & -rm
+            rm ^= rl
+            layer_of[rl.bit_length() - 1] = layer_idx
+        visited |= next_frontier
+        frontier = next_frontier
+
+    best_n = None
+    best_key = None
+    rm = launchable_mask
+    while rm:
+        rl = rm & -rm
+        rm ^= rl
+        rn = rl.bit_length() - 1
+        key = (component_size[rn], -layer_of.get(rn, UNREACHED))
+        if best_key is None or key < best_key:
+            best_key = key
+            best_n = rn
+
+    bot_pos, tile = launchable_map[best_n]
     rc.launch(bot_pos, tile)
-    log(f"launcher threw enemy from {bot_pos} to {tile}")
+    log(f"launcher threw enemy from {bot_pos} to {tile} (size={best_key[0]}, layer={-best_key[1]})")
     return True
+
+
+def _try_throw_enemy_to_history() -> bool:
+    adjacent_enemies = _adjacent_enemy_builders()
+    if not adjacent_enemies:
+        return False
+
+    w = map_info._width
+    histories = [
+        (enemy_id, bot_pos, map_info.bot_position_history(enemy_id))
+        for enemy_id, bot_pos in adjacent_enemies
+    ]
+    max_history_len = max((len(history) for _enemy_id, _bot_pos, history in histories), default=0)
+
+    for depth in range(1, max_history_len):
+        for enemy_id, bot_pos, history in histories:
+            if depth >= len(history):
+                continue
+            tn = history[depth]
+            tile = Position(tn % w, tn // w)
+            if tile == bot_pos:
+                continue
+            if not rc.is_tile_passable(tile):
+                continue
+            if not rc.can_launch(bot_pos, tile):
+                continue
+            rc.launch(bot_pos, tile)
+            log(f"chokepoint launcher threw enemy {enemy_id} from {bot_pos} back to {tile}")
+            return True
+    return False
+
 
 def run():
     map_info.update()
-    if _try_execute_launch_order():
+    _classify_launcher()
+    if _is_chokepoint_launcher and _try_throw_enemy_to_history():
         return
     _try_throw_enemy_away()

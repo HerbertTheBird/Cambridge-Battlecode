@@ -40,16 +40,24 @@ def _conv_zone():
     return visited
 
 
-def _find_chase_target():
+def _find_chase_target(damaged: bool = True):
     # log("find chase")
-    """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None."""
+    """Find an unclaimed enemy builder bot within conv zone. Returns (uid, pos) or None.
+
+    When `damaged` is True, only consider enemies sitting on one of our
+    very-damaged buildings; if none, retry with `damaged=False`."""
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
     enemy_bots = map_info._bm_enemy_bots
-    
+
     if not enemy_bots:
         log("no enemies")
         return None
+
+    if damaged:
+        enemy_bots = enemy_bots & _very_damaged_targets()
+        if not enemy_bots:
+            return _find_chase_target(damaged=False)
 
     friendly_bots = map_info._bm_friendly_bots
     my_bit = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
@@ -94,17 +102,33 @@ def _find_chase_target():
     if not nearby:
         log("too far")
         return None
-    closest_pos, dist = nav.closest_within(nearby, max_dist=8)
-    if closest_pos is None:
+    # Enumerate all reachable enemies within max_dist=8 by repeatedly removing
+    # the previous closest. Then tiebreak the minimum-BFS-distance set by
+    # chebyshev distance to my conveyors (lowest priority — closer wins).
+    remaining = nearby
+    enumerated = []  # list of (bfs_dist, pos)
+    while remaining:
+        pos, d = nav.closest_within(remaining, max_dist=8)
+        if pos is None:
+            break
+        enumerated.append((d, pos))
+        remaining ^= 1 << (pos.x + pos.y * w)
+    if not enumerated:
         log("no closest")
         return None
-    # if dist < 6:
-    #     return None
-    n = closest_pos.x + closest_pos.y * w
-    if closest_pos.distance_squared(map_info._my_pos) < 5:
-        log("too close")
-        return None
-    return closest_pos
+    min_d = min(d for d, _ in enumerated)
+    tied = [p for d, p in enumerated if d == min_d]
+    if len(tied) == 1:
+        return tied[0]
+    my_convs = map_info._bm_conveyors & map_info._bm_team[map_info._my_team_idx]
+    best = None
+    best_cd = None
+    for p in tied:
+        cd = _conv_dist(1 << (p.x + p.y * w), my_convs)
+        if best is None or cd < best_cd:
+            best = p
+            best_cd = cd
+    return best
 
 
 def _healable_mask():
@@ -113,9 +137,77 @@ def _healable_mask():
     return map_info._bm_team[my_team_idx]
 
 
+def _mutual_sentinel_threat():
+    """Bitmask of MY sentinels that can shoot an enemy sentinel which can also
+    shoot them back. Treated as 'very damaged' for heal priority so we rush in
+    to keep them alive through the trade."""
+    my_idx = map_info._my_team_idx
+    enemy_idx = 1 - my_idx
+    my_sents = map_info._bm_et[map_info._IDX_SENTINEL] & map_info._bm_team[my_idx]
+    enemy_sents = map_info._bm_et[map_info._IDX_SENTINEL] & map_info._bm_team[enemy_idx]
+    if not my_sents or not enemy_sents:
+        return 0
+    w = map_info._width
+    h = map_info._height
+    bm_dir = map_info._bm_dir
+    OFFSETS = map_info._SENTINEL_OFFSETS
+
+    enemy_dir_at = {}
+    m = enemy_sents
+    while m:
+        lsb = m & -m
+        en = lsb.bit_length() - 1
+        m ^= lsb
+        for di in range(8):
+            if bm_dir[di] & lsb:
+                enemy_dir_at[en] = di
+                break
+
+    result = 0
+    m = my_sents
+    while m:
+        lsb = m & -m
+        mn = lsb.bit_length() - 1
+        m ^= lsb
+        my_x, my_y = mn % w, mn // w
+        my_di = None
+        for di in range(8):
+            if bm_dir[di] & lsb:
+                my_di = di
+                break
+        if my_di is None:
+            continue
+        attack_mask = 0
+        for dx, dy in OFFSETS[my_di]:
+            tx, ty = my_x + dx, my_y + dy
+            if 0 <= tx < w and 0 <= ty < h:
+                attack_mask |= 1 << (tx + ty * w)
+        hit_enemies = attack_mask & enemy_sents
+        if not hit_enemies:
+            continue
+        he = hit_enemies
+        while he:
+            elsb = he & -he
+            en = elsb.bit_length() - 1
+            he ^= elsb
+            edi = enemy_dir_at.get(en)
+            if edi is None:
+                continue
+            ex, ey = en % w, en // w
+            for dx, dy in OFFSETS[edi]:
+                if ex + dx == my_x and ey + dy == my_y:
+                    result |= lsb
+                    break
+            if result & lsb:
+                break
+    return result
+
+
 def _very_damaged_targets():
-    """Bitmask of friendly buildings with > 2 damage."""
-    return _healable_mask() & map_info._bm_very_damaged & ~map_info._bm_my_core_area & map_info._bm_visible
+    """Bitmask of friendly buildings with > 2 damage, plus any friendly sentinel
+    locked in a mutual-shot exchange with an enemy sentinel."""
+    base = _healable_mask() & map_info._bm_very_damaged & ~map_info._bm_my_core_area & map_info._bm_visible
+    return base | (_mutual_sentinel_threat() & map_info._bm_visible)
 
 
 def _heal_targets():
@@ -127,12 +219,15 @@ _cached_chase_target = None  # set by score(), reused by run()
 
 MAX_SCORE = 8
 def score():
+    # Always refresh chase target so run() uses a current value when it falls
+    # through to the chase fallback (case 2 in run()). Previously this was
+    # skipped when score=8 returned early, leaving a stale target across turns.
+    global _cached_chase_target
+    _cached_chase_target = _find_chase_target()
+
     if _very_damaged_targets():
         # units.builder.draw_mask(_very_damaged_targets(), 255, 0, 0)
         return 8
-
-    global _cached_chase_target
-    _cached_chase_target = _find_chase_target()
 
     target = _cached_chase_target
     # log(target)
@@ -193,13 +288,46 @@ def score():
 #             map_info.update_at(p)
 #             return
 
+_HEAL_PRIORITY = [1] * 16  # default low priority for unknown types
+_HEAL_PRIORITY[map_info._IDX_ROAD] = 1
+_HEAL_PRIORITY[map_info._IDX_BARRIER] = 2
+_HEAL_PRIORITY[map_info._IDX_BRIDGE] = 2
+_HEAL_PRIORITY[map_info._IDX_SPLITTER] = 2
+_HEAL_PRIORITY[map_info._IDX_CONVEYOR] = 3
+_HEAL_PRIORITY[map_info._IDX_ARMOURED_CONVEYOR] = 4
+_HEAL_PRIORITY[map_info._IDX_HARVESTER] = 4
+_HEAL_PRIORITY[map_info._IDX_FOUNDRY] = 4
+_HEAL_PRIORITY[map_info._IDX_GUNNER] = 5
+_HEAL_PRIORITY[map_info._IDX_SENTINEL] = 5
+_HEAL_PRIORITY[map_info._IDX_BREACH] = 5
+_HEAL_PRIORITY[map_info._IDX_LAUNCHER] = 5
+_HEAL_PRIORITY[map_info._IDX_CORE] = 6
+
+
+def _conv_dist(pbit: int, source: int, cap: int = 12) -> int:
+    """Chebyshev distance from `source` to the tile bit `pbit` via slow
+    iterated bitwise expansion. Returns `cap + 1` if not reached within cap."""
+    if not source:
+        return cap + 1
+    if pbit & source:
+        return 0
+    cur = source
+    for d in range(1, cap + 1):
+        cur = map_info.expand_chebyshev(cur)
+        if cur & pbit:
+            return d
+    return cap + 1
+
+
 def _do_best_heal():
-    """Heal the most damaged adjacent friendly building."""
+    """Heal the most-damaged adjacent friendly building, weighted by type
+    priority so cheap roads/markers don't preempt healing more valuable
+    conveyors, turrets, or the core when both are damaged."""
     w = map_info._width
     h = map_info._height
     healable = _healable_mask() & map_info._bm_damaged
     best_heal = None
-    best_heal_damage = -1
+    best_score = -1
     my_pos = map_info._my_pos
     my_x = my_pos.x
     my_y = my_pos.y
@@ -217,11 +345,13 @@ def _do_best_heal():
             continue
         hp = map_info._building_hp[n]
         et_idx = map_info._building_et_idx[n]
-        if et_idx >= 0:
-            damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
-            if damage > best_heal_damage:
-                best_heal_damage = damage
-                best_heal = p
+        if et_idx < 0:
+            continue
+        damage = map_info._MAX_HP_BY_IDX[et_idx] - hp
+        score = damage * _HEAL_PRIORITY[et_idx]
+        if score > best_score:
+            best_score = score
+            best_heal = p
     if best_heal is not None:
         rc.heal(best_heal)
 
@@ -248,6 +378,12 @@ def run():
     targets = very_damaged if very_damaged else _heal_targets()
     if targets:
         best, dist = nav.closest(targets)
-        if best is not None and dist <= 4:
-            nav.move_adjacent(best, avoid_turret=False)
+        if best is not None:
+            if dist <= 4:
+                nav.move_adjacent(best, avoid_turret=False)
+            else:
+                # No immediate heal but reachable damage exists — close the
+                # gap so we can heal next turn (otherwise heal score 8 made
+                # us pivot here for nothing).
+                nav.move_to(best)
     _do_best_heal()

@@ -9,6 +9,8 @@ rc: Controller = None
 nav: Pathing = None
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
+ATTACK_ROUTE_DISTANCE_NUMERATOR = 3
+ATTACK_ROUTE_DISTANCE_DENOMINATOR = 2
 
 unpathable = 0
 
@@ -20,9 +22,17 @@ def _prefer_armoured_conveyor() -> bool:
 
 
 def _can_build_preferred_conveyor(pos: Position, direction: Direction) -> bool:
+    ti = rc.get_global_resources()[0]
+    reserve = map_info.builder_ti_reserve()
     if _prefer_armoured_conveyor():
-        return rc.can_build_armoured_conveyor(pos, direction)
-    return rc.can_build_conveyor(pos, direction)
+        return (
+            rc.can_build_armoured_conveyor(pos, direction)
+            and ti >= rc.get_armoured_conveyor_cost()[0] + reserve
+        )
+    return (
+        rc.can_build_conveyor(pos, direction)
+        and ti >= rc.get_conveyor_cost()[0] + reserve
+    )
 
 
 def _build_preferred_conveyor(pos: Position, direction: Direction) -> EntityType:
@@ -36,6 +46,26 @@ def init(c: Controller):
     global rc, nav
     rc = c
     nav = units.builder.nav
+
+def _core_distance(a: Position, b: Position) -> int:
+    return abs(a.x - b.x) + abs(a.y - b.y)
+
+def _core_bfs_distance(pos: Position, core: Position) -> int:
+    target = 1 << (core.x + core.y * map_info._width)
+    _closest, dist = nav.closest(target, pos=pos)
+    return dist if dist >= 0 else _core_distance(pos, core)
+
+def _should_attack_route(pos: Position) -> bool:
+    my_core = map_info._my_core
+    enemy_core = map_info._their_core or map_info._predicted_enemy_core
+    if my_core is None or enemy_core is None:
+        return False
+    enemy_dist = _core_bfs_distance(pos, enemy_core)
+    my_dist = _core_bfs_distance(pos, my_core)
+    return (
+        enemy_dist * ATTACK_ROUTE_DISTANCE_DENOMINATOR
+        <= my_dist * ATTACK_ROUTE_DISTANCE_NUMERATOR
+    )
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -71,10 +101,10 @@ def not_blocked():
     ) & map_info._bm_team[my_team_idx]
     w = map_info._width
     conveyors = (map_info._bm_et[map_info._IDX_CONVEYOR]|map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR])&map_info._bm_team[my_team_idx] & ~map_info._bm_guard_conveyor
-    left_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.EAST]])&map_info._not_right_col)<<1
-    right_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.WEST]])&map_info._not_left_col)>>1
-    up_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.SOUTH]]))<<w
-    down_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_INT[Direction.NORTH]]))>>w
+    left_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_E])&map_info._not_right_col)<<1
+    right_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_W])&map_info._not_left_col)>>1
+    up_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_S]))<<w
+    down_conveyors = ((conveyors&~map_info._bm_conv_by_dir[map_info._DIR_N]))>>w
     blocking = (
         (map_info._bm_team[1-my_team_idx]
         & ~map_info._bm_et[map_info._IDX_MARKER]
@@ -169,14 +199,59 @@ def run():
         EntityType.ARMOURED_CONVEYOR,
     )
 
+    def _try_barrier_output(target_n):
+        output_n = map_info._building_conv_target[target_n]
+        if output_n < 0:
+            return False
+        output_bit = 1 << output_n
+        if output_bit & (map_info._bm_friendly_bots | map_info._bm_enemy_bots):
+            return False
+        output = Position(output_n % width, output_n // width)
+        output_type = map_info.type_at(output.x, output.y)
+        is_my_road = (
+            output_type == EntityType.ROAD
+            and map_info.team_at(output.x, output.y) == map_info._my_team
+        )
+        if output_type is not None and not is_my_road:
+            return False
+
+        my_pos = map_info._my_pos
+        if max(abs(my_pos.x - output.x), abs(my_pos.y - output.y)) > 1:
+            if not nav.move_to_adjacent(output):
+                return False
+
+        if is_my_road and rc.can_destroy(output):
+            rc.destroy(output)
+            map_info.update_at(output)
+        if rc.can_build_barrier(output) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
+            rc.build_barrier(output)
+            map_info.update_at(output)
+        return True
+
     def fallback_barrier(target):
         log("barrier fallback at", target)
+        target_n = target.x + target.y * width
+        target_feeds_enemy = bool((1 << target_n) & map_info._bm_feeding_enemy)
+        barrier_ready = (
+            rc.get_action_cooldown() == 0
+            and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve()
+        )
+
+        if barrier_ready and _try_barrier_output(target_n):
+            return
+
         nav.move_adjacent(target)
         existing = map_info.type_at(target.x, target.y)
-        if existing in _BARRIER_DESTROYABLE and rc.get_action_cooldown() == 0 and rc.can_destroy(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]:
+        # Only destroy the routed tile for free when it immediately cuts an
+        # enemy feed, or when we can still turn it into a barrier this turn.
+        if (
+            existing in _BARRIER_DESTROYABLE
+            and rc.can_destroy(target)
+            and (target_feeds_enemy or barrier_ready)
+        ):
             rc.destroy(target)
             map_info.update_at(target)
-        if rc.can_build_barrier(target):
+        if rc.can_build_barrier(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
             rc.build_barrier(target)
             map_info.update_at(target)
 
@@ -185,8 +260,12 @@ def run():
 
     target_conveyor = [None]*2
     path = []
+    attack_route = False
     best_n = best.x + best.y * width
     is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY] & best_bit)
+    is_raw_ax = False
+    is_refined = False
+    is_ti_harvester = False
     if is_foundry:
         is_raw_ax = False
         is_refined = True
@@ -197,8 +276,13 @@ def run():
         elif map_info._bm_env[map_info._IDX_ENV_ORE_TI] & best_bit:
             is_raw_ax = False
             is_refined = False
+            is_ti_harvester = True
     if is_harvester or is_foundry:
-        path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
+        attack_route = (is_foundry or is_ti_harvester) and _should_attack_route(best)
+        if attack_route:
+            path = nav.calculate_attack_conveyor_path(best, update=False)
+        else:
+            path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
         if path is None:
             if high_priority:
                 fallback_barrier(best)
@@ -210,7 +294,11 @@ def run():
         prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
         is_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & best_bit)
         is_refined = bool(map_info._bm_refined_carrying & prev_bit) or bool(map_info._bm_refined_carrying & best_bit)
-        path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
+        attack_route = not is_raw_ax and _should_attack_route(best)
+        if attack_route:
+            path = nav.calculate_attack_conveyor_path(best, update=True)
+        else:
+            path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
         log("PATH", path, bool(is_raw_ax))
         if path is None:
             if high_priority:
@@ -233,11 +321,11 @@ def run():
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit) and target_conveyor[0] == target_conveyor[1]:
         nav.move_adjacent(target_conveyor[0])
-        if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0]:
+        if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0] + map_info.builder_ti_reserve():
             if rc.can_destroy(target_conveyor[0]):
                 rc.destroy(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
-            if rc.can_build_foundry(target_conveyor[0]):
+            if rc.can_build_foundry(target_conveyor[0]) and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0] + map_info.builder_ti_reserve():
                 rc.build_foundry(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
         return
@@ -261,7 +349,7 @@ def run():
             if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) != map_info._my_team and rc.can_fire(target_conveyor[1]):
                 rc.fire(target_conveyor[1])
                 map_info.update_at(target_conveyor[0])
-        if rc.can_build_road(target_conveyor[0]):
+        if rc.can_build_road(target_conveyor[0]) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
             rc.build_road(target_conveyor[0])
             map_info.update_at(target_conveyor[0])
         return
@@ -270,10 +358,11 @@ def run():
         next = target_conveyor[1]
         bridge = destroy.distance_squared(next) > 1
         cost = rc.get_bridge_cost()[0] if bridge else rc.get_conveyor_cost()[0]
+        cost += map_info.builder_ti_reserve()
         if rc.can_destroy(destroy) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= cost:
             rc.destroy(destroy)
             map_info.update_at(destroy)
-        if bridge and rc.can_build_bridge(destroy, next):
+        if bridge and rc.can_build_bridge(destroy, next) and rc.get_global_resources()[0] >= rc.get_bridge_cost()[0] + map_info.builder_ti_reserve():
             rc.build_bridge(destroy, next)
             map_info.update_at(destroy)
         elif not bridge:

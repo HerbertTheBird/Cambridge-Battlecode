@@ -15,6 +15,7 @@ import units.turret_launcher as launcher
 import map_info
 import comms
 import chokepoint
+from _config import USE_CHOKEPOINTS
 from log import log
 
 ENABLE_PROFILER = False
@@ -139,9 +140,11 @@ class Player:
                 self.current_round = round_num
 
             self.me.run()
-            chokepoint.post_turn(c)
 
             self.current_round += 1
+            
+            if USE_CHOKEPOINTS:
+                chokepoint.post_turn(c)
             
             end_time = time.perf_counter_ns()
             elapsed_us = end_time - start_time

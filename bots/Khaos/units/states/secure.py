@@ -203,6 +203,35 @@ def run():
             map_info.update_at(closest)
         log("exit 2")
         return
+
+    is_enemy_harvester = bool(
+        map_info._bm_et[map_info._IDX_HARVESTER]
+        & map_info._bm_team[1 - my_team_idx]
+        & (1 << best_n)
+    )
+    if is_enemy_harvester:
+        # Enemy-owned harvester at the target — wrap it in barriers instead of
+        # paving conveyors. Skips the path conveyor entirely.
+        log("enemy harvester at", best_ore, "— barrier wrap")
+        def _build_barrier_at(p):
+            if rc.can_destroy(p) and rc.get_action_cooldown() == 0:
+                rc.destroy(p)
+                map_info.update_at(p)
+            if rc.can_build_barrier(p) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
+                rc.build_barrier(p)
+                map_info.update_at(p)
+                return True
+            return False
+        if rc.get_position().distance_squared(closest) <= 2 and _build_barrier_at(closest):
+            unsecured ^= (1 << closest_n)
+            next_closest, _ = nav.closest(unsecured)
+            if next_closest:
+                nav.move_to(next_closest)
+        else:
+            nav.move_to(closest)
+            _build_barrier_at(closest)
+        return
+
     if done_conveyor:
         path = nav.calculate_conveyor_path(done_conveyor, is_raw_ax, True)
     else:
@@ -212,24 +241,25 @@ def run():
 
         cost_estimate = rc.get_conveyor_cost()[0]*(unsecured.bit_count()-1) + rc.get_harvester_cost()[0]
         scale_estimate = (unsecured.bit_count()-1)*0.01 + 0.05
-        if (1<<(path[0].x+path[0].y*w))&unsecured and is_conveyor:
-            cost_estimate += rc.get_bridge_cost()[0]
-            scale_estimate += 0.1
-        else:
+        if is_conveyor:
             cost_estimate += rc.get_conveyor_cost()[0]
             scale_estimate += 0.01
+        else:
+            cost_estimate += rc.get_bridge_cost()[0]
+            scale_estimate += 0.1
+        cost_estimate += map_info.builder_ti_reserve()
         _cost_map[best_n] = (cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate), rc.get_current_round())
     elif not secure_now:
         log("CANT SECURE", best_ore, done_conveyor)
         _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))
         return
     if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
+        log("too expensive", best_ore, _cost_map[best_n][0], rc.get_global_resources()[0])
         return
     if path and not is_foundry:
         tn = path[1].x + path[1].y * w
-        if not done_conveyor and is_conveyor and path[0] == closest and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
-            nav.move_to(path[1])
-            if rc.can_build_road(path[1]):
+        if not done_conveyor and is_conveyor and path[0] == closest and rc.get_position().distance_squared(path[1]) <= 2 and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
+            if rc.can_build_road(path[1]) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
                 rc.build_road(path[1])
                 map_info.update_at(path[1])
                 log("Exit 1")
@@ -243,18 +273,18 @@ def run():
         if path and not done_conveyor and closest == path[0]:
             if is_conveyor:
                 dir = map_info.direction_to(path[0], path[1])
-                if rc.can_build_conveyor(path[0], dir):
+                if rc.can_build_conveyor(path[0], dir) and rc.get_global_resources()[0] >= rc.get_conveyor_cost()[0] + map_info.builder_ti_reserve():
                     rc.build_conveyor(path[0], dir)
                     map_info.update_at(path[0])
                     return True
             else:
-                if rc.can_build_bridge(path[0], path[1]):
+                if rc.can_build_bridge(path[0], path[1]) and rc.get_global_resources()[0] >= rc.get_bridge_cost()[0] + map_info.builder_ti_reserve():
                     rc.build_bridge(path[0], path[1])
                     map_info.update_at(path[0])
                     return True
         else:
             dir = map_info.direction_to(closest, best_ore)
-            if rc.can_build_conveyor(closest, dir):
+            if rc.can_build_conveyor(closest, dir) and rc.get_global_resources()[0] >= rc.get_conveyor_cost()[0] + map_info.builder_ti_reserve():
                 rc.build_conveyor(closest, dir)
                 map_info.update_at(closest)
                 return True
