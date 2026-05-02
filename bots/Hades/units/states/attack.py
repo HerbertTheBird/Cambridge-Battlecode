@@ -1280,7 +1280,7 @@ def _try_launcher_lockdown(target: Position) -> bool:
             launcher_dist = _dist_with_extra(launcher_zone)
             launcher_delta = launcher_dist - baseline_dist
             log(f"  launcher @ {p}: {baseline_dist} -> {launcher_dist} (delta={launcher_delta})")
-            if launcher_delta >= 3:
+            if launcher_delta >= 5:
                 options.append((launcher_delta, 0, "launcher", p, lsb))
 
     if not options:

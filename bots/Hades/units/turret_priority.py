@@ -359,10 +359,11 @@ def select_best(candidates, priority_sets, nav, one_shot_hp: int,
     foundries that feed my turrets) up front — we never shoot our own
     pipeline.
 
-    `bot_ring_mode` controls how a non-bot candidate adjacent to an enemy
-    builder bot (bots heal what we shoot, so the shot is often wasted) is
-    treated. Candidates are NEVER dropped here — they're only demoted to a
-    last-resort fallback tier that fires after every normal pool is empty:
+    `bot_ring_mode` controls how a non-bot candidate adjacent to ≥2 enemy
+    builder bots (bots heal what we shoot, so two healers usually out-tempo
+    a single shot — one healer alone we still try to outpace) is treated.
+    Candidates are NEVER dropped here — they're only demoted to a last-resort
+    fallback tier that fires after every normal pool is empty:
       - `'strict'`           — demote unconditionally.
       - `'one_shot_override'` — demote unless the candidate is a one-shot
         (`hp <= one_shot_hp`) or its tile is in `ring_override_mask`.
@@ -390,7 +391,30 @@ def select_best(candidates, priority_sets, nav, one_shot_hp: int,
     enemy_bots = map_info._bm_enemy_bots
     friendly_bots = map_info._bm_friendly_bots
     if enemy_bots:
-        bot_ring = map_info.expand_chebyshev(enemy_bots) & ~enemy_bots
+        # Demote only when ≥2 enemy builder bots can heal the same tile —
+        # one healer is a kill we should still take.
+        w = map_info._width
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        ntr = map_info._not_top_row
+        nbr = map_info._not_bottom_row
+        b = enemy_bots
+        shifts = (
+            (b & nlc) >> 1,                  # bot E of tile
+            (b & nrc) << 1,                  # bot W of tile
+            (b & nbr) << w,                  # bot N of tile
+            (b & ntr) >> w,                  # bot S of tile
+            (b & nlc & nbr) << (w - 1),      # bot NE
+            (b & nrc & nbr) << (w + 1),      # bot NW
+            (b & nlc & ntr) >> (w + 1),      # bot SE
+            (b & nrc & ntr) >> (w - 1),      # bot SW
+        )
+        seen_one = 0
+        seen_two = 0
+        for s in shifts:
+            seen_two |= seen_one & s
+            seen_one |= s
+        bot_ring = seen_two & ~enemy_bots & map_info._board_mask
     else:
         bot_ring = 0
     protected = priority_sets.get('protected', 0)
