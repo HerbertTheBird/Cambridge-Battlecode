@@ -57,38 +57,87 @@ def _try_throw_enemy_away() -> bool:
     if not launchable_mask:
         return False
 
-    # Multi-source BFS from (every conveyor) ∪ (launcher position). The throw
-    # target is the launchable tile last reached by the wavefront. Tiles never
-    # reached (disconnected from the seed) are best of all — pick those first.
+    # For each candidate destination, Chebyshev flood-fill the region the
+    # launched bot could navigate using enemy-POV pathing, with unseen tiles
+    # treated as impassable. Smaller region = the bot is more contained
+    # post-launch, which is what we want.
+    forbidden = (
+        map_info.get_avoid(False, False, False, enemy_pov=True)
+        | (~map_info._bm_seen & map_info._board_mask)
+    )
+    passable = ~forbidden & map_info._board_mask
+
+    component_size: dict[int, int] = {}
+    handled = 0
+    m = launchable_mask
+    while m:
+        lsb = m & -m
+        m ^= lsb
+        n = lsb.bit_length() - 1
+        if handled & lsb:
+            continue
+        if not (lsb & passable):
+            # Destination is enemy-impassable itself (e.g. our core) — best.
+            component_size[n] = 0
+            handled |= lsb
+            continue
+        region = lsb
+        while True:
+            nxt = map_info.expand_chebyshev(region) & passable
+            if nxt == region:
+                break
+            region = nxt
+        size = bin(region).count("1")
+        rm = launchable_mask & region
+        while rm:
+            rl = rm & -rm
+            rm ^= rl
+            component_size[rl.bit_length() - 1] = size
+        handled |= region | lsb
+
+    # Tiebreak with the prior heuristic: prefer destinations farthest from
+    # (every conveyor) ∪ (launcher) in a wall-only Chebyshev BFS.
     seed = map_info._bm_conveyors | my_bit
     walls = map_info._bm_env[map_info._IDX_ENV_WALL]
     traversable = ~walls & map_info._board_mask
-
+    UNREACHED = 1 << 30
+    layer_of: dict[int, int] = {}
     visited = seed
     frontier = seed
-    last_wave_hit = seed & launchable_mask
+    layer_idx = 0
+    rm = seed & launchable_mask
+    while rm:
+        rl = rm & -rm
+        rm ^= rl
+        layer_of[rl.bit_length() - 1] = layer_idx
     while frontier:
+        layer_idx += 1
         next_frontier = map_info.expand_chebyshev(frontier) & traversable & ~visited
         if not next_frontier:
             break
-        hit = next_frontier & launchable_mask
-        if hit:
-            last_wave_hit = hit
+        rm = next_frontier & launchable_mask
+        while rm:
+            rl = rm & -rm
+            rm ^= rl
+            layer_of[rl.bit_length() - 1] = layer_idx
         visited |= next_frontier
         frontier = next_frontier
 
-    unvisited = launchable_mask & ~visited
-    if unvisited:
-        chosen_mask = unvisited
-    elif last_wave_hit:
-        chosen_mask = last_wave_hit
-    else:
-        return False
+    best_n = None
+    best_key = None
+    rm = launchable_mask
+    while rm:
+        rl = rm & -rm
+        rm ^= rl
+        rn = rl.bit_length() - 1
+        key = (component_size[rn], -layer_of.get(rn, UNREACHED))
+        if best_key is None or key < best_key:
+            best_key = key
+            best_n = rn
 
-    tn = (chosen_mask & -chosen_mask).bit_length() - 1
-    bot_pos, tile = launchable_map[tn]
+    bot_pos, tile = launchable_map[best_n]
     rc.launch(bot_pos, tile)
-    log(f"launcher threw enemy from {bot_pos} to {tile}")
+    log(f"launcher threw enemy from {bot_pos} to {tile} (size={best_key[0]}, layer={-best_key[1]})")
     return True
 
 

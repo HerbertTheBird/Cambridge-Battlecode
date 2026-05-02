@@ -2002,6 +2002,10 @@ def get_avoid(
         enemy_roads = _bm_et[_IDX_ROAD] & _bm_team[1 - _my_team_idx]
         if enemy_roads and _bm_enemy_bots:
             mask |= enemy_roads & expand_chebyshev(_bm_enemy_bots)
+        # Friendly barriers cardinally adjacent to a wall — these form
+        # tight defensive chokes; don't path through (destroy) them.
+        friendly_barriers = _bm_et[_IDX_BARRIER] & _bm_team[_my_team_idx]
+        mask |= friendly_barriers & expand_manhattan(_bm_env[_IDX_ENV_WALL])
     if avoid_ore:
         ore = _bm_env[_IDX_ENV_ORE_TI] | _bm_env[_IDX_ENV_ORE_AX]
         w = _width

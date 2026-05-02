@@ -102,17 +102,33 @@ def _find_chase_target(damaged: bool = True):
     if not nearby:
         log("too far")
         return None
-    closest_pos, dist = nav.closest_within(nearby, max_dist=8)
-    if closest_pos is None:
+    # Enumerate all reachable enemies within max_dist=8 by repeatedly removing
+    # the previous closest. Then tiebreak the minimum-BFS-distance set by
+    # chebyshev distance to my conveyors (lowest priority — closer wins).
+    remaining = nearby
+    enumerated = []  # list of (bfs_dist, pos)
+    while remaining:
+        pos, d = nav.closest_within(remaining, max_dist=8)
+        if pos is None:
+            break
+        enumerated.append((d, pos))
+        remaining ^= 1 << (pos.x + pos.y * w)
+    if not enumerated:
         log("no closest")
         return None
-    # if dist < 6:
-    #     return None
-    n = closest_pos.x + closest_pos.y * w
-    # if closest_pos.distance_squared(map_info._my_pos) < 5:
-    #     log("too close")
-    #     return None
-    return closest_pos
+    min_d = min(d for d, _ in enumerated)
+    tied = [p for d, p in enumerated if d == min_d]
+    if len(tied) == 1:
+        return tied[0]
+    my_convs = map_info._bm_conveyors & map_info._bm_team[map_info._my_team_idx]
+    best = None
+    best_cd = None
+    for p in tied:
+        cd = _conv_dist(1 << (p.x + p.y * w), my_convs)
+        if best is None or cd < best_cd:
+            best = p
+            best_cd = cd
+    return best
 
 
 def _healable_mask():
@@ -218,6 +234,21 @@ _HEAL_PRIORITY[map_info._IDX_SENTINEL] = 5
 _HEAL_PRIORITY[map_info._IDX_BREACH] = 5
 _HEAL_PRIORITY[map_info._IDX_LAUNCHER] = 5
 _HEAL_PRIORITY[map_info._IDX_CORE] = 6
+
+
+def _conv_dist(pbit: int, source: int, cap: int = 12) -> int:
+    """Chebyshev distance from `source` to the tile bit `pbit` via slow
+    iterated bitwise expansion. Returns `cap + 1` if not reached within cap."""
+    if not source:
+        return cap + 1
+    if pbit & source:
+        return 0
+    cur = source
+    for d in range(1, cap + 1):
+        cur = map_info.expand_chebyshev(cur)
+        if cur & pbit:
+            return d
+    return cap + 1
 
 
 def _do_best_heal():
