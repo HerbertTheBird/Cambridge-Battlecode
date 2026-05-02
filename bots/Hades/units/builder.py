@@ -211,7 +211,25 @@ def _destroy_enemy_feeders():
     if a friendly conveyor / armoured conveyor / bridge outputs onto a tile
     occupied by an enemy turret (gunner/sentinel/breach/launcher), destroy
     it. destroy() does not cost action cooldown, so if cooldown was already
-    0 we then drop a road on the freed tile. Exits after the first action."""
+    0 we then try to reclaim the freed tile. After feeder teardown, also
+    remove adjacent friendly harvesters that are cardinally adjacent to an
+    enemy turret and have no qualifying adjacent allied building support.
+    Exits after the first action."""
+
+    def _try_reclaim_destroyed_tile(p: Position, tile_bit: int) -> None:
+        if rc.get_action_cooldown() != 0:
+            return
+        enemy_bots = map_info._bm_enemy_bots
+        threatened = bool(enemy_bots and (tile_bit & map_info.expand_chebyshev(enemy_bots, 2)))
+        reserve = map_info.builder_ti_reserve()
+        ti_have = rc.get_global_resources()[0]
+        if threatened and rc.can_build_barrier(p) and ti_have >= rc.get_barrier_cost()[0] + reserve:
+            rc.build_barrier(p)
+            map_info.update_at(p)
+        elif rc.can_build_road(p) and ti_have >= rc.get_road_cost()[0] + reserve:
+            rc.build_road(p)
+            map_info.update_at(p)
+
     w = map_info._width
     my_pos = map_info._my_pos
     my_bit = 1 << (my_pos.x + my_pos.y * w)
@@ -223,8 +241,6 @@ def _destroy_enemy_feeders():
         | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
         | map_info._bm_et[map_info._IDX_BRIDGE]
     ) & map_info._bm_team[my_team_idx] & region
-    if not my_feeders:
-        return
 
     enemy_turrets = (
         map_info._bm_et[map_info._IDX_GUNNER]
@@ -244,17 +260,35 @@ def _destroy_enemy_feeders():
             if rc.can_destroy(p):
                 rc.destroy(p)
                 map_info.update_at(p)
-                if rc.get_action_cooldown() == 0:
-                    enemy_bots = map_info._bm_enemy_bots
-                    threatened = enemy_bots and (lsb & map_info.expand_chebyshev(enemy_bots, 2))
-                    reserve = map_info.builder_ti_reserve()
-                    ti_have = rc.get_global_resources()[0]
-                    if threatened and rc.can_build_barrier(p) and ti_have >= rc.get_barrier_cost()[0] + reserve:
-                        rc.build_barrier(p)
-                        map_info.update_at(p)
-                    elif rc.can_build_road(p) and ti_have >= rc.get_road_cost()[0] + reserve:
-                        rc.build_road(p)
-                        map_info.update_at(p)
+                _try_reclaim_destroyed_tile(p, lsb)
+                return
+        mask ^= lsb
+
+    my_harvesters = (
+        map_info._bm_et[map_info._IDX_HARVESTER]
+        & map_info._bm_team[my_team_idx]
+        & region
+    )
+    if not my_harvesters:
+        return
+
+    allied_support = map_info._bm_team[my_team_idx] & ~(
+        map_info._bm_et[map_info._IDX_ROAD]
+        | map_info._bm_et[map_info._IDX_MARKER]
+        | map_info._bm_et[map_info._IDX_LAUNCHER]
+    )
+
+    mask = my_harvesters
+    while mask:
+        lsb = mask & -mask
+        cardinal = map_info.expand_manhattan(lsb) & ~lsb
+        if (cardinal & enemy_turrets) and not (cardinal & allied_support):
+            n = lsb.bit_length() - 1
+            p = Position(n % w, n // w)
+            if rc.can_destroy(p):
+                rc.destroy(p)
+                map_info.update_at(p)
+                _try_reclaim_destroyed_tile(p, lsb)
                 return
         mask ^= lsb
 
