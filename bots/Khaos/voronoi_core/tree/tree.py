@@ -211,27 +211,27 @@ class Tree:
         :return: (Node) The new root of the sub tree
         """
 
-        # If the node is unbalanced, then try out the 4 cases
+        # If the node is unbalanced, then try out the 4 cases.
+        # The four original cases are mutually exclusive on the sign of balance,
+        # so we group by sign and evaluate each child's balance at most once.
 
-        # Case 1 - Left Left
         balance = node.balance
-        left = node._left
-        right = node._right
 
-        if balance > 1 and left.balance >= 0:
-            return Tree.rotate_right(node)
-
-        # Case 2 - Right Right
-        if balance < -1 and right.balance <= 0:
-            return Tree.rotate_left(node)
-
-        # Case 3 - Left Right
-        if balance > 1 and left.balance < 0:
+        if balance > 1:
+            left = node._left
+            # Case 1 - Left Left  (left.balance >= 0)
+            # Case 3 - Left Right (left.balance < 0)
+            if left.balance >= 0:
+                return Tree.rotate_right(node)
             node.left = Tree.rotate_left(left)
             return Tree.rotate_right(node)
 
-        # Case 4 - Right Left
-        if balance < -1 and right.balance > 0:
+        if balance < -1:
+            right = node._right
+            # Case 2 - Right Right (right.balance <= 0)
+            # Case 4 - Right Left  (right.balance > 0)
+            if right.balance <= 0:
+                return Tree.rotate_left(node)
             node.right = Tree.rotate_right(right)
             return Tree.rotate_left(node)
 

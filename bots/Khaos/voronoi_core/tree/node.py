@@ -65,11 +65,25 @@ class Node:
 
     @property
     def balance(self):
+        # Inlined to avoid per-call .height property dispatch on each child.
+        # Preserves identical lazy-fill side effect on each child's _height.
         left = self._left
         right = self._right
-        left_height = left.height if left is not None else 0
-        right_height = right.height if right is not None else 0
-        return left_height - right_height
+        if left is not None:
+            lh = left._height
+            if lh is None:
+                lh = left.calculate_height()
+                left._height = lh
+        else:
+            lh = 0
+        if right is not None:
+            rh = right._height
+            if rh is None:
+                rh = right.calculate_height()
+                right._height = rh
+        else:
+            rh = 0
+        return lh - rh
 
     def calculate_height(self):
         """

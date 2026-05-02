@@ -33,29 +33,44 @@ class Algebra:
 
     @staticmethod
     def line_ray_intersection_point(ray_orig, ray_end, point_1, point_2):
-        orig = (float(ray_orig[0]), float(ray_orig[1]))
-        end = (float(ray_end[0]), float(ray_end[1]))
-        direction = Algebra.norm((end[0] - orig[0], end[1] - orig[1]))
-        point_1 = (float(point_1[0]), float(point_1[1]))
-        point_2 = (float(point_2[0]), float(point_2[1]))
+        ox = float(ray_orig[0])
+        oy = float(ray_orig[1])
+        ex = float(ray_end[0])
+        ey = float(ray_end[1])
+        p1x = float(point_1[0])
+        p1y = float(point_1[1])
+        p2x = float(point_2[0])
+        p2y = float(point_2[1])
 
         # Ray-Line Segment Intersection Test in 2D
         # http://bit.ly/1CoxdrG
-        v1 = (orig[0] - point_1[0], orig[1] - point_1[1])
-        v2 = (point_2[0] - point_1[0], point_2[1] - point_1[1])
-        v3 = (-direction[1], direction[0])
+        dx = ex - ox
+        dy = ey - oy
+        mag = math.sqrt(dx * dx + dy * dy)
+        if mag == 0:
+            dir_x = dx
+            dir_y = dy
+        else:
+            dir_x = dx / mag
+            dir_y = dy / mag
 
-        denominator = Algebra.dot(v2, v3)
+        v1x = ox - p1x
+        v1y = oy - p1y
+        v2x = p2x - p1x
+        v2y = p2y - p1y
+        # v3 = (-dir_y, dir_x)
+
+        denominator = v2x * (-dir_y) + v2y * dir_x
         if denominator == 0:
             return []
 
-        t1 = Algebra.cross(v2, v1) / denominator
-        t2 = Algebra.dot(v1, v3) / denominator
+        t1 = (v2x * v1y - v2y * v1x) / denominator
+        t2 = (v1x * (-dir_y) + v1y * dir_x) / denominator
 
         if t1 > 0.0 and 0.0 <= t2 <= 1.0:
             return [(
-                orig[0] + t1 * direction[0],
-                orig[1] + t1 * direction[1],
+                ox + t1 * dir_x,
+                oy + t1 * dir_y,
             )]
         return []
 

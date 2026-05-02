@@ -174,7 +174,7 @@ def _fill_scanline_from_polygon(row: List[bool], y: float, scale: int, polygon: 
 
 
 def make_mask(height: int, width: int, fill: bool = False) -> Mask:
-    return [[fill for _ in range(width)] for _ in range(height)]
+    return [[fill] * width for _ in range(height)]
 
 
 def copy_mask(mask: Mask) -> Mask:

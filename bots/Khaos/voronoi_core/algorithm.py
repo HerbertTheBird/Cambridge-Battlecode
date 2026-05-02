@@ -185,7 +185,7 @@ class Algorithm(Subject):
             genesis_point = genesis_point or event.point
 
             # Handle circle events
-            if isinstance(event, CircleEvent) and event.is_valid:
+            if event.circle_event and event.is_valid:
                 # Update sweep line position
                 self.sweep_line = event.yd
 

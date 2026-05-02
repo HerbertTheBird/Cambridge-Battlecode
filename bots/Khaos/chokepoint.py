@@ -954,7 +954,7 @@ class AnalyzerState:
             return False
         while not self.voronoi.event_queue.empty():
             event = self.voronoi.event_queue.get()
-            if isinstance(event, CircleEvent):
+            if event.circle_event:
                 if not event.is_valid:
                     continue
                 self.voronoi.sweep_line = event.yd
@@ -1001,7 +1001,8 @@ class AnalyzerState:
             self.voronoi_finish_cursor += 1
             processed += 1
 
-            if edge.twin is None:
+            twin = edge.twin
+            if twin is None:
                 continue
 
             origin = edge.get_origin()
@@ -1009,16 +1010,16 @@ class AnalyzerState:
                 poly._finish_edge(edge)
                 origin = edge.get_origin()
 
-            target = edge.twin.get_origin()
+            target = twin.get_origin()
             if target is None or not poly.inside(target):
-                poly._finish_edge(edge.twin)
-                target = edge.twin.get_origin()
+                poly._finish_edge(twin)
+                target = twin.get_origin()
 
             if origin is not None and target is not None:
                 self.voronoi_finished_edges.append(edge)
             else:
                 edge.delete()
-                edge.twin.delete()
+                twin.delete()
 
         return self.voronoi_finish_cursor >= len(edges)
 
@@ -1489,17 +1490,18 @@ def _step_voronoi_extract(state: AnalyzerState, controller: Controller) -> None:
         state.voronoi_edge_cursor += 1
         processed += 1
 
-        if edge.twin is None or edge.twin.incident_point is None:
+        twin = edge.twin
+        if twin is None or twin.incident_point is None:
             continue
         site_a = edge.incident_point
-        site_b = edge.twin.incident_point
+        site_b = twin.incident_point
         origin = edge.get_origin()
-        target = edge.twin.get_origin()
+        target = twin.get_origin()
         if origin is None or target is None:
             continue
 
-        p1 = (float(origin.x), float(origin.y))
-        p2 = (float(target.x), float(target.y))
+        p1 = (origin.x, origin.y)
+        p2 = (target.x, target.y)
         if not state.segment_is_inside_free_space(p1, p2):
             continue
 

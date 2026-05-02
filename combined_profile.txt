@@ -1,652 +1,646 @@
 Combined profile
 Profiled turns: 6070
-Timed-out turns: 627
-Total calls: 10413975
-Total tottime: 7766986.30 us
-Total cumtime: 37684211.30 us
+Timed-out turns: 543
+Total calls: 9705128
+Total tottime: 7503467.30 us
+Total cumtime: 35654203.40 us
 
       ncalls   tottime_us   cumtime_us   avg_cum_us  function
 ----------------------------------------------------------------------------------------------------
-      470546    928637.30   1198772.90         2.55  map_info.py:update_at
-        6070    353554.80   1707151.40       281.24  map_info.py:update
-        3412    233409.10    233409.10        68.41  pathing.py:_claim_zone_on_passable
-        6716    227140.10    325817.60        48.51  map_info.py:_compute_route_targets
-        3655    133732.60    166428.60        45.53  pathing.py:bfs_move
-        5321    122516.30    168290.00        31.63  map_info.py:_carrying_expand
-      414358    117874.80    117874.80         0.28  ~:0(<method 'get_tile_building_id' of 'builtins.Controller' objects>)
-       71745    116791.40    116791.40         1.63  map_info.py:expand_chebyshev
-       15170     88179.10     98918.80         6.52  pathing.py:_closest_impl
-        9552     84890.10    517896.70        54.22  algorithm.py:handle_circle_event
-        2752     79430.40    588811.50       213.96  map_info.py:update_move
-         812     77905.40     96588.20       118.95  attack.py:_compute_sentinel_dir_scores
-        5218     76087.10    595225.30       114.07  algorithm.py:handle_site_event
-      334086     73752.00    133444.10         0.40  <string>:<lambda>
-        3866     73004.50   4423362.20      1144.17  builder.py:run
-         869     73003.70     77593.80        89.29  pathing.py:bfs_route
-      242042     72602.80     72602.80         0.30  ~:0(<method 'get_hp' of 'builtins.Controller' objects>)
-       29184     66488.80    209901.50         7.19  circle_event.py:create_circle_event
-       25500     65569.30    230142.70         9.03  algebra.py:line_ray_intersection_point
-        7930     61436.60     61436.60         7.75  ~:0(<method 'get_nearby_units' of 'builtins.Controller' objects>)
-        3863     61277.50    246532.60        63.82  comms.py:broadcast_symmetry
-      334086     59692.10     59692.10         0.18  ~:0(<built-in method __new__ of type object at 0x00007FFDC40F68A0>)
-       35533     57143.30    117787.40         3.31  breakpoint.py:get_intersection_x
-        6070     56499.30     56499.30         9.31  ~:0(<method 'disable' of '_lsprof.Profiler' objects>)
-       25500     53943.30    320122.60        12.55  algebra.py:get_intersection
-      422357     53845.80     53845.80         0.13  ~:0(<method 'bit_length' of 'int' objects>)
-        6033     53541.30     66420.80        11.01  map_info.py:_compute_route_reaches_core
-        5559     53034.10    174231.10        31.34  map_info.py:_compute_fed
-        2104     53009.70     80463.80        38.24  attack.py:_placement_candidates
-       44324     52730.20     52730.20         1.19  map_info.py:expand_manhattan
-       19436     52199.80     57857.30         2.98  map_info.py:_conveyor_target_tiles
-        5467     50079.00     67947.90        12.43  comms.py:_encode_learn_map_sample_bits
-          70     49780.80    191010.20      2728.72  chokepoint.py:_step_voronoi_extract
-          14     49178.00     64015.50      4572.54  geometry_core.py:boundary_segments_from_mask
-        1088     48429.00     84268.00        77.45  attack.py:_compute_gunner_dir_scores
-       73903     47092.60     73437.40         0.99  ~:0(<built-in method builtins.sum>)
-       22400     44752.90     77229.10         3.45  geometry_core.py:point_in_polygon
-        3216     44318.30    104532.60        32.50  ~:0(<method 'get_nearby_tiles' of 'builtins.Controller' objects>)
-       80651     43722.60     80707.40         1.00  half_edge.py:get_origin
-       29140     42849.80     72598.50         2.49  circle_event.py:create_circle
-       14783     42182.90   1227574.20        83.04  chokepoint.py:step_sweep_event
-         312     41169.00    534520.90      1713.21  chokepoint.py:step_finish_voronoi_edges
-        3657     40802.90    856778.90       234.28  pathing.py:move_to
-       75047     40675.80     40675.80         0.54  ~:0(<method 'get_entity_type' of 'builtins.Controller' objects>)
-       23808     40239.80     40239.80         1.69  map_info.py:valid_cardinal_targets
-        3866     39987.60    373344.50        96.57  attack.py:_get_attack_candidates
-        8090     36222.50     69035.10         8.53  builder.py:_try_mask
-       61040     35553.20     87830.30         1.44  coordinate.py:__init__
-       12830     35499.00     53266.80         4.15  heal.py:_mutual_sentinel_threat
-       11897     35101.10     46053.40         3.87  chokepoint.py:segment_is_inside_free_space
-      298185     34968.70     34968.70         0.12  algebra.py:<genexpr>
-       14592     34940.70    278528.20        19.09  algorithm.py:_check_circles
-        9552     34936.70    163330.40        17.10  algorithm.py:_update_breakpoints
-       93782     34252.80     41804.20         0.45  numeric.py:is_close
-       44333     33956.50     69054.00         1.56  map_info.py:pos_add
-        3866     33625.20   1154521.50       298.63  builder.py:select_best_state
-      220770     33450.00     33450.00         0.15  event.py:__lt__
-      135045     33444.90    158395.00         1.17  node.py:update_height
-       23463     33310.00     54050.00         2.30  ~:0(<method 'get_position' of 'builtins.Controller' objects>)
-        3290     32896.70    204579.00        62.18  secure.py:_my_claims
-       25500     32231.60     86406.80         3.39  algebra.py:norm
-        3396     32050.20     36224.00        10.67  route.py:not_blocked
-      214371     30879.10     30879.10         0.14  ~:0(<method 'append' of 'list' objects>)
-       10816     30724.40     74819.80         6.92  map_info.py:fwd
-      102793     30606.40     44786.40         0.44  enum.py:__hash__
-      359193     30455.00     30455.00         0.08  ~:0(<built-in method builtins.abs>)
-      122225     30014.80     52342.70         0.43  coordinate.py:_to_dec
-       19299     28941.50     53239.10         2.76  ~:0(<built-in method _heapq.heappop>)
-        1030     28813.40     28813.40        27.97  pathing.py:voronoi_claim
-        5204     28732.60    158802.60        30.52  tree.py:find_leaf_node
-       35231     28594.20     67348.20         1.91  random.py:randrange
-        8822     27991.60    387885.30        43.97  map_info.py:_recompute_derived_loaded
-       14576     27169.50     27169.50         1.86  attack.py:_ge_threshold_mask
-        8822     26885.20     85155.70         9.65  map_info.py:_recompute_derived_structural
-       48403     26574.30     74050.60         1.53  algebra.py:dot
-        4851     25740.30     31931.10         6.58  harvest.py:possible_ore
-        1680     25580.70     31159.40        18.55  geometry_core.py:_fill_scanline_from_polygon
-      230866     25375.80     25375.80         0.11  coordinate.py:xd
-       27080     25087.50     25087.50         0.93  attack.py:_max_score_in_mask
-       14778     25028.00     33247.30         2.25  chokepoint.py:site_radius_for_sites
-        5569     24965.10     57854.50        10.39  heal.py:_do_best_heal
-      232072     24707.00     24707.00         0.11  coordinate.py:yd
-       63576     24647.20     36552.50         0.57  node.py:balance
-       47371     24625.60    129414.50         2.73  tree.py:balance
-        3863     24249.90    106794.00        27.65  builder.py:_pick_symmetry_broadcast_pos
-        3396     23328.40    195940.30        57.70  route.py:_my_claims
-      209891     23325.70     23346.40         0.11  ~:0(<built-in method builtins.max>)
-       12544     23110.20     23110.20         1.84  attack.py:_add_planes_into
-        3863     22852.10    134366.60        34.78  builder.py:try_road_spam
-       28590     22752.80     22752.80         0.80  polygon.py:inside
-        3866     22716.10    407638.40       105.44  attack.py:_ensure_round_cache
-        9157     22547.90    418591.40        45.71  polygon.py:_finish_edge
-       84650     22482.50     23142.30         0.27  ~:0(<method 'get' of 'dict' objects>)
-      122225     22327.90     22327.90         0.18  numeric.py:to_number
-        2738     22199.50    636060.40       232.31  pathing.py:move
-       14756     22137.20    145802.10         9.88  node.py:update_heights
-       23808     21446.10     21446.10         0.90  map_info.py:splitter_side_targets
-       26702     21169.70     24522.00         0.92  circle_event.py:__init__
-        8822     20624.20    346441.80        39.27  map_info.py:_recompute_derived_visible
-       89548     20268.80     26336.10         0.29  geometry_core.py:_point_on_segment
-       35231     20254.40     29976.70         0.85  random.py:_randbelow_with_getrandbits
-        8822     20094.80    839577.60        95.17  map_info.py:recompute_derived
-       50116     19936.10     26820.70         0.54  numeric.py:sqrt
-       32904     19863.30     19863.30         0.60  attack.py:_add_bits_to_planes
-       57357     19862.40     25425.30         0.44  numeric.py:is_zero
-       70879     19803.40     19803.40         0.28  ~:0(<method 'get_stored_resource' of 'builtins.Controller' objects>)
-       11102     19023.90     27340.70         2.46  map_info.py:adj_seed
-        7257     18586.30     18586.30         2.56  harvest.py:secured
-       12830     18162.30     73206.70         5.71  heal.py:_very_damaged_targets
-        3396     18076.70     22035.30         6.49  route.py:_too_expensive
-        6070     17849.30   2293568.20       377.85  chokepoint.py:post_turn
-        2530     17790.10     23132.60         9.14  map_info.py:_compute_enemy_turret_threat
-         480     17789.30    200868.00       418.47  attack.py:run
-        5559     17372.60    185662.60        33.40  map_info.py:_compute_carrying
-        1614     17204.00     17204.00        10.66  heal.py:_conv_zone
-         400     17130.00    179093.20       447.73  secure.py:run
-          13     17106.30     27398.70      2107.59  chokepoint.py:prune_graph
-        9157     16991.80    346594.80        37.85  polygon.py:_get_intersection_point
-       94987     16973.40     16973.40         0.18  ~:0(<method 'add' of 'set' objects>)
-          71     16967.20     23411.40       329.74  map_info.py:_build_turret_shift_masks
-       33696     16787.10     23250.60         0.69  node.py:predecessor
-      115420     16502.10     16502.10         0.14  map_info.py:in_bounds_coords
-      166095     16249.20     16249.20         0.10  half_edge.py:twin
-       25500     15632.40     45551.30         1.79  algebra.py:magnitude
-       56835     15432.20     15432.20         0.27  map_info.py:in_bounds
-        3270     15401.30     37205.00        11.38  turret_gunner.py:_scan_ray
-       33696     14998.70     21098.40         0.63  node.py:successor
-       46336     14754.20     14754.20         0.32  ~:0(<method 'get_team' of 'builtins.Controller' objects>)
-       18765     14597.10     42261.90         2.25  vertex.py:__init__
-        9499     14571.20     40476.50         4.26  tree.py:rotate_left
-      128535     14322.80     14322.80         0.11  ~:0(<built-in method builtins.isinstance>)
-        3866     14285.70    490608.00       126.90  attack.py:_my_claims
-      102793     14180.00     14180.00         0.14  ~:0(<built-in method builtins.hash>)
-       14778     14106.30     24446.60         1.65  chokepoint.py:get_or_create_raw_vid
-       35231     13991.60     81339.80         2.31  random.py:randint
-       14592     13618.80    143033.30         9.80  tree.py:balance_and_propagate
-       90394     12870.40     12870.40         0.14  ~:0(<built-in method math.sqrt>)
-       19685     12835.70     21988.10         1.12  ~:0(<built-in method _heapq.heappush>)
-        3290     12429.70     14646.80         4.45  secure.py:_too_expensive
-      140384     12399.70     12399.70         0.09  leaf_node.py:get_value
-       14756     12243.40    160339.40        10.87  node.py:replace_leaf
-        9350     12144.50     13761.70         1.47  map_info.py:get_avoid
-       29512     12078.80     16082.20         0.54  half_edge.py:__init__
-       30883     12024.70     12024.70         0.39  ~:0(<method 'can_place_marker' of 'builtins.Controller' objects>)
-         669     11838.00    335110.50       500.91  turret_sentinel.py:run
-       38850     11665.20     11665.20         0.30  enum.py:<genexpr>
-        8303     11586.80     51338.10         6.18  pathing.py:closest_within
-        2904     11164.40     16505.70         5.68  chokepoint.py:_sync_visible_targets
-       76979     11064.10     12115.50         0.16  ~:0(<built-in method builtins.min>)
-       34639     10989.50    124295.40         3.59  internal_node.py:get_key
-        3863     10961.20     18133.10         4.69  builder.py:_destroy_enemy_feeders
-          42     10917.10     10917.10       259.93  geometry_core.py:make_mask
-       29920     10897.70     10897.70         0.36  ~:0(<method 'can_build_road' of 'builtins.Controller' objects>)
-      103722     10892.80     10892.80         0.11  node.py:right
-        3396     10213.90    167111.70        49.21  heal.py:score
-       14744      9960.80     14148.60         0.96  map_info.py:builder_ti_reserve
-        3396      9844.30    217711.90        64.11  route.py:score
-        6706      9782.00     27193.70         4.06  tree.py:rotate_right
-         446      9745.90     15194.60        34.07  turret_priority.py:select_best
-       37872      9699.60      9699.60         0.26  attack.py:<genexpr>
-       37502      9574.00      9574.00         0.26  ~:0(<method 'get_current_round' of 'builtins.Controller' objects>)
-       81532      9450.20      9450.20         0.12  node.py:left
-        2781      9009.00     11703.20         4.21  ~:0(<method 'can_move' of 'builtins.Controller' objects>)
-        2530      8853.90      8853.90         3.50  map_info.py:_compute_guard_conv
-        1486      8788.40    281542.30       189.46  heal.py:_try_chase
-      105693      8777.30      8777.30         0.08  ~:0(<built-in method _operator.index>)
-       12280      8695.40    277696.30        22.61  pathing.py:claim_subset
-        6867      8435.00     75609.60        11.01  pathing.py:closest
-          14      8078.30     13599.10       971.36  chokepoint.py:collect_boundary_samples
-         347      7970.40    183901.60       529.98  route.py:run
-         238      7955.20   1237340.60      5198.91  chokepoint.py:_step_voronoi_sweep
-        4585      7807.70     18560.10         4.05  pathing.py:raw_ax_foundry_sites
-        1706      7756.90    359157.80       210.53  heal.py:run
-       24589      7750.90      7750.90         0.32  chokepoint.py:quantize_key
-        3866      7633.20     27455.10         7.10  explore.py:try_passive_chokepoint_action_only
-          14      7549.90     85011.20      6072.23  chokepoint.py:_analysis_polygon_mask
-       26702      7509.30      7509.30         0.28  algebra.py:check_clockwise
-       15462      7412.20     10656.90         0.69  leaf_node.py:__init__
-       15170      7332.30      8007.10         0.53  pathing.py:_coerce_start
-       21644      7285.50      7285.50         0.34  ~:0(<method 'get_global_resources' of 'builtins.Controller' objects>)
-          14      7040.40     10587.70       756.26  geometry_core.py:build_free_mask
-         658      7028.40    244191.10       371.11  turret_gunner.py:run
-        5592      6934.00     10484.30         1.87  half_edge.py:delete
-         348      6900.00    102032.80       293.20  pathing.py:move_adjacent
-        3440      6884.10    240293.20        69.85  pathing.py:_get_base_claim_zones
-       15391      6832.50      9480.40         0.62  algebra.py:distance
-        3290      6795.20     39712.60        12.07  secure.py:securable_ore
-        3866      6731.90     10561.60         2.73  builder.py:handle_comms
-        3866      6681.60    498291.00       128.89  attack.py:score
-        1900      6594.20      6980.20         3.67  attack.py:_enemy_score_group_masks
-       16562      6568.10      6568.10         0.40  ~:0(<method 'get_tile_builder_bot_id' of 'builtins.Controller' objects>)
-       33734      6479.80      6479.80         0.19  node.py:maximum
-         650      6430.70    269511.50       414.63  core.py:run
-        2104      6235.20     90503.20        43.01  attack.py:_get_cached_gunner_per_dir
-       33674      6099.70      6099.70         0.18  node.py:minimum
-          14      5972.00     11424.20       816.01  geometry_core.py:merge_axis_aligned_segments
-       25706      5945.00      5945.00         0.23  node.py:__init__
-       10244      5917.30      8617.60         0.84  internal_node.py:__init__
-        2530      5834.70      5834.70         2.31  map_info.py:_compute_conv_into_open_ore
-       39783      5758.30      5758.30         0.14  node.py:is_leaf
-       12140      5745.30      5745.30         0.47  ~:0(<built-in method time.perf_counter_ns>)
-       19299      5743.10     58982.20         3.06  algorithm.py:get
-       56071      5692.70      5692.70         0.10  ~:0(<method 'getrandbits' of '_random.Random' objects>)
-        3290      5684.90    210263.90        63.91  secure.py:score
-        5653      5526.60      5526.60         0.98  attack.py:_read_score
-        1741      5521.00      8301.40         4.77  comms.py:decode_visible_marker
-       19685      5485.30     27473.40         1.40  algorithm.py:put
-        5593      5482.80      6743.10         1.21  site_event.py:__init__
-       15000      5482.10      5482.10         0.37  ~:0(<built-in method builtins.round>)
-       53088      5352.50      5352.50         0.10  log.py:log
-        9552      5299.90      7094.50         0.74  algorithm.py:_retarget_breakpoint
-         446      5283.90     13419.20        30.09  turret_priority.py:compute_priority_sets
-        3398      5151.90      5151.90         1.52  map_info.py:direction_to
-        1714      5093.10     95880.60        55.94  chokepoint.py:_start_readiness
-         327      5085.70     18173.20        55.58  attack.py:_try_launcher_lockdown
-         387      4797.90     43981.90       113.65  turret_gunner.py:_choose_rotate_dir
-        2752      4761.00      5982.60         2.17  ~:0(<method 'move' of 'builtins.Controller' objects>)
-        2530      4745.60      4745.60         1.88  map_info.py:_compute_conv_by_dir
-       16263      4718.20      4718.20         0.29  ~:0(<method 'get_scale_percent' of 'builtins.Controller' objects>)
-         502      4709.50     13035.00        25.97  attack.py:get_best_direction
-        4103      4686.30      7981.90         1.95  comms.py:get_learn_map_bucket_pos
-        1327      4669.10     11540.00         8.70  map_info.py:turret_could_possibly_be_fed
-       19966      4655.90      4655.90         0.23  ~:0(<method 'pop' of 'dict' objects>)
-        3885      4578.10      4578.10         1.18  enum.py:__iter__
-        8207      4508.40      5682.60         0.69  enum.py:__get__
-       11888      4418.90      4418.90         0.37  ~:0(<method 'get_tile_env' of 'builtins.Controller' objects>)
-        1561      4298.30     23277.50        14.91  harvest.py:_my_claims
-       10244      4275.00      5397.40         0.53  algorithm.py:_register_breakpoint_node
-        2530      4269.70      4687.90         1.85  map_info.py:_compute_my_gunner_claims
-         911      4244.90    307463.30       337.50  explore.py:run
-         869      4235.90     84487.70        97.22  pathing.py:_calculate_conveyor_path_to
-       19428      4178.40      4178.40         0.22  map_info.py:_splitter_side_output_mask
-        2224      4173.20      5653.30         2.54  map_info.py:_update_conv_reverse_outputs
-       34141      4166.80      4166.80         0.12  half_edge.py:set_next
-       12037      4158.90      4158.90         0.35  ~:0(<method 'setdefault' of 'dict' objects>)
-       22903      4116.00      4116.00         0.18  algebra.py:cross
-        4362      4106.50      8175.50         1.87  turret_sentinel.py:_resolve_target_on_tile
-         133      4058.40      5462.50        41.07  explore.py:generate_explore_target
-        1457      4045.50    100633.70        69.07  attack.py:_get_cached_sentinel_scores
-        2606      3965.20     95674.50        36.71  attack.py:_ensure_gunner_scores
-         948      3940.90      4354.80         4.59  turret_gunner.py:_ally_feeder_mask
-        1319      3934.60     17370.40        13.17  chokepoint.py:claim_targets_near
-        5650      3934.30      3934.30         0.70  map_info.py:ground_at
-        3396      3860.40      8072.10         2.38  route.py:cant_claim
-        9552      3836.60      6390.20         0.67  algorithm.py:_unregister_breakpoint
-        2104      3799.20      4126.30         1.96  attack.py:_turret_feed_chains
-       32295      3769.10      3769.10         0.12  event.py:__init__
-       23794      3663.50      3663.50         0.15  coordinate.py:x
-        3863      3631.90     11105.30         2.87  comms.py:get_learn_map_corresponding_pos
-       17684      3627.40      3627.40         0.21  ~:0(<method 'items' of 'dict' objects>)
-        2722      3608.20      4139.00         1.52  map_info.py:is_passable
-        6311      3572.50      3572.50         0.57  ~:0(<method 'get_direction' of 'builtins.Controller' objects>)
-        1783      3463.60    105090.00        58.94  attack.py:_ensure_sentinel_planes
-        9552      3370.20      4621.30         0.48  circle_event.py:yd
-       23794      3341.00      3341.00         0.14  coordinate.py:y
-          14      3329.10     14396.80      1028.34  algorithm.py:initialize
-        9552      3304.70      5772.60         0.60  algorithm.py:_find_breakpoint_node
-        2033      3285.90      3285.90         1.62  comms.py:encode_symmetry_broadcast
-        7124      3217.30      3600.30         0.51  heal.py:_turret_covered_mask
-        4445      3213.70      3213.70         0.72  ~:0(<method 'can_heal' of 'builtins.Controller' objects>)
-         894      3195.10     10179.40        11.39  breakpoint.py:get_intersection
-       19661      3189.20      3189.20         0.16  ~:0(<built-in method math.hypot>)
-        9825      3184.80      3184.80         0.32  ~:0(<method 'get_action_cooldown' of 'builtins.Controller' objects>)
-        3290      3139.40      4211.30         1.28  secure.py:cant_secure
-       13565      3074.40      3074.40         0.23  ~:0(<method 'bit_count' of 'int' objects>)
-       19104      3071.20      3623.60         0.19  algorithm.py:remove
-       10747      3053.40      3053.40         0.28  ~:0(<method 'get_id' of 'builtins.Controller' objects>)
-         391      3017.90      7698.50        19.69  turret_launcher.py:_adjacent_enemy_builders
-        3866      2978.80     98859.40        25.57  chokepoint.py:_ensure_state
-        5133      2978.60      2978.60         0.58  chokepoint.py:analysis_complete
-        1536      2865.40      3758.30         2.45  pathing.py:build_mask
-       13588      2805.00      2805.00         0.21  pathing.py:_dir_family
-        1741      2789.40      3015.10         1.73  comms.py:estimate_turn
-         546      2742.80     12301.80        22.53  route.py:attempt_build
-         561      2708.10     16916.60        30.15  turret_gunner.py:_decide_fire
-       18399      2685.90      2685.90         0.15  heal.py:_healable_mask
-        1561      2648.10      3595.60         2.30  harvest.py:_too_expensive
-         650      2646.60      9061.30        13.94  core.py:_scan_nearby_builders
-        4019      2613.20      3411.60         0.85  attack.py:_ensure_attack_shift_plans
-        2269      2574.70      4195.00         1.85  map_info.py:rot_flip
-        8322      2551.40      2551.40         0.31  ~:0(<method 'get_road_cost' of 'builtins.Controller' objects>)
-        8264      2468.90      2468.90         0.30  ~:0(<method 'get_cpu_time_elapsed' of 'builtins.Controller' objects>)
-         591      2456.10      8092.70        13.69  turret_gunner.py:_should_stay
-          71      2433.20     26305.90       370.51  map_info.py:init
-       19312      2427.90      2427.90         0.13  algorithm.py:empty
-        4398      2425.50      3627.10         0.82  chokepoint.py:_budget_remaining
-        2352      2337.90      2337.90         0.99  __init__.py:__repr__
-        1468      2333.80      2333.80         1.59  map_info.py:adjacent_bits
-        5593      2325.90      8015.10         1.43  point.py:__init__
-          14      2284.30     39477.30      2819.81  chokepoint.py:_step_voronoi_init
-        4394      2254.70      2254.70         0.51  map_info.py:team_at
-        2033      2251.00      2251.00         1.11  ~:0(<method 'place_marker' of 'builtins.Controller' objects>)
-        1547      2250.30      3234.40         2.09  heal.py:_try_launcher_fallback
-        1561      2213.30     14414.50         9.23  harvest.py:harvestable_ore
-        3561      2198.80      2198.80         0.62  attack.py:_round_cache_enemy_inputs
-          13      2196.20      3945.90       303.53  chokepoint.py:identify_choke_points
-        1706      2191.40      2191.40         1.28  heal.py:_chase_on_damaged_conv
-        5552      2155.40      3027.90         0.55  event.py:__ne__
-         250      2154.40      3324.90        13.30  turret_sentinel.py:_kill_assist_mask
-        6618      2118.10      2118.10         0.32  pathing.py:rebuild_broken_barriers
-        4895      2075.50      2075.50         0.42  ~:0(<method 'can_fire' of 'builtins.Controller' objects>)
-        5204      2054.50      4546.20         0.87  breakpoint.py:does_intersect
-        3360      2031.40      3039.80         0.90  geometry_core.py:_mark_point_boundary
-       18267      1992.90      1992.90         0.11  ~:0(<method 'discard' of 'set' objects>)
-       15462      1960.10      1960.10         0.13  arc.py:__init__
-        4539      1950.50      1950.50         0.43  _types.py:distance_squared
-          39      1896.80      1896.80        48.64  map_info.py:build_core_areas
-         570      1896.40      3397.40         5.96  _types.py:opposite
-          26      1893.30      3977.00       152.96  chokepoint.py:release_pruned_inputs
-        3866      1866.60      4421.30         1.14  builder.py:_update_harvest_zone
-          13      1845.50      4219.00       324.54  chokepoint.py:identify_region_nodes
-        1561      1812.30     25089.80        16.07  harvest.py:score
-         176      1810.40     12427.00        70.61  attack.py:_try_instant_preferred
-        5218      1782.70      2833.40         0.54  site_event.py:yd
-        5432      1770.80      1770.80         0.33  ~:0(<method 'get_harvester_cost' of 'builtins.Controller' objects>)
-        1784      1758.60      1958.70         1.10  turret_priority.py:_reverse_conveyor_feeders
-         207      1757.10      1757.10         8.49  ~:0(<method 'clear' of 'dict' objects>)
-         708      1734.30      2511.70         3.55  turret_priority.py:_adj_seed_conveyors
-        4554      1722.70      1722.70         0.38  map_info.py:type_at
-         934      1720.60      2517.90         2.70  chokepoint.py:_minimum_seen_map_tiles
-         255      1720.00      3308.40        12.97  ~:0(<method 'get_attackable_tiles' of 'builtins.Controller' objects>)
-         639      1689.10     69219.50       108.32  pathing.py:calculate_conveyor_path
-       11848      1667.40      1667.40         0.14  builder.py:draw_mask
-        2033      1628.00      1628.00         0.80  comms.py:get_sym_bits
-         650      1606.90      2144.10         3.30  ~:0(<method 'can_build_conveyor' of 'builtins.Controller' objects>)
-        5633      1599.40      1599.40         0.28  comms.py:_symmetry_env_idx
-        5358      1595.00      1595.00         0.30  ~:0(<method 'insert' of 'list' objects>)
-         918      1572.90      2791.20         3.04  enum.py:__format__
-        9552      1443.20      1443.20         0.15  node.py:is_left_child
-        3866      1441.20      1494.00         0.39  builder.py:_update_initial_explore
-          13      1401.80      2311.10       177.78  chokepoint.py:merge_adjacent_regions
-          14      1377.60      5092.00       363.71  geometry_core.py:build_obstacle_mask
-         639      1352.30      6310.40         9.88  pathing.py:_get_conveyor_targets_and_avoid
-        4138      1336.10      1336.10         0.32  ~:0(<method 'get_gunner_cost' of 'builtins.Controller' objects>)
-        4072      1314.30      1314.30         0.32  ~:0(<method 'get_sentinel_cost' of 'builtins.Controller' objects>)
-         911      1312.10      3611.30         3.96  explore.py:_try_passive_chokepoint_build
-         914      1303.20      2817.10         3.08  map_info.py:node_possible
-       10408      1302.40      1302.40         0.13  breakpoint.py:__init__
-         297      1299.00      4866.90        16.39  turret_sentinel.py:_should_stay
-        3396      1291.10      1291.10         0.38  route.py:_orphan_harvesters
-        1102      1279.00      1279.00         1.16  attack.py:_good_conveyor_mask
-        3552      1240.50      1785.00         0.50  chokepoint.py:<genexpr>
-         227      1211.00     86031.30       378.99  turret_launcher.py:run
-         532      1208.90      4332.20         8.14  route.py:_can_build_preferred_conveyor
-         911      1188.10      2271.50         2.49  disrupt.py:score
-        8207      1174.20      1174.20         0.14  enum.py:value
-        9552      1146.50      1146.50         0.12  internal_node.py:get_value
-        1088      1133.00      1133.00         1.04  attack.py:_gunner_ray_blocked_mask
-          14      1126.00      1622.70       115.91  chokepoint.py:filter_obstacle_cells_by_area
-        4970      1125.60      1386.40         0.28  ~:0(<built-in method builtins.sorted>)
-         230      1124.70      3531.00        15.35  pathing.py:_get_attack_conveyor_targets_and_avoid
-          73      1108.20      1725.70        23.64  chokepoint.py:is_locally_maximal_fast
-          14      1092.90     87152.20      6225.16  chokepoint.py:_snapshot_state
-          14      1077.20      1480.00       105.71  chokepoint.py:prepare_free_boundary_segments
-         255      1075.10      1174.40         4.61  turret_sentinel.py:_ally_feeder_mask
-        5592      1058.00      1058.00         0.19  ~:0(<method 'remove' of 'list' objects>)
-        1741      1053.00      1053.00         0.60  ~:0(<method 'get_marker_value' of 'builtins.Controller' objects>)
-        2224      1026.50      1026.50         0.46  map_info.py:_conv_output_mask
-        1914       979.60       979.60         0.51  ~:0(<method 'clear' of 'set' objects>)
-         918       976.70       976.70         1.06  enum.py:__str__
-          64       962.80       962.80        15.04  pathing.py:_init_col_masks
-         869       953.00      1094.40         1.26  pathing.py:conveyor_cost
-          22       952.30      7863.60       357.44  harvest.py:run
-        3396       940.40       940.40         0.28  route.py:_dead_end_conveyors
-         698       920.80     22870.90        32.77  route.py:_core_bfs_distance
-         101       893.50      3209.40        31.78  turret_priority.py:_apply_tiebreaks
-        1214       892.20       892.20         0.73  turret_priority.py:_bucket_for
-          14       892.10      2203.10       157.36  builder.py:_compute_voronoi_harvest_zone
-        2036       882.10       882.10         0.43  ~:0(<method 'is_in_vision' of 'builtins.Controller' objects>)
-        3866       874.80       874.80         0.23  comms.py:get_new_messages
-        5552       872.50       872.50         0.16  event.py:__eq__
-         118       864.90      3907.70        33.12  secure.py:build_stuff
-        2418       860.40       860.40         0.36  builder.py:near_core_mask
-        2508       845.10       845.10         0.34  ~:0(<method 'get_ammo_amount' of 'builtins.Controller' objects>)
-         903       842.10      1106.50         1.23  half_edge.py:_replacement_first_edge
-        4659       837.10       837.10         0.18  heal.py:<genexpr>
-         240       804.80      1820.20         7.58  comms.py:apply_symmetry_broadcast_map
-        3396       802.30       802.30         0.24  route.py:_orphan_foundries
-        2180       794.90       794.90         0.36  comms.py:decode_type
-         312       780.10    535595.90      1716.65  chokepoint.py:_step_voronoi_finish
-        5235       775.20       775.20         0.15  ~:0(<built-in method math.ceil>)
-         627       771.80       771.80         1.23  ~:0(<method 'draw_indicator_line' of 'builtins.Controller' objects>)
-         464       758.80       758.80         1.64  ~:0(<method 'build_road' of 'builtins.Controller' objects>)
-        6589       742.00       742.00         0.11  ~:0(<built-in method builtins.iter>)
-        6589       732.10       732.10         0.11  ~:0(<built-in method builtins.next>)
-        6655       725.40       725.40         0.11  ~:0(<method 'popleft' of 'collections.deque' objects>)
-        4901       722.70       764.20         0.16  ~:0(<method 'sort' of 'list' objects>)
-          64       711.30      6142.90        95.98  pathing.py:__init__
-         639       707.00      1020.90         1.60  route.py:_prefer_armoured_conveyor
-         446       706.70      1695.10         3.80  turret_priority.py:_threatening_enemy_turrets
-         272       704.40       916.00         3.37  ~:0(<method 'can_build_gunner' of 'builtins.Controller' objects>)
-         613       694.80       867.40         1.42  comms.py:_note_comm_env
-        4545       689.90       689.90         0.15  circle_event.py:remove
-         192       688.00      4446.30        23.16  pathing.py:make_steps
-         246       684.90       980.20         3.98  ~:0(<method 'can_fire_from' of 'builtins.Controller' objects>)
-          71       671.30      1016.70        14.32  random.py:seed
-         349       670.70     23541.60        67.45  route.py:_should_attack_route
-         495       670.50       670.50         1.35  ~:0(<method 'fire' of 'builtins.Controller' objects>)
-         230       659.00     27535.20       119.72  pathing.py:calculate_attack_conveyor_path
-        1671       649.50       649.50         0.39  ~:0(<method 'get_conveyor_cost' of 'builtins.Controller' objects>)
-          14       635.80     35595.80      2542.56  geometry_core.py:build_analysis_mask
-         224       626.50      1152.90         5.15  ~:0(<method 'get_attackable_tiles_from' of 'builtins.Controller' objects>)
-        2958       616.20       616.20         0.21  ~:0(<method 'remove' of 'set' objects>)
-         743       600.70       600.70         0.81  ~:0(<method 'can_destroy' of 'builtins.Controller' objects>)
-        1100       600.20       606.90         0.55  ~:0(<built-in method builtins.any>)
-        4714       588.00       588.00         0.12  ~:0(<method 'append' of 'collections.deque' objects>)
-         206       520.60       675.60         3.28  ~:0(<method 'can_build_sentinel' of 'builtins.Controller' objects>)
-          28       515.00      4596.80       164.17  turret_gunner.py:init
-         207       505.90       605.80         2.93  ~:0(<method 'build_conveyor' of 'builtins.Controller' objects>)
-          14       504.30    118914.70      8493.91  chokepoint.py:build_obstacle_geometry
-         334       476.70      1763.90         5.28  turret_priority.py:<genexpr>
-         280       468.40       468.40         1.67  secure.py:dirs_covered
-         230       459.80       459.80         2.00  pathing.py:_enemy_core_area_mask
-         253       426.70       426.70         1.69  ~:0(<method 'heal' of 'builtins.Controller' objects>)
-          13       419.50       715.50        55.04  chokepoint.py:simplify_choke_points_for_game
-         502       374.20       908.20         1.81  attack.py:_selection_bias_for_bit
-         457       357.90      3639.10         7.96  attack.py:_dist_with_extra
-         167       349.80       684.80         4.10  disrupt.py:_my_claims
-         446       347.60       347.60         0.78  turret_priority.py:_enemy_turrets_mask
-          13       343.10     31676.40      2436.65  chokepoint.py:_step_prune
-          27       341.10      9581.40       354.87  route.py:fallback_barrier
-          71       338.80       645.50         9.09  comms.py:init
-         265       338.50       573.30         2.16  turret_gunner.py:_hp_at
-         370       331.80      2085.00         5.64  ~:0(<method 'join' of 'str' objects>)
-         167       297.40       297.40         1.78  disrupt.py:_disruptable_ore
-          14       266.50       957.10        68.36  polygon.py:__init__
-          71       245.90       283.60         3.99  comms.py:random_hash
-         918       241.60       241.60         0.26  ~:0(<method '__format__' of 'str' objects>)
-        1706       240.20       259.80         0.15  chokepoint.py:<lambda>
-         240       239.10       747.60         3.12  comms.py:decode_learn_map_corresponding_pos
-         470       236.30       236.30         0.50  ~:0(<method 'convert' of 'builtins.Controller' objects>)
-        1477       232.70       232.70         0.16  chokepoint.py:find
-         650       225.70       400.20         0.62  core.py:_spawn_toward_enemy_if_undefended
-         361       225.60      2149.80         5.96  attack.py:_my_dist_with_extra
-          34       217.00       278.60         8.19  _types.py:direction_to
-         446       213.70       213.70         0.48  turret_priority.py:_my_turrets_mask
-         314       212.00       212.00         0.68  ~:0(<method 'can_spawn' of 'builtins.Controller' objects>)
-          15       208.10      3952.40       263.49  builder.py:init
-         822       189.40       189.40         0.23  chokepoint.py:_current_symmetry_from_flags
-         164       189.40      3674.00        22.40  turret_launcher.py:_try_throw_enemy_to_history
-          14       189.30       301.20        21.51  geometry_core.py:clip_polygon_against_half_plane
-         639       184.10       184.10         0.29  ~:0(<method 'get_armoured_conveyor_cost' of 'builtins.Controller' objects>)
-         227       180.10      4394.00        19.36  turret_launcher.py:_try_throw_enemy_away
-         156       174.80       174.80         1.12  ~:0(<method 'destroy' of 'builtins.Controller' objects>)
-         194       169.90       237.60         1.22  chokepoint.py:_round_point_to_tile
-         154       164.70       216.70         1.41  route.py:_core_distance
-          43       163.90       163.90         3.81  turret_priority.py:_forward_reach
-         911       156.50       156.50         0.17  explore.py:score
-          28       146.90       374.10        13.36  geometry_core.py:is_axis_aligned_rectangle
-         107       145.70       596.20         5.57  route.py:_build_preferred_conveyor
-         341       137.90       137.90         0.40  ~:0(<method 'get_launcher_cost' of 'builtins.Controller' objects>)
-          28       137.00       198.60         7.09  algorithm.py:__init__
-         361       135.20       135.20         0.37  ~:0(<method 'get_barrier_cost' of 'builtins.Controller' objects>)
-         134       133.70      1136.80         8.48  turret_priority.py:_dist
-          13       128.60      4074.50       313.42  chokepoint.py:_step_chokes
-          25       123.60       392.90        15.72  map_info.py:core_center
-          13       122.50       122.50         9.42  chokepoint.py:finish_voronoi_polygon
-         199       118.20       173.00         0.87  comms.py:decode_sym
-          21       117.40      2145.80       102.18  turret_sentinel.py:init
-         100       117.30       217.30         2.17  map_info.py:empty
-          28       112.80       128.90         4.60  ~:0(<method 'build_gunner' of 'builtins.Controller' objects>)
-          27       111.50       272.30        10.09  explore.py:_target_unavailable
-          14       105.80       427.30        30.52  chokepoint.py:_compute_analysis_polygon
-          99       102.60       158.00         1.60  chokepoint.py:union
-         328        99.90        99.90         0.30  ~:0(<method 'get_map_width' of 'builtins.Controller' objects>)
-          13        99.80      2410.90       185.45  chokepoint.py:_step_merge
-          63        98.90       277.50         4.40  heal.py:_conv_dist
-          13        94.70      4313.70       331.82  chokepoint.py:_step_regions
-          90        91.90        91.90         1.02  ~:0(<built-in method math.atan2>)
-          13        89.00       214.20        16.48  chokepoint.py:mirror_blocker_targets_only
-         240        87.60        87.60         0.36  comms.py:decode_learn_map_sample_bits
-          56        85.90       125.80         2.25  algebra.py:calculate_angle
-          52        85.50       108.10         2.08  map_info.py:has_builder_bot
-          87        84.60        84.60         0.97  ~:0(<method 'update' of 'set' objects>)
-         199        80.50        80.50         0.40  map_info.py:update_symmetry_from_comms
-         328        79.80        79.80         0.24  ~:0(<method 'get_map_height' of 'builtins.Controller' objects>)
-          43        77.90        90.30         2.10  chokepoint.py:blocker_footprint
-          23        77.70        89.10         3.87  ~:0(<method 'build_sentinel' of 'builtins.Controller' objects>)
-          13        77.20       792.70        60.98  chokepoint.py:_step_simplify
-         227        74.70        89.90         0.40  turret_launcher.py:_classify_launcher
-         103        73.30        97.50         0.95  turret_priority.py:_turret_et_for_idx
-          86        72.60        96.70         1.12  chokepoint.py:add_target
-          13        70.10       607.10        46.70  chokepoint.py:_step_mirror
-          15        68.60      2261.00       150.73  attack.py:init
-          24        67.90        89.50         3.73  spawn_plan.py:get_ray_endpoint
-          56        64.50       190.30         3.40  polygon.py:<lambda>
-          13        63.30       290.30        22.33  chokepoint.py:release_final_analysis_state
-          71        62.10        71.50         1.01  enum.py:__len__
-           6        61.70       114.90        19.15  core.py:_spawn_toward_center
-          14        61.00        87.50         6.25  map_info.py:flip
-         134        56.60        56.60         0.42  turret_priority.py:_fmt_dist
-          43        56.20        56.20         1.31  ~:0(<built-in method builtins.bin>)
-          14        54.60    118969.30      8497.81  chokepoint.py:_step_geometry
-          28        50.20        50.20         1.79  subject.py:__init__
-          14        49.30       198.20        14.16  core.py:_spawn_toward_plan
-          36        46.60        71.70         1.99  explore.py:_enemy_clearable_chokepoint_blocker
-          11        44.80        68.40         6.22  heal.py:_mask_to_positions
-         280        41.70        41.70         0.15  polygon.py:<genexpr>
-           2        40.80       172.40        86.20  spawn_plan.py:_build_ti_near_mask
-           8        37.30        59.20         7.40  _types.py:rotate_left
-          28        35.80        40.50         1.45  geometry_core.py:intersect
-          83        34.90        34.90         0.42  ~:0(<method 'get_bridge_cost' of 'builtins.Controller' objects>)
-          21        33.00        33.00         1.57  ~:0(<method 'build_harvester' of 'builtins.Controller' objects>)
-          33        32.70        51.40         1.56  ~:0(<method 'get_bridge_target' of 'builtins.Controller' objects>)
-          13        32.50        32.50         2.50  chokepoint.py:_refresh_target_mask
-          24        32.00        55.20         2.30  chokepoint.py:blocker_kind_at
-          15        30.00        30.00         2.00  ~:0(<method 'spawn_builder' of 'builtins.Controller' objects>)
-           1        28.60        28.60        28.60  ~:0(<function Random.seed at 0x00000243CF4FE660>)
-          70        27.10        27.10         0.39  geometry_core.py:side_value
-         128        27.00        27.00         0.21  ~:0(<method 'pop' of 'set' objects>)
-          23        26.70        31.90         1.39  route.py:_try_barrier_output
-          43        26.10        26.10         0.61  chokepoint.py:mirror_cell
-          10        25.70        39.80         3.98  explore.py:_can_afford_chokepoint
-          20        25.50       101.60         5.08  explore.py:_launcher_too_close
-          14        25.50        44.00         3.14  geometry_core.py:raster_scale_from_spacing
-          32        24.00        24.00         0.75  <string>:__init__
-          43        23.20        23.20         0.54  ~:0(<method 'count' of 'str' objects>)
-          29        21.10        21.10         0.73  ~:0(<method 'can_build_barrier' of 'builtins.Controller' objects>)
-         129        21.10        21.10         0.16  chokepoint.py:_cell_to_index
-           2        20.50       337.80       168.90  spawn_plan.py:choose_spawn_plan
-          14        20.30        20.30         1.45  geometry_core.py:rectangle_polygon
-           5        20.10        20.10         4.02  ~:0(<method 'build_launcher' of 'builtins.Controller' objects>)
-          14        19.70        32.30         2.31  subject.py:inherit_observers_from
-           8        19.40        39.20         4.90  _types.py:rotate_right
-          14        19.00        23.00         1.64  chokepoint.py:_snapshot_unseen_analysis_tiles
-           2        18.90       275.70       137.85  spawn_plan.py:get_valid_directions
-          22        17.30        17.30         0.79  ~:0(<method 'can_build_harvester' of 'builtins.Controller' objects>)
-          10        17.00        20.10         2.01  spawn_plan.py:_ray_hits_mask
-          34        16.30        16.30         0.48  spawn_plan.py:draw_spawn_plan
-           2        15.10        34.60        17.30  explore.py:_try_place_chokepoint_at
+      470546    926582.10   1198075.90         2.55  map_info.py:update_at
+        6070    352845.20   1705417.30       280.96  map_info.py:update
+        3412    227512.30    227512.30        66.68  pathing.py:_claim_zone_on_passable
+        6716    226011.40    325109.90        48.41  map_info.py:_compute_route_targets
+        3655    132979.60    165153.90        45.19  pathing.py:bfs_move
+        5321    122309.00    168108.30        31.59  map_info.py:_carrying_expand
+      414358    120488.30    120488.30         0.29  ~:0(<method 'get_tile_building_id' of 'builtins.Controller' objects>)
+       71745    115226.30    115226.30         1.61  map_info.py:expand_chebyshev
+       15170     87242.20     97511.80         6.43  pathing.py:_closest_impl
+        9552     85271.20    517824.30        54.21  algorithm.py:handle_circle_event
+        2752     79705.10    589665.10       214.27  map_info.py:update_move
+         812     77782.10     96286.30       118.58  attack.py:_compute_sentinel_dir_scores
+        5218     77565.70    578563.20       110.88  algorithm.py:handle_site_event
+        3866     73271.60   4411668.80      1141.15  builder.py:run
+      333918     73140.10    132435.80         0.40  <string>:<lambda>
+         869     71645.50     76243.70        87.74  pathing.py:bfs_route
+      242042     70790.80     70790.80         0.29  ~:0(<method 'get_hp' of 'builtins.Controller' objects>)
+       29184     67349.70    211765.70         7.26  circle_event.py:create_circle_event
+        3863     62552.50    248891.30        64.43  comms.py:broadcast_symmetry
+        7930     61656.20     61656.20         7.78  ~:0(<method 'get_nearby_units' of 'builtins.Controller' objects>)
+      333918     59295.70     59295.70         0.18  ~:0(<built-in method __new__ of type object at 0x00007FFDC40F68A0>)
+       35533     57583.40    119322.30         3.36  breakpoint.py:get_intersection_x
+        6070     55760.00     55760.00         9.19  ~:0(<method 'disable' of '_lsprof.Profiler' objects>)
+      422357     54521.10     54521.10         0.13  ~:0(<method 'bit_length' of 'int' objects>)
+        6033     53505.90     66596.30        11.04  map_info.py:_compute_route_reaches_core
+        5559     52791.40    173305.90        31.18  map_info.py:_compute_fed
+        2104     52589.50     79948.40        38.00  attack.py:_placement_candidates
+       19436     52124.30     57958.50         2.98  map_info.py:_conveyor_target_tiles
+       44324     52120.10     52120.10         1.18  map_info.py:expand_manhattan
+        5467     50313.30     68157.40        12.47  comms.py:_encode_learn_map_sample_bits
+       25500     49733.20    124585.60         4.89  algebra.py:get_intersection
+          14     49169.30     63957.10      4568.36  geometry_core.py:boundary_segments_from_mask
+        1088     47966.40     83786.10        77.01  attack.py:_compute_gunner_dir_scores
+       22400     44883.40     77664.60         3.47  geometry_core.py:point_in_polygon
+        3216     44534.90    104992.30        32.65  ~:0(<method 'get_nearby_tiles' of 'builtins.Controller' objects>)
+       29140     43087.40     73242.10         2.51  circle_event.py:create_circle
+       80651     42953.40     79482.40         0.99  half_edge.py:get_origin
+        3657     40902.80    856926.70       234.33  pathing.py:move_to
+          70     40437.80    180289.00      2575.56  chokepoint.py:_step_voronoi_extract
+        3866     39821.30    371986.50        96.22  attack.py:_get_attack_candidates
+       75047     39736.00     39736.00         0.53  ~:0(<method 'get_entity_type' of 'builtins.Controller' objects>)
+       23808     39655.00     39655.00         1.67  map_info.py:valid_cardinal_targets
+       14783     38490.60   1204699.40        81.49  chokepoint.py:step_sweep_event
+       25500     36740.40     40734.00         1.60  algebra.py:line_ray_intersection_point
+        8090     36676.60     69448.80         8.58  builder.py:_try_mask
+         312     36160.50    325643.70      1043.73  chokepoint.py:step_finish_voronoi_edges
+       11897     35367.20     46447.00         3.90  chokepoint.py:segment_is_inside_free_space
+       12830     35248.40     52992.00         4.13  heal.py:_mutual_sentinel_threat
+       61040     35162.60     86959.70         1.42  coordinate.py:__init__
+       14592     35110.40    280805.30        19.24  algorithm.py:_check_circles
+        9552     35087.80    160912.30        16.85  algorithm.py:_update_breakpoints
+       93782     34448.30     42293.40         0.45  numeric.py:is_close
+       44333     34029.30     68609.60         1.55  map_info.py:pos_add
+      135045     33955.60    162058.70         1.20  node.py:update_height
+      220770     33335.90     33335.90         0.15  event.py:__lt__
+       23379     32796.00     53525.50         2.29  ~:0(<method 'get_position' of 'builtins.Controller' objects>)
+        3866     32549.50   1143967.90       295.90  builder.py:select_best_state
+        3290     32495.50    201509.10        61.25  secure.py:_my_claims
+        3396     31954.60     36157.50        10.65  route.py:not_blocked
+      359193     31063.50     31063.50         0.09  ~:0(<built-in method builtins.abs>)
+      214371     30930.30     30930.30         0.14  ~:0(<method 'append' of 'list' objects>)
+       10816     30826.00     74481.30         6.89  map_info.py:fwd
+      102793     30393.10     44693.50         0.43  enum.py:__hash__
+      122225     29888.00     51861.20         0.42  coordinate.py:_to_dec
+       19299     29022.20     53253.60         2.76  ~:0(<built-in method _heapq.heappop>)
+       35231     28706.40     67914.50         1.93  random.py:randrange
+        1030     28682.20     28682.20        27.85  pathing.py:voronoi_claim
+        5204     28635.80    160308.00        30.80  tree.py:find_leaf_node
+        8822     28410.00    386914.30        43.86  map_info.py:_recompute_derived_loaded
+        8822     27229.10     86058.20         9.75  map_info.py:_recompute_derived_structural
+       14576     27085.50     27085.50         1.86  attack.py:_ge_threshold_mask
+        1680     25661.40     31251.90        18.60  geometry_core.py:_fill_scanline_from_polygon
+       27080     25382.80     25382.80         0.94  attack.py:_max_score_in_mask
+       14778     25239.60     33546.90         2.27  chokepoint.py:site_radius_for_sites
+        4851     25217.50     31367.80         6.47  harvest.py:possible_ore
+        5569     24873.90     57448.80        10.32  heal.py:_do_best_heal
+      230866     24741.80     24741.80         0.11  coordinate.py:xd
+      232072     24448.00     24448.00         0.11  coordinate.py:yd
+        3863     24403.10    107705.40        27.88  builder.py:_pick_symmetry_broadcast_pos
+        3396     23860.70    193813.90        57.07  route.py:_my_claims
+      209891     23279.00     23298.20         0.11  ~:0(<built-in method builtins.max>)
+       12544     23205.80     23205.80         1.85  attack.py:_add_planes_into
+        3863     22893.00    134632.10        34.85  builder.py:try_road_spam
+       14756     22583.70    147904.80        10.02  node.py:update_heights
+        3866     22555.20    406097.40       105.04  attack.py:_ensure_round_cache
+        2738     22261.10    637332.30       232.77  pathing.py:move
+       84650     22170.30     22820.80         0.27  ~:0(<method 'get' of 'dict' objects>)
+      122225     21973.20     21973.20         0.18  numeric.py:to_number
+        9157     21959.40    219255.40        23.94  polygon.py:_finish_edge
+       47371     21852.10    103532.40         2.19  tree.py:balance
+       28590     21623.70     21623.70         0.76  polygon.py:inside
+       23808     21496.60     21496.60         0.90  map_info.py:splitter_side_targets
+       26702     21317.60     24610.00         0.92  circle_event.py:__init__
+        8822     20900.60    346010.50        39.22  map_info.py:_recompute_derived_visible
+        8822     20642.00    839625.00        95.17  map_info.py:recompute_derived
+       50116     20456.70     27420.40         0.55  numeric.py:sqrt
+       35231     20416.10     30226.30         0.86  random.py:_randbelow_with_getrandbits
+       89548     20177.10     26437.10         0.30  geometry_core.py:_point_on_segment
+       57357     20151.10     25810.40         0.45  numeric.py:is_zero
+       70879     20120.60     20120.60         0.28  ~:0(<method 'get_stored_resource' of 'builtins.Controller' objects>)
+       32904     19704.80     19704.80         0.60  attack.py:_add_bits_to_planes
+       11102     18792.40     27001.90         2.43  map_info.py:adj_seed
+        7257     18774.90     18774.90         2.59  harvest.py:secured
+        6070     17989.40   2043864.40       336.72  chokepoint.py:post_turn
+        3396     17959.30     22052.70         6.49  route.py:_too_expensive
+       12830     17923.50     72721.40         5.67  heal.py:_very_damaged_targets
+        2530     17884.70     23170.80         9.16  map_info.py:_compute_enemy_turret_threat
+          13     17592.40     28110.30      2162.33  chokepoint.py:prune_graph
+         480     17492.50    199805.10       416.26  attack.py:run
+         400     17335.20    177616.70       444.04  secure.py:run
+       94987     17237.10     17237.10         0.18  ~:0(<method 'add' of 'set' objects>)
+        5559     17090.10    185198.40        33.32  map_info.py:_compute_carrying
+       33696     17021.30     23589.70         0.70  node.py:predecessor
+          71     16932.80     23202.20       326.79  map_info.py:_build_turret_shift_masks
+        1614     16908.80     16908.80        10.48  heal.py:_conv_zone
+      115420     16484.70     16484.70         0.14  map_info.py:in_bounds_coords
+        9157     15627.40    149221.10        16.30  polygon.py:_get_intersection_point
+       56835     15479.50     15479.50         0.27  map_info.py:in_bounds
+        3270     15381.60     36936.10        11.30  turret_gunner.py:_scan_ray
+       46336     15061.30     15061.30         0.33  ~:0(<method 'get_team' of 'builtins.Controller' objects>)
+       33696     15030.40     21273.00         0.63  node.py:successor
+        9499     15009.20     42394.20         4.46  tree.py:rotate_left
+        3866     14747.80    488516.50       126.36  attack.py:_my_claims
+      102793     14300.40     14300.40         0.14  ~:0(<built-in method builtins.hash>)
+       35231     14257.80     82172.30         2.33  random.py:randint
+       14778     14194.10     24546.20         1.66  chokepoint.py:get_or_create_raw_vid
+       18765     14125.10     41475.10         2.21  vertex.py:__init__
+       14592     13955.10    117487.50         8.05  tree.py:balance_and_propagate
+       90394     13048.40     13048.40         0.14  ~:0(<built-in method math.sqrt>)
+       19685     12869.40     21973.90         1.12  ~:0(<built-in method _heapq.heappush>)
+        3290     12512.50     14706.30         4.47  secure.py:_too_expensive
+      140384     12427.70     12427.70         0.09  leaf_node.py:get_value
+       38850     12171.20     12171.20         0.31  enum.py:<genexpr>
+       14756     12126.70    162337.00        11.00  node.py:replace_leaf
+       29512     12080.30     16014.20         0.54  half_edge.py:__init__
+       30883     12052.80     12052.80         0.39  ~:0(<method 'can_place_marker' of 'builtins.Controller' objects>)
+        9350     11871.50     13448.30         1.44  map_info.py:get_avoid
+         669     11867.50    334354.00       499.78  turret_sentinel.py:run
+      103467     11615.30     11615.30         0.11  half_edge.py:twin
+      109236     11600.50     11600.50         0.11  ~:0(<built-in method builtins.isinstance>)
+        8303     11455.40     50825.80         6.12  pathing.py:closest_within
+        3863     11143.70     18221.90         4.72  builder.py:_destroy_enemy_feeders
+        2904     11120.10     16487.90         5.68  chokepoint.py:_sync_visible_targets
+       76979     11004.60     12061.20         0.16  ~:0(<built-in method builtins.min>)
+      103722     10996.00     10996.00         0.11  node.py:right
+       34639     10967.60    125788.90         3.63  internal_node.py:get_key
+       58963     10927.20     10927.20         0.19  node.py:balance
+       29920     10877.10     10877.10         0.36  ~:0(<method 'can_build_road' of 'builtins.Controller' objects>)
+        3396     10342.00    166362.80        48.99  heal.py:score
+        3396      9991.80    215467.50        63.45  route.py:score
+       14744      9948.70     14083.30         0.96  map_info.py:builder_ti_reserve
+        6706      9880.40     27806.90         4.15  tree.py:rotate_right
+       37872      9801.60      9801.60         0.26  attack.py:<genexpr>
+         446      9672.60     15086.10        33.83  turret_priority.py:select_best
+        2781      9408.60     12183.40         4.38  ~:0(<method 'can_move' of 'builtins.Controller' objects>)
+       81532      9389.00      9389.00         0.12  node.py:left
+       37418      9321.90      9321.90         0.25  ~:0(<method 'get_current_round' of 'builtins.Controller' objects>)
+      105693      8981.80      8981.80         0.08  ~:0(<built-in method _operator.index>)
+        2530      8918.60      8918.60         3.53  map_info.py:_compute_guard_conv
+        1486      8648.70    282054.60       189.81  heal.py:_try_chase
+        6867      8516.30     74582.10        10.86  pathing.py:closest
+       12280      8481.90    271265.00        22.09  pathing.py:claim_subset
+         238      8201.60   1214716.90      5103.85  chokepoint.py:_step_voronoi_sweep
+          14      8156.20     13627.40       973.39  chokepoint.py:collect_boundary_samples
+        4585      8028.10     18789.70         4.10  pathing.py:raw_ax_foundry_sites
+         347      7863.70    181804.50       523.93  route.py:run
+        1706      7831.20    359750.60       210.87  heal.py:run
+       24589      7770.20      7770.20         0.32  chokepoint.py:quantize_key
+        3866      7690.70     27457.40         7.10  explore.py:try_passive_chokepoint_action_only
+          14      7644.20     85537.20      6109.80  chokepoint.py:_analysis_polygon_mask
+       26702      7589.40      7589.40         0.28  algebra.py:check_clockwise
+       21644      7457.40      7457.40         0.34  ~:0(<method 'get_global_resources' of 'builtins.Controller' objects>)
+       15462      7447.40     10640.70         0.69  leaf_node.py:__init__
+       15170      7235.00      7924.40         0.52  pathing.py:_coerce_start
+         658      7110.40    243800.70       370.52  turret_gunner.py:run
+          14      7097.20      7524.50       537.46  geometry_core.py:build_free_mask
+         348      6887.10    102119.80       293.45  pathing.py:move_adjacent
+        3290      6838.20     39549.70        12.02  secure.py:securable_ore
+        5592      6821.90     10167.90         1.82  half_edge.py:delete
+        3440      6695.20    234207.50        68.08  pathing.py:_get_base_claim_zones
+       16562      6664.40      6664.40         0.40  ~:0(<method 'get_tile_builder_bot_id' of 'builtins.Controller' objects>)
+       33734      6584.40      6584.40         0.20  node.py:maximum
+         650      6507.60    270763.60       416.56  core.py:run
+        3866      6504.60     10386.30         2.69  builder.py:handle_comms
+        1900      6466.40      6822.70         3.59  attack.py:_enemy_score_group_masks
+       15391      6416.30      9008.10         0.59  algebra.py:distance
+        2104      6348.20     90134.30        42.84  attack.py:_get_cached_gunner_per_dir
+       33674      6242.60      6242.60         0.19  node.py:minimum
+        3866      6155.40    495745.40       128.23  attack.py:score
+       25706      5922.30      5922.30         0.23  node.py:__init__
+        2530      5922.20      5922.20         2.34  map_info.py:_compute_conv_into_open_ore
+          14      5897.10     11383.10       813.08  geometry_core.py:merge_axis_aligned_segments
+       39783      5867.30      5867.30         0.15  node.py:is_leaf
+       10244      5860.70      8589.70         0.84  internal_node.py:__init__
+       19299      5787.60     59041.20         3.06  algorithm.py:get
+       56071      5769.00      5769.00         0.10  ~:0(<method 'getrandbits' of '_random.Random' objects>)
+        1741      5620.70      8423.20         4.84  comms.py:decode_visible_marker
+       12140      5599.80      5599.80         0.46  ~:0(<built-in method time.perf_counter_ns>)
+        5653      5531.80      5531.80         0.98  attack.py:_read_score
+        3290      5520.50    207029.60        62.93  secure.py:score
+       19685      5463.60     27437.50         1.39  algorithm.py:put
+       15000      5442.20      5442.20         0.36  ~:0(<built-in method builtins.round>)
+        5593      5341.50      6642.20         1.19  site_event.py:__init__
+         446      5337.30     13847.70        31.05  turret_priority.py:compute_priority_sets
+        9552      5312.70      7078.00         0.74  algorithm.py:_retarget_breakpoint
+       53004      5307.30      5307.30         0.10  log.py:log
+        1714      5259.40     96822.00        56.49  chokepoint.py:_start_readiness
+        3398      5072.00      5072.00         1.49  map_info.py:direction_to
+         327      5017.70     17887.20        54.70  attack.py:_try_launcher_lockdown
+        1327      4832.10     11785.80         8.88  map_info.py:turret_could_possibly_be_fed
+        2530      4790.50      4790.50         1.89  map_info.py:_compute_conv_by_dir
+         387      4789.00     43844.40       113.29  turret_gunner.py:_choose_rotate_dir
+        2752      4786.60      6037.10         2.19  ~:0(<method 'move' of 'builtins.Controller' objects>)
+        4103      4757.20      8097.00         1.97  comms.py:get_learn_map_bucket_pos
+       16263      4745.90      4745.90         0.29  ~:0(<method 'get_scale_percent' of 'builtins.Controller' objects>)
+         502      4664.60     13030.00        25.96  attack.py:get_best_direction
+        8207      4655.00      5768.10         0.70  enum.py:__get__
+       19966      4643.50      4643.50         0.23  ~:0(<method 'pop' of 'dict' objects>)
+        3885      4637.10      4637.10         1.19  enum.py:__iter__
+       11888      4509.10      4509.10         0.38  ~:0(<method 'get_tile_env' of 'builtins.Controller' objects>)
+       10244      4415.50      5510.50         0.54  algorithm.py:_register_breakpoint_node
+         911      4353.50    308135.00       338.24  explore.py:run
+        2530      4348.90      4765.60         1.88  map_info.py:_compute_my_gunner_claims
+       19428      4331.40      4331.40         0.22  map_info.py:_splitter_side_output_mask
+        2224      4289.40      5865.90         2.64  map_info.py:_update_conv_reverse_outputs
+       12037      4197.10      4197.10         0.35  ~:0(<method 'setdefault' of 'dict' objects>)
+       34141      4167.70      4167.70         0.12  half_edge.py:set_next
+        1457      4166.70    100453.00        68.95  attack.py:_get_cached_sentinel_scores
+         869      4158.20     82938.70        95.44  pathing.py:_calculate_conveyor_path_to
+        1561      4156.30     22683.50        14.53  harvest.py:_my_claims
+        4362      4039.10      8110.60         1.86  turret_sentinel.py:_resolve_target_on_tile
+         948      4022.40      4431.50         4.67  turret_gunner.py:_ally_feeder_mask
+        3396      3983.00      8189.50         2.41  route.py:cant_claim
+         133      3939.80      5331.60        40.09  explore.py:generate_explore_target
+        1319      3896.10     17205.70        13.04  chokepoint.py:claim_targets_near
+        5650      3864.90      3864.90         0.68  map_info.py:ground_at
+        2606      3826.30     95136.70        36.51  attack.py:_ensure_gunner_scores
+        3863      3819.10     11425.30         2.96  comms.py:get_learn_map_corresponding_pos
+       23794      3782.30      3782.30         0.16  coordinate.py:x
+        9552      3779.80      6387.80         0.67  algorithm.py:_unregister_breakpoint
+        2104      3727.50      4059.60         1.93  attack.py:_turret_feed_chains
+        2722      3713.40      4244.20         1.56  map_info.py:is_passable
+       32295      3711.20      3711.20         0.11  event.py:__init__
+       17684      3679.30      3679.30         0.21  ~:0(<method 'items' of 'dict' objects>)
+        6311      3545.40      3545.40         0.56  ~:0(<method 'get_direction' of 'builtins.Controller' objects>)
+       23794      3473.50      3473.50         0.15  coordinate.py:y
+        1783      3409.50    104850.90        58.81  attack.py:_ensure_sentinel_planes
+        4445      3335.40      3335.40         0.75  ~:0(<method 'can_heal' of 'builtins.Controller' objects>)
+        9552      3312.70      5740.60         0.60  algorithm.py:_find_breakpoint_node
+          14      3305.20     14200.20      1014.30  algorithm.py:initialize
+        9552      3294.50      4652.90         0.49  circle_event.py:yd
+        2033      3269.30      3269.30         1.61  comms.py:encode_symmetry_broadcast
+        9825      3229.30      3229.30         0.33  ~:0(<method 'get_action_cooldown' of 'builtins.Controller' objects>)
+         894      3184.00     10200.30        11.41  breakpoint.py:get_intersection
+        7124      3116.80      3448.90         0.48  heal.py:_turret_covered_mask
+       19661      3108.90      3108.90         0.16  ~:0(<built-in method math.hypot>)
+        3866      3076.70     99898.70        25.84  chokepoint.py:_ensure_state
+       13565      3069.50      3069.50         0.23  ~:0(<method 'bit_count' of 'int' objects>)
+       19104      3051.20      3622.20         0.19  algorithm.py:remove
+        3290      3039.80      4124.60         1.25  secure.py:cant_secure
+       10663      3018.50      3018.50         0.28  ~:0(<method 'get_id' of 'builtins.Controller' objects>)
+         391      3006.80      7640.90        19.54  turret_launcher.py:_adjacent_enemy_builders
+        5133      2985.10      2985.10         0.58  chokepoint.py:analysis_complete
+        1536      2833.40      3703.10         2.41  pathing.py:build_mask
+       18399      2828.60      2828.60         0.15  heal.py:_healable_mask
+        1741      2794.50      3022.70         1.74  comms.py:estimate_turn
+       13588      2777.10      2777.10         0.20  pathing.py:_dir_family
+         546      2723.20     12345.60        22.61  route.py:attempt_build
+         561      2701.00     16828.00        30.00  turret_gunner.py:_decide_fire
+        4019      2668.20      3485.30         0.87  attack.py:_ensure_attack_shift_plans
+         650      2652.30      9212.90        14.17  core.py:_scan_nearby_builders
+        8322      2625.40      2625.40         0.32  ~:0(<method 'get_road_cost' of 'builtins.Controller' objects>)
+        1561      2589.80      3494.40         2.24  harvest.py:_too_expensive
+        8264      2571.60      2571.60         0.31  ~:0(<method 'get_cpu_time_elapsed' of 'builtins.Controller' objects>)
+        2269      2556.10      4111.00         1.81  map_info.py:rot_flip
+       19312      2437.00      2437.00         0.13  algorithm.py:empty
+        1468      2409.30      2409.30         1.64  map_info.py:adjacent_bits
+         591      2399.00      8086.00        13.68  turret_gunner.py:_should_stay
+        4398      2389.40      3653.90         0.83  chokepoint.py:_budget_remaining
+        2352      2345.00      2345.00         1.00  __init__.py:__repr__
+          71      2322.20     25983.80       365.97  map_info.py:init
+        4394      2275.80      2275.80         0.52  map_info.py:team_at
+        2033      2266.60      2266.60         1.11  ~:0(<method 'place_marker' of 'builtins.Controller' objects>)
+          13      2263.20      4154.90       319.61  chokepoint.py:identify_choke_points
+          14      2223.50     39007.50      2786.25  chokepoint.py:_step_voronoi_init
+        5552      2201.00      3155.10         0.57  event.py:__ne__
+        1547      2175.90      3205.60         2.07  heal.py:_try_launcher_fallback
+        5593      2167.30      7770.70         1.39  point.py:__init__
+        3561      2164.50      2164.50         0.61  attack.py:_round_cache_enemy_inputs
+         250      2133.80      3362.30        13.45  turret_sentinel.py:_kill_assist_mask
+        6618      2128.40      2128.40         0.32  pathing.py:rebuild_broken_barriers
+       18267      2127.40      2127.40         0.12  ~:0(<method 'discard' of 'set' objects>)
+        1706      2121.00      2121.00         1.24  heal.py:_chase_on_damaged_conv
+        4895      2115.40      2115.40         0.43  ~:0(<method 'can_fire' of 'builtins.Controller' objects>)
+        5204      2103.70      4517.10         0.87  breakpoint.py:does_intersect
+        3360      2083.00      3073.50         0.91  geometry_core.py:_mark_point_boundary
+        1561      2082.70     13993.50         8.96  harvest.py:harvestable_ore
+       15462      1948.30      1948.30         0.13  arc.py:__init__
+          26      1947.70      4065.90       156.38  chokepoint.py:release_pruned_inputs
+         570      1942.40      3488.90         6.12  _types.py:opposite
+        4539      1932.40      1932.40         0.43  _types.py:distance_squared
+          39      1890.80      1890.80        48.48  map_info.py:build_core_areas
+          13      1884.30      4263.30       327.95  chokepoint.py:identify_region_nodes
+         934      1874.70      2669.60         2.86  chokepoint.py:_minimum_seen_map_tiles
+         176      1856.90     12814.40        72.81  attack.py:_try_instant_preferred
+         207      1834.70      1834.70         8.86  ~:0(<method 'clear' of 'dict' objects>)
+        3866      1830.10      4242.80         1.10  builder.py:_update_harvest_zone
+        5432      1823.80      1823.80         0.34  ~:0(<method 'get_harvester_cost' of 'builtins.Controller' objects>)
+        1784      1794.20      2020.20         1.13  turret_priority.py:_reverse_conveyor_feeders
+         708      1786.10      2575.20         3.64  turret_priority.py:_adj_seed_conveyors
+         255      1737.30      3281.60        12.87  ~:0(<method 'get_attackable_tiles' of 'builtins.Controller' objects>)
+         650      1729.90      2265.10         3.48  ~:0(<method 'can_build_conveyor' of 'builtins.Controller' objects>)
+        4554      1714.80      1714.80         0.38  map_info.py:type_at
+       11848      1710.50      1710.50         0.14  builder.py:draw_mask
+        5218      1700.30      2735.30         0.52  site_event.py:yd
+        1561      1693.10     24376.60        15.62  harvest.py:score
+         639      1688.90     68198.30       106.73  pathing.py:calculate_conveyor_path
+        2033      1627.60      1627.60         0.80  comms.py:get_sym_bits
+        5358      1594.80      1594.80         0.30  ~:0(<method 'insert' of 'list' objects>)
+        5633      1587.80      1587.80         0.28  comms.py:_symmetry_env_idx
+        3866      1492.90      1554.30         0.40  builder.py:_update_initial_explore
+         918      1479.50      2726.40         2.97  enum.py:__format__
+        9552      1467.00      1467.00         0.15  node.py:is_left_child
+          42      1424.80      1424.80        33.92  geometry_core.py:make_mask
+          13      1384.30      2251.00       173.15  chokepoint.py:merge_adjacent_regions
+        3396      1384.10      1384.10         0.41  route.py:_orphan_harvesters
+         911      1368.50      3594.30         3.95  explore.py:_try_passive_chokepoint_build
+         297      1365.20      4844.10        16.31  turret_sentinel.py:_should_stay
+         639      1352.00      6273.60         9.82  pathing.py:_get_conveyor_targets_and_avoid
+          14      1337.80      1817.00       129.79  geometry_core.py:build_obstacle_mask
+        4072      1333.90      1333.90         0.33  ~:0(<method 'get_sentinel_cost' of 'builtins.Controller' objects>)
+        4138      1307.60      1307.60         0.32  ~:0(<method 'get_gunner_cost' of 'builtins.Controller' objects>)
+         914      1290.10      2918.90         3.19  map_info.py:node_possible
+       10408      1279.90      1279.90         0.12  breakpoint.py:__init__
+        1102      1262.60      1262.60         1.15  attack.py:_good_conveyor_mask
+        1088      1233.60      1233.60         1.13  attack.py:_gunner_ray_blocked_mask
+        3552      1228.00      1732.40         0.49  chokepoint.py:<genexpr>
+         227      1214.50     85942.40       378.60  turret_launcher.py:run
+         911      1210.60      2265.50         2.49  disrupt.py:score
+         532      1206.30      4394.90         8.26  route.py:_can_build_preferred_conveyor
+          14      1156.40      1552.60       110.90  chokepoint.py:prepare_free_boundary_segments
+        9552      1140.20      1140.20         0.12  internal_node.py:get_value
+        4970      1128.70      1386.30         0.28  ~:0(<built-in method builtins.sorted>)
+          14      1123.30     87776.90      6269.78  chokepoint.py:_snapshot_state
+          73      1117.80      1725.90        23.64  chokepoint.py:is_locally_maximal_fast
+          14      1114.80      1609.80       114.99  chokepoint.py:filter_obstacle_cells_by_area
+        8207      1113.10      1113.10         0.14  enum.py:value
+        2224      1107.20      1107.20         0.50  map_info.py:_conv_output_mask
+         230      1082.40      3442.40        14.97  pathing.py:_get_attack_conveyor_targets_and_avoid
+          22      1073.30      8171.40       371.43  harvest.py:run
+         255      1065.50      1164.90         4.57  turret_sentinel.py:_ally_feeder_mask
+        1741      1058.40      1058.40         0.61  ~:0(<method 'get_marker_value' of 'builtins.Controller' objects>)
+          64      1014.70      1014.70        15.85  pathing.py:_init_col_masks
+        5592      1002.10      1002.10         0.18  ~:0(<method 'remove' of 'list' objects>)
+         918       960.60       960.60         1.05  enum.py:__str__
+        1914       959.60       959.60         0.50  ~:0(<method 'clear' of 'set' objects>)
+        5552       954.10       954.10         0.17  event.py:__eq__
+         698       948.10     22304.10        31.95  route.py:_core_bfs_distance
+        1214       915.20       915.20         0.75  turret_priority.py:_bucket_for
+        3866       911.20       911.20         0.24  comms.py:get_new_messages
+        3396       909.90       909.90         0.27  route.py:_dead_end_conveyors
+         869       908.20      1041.80         1.20  pathing.py:conveyor_cost
+        2418       899.90       899.90         0.37  builder.py:near_core_mask
+         118       856.60      3966.10        33.61  secure.py:build_stuff
+         446       854.00      1914.10         4.29  turret_priority.py:_threatening_enemy_turrets
+        2036       850.90       850.90         0.42  ~:0(<method 'is_in_vision' of 'builtins.Controller' objects>)
+          14       842.30      2064.00       147.43  builder.py:_compute_voronoi_harvest_zone
+        2180       836.50       836.50         0.38  comms.py:decode_type
+         101       836.50      3128.70        30.98  turret_priority.py:_apply_tiebreaks
+        4659       835.70       835.70         0.18  heal.py:<genexpr>
+         240       824.90      1866.10         7.78  comms.py:apply_symmetry_broadcast_map
+         312       813.50    326768.40      1047.33  chokepoint.py:_step_voronoi_finish
+        3396       807.80       807.80         0.24  route.py:_orphan_foundries
+         903       807.20      1066.70         1.18  half_edge.py:_replacement_first_edge
+        2508       798.40       798.40         0.32  ~:0(<method 'get_ammo_amount' of 'builtins.Controller' objects>)
+        6589       785.70       785.70         0.12  ~:0(<built-in method builtins.iter>)
+        5235       773.20       773.20         0.15  ~:0(<built-in method math.ceil>)
+         246       758.30      1057.40         4.30  ~:0(<method 'can_fire_from' of 'builtins.Controller' objects>)
+         272       745.50       958.90         3.53  ~:0(<method 'can_build_gunner' of 'builtins.Controller' objects>)
+         464       729.30       729.30         1.57  ~:0(<method 'build_road' of 'builtins.Controller' objects>)
+         613       725.30       893.30         1.46  comms.py:_note_comm_env
+        4901       724.50       768.60         0.16  ~:0(<method 'sort' of 'list' objects>)
+        6655       722.30       722.30         0.11  ~:0(<method 'popleft' of 'collections.deque' objects>)
+         543       715.20       715.20         1.32  ~:0(<method 'draw_indicator_line' of 'builtins.Controller' objects>)
+        6589       709.00       709.00         0.11  ~:0(<built-in method builtins.next>)
+        4545       708.90       708.90         0.16  circle_event.py:remove
+         230       699.10     26922.50       117.05  pathing.py:calculate_attack_conveyor_path
+         192       681.40      4384.50        22.84  pathing.py:make_steps
+          71       664.90       985.10        13.87  random.py:seed
+         639       664.70      1008.80         1.58  route.py:_prefer_armoured_conveyor
+          64       663.60      6084.20        95.07  pathing.py:__init__
+         495       657.60       657.60         1.33  ~:0(<method 'fire' of 'builtins.Controller' objects>)
+          14       655.10     32571.10      2326.51  geometry_core.py:build_analysis_mask
+        1671       638.70       638.70         0.38  ~:0(<method 'get_conveyor_cost' of 'builtins.Controller' objects>)
+        2958       629.00       629.00         0.21  ~:0(<method 'remove' of 'set' objects>)
+         224       626.70      1055.20         4.71  ~:0(<method 'get_attackable_tiles_from' of 'builtins.Controller' objects>)
+         349       626.70     22930.80        65.70  route.py:_should_attack_route
+         743       616.20       616.20         0.83  ~:0(<method 'can_destroy' of 'builtins.Controller' objects>)
+        1100       580.50       588.20         0.53  ~:0(<built-in method builtins.any>)
+        4714       560.00       560.00         0.12  ~:0(<method 'append' of 'collections.deque' objects>)
+         206       536.70       690.20         3.35  ~:0(<method 'can_build_sentinel' of 'builtins.Controller' objects>)
+          28       512.70      4482.00       160.07  turret_gunner.py:init
+         207       500.40       600.80         2.90  ~:0(<method 'build_conveyor' of 'builtins.Controller' objects>)
+          14       492.80    109544.00      7824.57  chokepoint.py:build_obstacle_geometry
+         230       487.60       487.60         2.12  pathing.py:_enemy_core_area_mask
+         334       476.90      1735.10         5.19  turret_priority.py:<genexpr>
+          13       453.10       776.40        59.72  chokepoint.py:simplify_choke_points_for_game
+         280       440.20       440.20         1.57  secure.py:dirs_covered
+         253       420.00       420.00         1.66  ~:0(<method 'heal' of 'builtins.Controller' objects>)
+         502       394.30       914.10         1.82  attack.py:_selection_bias_for_bit
+         446       387.50       387.50         0.87  turret_priority.py:_enemy_turrets_mask
+          13       381.00     32492.60      2499.43  chokepoint.py:_step_prune
+         370       359.70      2082.50         5.63  ~:0(<method 'join' of 'str' objects>)
+         457       355.30      3562.80         7.80  attack.py:_dist_with_extra
+         167       340.70       658.60         3.94  disrupt.py:_my_claims
+          27       326.50      9615.60       356.13  route.py:fallback_barrier
+          71       314.60       612.70         8.63  comms.py:init
+         265       309.00       563.70         2.13  turret_gunner.py:_hp_at
+         918       286.30       286.30         0.31  ~:0(<method '__format__' of 'str' objects>)
+          14       282.70       970.20        69.30  polygon.py:__init__
+         167       281.90       281.90         1.69  disrupt.py:_disruptable_ore
+         650       253.80       469.50         0.72  core.py:_spawn_toward_enemy_if_undefended
+         314       253.70       253.70         0.81  ~:0(<method 'can_spawn' of 'builtins.Controller' objects>)
+        1706       249.10       268.10         0.16  chokepoint.py:<lambda>
+         240       237.70       728.50         3.04  comms.py:decode_learn_map_corresponding_pos
+          71       236.20       274.30         3.86  comms.py:random_hash
+        1477       235.10       235.10         0.16  chokepoint.py:find
+          34       232.30       285.50         8.40  _types.py:direction_to
+         361       224.10      2186.10         6.06  attack.py:_my_dist_with_extra
+          14       216.00       325.60        23.26  geometry_core.py:clip_polygon_against_half_plane
+          15       206.00      3922.20       261.48  builder.py:init
+         446       205.00       205.00         0.46  turret_priority.py:_my_turrets_mask
+         639       193.40       193.40         0.30  ~:0(<method 'get_armoured_conveyor_cost' of 'builtins.Controller' objects>)
+         470       192.40       192.40         0.41  ~:0(<method 'convert' of 'builtins.Controller' objects>)
+         822       189.80       189.80         0.23  chokepoint.py:_current_symmetry_from_flags
+         156       177.30       177.30         1.14  ~:0(<method 'destroy' of 'builtins.Controller' objects>)
+         194       172.90       260.30         1.34  chokepoint.py:_round_point_to_tile
+         164       172.20      3575.60        21.80  turret_launcher.py:_try_throw_enemy_to_history
+         911       171.00       171.00         0.19  explore.py:score
+         227       167.60      4405.10        19.41  turret_launcher.py:_try_throw_enemy_away
+         154       165.10       215.60         1.40  route.py:_core_distance
+         107       153.60       569.30         5.32  route.py:_build_preferred_conveyor
+          28       143.50       371.40        13.26  geometry_core.py:is_axis_aligned_rectangle
+          13       141.30       141.30        10.87  chokepoint.py:finish_voronoi_polygon
+          43       136.80       136.80         3.18  turret_priority.py:_forward_reach
+         134       135.80      1100.90         8.22  turret_priority.py:_dist
+          28       134.60       189.10         6.75  algorithm.py:__init__
+         361       134.50       134.50         0.37  ~:0(<method 'get_barrier_cost' of 'builtins.Controller' objects>)
+          25       127.30       422.90        16.92  map_info.py:core_center
+          14       126.50       472.20        33.73  chokepoint.py:_compute_analysis_polygon
+         341       125.80       125.80         0.37  ~:0(<method 'get_launcher_cost' of 'builtins.Controller' objects>)
+         199       118.70       172.30         0.87  comms.py:decode_sym
+         100       116.20       215.10         2.15  map_info.py:empty
+          21       116.10      2150.80       102.42  turret_sentinel.py:init
+          27       107.10       259.30         9.60  explore.py:_target_unavailable
+         328       104.30       104.30         0.32  ~:0(<method 'get_map_width' of 'builtins.Controller' objects>)
+          99       104.30       161.70         1.63  chokepoint.py:union
+          28       103.80       117.70         4.20  ~:0(<method 'build_gunner' of 'builtins.Controller' objects>)
+          13       101.70      4256.60       327.43  chokepoint.py:_step_chokes
+          13       100.90      2351.90       180.92  chokepoint.py:_step_merge
+          63       100.40       273.90         4.35  heal.py:_conv_dist
+          13        90.70       219.90        16.92  chokepoint.py:mirror_blocker_targets_only
+          52        87.10       108.80         2.09  map_info.py:has_builder_bot
+          90        84.30        84.30         0.94  ~:0(<built-in method math.atan2>)
+         240        81.60        81.60         0.34  comms.py:decode_learn_map_sample_bits
+          56        80.90       122.40         2.19  algebra.py:calculate_angle
+          23        80.40        92.00         4.00  ~:0(<method 'build_sentinel' of 'builtins.Controller' objects>)
+          43        80.00        93.60         2.18  chokepoint.py:blocker_footprint
+          87        80.00        80.00         0.92  ~:0(<method 'update' of 'set' objects>)
+         328        79.70        79.70         0.24  ~:0(<method 'get_map_height' of 'builtins.Controller' objects>)
+          13        78.80       855.20        65.78  chokepoint.py:_step_simplify
+         199        76.10        76.10         0.38  map_info.py:update_symmetry_from_comms
+          24        75.70        98.80         4.12  spawn_plan.py:get_ray_endpoint
+          14        74.30    109618.30      7829.88  chokepoint.py:_step_geometry
+         103        73.80        98.90         0.96  turret_priority.py:_turret_et_for_idx
+          86        73.70        99.20         1.15  chokepoint.py:add_target
+         227        72.10        87.70         0.39  turret_launcher.py:_classify_launcher
+          13        71.50      4334.80       333.45  chokepoint.py:_step_regions
+          13        71.30       627.50        48.27  chokepoint.py:_step_mirror
+          15        68.80      2284.40       152.29  attack.py:init
+          13        64.80       305.40        23.49  chokepoint.py:release_final_analysis_state
+          56        63.90       186.30         3.33  polygon.py:<lambda>
+          71        62.20        72.00         1.01  enum.py:__len__
+           6        61.10       114.60        19.10  core.py:_spawn_toward_center
+         134        58.70        58.70         0.44  turret_priority.py:_fmt_dist
+          43        53.10        53.10         1.23  ~:0(<built-in method builtins.bin>)
+          11        49.50       102.30         9.30  heal.py:_mask_to_positions
+          14        47.20       196.10        14.01  core.py:_spawn_toward_plan
+          28        44.00        44.00         1.57  subject.py:__init__
+          36        43.80        69.20         1.92  explore.py:_enemy_clearable_chokepoint_blocker
+           2        41.70       360.10       180.05  spawn_plan.py:choose_spawn_plan
+           2        40.80       171.70        85.85  spawn_plan.py:_build_ti_near_mask
+         280        38.70        38.70         0.14  polygon.py:<genexpr>
+          33        38.40        58.10         1.76  ~:0(<method 'get_bridge_target' of 'builtins.Controller' objects>)
+           8        36.90        59.30         7.41  _types.py:rotate_left
+          83        36.00        36.00         0.43  ~:0(<method 'get_bridge_cost' of 'builtins.Controller' objects>)
+          21        34.10        34.10         1.62  ~:0(<method 'build_harvester' of 'builtins.Controller' objects>)
+          28        32.90        37.80         1.35  geometry_core.py:intersect
+          24        32.30        54.30         2.26  chokepoint.py:blocker_kind_at
+          13        30.90        30.90         2.38  chokepoint.py:_refresh_target_mask
+          15        29.40        29.40         1.96  ~:0(<method 'spawn_builder' of 'builtins.Controller' objects>)
+          14        27.50        56.00         4.00  geometry_core.py:raster_scale_from_spacing
+          43        27.40        27.40         0.64  chokepoint.py:mirror_cell
+          70        26.60        26.60         0.38  geometry_core.py:side_value
+         128        26.50        26.50         0.21  ~:0(<method 'pop' of 'set' objects>)
+          23        25.90        31.30         1.36  route.py:_try_barrier_output
+          14        24.50        49.30         3.52  map_info.py:flip
+          20        23.90        95.40         4.77  explore.py:_launcher_too_close
+          10        23.30        38.10         3.81  explore.py:_can_afford_chokepoint
+         129        23.10        23.10         0.18  chokepoint.py:_cell_to_index
+          43        22.80        22.80         0.53  ~:0(<method 'count' of 'str' objects>)
+          27        21.10        21.10         0.78  <string>:__init__
+          29        20.90        20.90         0.72  ~:0(<method 'can_build_barrier' of 'builtins.Controller' objects>)
+          14        20.10        20.10         1.44  geometry_core.py:rectangle_polygon
+           2        19.10       275.00       137.50  spawn_plan.py:get_valid_directions
+           8        18.90        38.20         4.78  _types.py:rotate_right
+          34        18.80        18.80         0.55  spawn_plan.py:draw_spawn_plan
+           5        18.30        18.30         3.66  ~:0(<method 'build_bridge' of 'builtins.Controller' objects>)
+          14        17.70        22.10         1.58  chokepoint.py:_snapshot_unseen_analysis_tiles
+          22        17.60        17.60         0.80  ~:0(<method 'can_build_harvester' of 'builtins.Controller' objects>)
+          10        17.50        20.30         2.03  spawn_plan.py:_ray_hits_mask
+          14        17.30        30.60         2.19  subject.py:inherit_observers_from
+          52        15.90        15.90         0.31  chokepoint.py:blocker_kind_for_radius
+           2        14.70        36.40        18.20  explore.py:_try_place_chokepoint_at
           14        14.50        14.50         1.04  numeric.py:set_numeric_mode
-          52        14.40        14.40         0.28  chokepoint.py:blocker_kind_for_radius
-           5        14.10        14.10         2.82  ~:0(<method 'can_build_launcher' of 'builtins.Controller' objects>)
-          14        13.10       236.50        16.89  polygon.py:_order_points
-          20        12.70        20.20         1.01  core.py:<genexpr>
-           2        12.50        59.80        29.90  explore.py:_try_build_chokepoint_at
-           8        11.00        16.70         2.09  spawn_plan.py:dir_distance
-           6        10.60        10.60         1.77  ~:0(<method 'build_barrier' of 'builtins.Controller' objects>)
-           6        10.40        13.40         2.23  ~:0(<method 'can_rotate' of 'builtins.Controller' objects>)
-          25         9.60         9.60         0.38  map_info.py:_compute_predicted_enemy_core
-          56         9.60         9.60         0.17  ~:0(<built-in method math.degrees>)
-           2         9.50        58.80        29.40  spawn_plan.py:_all_dir_endpoints
-          15         9.50         9.50         0.63  heal.py:init
-           6         9.20        11.50         1.92  ~:0(<method 'rotate' of 'builtins.Controller' objects>)
-           2         9.10        29.30        14.65  core.py:_core_area_positions
-          14         9.00        12.60         0.90  subject.py:add_child
+           5        14.20        14.20         2.84  ~:0(<method 'can_build_launcher' of 'builtins.Controller' objects>)
+          14        13.90       234.00        16.71  polygon.py:_order_points
+           5        13.60        13.60         2.72  ~:0(<method 'build_launcher' of 'builtins.Controller' objects>)
+          20        13.10        20.20         1.01  core.py:<genexpr>
+           2        11.80        61.30        30.65  explore.py:_try_build_chokepoint_at
+           6        11.70        11.70         1.95  ~:0(<method 'build_barrier' of 'builtins.Controller' objects>)
+           8        10.90        16.70         2.09  spawn_plan.py:dir_distance
+          56        10.40        10.40         0.19  ~:0(<built-in method math.degrees>)
+           2        10.10        30.30        15.15  core.py:_core_area_positions
+          15        10.10        10.10         0.67  heal.py:init
+           6        10.00        12.70         2.12  ~:0(<method 'can_rotate' of 'builtins.Controller' objects>)
+          14        10.00        13.30         0.95  subject.py:add_child
+           8         9.80        30.00         3.75  spawn_plan.py:<lambda>
+           6         9.40        17.60         2.93  ~:0(<method 'rotate' of 'builtins.Controller' objects>)
           29         8.90         8.90         0.31  ~:0(<method 'clear' of 'list' objects>)
-           8         8.70        28.80         3.60  spawn_plan.py:<lambda>
-          14         8.40         8.40         0.60  ~:0(<method 'can_build_bridge' of 'builtins.Controller' objects>)
-          17         7.80         7.80         0.46  ~:0(<method 'get_max_hp' of 'builtins.Controller' objects>)
-           5         7.60         7.60         1.52  ~:0(<method 'build_bridge' of 'builtins.Controller' objects>)
-          15         7.30         7.30         0.49  harvest.py:init
-          13         7.10         7.10         0.55  ~:0(<method 'keys' of 'dict' objects>)
-          15         6.70         6.70         0.45  secure.py:init
-          15         6.60         6.60         0.44  explore.py:init
-          25         6.40         6.40         0.26  turret_priority.py:<lambda>
-          15         6.30         6.30         0.42  disrupt.py:init
-          15         6.30         6.30         0.42  route.py:init
-           2         6.10        50.30        25.15  core.py:init
-           1         4.80         4.80         4.80  ~:0(<function Random.seed at 0x00000243D5E52660>)
-           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x00000243D4FF1A80>)
-           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x00000243D5473B00>)
-           1         4.60         4.60         4.60  ~:0(<function Random.seed at 0x00000243D3516660>)
-           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000243D4AF2020>)
-           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000243D4A24F40>)
-           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000243CF35BC40>)
-           1         4.40         4.40         4.40  ~:0(<function Random.seed at 0x00000243CD3A5BC0>)
-          10         4.40         4.40         0.44  ~:0(<method 'values' of 'dict' objects>)
-           3         4.30         5.20         1.73  explore.py:_wait_for_chokepoint_if_enabled
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000243CA4A07C0>)
-           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000243D56A8B80>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000243CFF0B100>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000243D5007E20>)
-           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000243C9FB05E0>)
-           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000243C75CBD80>)
-           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000243D4CB51C0>)
-           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000243C90C3EC0>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000243D1A95080>)
-           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000243D373E200>)
-           5         3.90         3.90         0.78  turret_launcher.py:init
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243CD8B9DA0>)
-          22         3.90         3.90         0.18  explore.py:<lambda>
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D1954AE0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D2329BC0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D1B994E0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243CF3074C0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D382EC00>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D3392E80>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D3733D80>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D33EDDA0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243C8BF7C40>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D35A4AE0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243CF60F920>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D226B420>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243CA0CEFC0>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243CCA0D440>)
-           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000243D256D440>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D043F240>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D199FCE0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D2C68720>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D36314E0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D4B36C00>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243CF7654E0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D2783100>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D1DD5580>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243CD081440>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243CBE5CB80>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D4A45B20>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D2F0A5C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243CC348D60>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D703D760>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D4ED9D00>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D726CF40>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D516DEE0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D4D6C7C0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243D72F9A80>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243CD9A67A0>)
-           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000243C9AC4400>)
-          16         3.70         3.70         0.23  ~:0(<method 'index' of 'tuple' objects>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243CEF45D00>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243CA9909A0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243CF9E6C00>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D5368EA0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D5974680>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D5B53420>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D33A0720>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D05DC860>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D4F2B240>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243D59A16C0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243C95B80E0>)
-           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000243CCD019E0>)
-           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000243D1E551C0>)
-           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000243D3168E00>)
-           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000243D593AA20>)
-           7         2.40         2.40         0.34  attack.py:<lambda>
-           6         2.40         2.40         0.40  ~:0(<method 'get_move_cooldown' of 'builtins.Controller' objects>)
+           2         8.80        58.10        29.05  spawn_plan.py:_all_dir_endpoints
+          25         8.80         8.80         0.35  map_info.py:_compute_predicted_enemy_core
+          15         8.30         8.30         0.55  explore.py:init
+          14         7.90         7.90         0.56  ~:0(<method 'can_build_bridge' of 'builtins.Controller' objects>)
+          17         7.60         7.60         0.45  ~:0(<method 'get_max_hp' of 'builtins.Controller' objects>)
+          15         7.50         7.50         0.50  route.py:init
+          15         7.00         7.00         0.47  secure.py:init
+          25         6.70         6.70         0.27  turret_priority.py:<lambda>
+          13         6.10         6.10         0.47  ~:0(<method 'keys' of 'dict' objects>)
+           2         6.00        53.50        26.75  core.py:init
+           1         5.80         5.80         5.80  ~:0(<function Random.seed at 0x00000166B1E591C0>)
+          15         5.70         5.70         0.38  harvest.py:init
+           1         5.00         5.00         5.00  ~:0(<function Random.seed at 0x00000166B72E9440>)
+           1         4.90         4.90         4.90  ~:0(<function Random.seed at 0x00000166AA9E09A0>)
+          15         4.90         4.90         0.33  disrupt.py:init
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000166AA4F87C0>)
+           1         4.70         4.70         4.70  ~:0(<function Random.seed at 0x00000166B36CFD80>)
+           1         4.50         4.50         4.50  ~:0(<function Random.seed at 0x00000166B2FFCE00>)
+          22         4.40         4.40         0.20  explore.py:<lambda>
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000166B26B82C0>)
+           1         4.30         4.30         4.30  ~:0(<function Random.seed at 0x00000166A8C57C40>)
+           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000166B5720400>)
+           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000166B2F8CE00>)
+           1         4.20         4.20         4.20  ~:0(<function Random.seed at 0x00000166A96080E0>)
+           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000166AC7F8860>)
+           1         4.10         4.10         4.10  ~:0(<function Random.seed at 0x00000166A9113EC0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000166A7613D80>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000166B35A94E0>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000166B4A82020>)
+           1         4.00         4.00         4.00  ~:0(<function Random.seed at 0x00000166B52D1D00>)
+           3         3.90         4.80         1.60  explore.py:_wait_for_chokepoint_if_enabled
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166AEF71D00>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B197B4C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B2BC8720>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B4AAEC00>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B4D414E0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B528CEA0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B4BA51C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B514F100>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B35D2B60>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166AD16E840>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166AC2C8D60>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B48AC720>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B7276480>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B32D07C0>)
+           1         3.90         3.90         3.90  ~:0(<function Random.seed at 0x00000166B73C9A80>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166AD90DDA0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166AF9D6C00>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B2331BC0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B0427CE0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B4D51080>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B4F91A80>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B26B9440>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166AF310D60>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B31C1DA0>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B3213C40>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B574BE20>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B5BEF420>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B5482660>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B6FF1760>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B2DCB420>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166AC785E40>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166A9E7CD60>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166AD36D940>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B6E6D760>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166B72D9440>)
+           1         3.80         3.80         3.80  ~:0(<function Random.seed at 0x00000166A9FFC5E0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166AD3EDBC0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166AF4FA660>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166AFEFF100>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166B1950AE0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166B25614E0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166B5648B80>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166AF30BB00>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166ABEA8B80>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166B5468AE0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166B225B920>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166B499FB00>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166AF6365C0>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166A9B10400>)
+           1         3.70         3.70         3.70  ~:0(<function Random.seed at 0x00000166ACD499E0>)
+          10         3.70         3.70         0.37  ~:0(<method 'values' of 'dict' objects>)
+           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000166B041B240>)
+           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000166B25E1DA0>)
+           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000166AA1D76A0>)
+           1         3.60         3.60         3.60  ~:0(<function Random.seed at 0x00000166B21A2200>)
+          16         3.50         3.50         0.22  ~:0(<method 'index' of 'tuple' objects>)
+           5         3.50         3.50         0.70  turret_launcher.py:init
+           7         3.00         3.00         0.43  attack.py:<lambda>
+           6         2.80         2.80         0.47  ~:0(<method 'get_move_cooldown' of 'builtins.Controller' objects>)
+           2         2.40         2.70         1.35  spawn_plan.py:pick_n_directions
            2         2.00         2.00         1.00  chokepoint.py:abandon_target
-           2         1.90         2.20         1.10  explore.py:_clear_replaceable
-           2         1.50         1.70         0.85  spawn_plan.py:pick_n_directions
-           2         1.20         2.50         1.25  explore.py:_try_clear_enemy_chokepoint_blocker
-           2         1.20         1.80         0.90  builder.py:_try_reclaim_destroyed_tile
-           1         1.10         1.10         1.10  chokepoint.py:mark_completed
+           2         2.00         2.40         1.20  explore.py:_clear_replaceable
+           1         1.60         1.60         1.60  chokepoint.py:mark_completed
+           2         1.40         1.90         0.95  builder.py:_try_reclaim_destroyed_tile
            3         0.90         0.90         0.30  builder.py:wait_for_chokepoint
+           2         0.80         2.20         1.10  explore.py:_try_clear_enemy_chokepoint_blocker
