@@ -49,6 +49,8 @@ def _find_chase_target(damaged: bool = True):
     w = map_info._width
     # Filter enemy bots in zone, unclaimed
     enemy_bots = map_info._bm_enemy_bots
+    if units.builder._stay_near_core:
+        enemy_bots &= units.builder.near_core_mask()
 
     if not enemy_bots:
         log("no enemies")
@@ -134,7 +136,10 @@ def _find_chase_target(damaged: bool = True):
 def _healable_mask():
     """Bitmask of friendly buildings."""
     my_team_idx = map_info._my_team_idx
-    return map_info._bm_team[my_team_idx]
+    result = map_info._bm_team[my_team_idx]
+    if units.builder._stay_near_core:
+        result &= units.builder.near_core_mask()
+    return result
 
 
 def _mutual_sentinel_threat():

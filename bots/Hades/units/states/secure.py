@@ -13,6 +13,8 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = securable_ore() & ~((_too_expensive()) & ~(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])) & ~cant_secure()
+    if units.builder._stay_near_core:
+        available &= units.builder.near_core_mask()
     # Defer ore tiles whose only unsecured cardinal side is itself a
     # harvest-ready ore: harvest will plant a harvester there next turn,
     # which secures this tile for free. Avoids racing secure into paving

@@ -1055,6 +1055,10 @@ def _my_claims():
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     _ensure_round_cache()
     preferred, fallback = _round_cache_attack_candidates
+    if units.builder._stay_near_core:
+        near = units.builder.near_core_mask()
+        preferred &= near
+        fallback &= near
     combined = preferred | fallback
     claimed = pathing.claim_subset(
         my_mask,

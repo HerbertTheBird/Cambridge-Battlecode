@@ -132,6 +132,8 @@ def _my_claims():
         | _orphan_harvesters(not_blocked_mask)
         | _orphan_foundries(not_blocked_mask)
     ) & ~avoid
+    if units.builder._stay_near_core:
+        candidates &= units.builder.near_core_mask()
     return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, candidates, tie_self=True)
 
 _cached_claims = 0

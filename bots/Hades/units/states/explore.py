@@ -41,6 +41,22 @@ def generate_explore_target():
     nlc = map_info._not_left_col
     nrc = map_info._not_right_col
     board = (1 << (w * map_info._height)) - 1
+    if units.builder._stay_near_core:
+        near = units.builder.near_core_mask()
+        avoid = map_info.get_avoid(False, False, False)
+        candidates = near & ~avoid
+        if not candidates:
+            candidates = near
+        if candidates:
+            count = candidates.bit_count()
+            pick = random.randint(0, count - 1)
+            mask = candidates
+            for _ in range(pick):
+                mask &= mask - 1
+            lsb = mask & -mask
+            n = lsb.bit_length() - 1
+            explore_target = Position(n % w, n // w)
+            return
     avoid = map_info.get_avoid(False, False, False)
     if rc.get_global_resources()[0] < rc.get_harvester_cost()[0]*2:
         avoid |= map_info._bm_seen & ~map_info._bm_any_building & ~map_info._bm_env[map_info._IDX_ENV_WALL]
@@ -392,7 +408,6 @@ def run():
     if explore_target is None or map_info._my_pos.distance_squared(explore_target) <= 18:
         generate_explore_target()
         _explore_target_from_initial = False
-
     attempts = 0
     while attempts < 1:
         if not nav.move_to(explore_target):

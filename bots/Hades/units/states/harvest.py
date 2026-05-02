@@ -13,6 +13,8 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
+    if units.builder._stay_near_core:
+        available &= units.builder.near_core_mask()
     return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 def init(c: Controller):

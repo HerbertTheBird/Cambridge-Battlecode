@@ -42,6 +42,37 @@ _initial_explore_calculated = False
 _initial_explore_target: Position | None = None
 _initial_explore_round = -1
 
+# Builders spawned on round 1 stay close to the core; their state targets and
+# explore tiles are restricted to within STAY_NEAR_CORE_DSQ of the core.
+STAY_NEAR_CORE_DSQ = 100
+_stay_near_core = False
+_first_run_done = False
+_near_core_mask_cache: tuple[Position | None, int] = (None, 0)
+
+
+def near_core_mask() -> int:
+    """Bitmask of in-bounds tiles within STAY_NEAR_CORE_DSQ of my core."""
+    global _near_core_mask_cache
+    core = map_info._my_core
+    if core is None:
+        return map_info._board_mask
+    if _near_core_mask_cache[0] == core:
+        return _near_core_mask_cache[1]
+    w = map_info._width
+    h = map_info._height
+    cx, cy = core.x, core.y
+    result = 0
+    for y in range(h):
+        dy2 = (y - cy) * (y - cy)
+        if dy2 > STAY_NEAR_CORE_DSQ:
+            continue
+        for x in range(w):
+            dx = x - cx
+            if dx * dx + dy2 <= STAY_NEAR_CORE_DSQ:
+                result |= 1 << (x + y * w)
+    _near_core_mask_cache = (core, result)
+    return result
+
 
 def init(c: Controller):
     global rc, harvest_radius, nav
@@ -164,11 +195,15 @@ def select_best_state():
 
 
 def run():
-    global _waiting_for_chokepoint
+    global _waiting_for_chokepoint, _stay_near_core, _first_run_done
     _waiting_for_chokepoint = False
 
     # Sync round info
     current_round = rc.get_current_round()
+    if not _first_run_done:
+        _first_run_done = True
+        if current_round == 1:
+            _stay_near_core = True
     map_info.update(recompute=False)
     handle_comms()
     map_info.recompute_derived()
