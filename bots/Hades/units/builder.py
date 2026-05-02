@@ -185,7 +185,6 @@ def run():
 
     if _waiting_for_chokepoint:
         return
-
     # Road-spam if an enemy is closing in
     try_road_spam()
 

@@ -601,7 +601,7 @@ def _compute_fed() -> tuple[int, int]:
     ti_harv_adj = adj_seed(ti_harv)
     foundry_adj = adj_seed(foundries)
     ti_carry = (_bm_conv_ti & bm_conveyors) & (has_reverse | ti_harv_adj)
-    ax_carry = ((_bm_conv_raw_ax | _bm_conv_refined) & bm_conveyors) & (has_reverse | foundry_adj)
+    ax_carry = (_bm_conv_refined & bm_conveyors) & (has_reverse | foundry_adj)
 
     ti_seed = ti_harv_adj | ti_carry
     ax_seed = foundry_adj | ax_carry
