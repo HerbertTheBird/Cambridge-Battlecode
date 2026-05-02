@@ -173,6 +173,7 @@ def run():
             securing = ( map_info._bm_team[my_team_idx]
                 & ~map_info._bm_et[map_info._IDX_ROAD]
                 & ~map_info._bm_et[map_info._IDX_MARKER]
+                & ~map_info._bm_guard_conveyor
             | map_info._bm_env[map_info._IDX_ENV_WALL]) |  map_info._bm_team[1-my_team_idx] & map_info._bm_et[map_info._IDX_HARVESTER]
             bottom_row = ((1<<w)-1)<<w*(map_info._height-1)
             top_row = ((1<<w)-1)
@@ -243,12 +244,6 @@ def run():
         if not cand_closest:
             _mark_cant_secure(cand_unsecured | cand_bit)
             log("exit 3, retrying")
-            print(
-                f"[SECURE_GIVEUP] round={rc.get_current_round()} unit={rc.get_id()} "
-                f"target={candidate} reason=no_reachable_unsecured_neighbor "
-                f"unsecured_bits={cand_unsecured.bit_count()} "
-                f"remaining_after={(available & ~cand_bit).bit_count()}"
-            )
             available &= ~cand_bit
             continue
         cand_closest_n = cand_closest.x + cand_closest.y * w
@@ -303,23 +298,11 @@ def run():
             log("secure cost: path_len", cand_path[2], "unsecured_conv", unsecured_conv_cost, "harvester", harvester_cost, "start_piece", start_piece_cost, "reserve", reserve_cost, "path", path_cost, "total", total_cost, "ti", rc.get_global_resources()[0], "unsecured", cand_unsecured.bit_count(), "is_conveyor", cand_is_conveyor)
         if cand_path is None and not secure_now:
             log("CANT SECURE", candidate, cand_done_conveyor, "— retrying")
-            # print(
-            #     f"[SECURE_GIVEUP] round={rc.get_current_round()} unit={rc.get_id()} "
-            #     f"target={candidate} reason=no_conveyor_path "
-            #     f"done_conveyor={cand_done_conveyor} "
-            #     f"remaining_after={(available & ~cand_bit).bit_count()}"
-            # )
             _mark_cant_secure(cand_bit)
             available &= ~cand_bit
             continue
         if cand_path is not None and not secure_now and _cost_map[cand_n][0] > rc.get_global_resources()[0]:
             log("too expensive", candidate, _cost_map[cand_n][0], rc.get_global_resources()[0], "— retrying")
-            # print(
-            #     f"[SECURE_GIVEUP] round={rc.get_current_round()} unit={rc.get_id()} "
-            #     f"target={candidate} reason=too_expensive "
-            #     f"cost={_cost_map[cand_n][0]} ti={rc.get_global_resources()[0]} "
-            #     f"remaining_after={(available & ~cand_bit).bit_count()}"
-            # )
             available &= ~cand_bit
             continue
         best_ore = candidate
