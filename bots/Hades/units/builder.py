@@ -20,7 +20,7 @@ from log import DRAW_DEBUG
 rc: Controller
 nav: Pathing = None
 
-WAIT_FOR_CHOKEPOINT = True
+WAIT_FOR_CHOKEPOINT = False
 _waiting_for_chokepoint = False
 
 # Sorted in descending order of max score to allow early break in selection loop

@@ -26,6 +26,7 @@ from voronoi_core import NUMERIC_MODE_FLOAT, Polygon as ForonoiPolygon, Voronoi 
 from voronoi_core.events.circle_event import CircleEvent
 from voronoi_core.events.site_event import SiteEvent
 from voronoi_core.graph.point import Point as ForonoiPoint
+from log import CHOKEPOINT_DRAW_DEBUG
 
 Cell = Tuple[int, int]
 Point = Tuple[float, float]
@@ -80,7 +81,6 @@ CHOKEPOINT_MAX_STAGES_PER_TICK = 16
 CHOKEPOINT_MAX_SWEEP_EVENTS_PER_TICK = 64
 CHOKEPOINT_MAX_FINISH_EDGES_PER_TICK = 48
 CHOKEPOINT_MAX_EXTRACT_EDGES_PER_TICK = 192
-CHOKEPOINT_DRAW_DEBUG = True
 CHOKEPOINT_DEBUG_MAX_LIVE_VORONOI_EDGES = 96
 CHOKEPOINT_DEBUG_MAX_GRAPH_EDGES = 160
 CHOKEPOINT_DEBUG_MAX_SITE_GUIDES = 24
