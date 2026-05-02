@@ -6,7 +6,6 @@ import map_info
 import pathing
 from pathing import Pathing
 import comms
-from _config import USE_CHOKEPOINTS
 from units.spawn_plan import get_ray_endpoint, INITIAL_EXPLORE_MAX_STEPS, INITIAL_SPAWN_COUNT
 
 import units.states.explore  as explore
@@ -245,8 +244,7 @@ def run():
     best_state = select_best_state()
     best_state.run()
 
-    if USE_CHOKEPOINTS:
-        explore.try_passive_chokepoint_action_only()
+    explore.try_passive_chokepoint_action_only()
 
 
     # Try healing adjacent building

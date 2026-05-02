@@ -1,6 +1,5 @@
 from collections import deque
 
-from _config import USE_CHOKEPOINTS
 import chokepoint
 import map_info
 from pathing import Pathing
@@ -392,7 +391,7 @@ def run():
     global explore_target, _explore_target_from_initial
     log("EXPLORE")
     
-    if USE_CHOKEPOINTS and _try_passive_chokepoint_build():
+    if _try_passive_chokepoint_build():
         return
 
     if units.builder._initial_explore_target is not None:
