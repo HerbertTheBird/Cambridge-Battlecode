@@ -93,26 +93,34 @@ def _point_on_segment(pt: Point, a: Point, b: Point, eps: float = 1e-9) -> bool:
 
 
 def point_in_polygon(pt: Point, polygon: Sequence[Point], eps: float = 1e-9) -> bool:
-    if len(polygon) < 3:
+    n = len(polygon)
+    if n < 3:
         return False
 
     inside = False
-    j = len(polygon) - 1
     px, py = pt
+    # Track previous vertex via locals to avoid the polygon[j] tuple unpack
+    # each iteration.
+    xj, yj = polygon[-1]
 
-    for i, (xi, yi) in enumerate(polygon):
-        xj, yj = polygon[j]
-        if _point_on_segment(pt, (xi, yi), (xj, yj), eps):
-            return True
+    for i in range(n):
+        xi, yi = polygon[i]
 
-        intersects = ((yi > py) != (yj > py))
-        if intersects:
+        # _point_on_segment inlined: collinear cross + on-segment dot test.
+        cross = (xj - xi) * (py - yi) - (yj - yi) * (px - xi)
+        if -eps <= cross <= eps:
+            dot = (px - xi) * (px - xj) + (py - yi) * (py - yj)
+            if dot <= eps:
+                return True
+
+        if (yi > py) != (yj > py):
             denom = yj - yi
-            if abs(denom) > eps:
+            if denom > eps or denom < -eps:
                 x_cross = xi + (py - yi) * (xj - xi) / denom
                 if x_cross >= px - eps:
                     inside = not inside
-        j = i
+
+        xj, yj = xi, yi
 
     return inside
 
@@ -137,40 +145,70 @@ def _mark_point_boundary(row: List[bool], scale: int, x: float, eps: float) -> N
             row[px] = True
 
 
-def _fill_scanline_from_polygon(row: List[bool], y: float, scale: int, polygon: Sequence[Point], eps: float = 1e-9) -> None:
-    crossings: List[float] = []
-    prev_x, prev_y = polygon[-1]
+def _classify_polygon_edges(polygon: Sequence[Point], eps: float = 1e-9):
+    """Split polygon edges into horizontal (dy ~ 0) and sloped lists.
 
+    horizontal: list of (prev_x, prev_y, cur_x)
+    sloped:     list of (prev_x, prev_y, dx, dy, y_min_minus_eps, y_max_plus_eps)
+    Pre-computing these once avoids redoing dy / dx / min / max per scanline.
+    """
+    horizontal = []
+    sloped = []
+    prev_x, prev_y = polygon[-1]
     for cur_x, cur_y in polygon:
         dy = cur_y - prev_y
-
-        if abs(dy) <= eps:
-            if abs(y - prev_y) <= eps:
-                _mark_horizontal_boundary(row, scale, prev_x, cur_x, eps)
+        if -eps <= dy <= eps:
+            horizontal.append((prev_x, prev_y, cur_x))
         else:
-            if ((prev_y > y) != (cur_y > y)):
-                crossings.append(prev_x + (y - prev_y) * (cur_x - prev_x) / dy)
-
-            if min(prev_y, cur_y) - eps <= y <= max(prev_y, cur_y) + eps:
-                x_on_edge = prev_x + (y - prev_y) * (cur_x - prev_x) / dy
-                _mark_point_boundary(row, scale, x_on_edge, eps)
-
+            if prev_y < cur_y:
+                y_lo, y_hi = prev_y, cur_y
+            else:
+                y_lo, y_hi = cur_y, prev_y
+            sloped.append((prev_x, prev_y, cur_x - prev_x, dy, y_lo - eps, y_hi + eps))
         prev_x, prev_y = cur_x, cur_y
+    return horizontal, sloped
+
+
+def _fill_scanline_from_classified(row: List[bool], y: float, scale: int,
+                                   horizontal, sloped, eps: float = 1e-9) -> None:
+    # Horizontal edges only matter when y sits exactly on them.
+    for prev_x, prev_y, cur_x in horizontal:
+        if -eps <= y - prev_y <= eps:
+            _mark_horizontal_boundary(row, scale, prev_x, cur_x, eps)
+
+    crossings: List[float] = []
+    crossings_append = crossings.append
+    cy = y  # local-bind for the tight loop
+    for prev_x, prev_y, dx, dy, y_lo, y_hi in sloped:
+        if (prev_y > cy) != ((prev_y + dy) > cy):
+            crossings_append(prev_x + (cy - prev_y) * dx / dy)
+        if y_lo <= cy <= y_hi:
+            _mark_point_boundary(row, scale, prev_x + (cy - prev_y) * dx / dy, eps)
 
     crossings.sort()
     inside = False
     cross_index = 0
     cross_count = len(crossings)
+    inv_scale = 1.0 / scale
+    half_inv = 0.5 * inv_scale
+    width = len(row)
 
-    for px in range(len(row)):
+    for px in range(width):
         if row[px]:
             continue
 
-        x = (px + 0.5) / scale
+        x = px * inv_scale + half_inv
         while cross_index < cross_count and crossings[cross_index] < x - eps:
             inside = not inside
             cross_index += 1
         row[px] = inside
+
+
+def _fill_scanline_from_polygon(row: List[bool], y: float, scale: int, polygon: Sequence[Point], eps: float = 1e-9) -> None:
+    """Compatibility wrapper — call sites that pre-classify should use the
+    `_fill_scanline_from_classified` variant directly."""
+    horizontal, sloped = _classify_polygon_edges(polygon, eps)
+    _fill_scanline_from_classified(row, y, scale, horizontal, sloped, eps)
 
 
 def make_mask(height: int, width: int, fill: bool = False) -> Mask:
@@ -223,9 +261,13 @@ def build_analysis_mask(rows: int, cols: int, scale: int, polygon: Sequence[Poin
                 mask[py][px_start:px_end + 1] = fill_row
         return mask
 
+    # Pre-classify polygon edges once; each scanline reuses these tuples.
+    horizontal, sloped = _classify_polygon_edges(polygon)
+    inv_scale = 1.0 / scale
+    half_inv = 0.5 * inv_scale
     for py in range(height):
-        y = (py + 0.5) / scale
-        _fill_scanline_from_polygon(mask[py], y, scale, polygon)
+        y = py * inv_scale + half_inv
+        _fill_scanline_from_classified(mask[py], y, scale, horizontal, sloped)
 
     return mask
 
@@ -373,67 +415,111 @@ def boundary_segments_from_mask(mask: Mask, scale: int) -> List[Segment]:
     height = len(mask)
     width = len(mask[0]) if height else 0
     segments: List[Segment] = []
+    if height == 0 or width == 0:
+        return segments
+
+    inv_scale = 1.0 / scale
+    # Pre-compute the world-space coordinate of every grid line once. The inner
+    # loops do many `run_start / scale` and `px / scale` divisions otherwise.
+    x_coords = [round(i * inv_scale, 9) for i in range(width + 1)]
+    y_coords = [round(i * inv_scale, 9) for i in range(height + 1)]
+
+    seg_append = segments.append
 
     for py in range(height):
-        y0 = round(py / scale, 9)
-        y1 = round((py + 1) / scale, 9)
+        y0 = y_coords[py]
+        y1 = y_coords[py + 1]
         row = mask[py]
         row_above = mask[py - 1] if py > 0 else None
         row_below = mask[py + 1] if py + 1 < height else None
 
         run_start = None
-        for px in range(width):
-            has_top = row[px] and (row_above is None or not row_above[px])
-            if has_top:
-                if run_start is None:
-                    run_start = px
-            elif run_start is not None:
-                segments.append(((run_start / scale, y0), (px / scale, y0)))
-                run_start = None
+        if row_above is None:
+            for px in range(width):
+                if row[px]:
+                    if run_start is None:
+                        run_start = px
+                elif run_start is not None:
+                    seg_append(((x_coords[run_start], y0), (x_coords[px], y0)))
+                    run_start = None
+        else:
+            for px in range(width):
+                if row[px] and not row_above[px]:
+                    if run_start is None:
+                        run_start = px
+                elif run_start is not None:
+                    seg_append(((x_coords[run_start], y0), (x_coords[px], y0)))
+                    run_start = None
         if run_start is not None:
-            segments.append(((run_start / scale, y0), (width / scale, y0)))
+            seg_append(((x_coords[run_start], y0), (x_coords[width], y0)))
 
         run_start = None
-        for px in range(width):
-            has_bottom = row[px] and (row_below is None or not row_below[px])
-            if has_bottom:
-                if run_start is None:
-                    run_start = px
-            elif run_start is not None:
-                segments.append(((run_start / scale, y1), (px / scale, y1)))
-                run_start = None
+        if row_below is None:
+            for px in range(width):
+                if row[px]:
+                    if run_start is None:
+                        run_start = px
+                elif run_start is not None:
+                    seg_append(((x_coords[run_start], y1), (x_coords[px], y1)))
+                    run_start = None
+        else:
+            for px in range(width):
+                if row[px] and not row_below[px]:
+                    if run_start is None:
+                        run_start = px
+                elif run_start is not None:
+                    seg_append(((x_coords[run_start], y1), (x_coords[px], y1)))
+                    run_start = None
         if run_start is not None:
-            segments.append(((run_start / scale, y1), (width / scale, y1)))
+            seg_append(((x_coords[run_start], y1), (x_coords[width], y1)))
 
     for px in range(width):
-        x0 = round(px / scale, 9)
-        x1 = round((px + 1) / scale, 9)
+        x0 = x_coords[px]
+        x1 = x_coords[px + 1]
 
         run_start = None
-        for py in range(height):
-            row = mask[py]
-            has_left = row[px] and (px == 0 or not row[px - 1])
-            if has_left:
-                if run_start is None:
-                    run_start = py
-            elif run_start is not None:
-                segments.append(((x0, run_start / scale), (x0, py / scale)))
-                run_start = None
+        if px == 0:
+            for py in range(height):
+                if mask[py][px]:
+                    if run_start is None:
+                        run_start = py
+                elif run_start is not None:
+                    seg_append(((x0, y_coords[run_start]), (x0, y_coords[py])))
+                    run_start = None
+        else:
+            px_minus_1 = px - 1
+            for py in range(height):
+                row = mask[py]
+                if row[px] and not row[px_minus_1]:
+                    if run_start is None:
+                        run_start = py
+                elif run_start is not None:
+                    seg_append(((x0, y_coords[run_start]), (x0, y_coords[py])))
+                    run_start = None
         if run_start is not None:
-            segments.append(((x0, run_start / scale), (x0, height / scale)))
+            seg_append(((x0, y_coords[run_start]), (x0, y_coords[height])))
 
         run_start = None
-        for py in range(height):
-            row = mask[py]
-            has_right = row[px] and (px == width - 1 or not row[px + 1])
-            if has_right:
-                if run_start is None:
-                    run_start = py
-            elif run_start is not None:
-                segments.append(((x1, run_start / scale), (x1, py / scale)))
-                run_start = None
+        if px == width - 1:
+            for py in range(height):
+                if mask[py][px]:
+                    if run_start is None:
+                        run_start = py
+                elif run_start is not None:
+                    seg_append(((x1, y_coords[run_start]), (x1, y_coords[py])))
+                    run_start = None
+        else:
+            px_plus_1 = px + 1
+            for py in range(height):
+                row = mask[py]
+                if row[px] and not row[px_plus_1]:
+                    if run_start is None:
+                        run_start = py
+                elif run_start is not None:
+                    seg_append(((x1, y_coords[run_start]), (x1, y_coords[py])))
+                    run_start = None
         if run_start is not None:
-            segments.append(((x1, run_start / scale), (x1, height / scale)))
+            seg_append(((x1, y_coords[run_start]), (x1, y_coords[height])))
 
     return merge_axis_aligned_segments(segments)
 

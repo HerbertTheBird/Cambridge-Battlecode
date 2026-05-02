@@ -141,6 +141,10 @@ class AnalyzerState:
     analysis_mask: Mask = field(default_factory=list)
     kept_obstacle_mask: Mask = field(default_factory=list)
     free_mask: Mask = field(default_factory=list)
+    # Cached free_mask dimensions so segment_is_inside_free_space doesn't
+    # call len() on every Voronoi edge.
+    free_height: int = 0
+    free_width: int = 0
     free_boundary_segments: List[Tuple[Point, Point]] = field(default_factory=list)
     free_boundary_verticals: List[Tuple[float, float, float]] = field(default_factory=list)
     free_boundary_horizontals: List[Tuple[float, float, float]] = field(default_factory=list)
@@ -188,18 +192,21 @@ class AnalyzerState:
 
     def collect_boundary_samples(self, spacing: float) -> List[Point]:
         samples: Set[Tuple[int, int]] = set()
+        samples_add = samples.add
         spacing = max(spacing, 1.0 / max(self.raster_scale, 1))
         for start, end in self.free_boundary_segments:
             x1, y1 = start
             x2, y2 = end
-            seg_len = math.hypot(x2 - x1, y2 - y1)
+            dx = x2 - x1
+            dy = y2 - y1
+            seg_len = math.hypot(dx, dy)
             steps = max(1, int(math.ceil(seg_len / spacing)))
+            inv_steps = 1.0 / steps
             for k in range(steps + 1):
-                t = k / steps
-                samples.add(self.quantize_key(
-                    x1 + t * (x2 - x1),
-                    y1 + t * (y2 - y1),
-                ))
+                t = k * inv_steps
+                # quantize_key inlined.
+                samples_add((int((x1 + t * dx) * 10000.0 + 0.5),
+                             int((y1 + t * dy) * 10000.0 + 0.5)))
         return [(x * 0.0001, y * 0.0001) for x, y in samples]
 
     def quantize_key(self, x: float, y: float) -> Tuple[int, int]:
@@ -207,28 +214,41 @@ class AnalyzerState:
 
     def segment_is_inside_free_space(self, p1: Point, p2: Point) -> bool:
         free_mask = self.free_mask
-        if not free_mask:
-            return False
-        height = len(free_mask)
-        width = len(free_mask[0]) if height else 0
-        if width == 0 or height == 0:
+        height = self.free_height
+        width = self.free_width
+        if width == 0 or height == 0 or not free_mask:
             return False
 
+        cfg = self.cfg
+        cols = cfg.cols
+        rows = cfg.rows
         scale = self.raster_scale
-        cols = self.cfg.cols
-        rows = self.cfg.rows
-        if p1[0] < 0.0 or p1[1] < 0.0 or p2[0] < 0.0 or p2[1] < 0.0:
+
+        p1x = p1[0]
+        p1y = p1[1]
+        p2x = p2[0]
+        p2y = p2[1]
+        if p1x < 0.0 or p1y < 0.0 or p2x < 0.0 or p2y < 0.0:
             return False
-        if p1[0] > cols or p2[0] > cols or p1[1] > rows or p2[1] > rows:
+        if p1x > cols or p2x > cols or p1y > rows or p2y > rows:
             return False
-        x1 = min(width - 1, int(p1[0] * scale))
-        y1 = min(height - 1, int(p1[1] * scale))
-        x2 = min(width - 1, int(p2[0] * scale))
-        y2 = min(height - 1, int(p2[1] * scale))
+
+        width_m1 = width - 1
+        height_m1 = height - 1
+        ix = int(p1x * scale)
+        iy = int(p1y * scale)
+        x1 = ix if ix < width_m1 else width_m1
+        y1 = iy if iy < height_m1 else height_m1
+        ix = int(p2x * scale)
+        iy = int(p2y * scale)
+        x2 = ix if ix < width_m1 else width_m1
+        y2 = iy if iy < height_m1 else height_m1
 
         dx = x2 - x1
         dy = y2 - y1
-        steps = max(abs(dx), abs(dy))
+        adx = -dx if dx < 0 else dx
+        ady = -dy if dy < 0 else dy
+        steps = adx if adx > ady else ady
         if steps == 0:
             return False
 
@@ -859,6 +879,8 @@ class AnalyzerState:
                 self.analysis_mask,
             )
             self.free_mask = build_free_mask(self.analysis_mask, self.kept_obstacle_mask)
+            self.free_height = len(self.free_mask)
+            self.free_width = len(self.free_mask[0]) if self.free_height else 0
             self.free_boundary_segments = boundary_segments_from_mask(self.free_mask, scale)
             self.prepare_free_boundary_segments()
             return True
@@ -892,6 +914,8 @@ class AnalyzerState:
             min_area_pixels,
         )
         self.free_mask = build_free_mask(self.analysis_mask, self.kept_obstacle_mask)
+        self.free_height = len(self.free_mask)
+        self.free_width = len(self.free_mask[0]) if self.free_height else 0
         self.free_boundary_segments = boundary_segments_from_mask(self.free_mask, scale)
         self.prepare_free_boundary_segments()
         return any(any(row) for row in self.kept_obstacle_mask)
@@ -918,32 +942,41 @@ class AnalyzerState:
         return kept
 
     def site_radius_for_sites(self, x: float, y: float, site_a, site_b) -> Optional[float]:
-        best_sq = float("inf")
+        # Direct ._xd/._yd access skips the .xd/.yd property descriptors.
+        # In float numeric mode (the only mode used here) these are already
+        # plain floats, so no float() cast is needed.
         if site_a is not None:
-            dx = x - float(site_a.xd)
-            dy = y - float(site_a.yd)
+            dx = x - site_a._xd
+            dy = y - site_a._yd
             best_sq = dx * dx + dy * dy
+            if site_b is not None:
+                dx = x - site_b._xd
+                dy = y - site_b._yd
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < best_sq:
+                    best_sq = dist_sq
+            return math.sqrt(best_sq)
         if site_b is not None:
-            dx = x - float(site_b.xd)
-            dy = y - float(site_b.yd)
-            dist_sq = dx * dx + dy * dy
-            if dist_sq < best_sq:
-                best_sq = dist_sq
-        if best_sq == float("inf"):
-            return None
-        return math.sqrt(best_sq)
+            dx = x - site_b._xd
+            dy = y - site_b._yd
+            return math.sqrt(dx * dx + dy * dy)
+        return None
 
     def get_or_create_raw_vid(self, pt: Point, radius: Optional[float] = None) -> VertexId:
-        key = self.quantize_key(pt[0], pt[1])
-        vid = self.raw_vertex_ids_by_point.get(key)
+        # Inline quantize_key — saves one bound-method dispatch per call,
+        # which adds up across ~15k Voronoi-edge endpoints per analysis.
+        key = (int(pt[0] * 10000.0 + 0.5), int(pt[1] * 10000.0 + 0.5))
+        ids = self.raw_vertex_ids_by_point
+        vid = ids.get(key)
         if vid is not None:
             if radius is not None:
-                existing = self.raw_vertex_radius.get(vid)
+                radii = self.raw_vertex_radius
+                existing = radii.get(vid)
                 if existing is None or radius < existing:
-                    self.raw_vertex_radius[vid] = radius
+                    radii[vid] = radius
             return vid
-        vid = len(self.raw_vertex_ids_by_point)
-        self.raw_vertex_ids_by_point[key] = vid
+        vid = len(ids)
+        ids[key] = vid
         self.raw_vertices[vid] = (key[0] * 0.0001, key[1] * 0.0001)
         if radius is not None:
             self.raw_vertex_radius[vid] = radius
