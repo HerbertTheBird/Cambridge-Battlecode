@@ -241,12 +241,12 @@ def run():
 
         cost_estimate = rc.get_conveyor_cost()[0]*(unsecured.bit_count()-1) + rc.get_harvester_cost()[0]
         scale_estimate = (unsecured.bit_count()-1)*0.01 + 0.05
-        if (1<<(path[0].x+path[0].y*w))&unsecured and is_conveyor:
-            cost_estimate += rc.get_bridge_cost()[0]
-            scale_estimate += 0.1
-        else:
+        if is_conveyor:
             cost_estimate += rc.get_conveyor_cost()[0]
             scale_estimate += 0.01
+        else:
+            cost_estimate += rc.get_bridge_cost()[0]
+            scale_estimate += 0.1
         cost_estimate += map_info.builder_ti_reserve()
         _cost_map[best_n] = (cost_estimate + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate), rc.get_current_round())
     elif not secure_now:
@@ -254,6 +254,7 @@ def run():
         _mark_cant_secure(1 << (best_ore.x + best_ore.y * w))
         return
     if not secure_now and _cost_map[best_n][0] > rc.get_global_resources()[0]:
+        log("too expensive", best_ore, _cost_map[best_n][0], rc.get_global_resources()[0])
         return
     if path and not is_foundry:
         tn = path[1].x + path[1].y * w
