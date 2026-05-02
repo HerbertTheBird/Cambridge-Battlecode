@@ -917,26 +917,6 @@ class Pathing:
             self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
-    def calculate_conveyor_path(self, start: Position, raw_axionite: bool, update: bool = False):
-        log("conveyors from ", start, raw_axionite)
-        target, avoid = self._get_conveyor_targets_and_avoid(raw_axionite)
-        end_cost_mask = self.raw_ax_foundry_sites() if raw_axionite else 0
-        return self._calculate_conveyor_path_to(
-            start,
-            target,
-            avoid,
-            update,
-            end_cost_mask=end_cost_mask,
-        )
-
-    def calculate_attack_conveyor_path(self, start: Position, update: bool = False):
-        log("attack conveyors from ", start)
-        target, avoid = self._get_attack_conveyor_targets_and_avoid()
-        return self._calculate_conveyor_path_to(start, target, avoid, update)
-
-    # 1.0 for full cost, lower = discounted cost to more proactively start routes
-    CONVEYOR_COST_DISCOUNT = 0.7
-
     def conveyor_cost(self, dist, scaling=None):
         if scaling is None:
             scaling = self.rc.get_scale_percent() / 100
