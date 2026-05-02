@@ -1504,11 +1504,11 @@ def _compute_route_reaches_core() -> tuple[int, tuple[int, ...]]:
 
     # Single walk per layer: append to `order` and accumulate `next_layer`
     # in the same LSB-extraction loop, instead of two separate passes.
+    order_append = order.append
     while layer:
         reaches_core |= layer
         next_layer = 0
         m = layer
-        order_append = order.append
         while m:
             lsb = m & -m
             n = lsb.bit_length() - 1

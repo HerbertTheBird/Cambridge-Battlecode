@@ -396,6 +396,14 @@ class Pathing:
         h = self.height
         _init_col_masks(w, h)
 
+        # Precomputed perimeter (top + bottom rows | left + right cols), masked
+        # to the board. Used in bfs_move; constant for the lifetime of the bot.
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        board = map_info._board_mask
+        row_mask = (1 << w) - 1
+        self._board_border = (~nlc | ~nrc | row_mask | (row_mask << (w * (h - 1)))) & board
+
         # --- movement definitions (make these class-level if truly constant) ---
         raw_card: list[tuple[int, int, int]] = [
             (0, -1, 1),
@@ -543,12 +551,28 @@ class Pathing:
         #     return Position(s_idx % self.width, s_idx // self.width), Position(s_idx % self.width, s_idx // self.width), 0
         width = self.width
         height = self.height
+        # Hoist commonly-read map_info attrs into locals once.
+        bm_et = map_info._bm_et
+        bm_team = map_info._bm_team
+        bm_friendly_bots = map_info._bm_friendly_bots
+        bm_enemy_bots = map_info._bm_enemy_bots
+        idx_barrier = map_info._IDX_BARRIER
+        idx_road = map_info._IDX_ROAD
+        bm_conveyors = map_info._bm_conveyors
+        bm_my_core_area = map_info._bm_my_core_area
+        nlc = map_info._not_left_col
+        nrc = map_info._not_right_col
+        board = map_info._board_mask
+        # Hoist module cost globals.
+        bcost = barrier_cost
+        tcost = threat_cost
+
         avoid &= ~start_mask
-        builders_mask = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~start_mask
+        builders_mask = (bm_friendly_bots | bm_enemy_bots) & ~start_mask
         can_move_to = map_info.expand_chebyshev(start_mask) & ~avoid & ~builders_mask
 
         my_team_idx = map_info._my_team_idx
-        barriers = map_info._bm_et[map_info._IDX_BARRIER] & map_info._bm_team[my_team_idx]
+        barriers = bm_et[idx_barrier] & bm_team[my_team_idx]
         barriers &= ~start_mask
         threat = map_info._bm_enemy_launch_adj
         if avoid_turret:
@@ -559,15 +583,12 @@ class Pathing:
 
         # builder.draw_mask(barriers, 0, 0, 255)
 
-        walkable = (map_info._bm_et[map_info._IDX_ROAD]
-                    | map_info._bm_conveyors
-                    | map_info._bm_my_core_area
+        walkable = (bm_et[idx_road]
+                    | bm_conveyors
+                    | bm_my_core_area
                     | start_mask)
 
-        nlc = map_info._not_left_col
-        nrc = map_info._not_right_col
         w = width
-        board = map_info._board_mask
         not_avoid = board & ~avoid
 
 
@@ -576,14 +597,14 @@ class Pathing:
         nb_t   = board & ~barriers & threat
         b_t    = board & barriers  & threat
 
-        max_c = 1 + barrier_cost + threat_cost
-        max_seed = barrier_cost + threat_cost
+        max_c = 1 + bcost + tcost
+        max_seed = bcost + tcost
         cycle_len = max(max_c, max_seed) + 1
         frontier = [0] * cycle_len
         frontier[0]                                      = target_mask & nb_nt
-        frontier[barrier_cost]                          |= target_mask & b_nt
-        frontier[threat_cost]                           |= target_mask & nb_t
-        frontier[barrier_cost + threat_cost]            |= target_mask & b_t
+        frontier[bcost]                                 |= target_mask & b_nt
+        frontier[tcost]                                 |= target_mask & nb_t
+        frontier[bcost + tcost]                         |= target_mask & b_t
         visited = 0
         i = 0
         stuck_turns = 0
@@ -622,8 +643,7 @@ class Pathing:
                         from_mask = all_covered
                 if from_mask & walkable:
                     from_mask &= walkable
-                border = (~nlc | ~nrc | ((1 << width) - 1) | (((1 << width) - 1)<<(w*(height-1)))) & board
-                border |= map_info._bm_friendly_bots
+                border = self._board_border | bm_friendly_bots
                 last_working_mask = from_mask
                 c = 0
                 while from_mask and c <= 4:
@@ -661,9 +681,9 @@ class Pathing:
             new = expanded & ~visited & not_avoid
 
             frontier[(i + 1) % cycle_len]                                        |= new & nb_nt
-            frontier[(i + 1 + barrier_cost) % cycle_len]                         |= new & b_nt
-            frontier[(i + 1 + threat_cost) % cycle_len]                          |= new & nb_t
-            frontier[(i + 1 + barrier_cost + threat_cost) % cycle_len]           |= new & b_t
+            frontier[(i + 1 + bcost) % cycle_len]                                |= new & b_nt
+            frontier[(i + 1 + tcost) % cycle_len]                                |= new & nb_t
+            frontier[(i + 1 + bcost + tcost) % cycle_len]                        |= new & b_t
             i += 1
             frontier[slot] = 0
 
