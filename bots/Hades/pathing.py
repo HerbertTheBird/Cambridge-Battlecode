@@ -654,9 +654,9 @@ class Pathing:
         height = self.height
         if avoid is None:
             avoid = map_info.get_avoid(False, True, False)
-        # builder.draw_mask(avoid, 255, 0, 0)
+        builder.draw_mask(avoid, 255, 0, 0)
 
-        # builder.draw_mask(target_mask, 0, 255, 255)
+        builder.draw_mask(target_mask, 0, 255, 255)
         avoid &= ~start_mask
 
         if end_cost_mask:
@@ -983,6 +983,7 @@ class Pathing:
         if raw_axionite:
             ti_harvesters = map_info.expand_manhattan(map_info._bm_env[map_info._IDX_ENV_ORE_TI])
             target = self.raw_ax_foundry_sites()
+            avoid |= map_info.expand_manhattan(map_info._bm_my_core_area)
             avoid |= ti_harvesters
             target |= map_info._bm_route_targets & map_info._bm_conv_raw_ax
             return target, avoid
