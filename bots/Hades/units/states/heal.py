@@ -137,9 +137,77 @@ def _healable_mask():
     return map_info._bm_team[my_team_idx]
 
 
+def _mutual_sentinel_threat():
+    """Bitmask of MY sentinels that can shoot an enemy sentinel which can also
+    shoot them back. Treated as 'very damaged' for heal priority so we rush in
+    to keep them alive through the trade."""
+    my_idx = map_info._my_team_idx
+    enemy_idx = 1 - my_idx
+    my_sents = map_info._bm_et[map_info._IDX_SENTINEL] & map_info._bm_team[my_idx]
+    enemy_sents = map_info._bm_et[map_info._IDX_SENTINEL] & map_info._bm_team[enemy_idx]
+    if not my_sents or not enemy_sents:
+        return 0
+    w = map_info._width
+    h = map_info._height
+    bm_dir = map_info._bm_dir
+    OFFSETS = map_info._SENTINEL_OFFSETS
+
+    enemy_dir_at = {}
+    m = enemy_sents
+    while m:
+        lsb = m & -m
+        en = lsb.bit_length() - 1
+        m ^= lsb
+        for di in range(8):
+            if bm_dir[di] & lsb:
+                enemy_dir_at[en] = di
+                break
+
+    result = 0
+    m = my_sents
+    while m:
+        lsb = m & -m
+        mn = lsb.bit_length() - 1
+        m ^= lsb
+        my_x, my_y = mn % w, mn // w
+        my_di = None
+        for di in range(8):
+            if bm_dir[di] & lsb:
+                my_di = di
+                break
+        if my_di is None:
+            continue
+        attack_mask = 0
+        for dx, dy in OFFSETS[my_di]:
+            tx, ty = my_x + dx, my_y + dy
+            if 0 <= tx < w and 0 <= ty < h:
+                attack_mask |= 1 << (tx + ty * w)
+        hit_enemies = attack_mask & enemy_sents
+        if not hit_enemies:
+            continue
+        he = hit_enemies
+        while he:
+            elsb = he & -he
+            en = elsb.bit_length() - 1
+            he ^= elsb
+            edi = enemy_dir_at.get(en)
+            if edi is None:
+                continue
+            ex, ey = en % w, en // w
+            for dx, dy in OFFSETS[edi]:
+                if ex + dx == my_x and ey + dy == my_y:
+                    result |= lsb
+                    break
+            if result & lsb:
+                break
+    return result
+
+
 def _very_damaged_targets():
-    """Bitmask of friendly buildings with > 2 damage."""
-    return _healable_mask() & map_info._bm_very_damaged & ~map_info._bm_my_core_area & map_info._bm_visible
+    """Bitmask of friendly buildings with > 2 damage, plus any friendly sentinel
+    locked in a mutual-shot exchange with an enemy sentinel."""
+    base = _healable_mask() & map_info._bm_very_damaged & ~map_info._bm_my_core_area & map_info._bm_visible
+    return base | (_mutual_sentinel_threat() & map_info._bm_visible)
 
 
 def _heal_targets():
