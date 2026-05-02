@@ -257,8 +257,7 @@ def run():
         return
     if path and not is_foundry:
         tn = path[1].x + path[1].y * w
-        if not done_conveyor and is_conveyor and path[0] == closest and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
-            nav.move_to(path[1])
+        if not done_conveyor and is_conveyor and path[0] == closest and rc.get_position().distance_squared(path[1]) <= 2 and not (map_info._bm_team[my_team_idx] & (1 << tn) and not (map_info._bm_et[map_info._IDX_MARKER] & (1 << tn))):
             if rc.can_build_road(path[1]) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
                 rc.build_road(path[1])
                 map_info.update_at(path[1])
