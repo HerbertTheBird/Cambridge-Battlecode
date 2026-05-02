@@ -94,11 +94,10 @@ def _try_launcher_fallback():
     mask = map_info._bm_friendly_bots & ~my_bit & map_info._bm_visible & enemy_zone_4
     while mask:
         lsb = mask & -mask
-        n = lsb.bit_length() - 1
         friend_zone = map_info.expand_chebyshev(lsb, 4)
         nearby = enemies & friend_zone
         if nearby:
-            closest = nav.closest_within(nearby, Position(n % w, n // w), 4)
+            closest = nav.closest_within(nearby, lsb, 4)
             if closest[0]:
                 enemies ^= 1 << (closest[0].x + closest[0].y * w)
         mask ^= lsb
@@ -226,7 +225,7 @@ def _find_chase_target_main(damaged: bool = True):
         if not nearby:
             mask ^= lsb
             continue
-        closest = nav.closest_within(nearby, Position(n % w, n // w), 4)
+        closest = nav.closest_within(nearby, lsb, 4)
         if closest[0]:
             log("filtering", closest[0], "because", n%w, n//2, closest[1])
             filtered ^= (1<<(closest[0].x+closest[0].y*w))
