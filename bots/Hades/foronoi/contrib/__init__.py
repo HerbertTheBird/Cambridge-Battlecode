@@ -1,1 +1,0 @@
-from foronoi.contrib.bounding_circle import BoundingCircle

@@ -1324,146 +1324,182 @@ def run():
 
     width = map_info._width
     my_team_idx = map_info._my_team_idx
-    best = None
-    if preferred:
-        best, _ = nav.closest(preferred)
-    if best is None and fallback:
-        best, _ = nav.closest(fallback)
-    if best is None:
-        cant_attack |= preferred | fallback
-        return
+    excluded_this_turn = 0
 
-    # Locally prefer fully secured tiles: if any candidate's entire 3x3 is
-    # sealed by walls / non-walkable buildings / our launcher zones, and one
-    # is reachable within 2 pathing steps, prefer the closest such tile.
-    walkable_types_pref = (
-        map_info._bm_et[map_info._IDX_ROAD]
-        | map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-    )
-    non_walkable_pref = map_info._bm_any_building & ~walkable_types_pref
-    walls_pref = map_info._bm_env[map_info._IDX_ENV_WALL]
-    my_launchers_pref = (
-        map_info._bm_et[map_info._IDX_LAUNCHER]
-        & map_info._bm_team[my_team_idx]
-    )
-    launcher_zone_pref = (
-        map_info.expand_chebyshev(my_launchers_pref) | my_launchers_pref
-    )
-    sealed_pref = walls_pref | non_walkable_pref | launcher_zone_pref
-    not_sealed = ~sealed_pref & map_info._board_mask
-    # Chebyshev erosion: a tile is fully secured iff its 3x3 is in sealed_pref.
-    secured = ~map_info.expand_chebyshev(not_sealed) & map_info._board_mask
-    secured_candidates = secured & (preferred | fallback)
-    if secured_candidates:
-        sec_best, _ = nav.closest_within(secured_candidates, max_dist=2)
-        if sec_best is not None:
-            best = sec_best
+    while True:
+        eff_preferred = preferred & ~excluded_this_turn
+        eff_fallback = fallback & ~excluded_this_turn
 
-    best_n = best.x + best.y * width
-    best_bit = 1 << best_n
-    direction, turret_type, _ = get_best_direction(best)
-    is_fallback = not bool(preferred & best_bit)
-    best_id = map_info._building_id[best_n]
-    is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
+        if not eff_preferred and not eff_fallback:
+            return
 
-    log(f"Attack: best={best}, dir={direction}, type={turret_type}, fallback={is_fallback}")
+        best = None
+        if eff_preferred:
+            best, _ = nav.closest(eff_preferred)
+        if best is None and eff_fallback:
+            best, _ = nav.closest(eff_fallback)
+        if best is None:
+            cant_attack |= eff_preferred | eff_fallback
+            return
 
-    # High-priority lockdown: if target is an enemy conveyor and we can drop a
-    # launcher that (combined with non-walkable buildings) covers the whole 3x3
-    # around it, do that this turn instead of firing.
-    if is_fallback and _try_launcher_lockdown(best):
-        return
-
-    _, _enemy_bot_pathing_dist = nav.closest_within(map_info._bm_enemy_bots, max_dist=1)
-    enemy_bot_nearby = (_enemy_bot_pathing_dist != -1)
-    if is_fallback:
-        can_attack_despite_enemy = False
-
-        # if we have >= 2 builder bots (including ourselves) close by (within 5 tiles)
-        # for only one opponent bot within 2 tiles we attack
-        my_pos = rc.get_position()
-        friendly_builders_nearby_count = 1  # Counting myself
-        my_team = rc.get_team()
-        for unit_id in rc.get_nearby_units():
-            # Note: get_nearby_units does not include self
-            if rc.get_team(unit_id) == my_team and rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT:
-                unit_pos = rc.get_position(unit_id)
-                if my_pos.distance_squared(unit_pos) <= 25:
-                    friendly_builders_nearby_count += 1
-
-        # Count enemy bots reachable within 2 BFS steps via repeated closest-within calls.
-        _remaining_enemies = map_info._bm_enemy_bots
-        num_enemy_bots_very_close = 0
-        while _remaining_enemies:
-            _ep, _ed = nav.closest_within(_remaining_enemies, max_dist=2)
-            if _ep is None:
+        # Lead-metric refinement: among (preferred|fallback) tiles within 2
+        # pathing steps of me, pick the one maximizing
+        # (enemy's BFS dist to it - my BFS dist to it). Biases toward tiles
+        # where we have the largest head start.
+        all_candidates = eff_preferred | eff_fallback
+        best_lead = None
+        best_lead_tile = None
+        remaining = all_candidates
+        while remaining:
+            cand, my_d = nav.closest_within(remaining, max_dist=2)
+            if cand is None:
                 break
-            num_enemy_bots_very_close += 1
-            _remaining_enemies ^= 1 << (_ep.x + _ep.y * width)
+            cand_n = cand.x + cand.y * width
+            remaining &= ~(1 << cand_n)
+            _, their_d = nav.closest(map_info._bm_enemy_bots, pos=cand, side=False)
+            if their_d == -1:
+                their_d = 1 << 30
+            lead = their_d - my_d
+            if best_lead is None or lead > best_lead:
+                best_lead = lead
+                best_lead_tile = cand
+        if best_lead_tile is not None:
+            best = best_lead_tile
 
-        if friendly_builders_nearby_count >= 2 and num_enemy_bots_very_close == 1:
-            can_attack_despite_enemy = True
+        best_n = best.x + best.y * width
+        best_bit = 1 << best_n
+        direction, turret_type, _ = get_best_direction(best)
+        is_fallback = not bool(preferred & best_bit)
+        best_id = map_info._building_id[best_n]
+        is_mine = bool(map_info._bm_team[my_team_idx] & best_bit)
 
-        # if allied sentinel in sight also attack instead of waiting for opponent to leave
-        if not can_attack_despite_enemy:
-            my_sentinels = map_info._bm_team[my_team_idx] & map_info._bm_et[map_info._IDX_SENTINEL]
-            if my_sentinels & map_info._bm_seen_observed:
-                can_attack_despite_enemy = True
+        log(f"Attack: best={best}, dir={direction}, type={turret_type}, fallback={is_fallback}")
 
-        # If every tile in target's 3x3 is a wall, non-walkable building, or
-        # inside one of our launchers' 3x3, no enemy can reach to heal — attack.
-        if not can_attack_despite_enemy:
-            walkable_types_run = (
-                map_info._bm_et[map_info._IDX_ROAD]
-                | map_info._bm_et[map_info._IDX_CONVEYOR]
-                | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-                | map_info._bm_et[map_info._IDX_SPLITTER]
-                | map_info._bm_et[map_info._IDX_BRIDGE]
-            )
-            non_walkable_run = map_info._bm_any_building & ~walkable_types_run
-            walls_run = map_info._bm_env[map_info._IDX_ENV_WALL]
-            my_launchers_run = (
-                map_info._bm_et[map_info._IDX_LAUNCHER]
-                & map_info._bm_team[my_team_idx]
-            )
-            launcher_zone_run = (
-                map_info.expand_chebyshev(my_launchers_run) | my_launchers_run
-            )
-            target_zone_run = map_info.expand_chebyshev(best_bit) | best_bit
-            sealed = walls_run | non_walkable_run | launcher_zone_run
-            if (target_zone_run & ~sealed) == 0:
-                can_attack_despite_enemy = True
+        # High-priority lockdown: if target is an enemy conveyor and we can drop a
+        # launcher that (combined with non-walkable buildings) covers the whole 3x3
+        # around it, do that this turn instead of firing.
+        if is_fallback and _try_launcher_lockdown(best):
+            return
 
-        nav.move_to(best)
-        if rc.can_fire(best):
-            if (not enemy_bot_nearby or can_attack_despite_enemy) or rc.get_hp(best_id) <= 2:
-                rc.fire(best)
-                map_info.update_at(best)
-        if rc.get_position() == best and map_info._building_id[best_n] != best_id:
-            for d in map_info._DIRECTIONS:
-                if d == Direction.CENTRE:
+        _, _enemy_bot_pathing_dist = nav.closest_within(map_info._bm_enemy_bots, max_dist=1)
+        enemy_bot_nearby = (_enemy_bot_pathing_dist != -1)
+        if is_fallback:
+            can_attack_despite_enemy = False
+
+            # if we have >= 2 builder bots (including ourselves) close by (within 5 tiles)
+            # for only one opponent bot within 2 tiles we attack
+            my_pos = rc.get_position()
+            my_id = rc.get_id()
+            friendly_builders_nearby_count = 1  # Counting myself
+            friendly_builders_nearby_positions = []
+            my_team = rc.get_team()
+            for unit_id in rc.get_nearby_units():
+                if unit_id == my_id:
                     continue
-                if rc.can_move(d):
-                    rc.move(d)
-                    map_info.update_move()
+                if rc.get_team(unit_id) == my_team and rc.get_entity_type(unit_id) == EntityType.BUILDER_BOT:
+                    unit_pos = rc.get_position(unit_id)
+                    if my_pos.distance_squared(unit_pos) <= 25:
+                        friendly_builders_nearby_count += 1
+                        friendly_builders_nearby_positions.append(unit_pos)
+            log(f"AttackFallback friendlies_nearby_positions={friendly_builders_nearby_positions}")
+
+            # Count enemy bots reachable within 2 BFS steps via repeated closest-within calls.
+            _remaining_enemies = map_info._bm_enemy_bots
+            num_enemy_bots_very_close = 0
+            while _remaining_enemies:
+                _ep, _ed = nav.closest_within(_remaining_enemies, max_dist=2)
+                if _ep is None:
                     break
-    else:
-        nav.move_adjacent(best)
-        if best_id and is_mine:
-            if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
-                log(f"Attack destroy own building at {best}")
-                rc.destroy(best)
+                num_enemy_bots_very_close += 1
+                _remaining_enemies ^= 1 << (_ep.x + _ep.y * width)
+
+            despite_reason = None
+            if friendly_builders_nearby_count >= 2 and num_enemy_bots_very_close == 1:
+                can_attack_despite_enemy = True
+                despite_reason = "outnumbering"
+
+            # if allied sentinel in sight also attack instead of waiting for opponent to leave
+            if not can_attack_despite_enemy:
+                my_sentinels = map_info._bm_team[my_team_idx] & map_info._bm_et[map_info._IDX_SENTINEL]
+                if my_sentinels & map_info._bm_seen_observed:
+                    can_attack_despite_enemy = True
+                    despite_reason = "ally_sentinel_seen"
+
+            # If every tile in target's 3x3 is a wall, non-walkable building, or
+            # inside one of our launchers' 3x3, no enemy can reach to heal — attack.
+            if not can_attack_despite_enemy:
+                walkable_types_run = (
+                    map_info._bm_et[map_info._IDX_ROAD]
+                    | map_info._bm_et[map_info._IDX_CONVEYOR]
+                    | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
+                    | map_info._bm_et[map_info._IDX_SPLITTER]
+                    | map_info._bm_et[map_info._IDX_BRIDGE]
+                )
+                non_walkable_run = map_info._bm_any_building & ~walkable_types_run
+                walls_run = map_info._bm_env[map_info._IDX_ENV_WALL]
+                my_launchers_run = (
+                    map_info._bm_et[map_info._IDX_LAUNCHER]
+                    & map_info._bm_team[my_team_idx]
+                )
+                launcher_zone_run = (
+                    map_info.expand_chebyshev(my_launchers_run) | my_launchers_run
+                )
+                target_zone_run = map_info.expand_chebyshev(best_bit) | best_bit
+                sealed = walls_run | non_walkable_run | launcher_zone_run
+                if (target_zone_run & ~sealed) == 0:
+                    can_attack_despite_enemy = True
+                    despite_reason = "target_sealed"
+
+            stuck_no_fire = False
+            nav.move_to(best)
+            if rc.can_fire(best):
+                target_hp = rc.get_hp(best_id)
+                if not enemy_bot_nearby:
+                    fire_reason = "no_enemy_nearby"
+                elif can_attack_despite_enemy:
+                    fire_reason = f"despite={despite_reason}"
+                elif target_hp <= 2:
+                    fire_reason = f"target_hp={target_hp}"
+                else:
+                    fire_reason = None
+                log(
+                    f"AttackFallback enemy_bot_dist={_enemy_bot_pathing_dist} "
+                    f"friendlies_nearby={friendly_builders_nearby_count} "
+                    f"enemies_within_2={num_enemy_bots_very_close} "
+                    f"target_hp={target_hp} fire={fire_reason}"
+                )
+                if fire_reason is not None:
+                    rc.fire(best)
+                    map_info.update_at(best)
+                elif rc.get_position() == best:
+                    log(f"AttackFallback retry: stuck on {best}, excluding for this turn")
+                    excluded_this_turn |= best_bit
+                    stuck_no_fire = True
+            if stuck_no_fire:
+                continue
+            if rc.get_position() == best and map_info._building_id[best_n] != best_id:
+                for d in map_info._DIRECTIONS:
+                    if d == Direction.CENTRE:
+                        continue
+                    if rc.can_move(d):
+                        rc.move(d)
+                        map_info.update_move()
+                        break
+        else:
+            nav.move_adjacent(best)
+            if best_id and is_mine:
+                if not map_info.has_builder_bot(best) and rc.can_destroy(best) and rc.get_action_cooldown() == 0:
+                    log(f"Attack destroy own building at {best}")
+                    rc.destroy(best)
+                    map_info.update_at(best)
+        if turret_type == EntityType.GUNNER:
+            log("gunner cost", rc.get_gunner_cost(), rc.get_global_resources())
+            if rc.can_build_gunner(best, direction):
+                rc.build_gunner(best, direction)
                 map_info.update_at(best)
-    if turret_type == EntityType.GUNNER:
-        log("gunner cost", rc.get_gunner_cost(), rc.get_global_resources())
-        if rc.can_build_gunner(best, direction):
-            rc.build_gunner(best, direction)
-            map_info.update_at(best)
-    else:
-        log("sentinel cost", rc.get_sentinel_cost(), rc.get_global_resources())
-        if rc.can_build_sentinel(best, direction):
-            rc.build_sentinel(best, direction)
-            map_info.update_at(best)
+        else:
+            log("sentinel cost", rc.get_sentinel_cost(), rc.get_global_resources())
+            if rc.can_build_sentinel(best, direction):
+                rc.build_sentinel(best, direction)
+                map_info.update_at(best)
+        break

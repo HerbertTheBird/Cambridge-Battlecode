@@ -10,7 +10,7 @@ from cambc import Controller, EntityType, Position
 
 import map_info
 import pathing
-from chokepoint_runtime import (
+from geometry_core import (
     apply_diagonal_notches,
     boundary_segments_from_mask,
     build_analysis_mask,
@@ -22,10 +22,10 @@ from chokepoint_runtime import (
     rectangle_polygon,
     split_obstacle_mask_by_area,
 )
-from foronoi import NUMERIC_MODE_FLOAT, Polygon as ForonoiPolygon, Voronoi as ForonoiVoronoi, set_numeric_mode
-from foronoi.events.circle_event import CircleEvent
-from foronoi.events.site_event import SiteEvent
-from foronoi.graph.point import Point as ForonoiPoint
+from voronoi_core import NUMERIC_MODE_FLOAT, Polygon as ForonoiPolygon, Voronoi as ForonoiVoronoi, set_numeric_mode
+from voronoi_core.events.circle_event import CircleEvent
+from voronoi_core.events.site_event import SiteEvent
+from voronoi_core.graph.point import Point as ForonoiPoint
 
 Cell = Tuple[int, int]
 Point = Tuple[float, float]
