@@ -670,11 +670,10 @@ def get_best_direction(pos):
 # ---------------------------------------------------------------------------
 
 def _turret_feed_chains(max_steps: int = 8) -> int:
-    """Bitmask of my conveyor-like tiles that feed into my gunners/sentinels,
-    walking upstream up to max_steps hops. First hop: cardinal conveyors
-    pointing into each turret (turrets don't have a _conv_reverse entry).
-    Subsequent hops: upstream via _conv_reverse on the conveyor tiles.
-    Stops when the next hop yields no tile that's a conveyor-like type."""
+    """Bitmask of conveyor-type tiles (either team) that feed into my
+    gunners/sentinels, walking upstream up to max_steps hops via
+    `_conv_reverse`. Includes conveyors, armoured conveyors, bridges, and
+    splitters (whatever `_conv_reverse` registers)."""
     global _TURRET_FEED_CACHE_VERSION, _TURRET_FEED_CACHE_MASK
 
     sv = map_info._struct_version
@@ -687,40 +686,11 @@ def _turret_feed_chains(max_steps: int = 8) -> int:
         _TURRET_FEED_CACHE_VERSION = sv
         _TURRET_FEED_CACHE_MASK = 0
         return 0
-    w = map_info._width
-    conv_types = (
-        map_info._bm_et[map_info._IDX_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]
-        | map_info._bm_et[map_info._IDX_BRIDGE]
-        | map_info._bm_et[map_info._IDX_SPLITTER]
-    )
-    nlc = map_info._not_left_col
-    nrc = map_info._not_right_col
-    board = map_info._board_mask
-    conv_by_dir = map_info._bm_conv_by_dir
-
-    # First hop: for each cardinal direction d, a conveyor facing d sits
-    # opposite-of-d from the turret. Shift turrets to the source tile and
-    # intersect with conv_by_dir[d].
-    # d=0 NORTH (delta 0,-1): source is south of turret  -> turrets << w
-    # d=2 EAST  (delta 1, 0): source is west of turret   -> (turrets & nlc) >> 1
-    # d=4 SOUTH (delta 0, 1): source is north of turret  -> turrets >> w
-    # d=6 WEST  (delta -1,0): source is east of turret   -> (turrets & nrc) << 1
-    frontier = (
-        ((turrets << w) & board & conv_by_dir[0])
-        | (((turrets & nlc) >> 1) & conv_by_dir[2])
-        | ((turrets >> w) & conv_by_dir[4])
-        | (((turrets & nrc) << 1) & board & conv_by_dir[6])
-    )
-    frontier &= conv_types
-    if not frontier:
-        _TURRET_FEED_CACHE_VERSION = sv
-        _TURRET_FEED_CACHE_MASK = 0
-        return 0
 
     reverse = map_info._conv_reverse
-    result = frontier
-    for _ in range(max_steps - 1):
+    visited = 0
+    frontier = turrets
+    for _ in range(max_steps):
         next_frontier = 0
         m = frontier
         while m:
@@ -728,14 +698,14 @@ def _turret_feed_chains(max_steps: int = 8) -> int:
             n = lsb.bit_length() - 1
             next_frontier |= reverse[n]
             m ^= lsb
-        next_frontier &= conv_types & ~result
+        next_frontier &= ~visited
         if not next_frontier:
             break
-        result |= next_frontier
+        visited |= next_frontier
         frontier = next_frontier
     _TURRET_FEED_CACHE_VERSION = sv
-    _TURRET_FEED_CACHE_MASK = result
-    return result
+    _TURRET_FEED_CACHE_MASK = visited
+    return visited
 
 
 def _placement_candidates():
@@ -803,7 +773,7 @@ def _placement_candidates():
             map_info.expand_chebyshev(my_launchers) | my_launchers
         )
         enemy_passable = (
-            ~map_info.get_avoid(False, False, False, avoid_threat=False)
+            ~map_info.get_avoid(False, False, False, enemy_pov=True)
             & map_info._board_mask
             & ~my_launcher_zone
         )
@@ -833,6 +803,9 @@ def _placement_candidates():
     if not candidates:
         return _EMPTY_CANDIDATE_MASKS, _EMPTY_CANDIDATE_MASKS
     feed_chains = _turret_feed_chains()
+    if DRAW_DEBUG and feed_chains:
+        for p in map_info.iter_mask(feed_chains):
+            rc.draw_indicator_dot(p, 0, 200, 200)
     if feed_chains:
         candidates &= ~feed_chains
         if not candidates:

@@ -310,12 +310,13 @@ class Pathing:
             passable = map_info._bm_passable_FFF
         else:
             passable = (
-                ~map_info.get_avoid(False, False, False, avoid_threat=False)
+                ~map_info.get_avoid(False, False, False, enemy_pov=not side)
                 & map_info._board_mask
             )
         if avoid:
             passable &= ~avoid
-        passable |= targets
+        if side:
+            passable |= targets
         start = 1 << (pos.x + pos.y * w)
         if start & targets:
             return pos, 0

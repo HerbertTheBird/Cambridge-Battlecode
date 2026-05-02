@@ -1,8 +1,15 @@
-from cambc import Controller, Direction, EntityType, Position, Team, Environment
+from cambc import Controller, Direction, EntityType, Position, Team, Environment, GameConstants
 import map_info
 import pathing
 from pathing import Pathing
 from log import log
+import units.turret_priority as turret_priority
+
+# A gunner one-shots anything with HP ≤ its base damage. We deliberately use
+# the base damage (Ti ammo) here even when loaded with refined ax — being
+# conservative means we prefer guaranteed-kill targets. Overshooting an ax-
+# loaded gunner on a 12-HP target wastes some overkill but doesn't mispick.
+ONE_SHOT_HP = GameConstants.GUNNER_DAMAGE  # 10
 
 rc: Controller = None
 nav: Pathing = None
@@ -106,7 +113,8 @@ def _ally_feeder_mask(max_steps: int = 6) -> int:
     return visited
 
 
-def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
+def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool,
+              bot_must_be_on_my_conveyor: bool = False):
     """Walk forward from my_pos in `direction`. Friendly roads and any markers
     are pass-through; everything else is a stopping tile.
 
@@ -123,7 +131,9 @@ def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
       - Friendly conveyor that's part of an ally feeder chain: no fire.
       - Enemy building: fire (even past friendly roads).
       - Enemy builder bot: fire only if `allow_builder_bots` AND nothing in
-        front of it (no friendly road already passed)."""
+        front of it (no friendly road already passed). If
+        `bot_must_be_on_my_conveyor`, additionally require the bot to stand on
+        a friendly conveyor tile."""
     w = map_info._width
     cur = map_info.pos_add(my_pos, direction)
     fire_at = None
@@ -161,6 +171,21 @@ def _scan_ray(direction, attackable, feeder_mask, allow_builder_bots: bool):
                 return None
             if passed_road:
                 return None
+            if bot_must_be_on_my_conveyor:
+                my_convs = map_info._bm_conveyors & map_info._bm_team[map_info._my_team_idx]
+                if not (my_convs & (1 << n)):
+                    return None
+                # Only commit a rotation to clear an enemy bot off our line if
+                # the conveyor is already taking damage AND no friendly builder
+                # is within Chebyshev 1 (a friendly bot can heal/repair, so let
+                # it handle the trespasser instead of burning a rotation).
+                if bid is None:
+                    return None
+                if rc.get_hp(bid) >= rc.get_max_hp(bid):
+                    return None
+                cheb = map_info.expand_chebyshev(1 << n)
+                if cheb & map_info._bm_friendly_bots:
+                    return None
             return EntityType.BUILDER_BOT, fire_at
 
         # Building only
@@ -186,24 +211,57 @@ def _decide_fire():
     return None if res is None else res[1]
 
 
+def _hp_at(tile: Position) -> int:
+    """HP of the entity that would be hit at `tile`. Mirrors `_scan_ray`'s
+    resolution: builder-bot wins over building."""
+    bot_id = rc.get_tile_builder_bot_id(tile)
+    if bot_id is not None:
+        return rc.get_hp(bot_id)
+    bid = rc.get_tile_building_id(tile)
+    if bid is None:
+        return 0
+    return rc.get_hp(bid)
+
+
 def _choose_rotate_dir():
+    """Pick the best direction to rotate toward by scoring each non-current
+    facing's first-obstruction tile through the shared turret priority logic.
+
+    Enemy builder bots are only considered as a rotation target when they
+    stand on one of *my* conveyors — that's the legacy "bot trespassing on my
+    line" fallback. They're routed through the bot pool in `select_best`,
+    which only fires after priorities 1-4 are exhausted."""
     feeder_mask = _ally_feeder_mask()
     current = rc.get_direction()
-    best_dir = None
-    best_score = 0
+    w = map_info._width
+
+    candidates = []  # (tile, n, weight, hp, etype, direction)
     for d in map_info._DIRECTIONS:
         if d == current:
             continue
         attackable = _attackable_by_dir[d]
-        res = _scan_ray(d, attackable, feeder_mask, allow_builder_bots=False)
+        res = _scan_ray(d, attackable, feeder_mask,
+                        allow_builder_bots=True,
+                        bot_must_be_on_my_conveyor=True)
         if res is None:
             continue
-        etype, _ = res
-        score = _WEIGHTS.get(etype, 0)
-        if score > best_score:
-            best_score = score
-            best_dir = d
-    return best_dir
+        etype, fire_at = res
+        weight = _WEIGHTS.get(etype, 0)
+        n = fire_at.x + fire_at.y * w
+        hp = _hp_at(fire_at)
+        candidates.append((fire_at, n, weight, hp, etype, d))
+
+    if not candidates:
+        return None
+
+    priority_sets = turret_priority.compute_priority_sets(rc)
+    chosen = turret_priority.select_best(
+        candidates, priority_sets, nav, ONE_SHOT_HP,
+        bot_ring_mode='off',
+    )
+    if chosen is None:
+        return None
+    return chosen[5]
 
 
 def run():

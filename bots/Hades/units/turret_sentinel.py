@@ -1,8 +1,9 @@
-from cambc import Controller, Position, EntityType, Direction
+from cambc import Controller, Position, EntityType, Direction, GameConstants
 import map_info
 import pathing
 from pathing import Pathing
 from log import log
+import units.turret_priority as turret_priority
 
 rc: Controller = None
 nav: Pathing = None
@@ -10,6 +11,7 @@ _no_ammo_turns = 0
 _invalid_upstream_turns = 0
 
 CARDINAL_OFFSETS = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+ONE_SHOT_HP = GameConstants.SENTINEL_DAMAGE  # 18
 
 _WEIGHTS = {
     EntityType.CORE: 2,
@@ -129,6 +131,81 @@ def _other_sentinel_attack_mask() -> int:
     return union
 
 
+def _kill_assist_mask(candidates) -> int:
+    """Return a bitmask of candidate tiles where this sentinel + every other
+    allied turret with a legal shot can collectively deal at least `hp + 4`
+    damage (the user's "−4 HP grace"). These tiles bypass the bot-adjacency
+    filter in `select_best`.
+
+    Damage values are conservative bases (no axionite buffs):
+      sentinel = 18, gunner = 10, breach = 40 (direct hit only — splash
+      isn't counted because it depends on adjacency to the actual hit tile).
+    `rc.can_fire_from` ignores ammo / cooldown but enforces geometry and
+    (for gunners) first-obstruction LOS — the same proxy used elsewhere in
+    the codebase."""
+    if not candidates:
+        return 0
+
+    DMG = {
+        EntityType.SENTINEL: GameConstants.SENTINEL_DAMAGE,  # 18
+        EntityType.GUNNER:   GameConstants.GUNNER_DAMAGE,    # 10
+        EntityType.BREACH:   GameConstants.BREACH_DAMAGE,    # 40
+    }
+    et_idx_to_et = {
+        map_info._IDX_SENTINEL: EntityType.SENTINEL,
+        map_info._IDX_GUNNER:   EntityType.GUNNER,
+        map_info._IDX_BREACH:   EntityType.BREACH,
+    }
+
+    my_team_bm = map_info._bm_team[map_info._my_team_idx]
+    w = map_info._width
+    my_pos = rc.get_position()
+    my_n = my_pos.x + my_pos.y * w
+
+    ally_turrets = (
+        (map_info._bm_et[map_info._IDX_SENTINEL]
+         | map_info._bm_et[map_info._IDX_GUNNER]
+         | map_info._bm_et[map_info._IDX_BREACH])
+        & my_team_bm
+        & ~(1 << my_n)
+    )
+
+    turret_info = []  # (pos, dir, etype, dmg)
+    m = ally_turrets
+    while m:
+        lsb = m & -m
+        n = lsb.bit_length() - 1
+        m ^= lsb
+        bid = map_info._building_id[n]
+        if bid is None:
+            continue
+        et = et_idx_to_et.get(map_info._building_et_idx[n])
+        if et is None:
+            continue
+        try:
+            d = rc.get_direction(bid)
+        except Exception:
+            continue
+        turret_info.append((Position(n % w, n // w), d, et, DMG[et]))
+
+    my_dmg = GameConstants.SENTINEL_DAMAGE
+    result = 0
+    for cand in candidates:
+        tile, n, _, hp, _ = cand[:5]
+        needed = hp + 4
+        total = my_dmg
+        if total >= needed:
+            result |= 1 << n
+            continue
+        for pos, d, et, dmg in turret_info:
+            if rc.can_fire_from(pos, d, et, tile):
+                total += dmg
+                if total >= needed:
+                    result |= 1 << n
+                    break
+    return result
+
+
 def _resolve_target_on_tile(tile: Position):
     """Return (etype, hp) of what a sentinel shot at `tile` would actually hit,
     or None if the tile is empty / friendly / a marker. Sentinels (like all
@@ -178,7 +255,10 @@ def run():
     w = map_info._width
     feeder_mask = _ally_feeder_mask()
 
-    candidates = []  # (pos, weight, hp)
+    # Collect every shootable tile that resolves to a real (non-friendly,
+    # non-marker) target. Weight is recorded but not used as a hard filter —
+    # priority bucket decides eligibility, weight is only a final tiebreak.
+    raw = []  # (tile, n, weight, hp)
     for tile in rc.get_attackable_tiles():
         n = tile.x + tile.y * w
         if feeder_mask & (1 << n):
@@ -190,26 +270,24 @@ def run():
             continue
         etype, hp = resolved
         weight = _WEIGHTS.get(etype, 0)
-        if weight <= 0:
-            continue
-        candidates.append((tile, weight, hp))
+        raw.append((tile, n, weight, hp, etype))
 
-    if not candidates:
+    if not raw:
         if not _should_stay():
             rc.self_destruct()
         return
 
-    one_shots = [c for c in candidates if c[2] <= 18]
-    if one_shots:
-        # Highest weight, then highest HP (use the full damage on a chunky kill)
-        one_shots.sort(key=lambda c: (-c[1], -c[2]))
-        best = one_shots[0][0]
-    else:
-        other_mask = _other_sentinel_attack_mask()
-        focus = [c for c in candidates if other_mask & (1 << (c[0].x + c[0].y * w))]
-        pool = focus if focus else candidates
-        # Highest weight, then lowest HP (finish softer targets first)
-        pool.sort(key=lambda c: (-c[1], c[2]))
-        best = pool[0][0]
+    priority_sets = turret_priority.compute_priority_sets(rc)
+    kill_assist = _kill_assist_mask(raw)
+    chosen = turret_priority.select_best(
+        raw, priority_sets, nav, ONE_SHOT_HP,
+        bot_ring_mode='one_shot_override',
+        ring_override_mask=kill_assist,
+    )
 
-    rc.fire(best)
+    if chosen is None:
+        if not _should_stay():
+            rc.self_destruct()
+        return
+
+    rc.fire(chosen[0])

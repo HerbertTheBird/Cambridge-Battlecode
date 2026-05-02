@@ -189,7 +189,7 @@ _building_et_idx: list[int] = []
 _building_hp: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
-_conv_reverse: list[int] = []   # reverse[tn] = bitmask of my conveyors whose output target is tile tn
+_conv_reverse: list[int] = []   # reverse[tn] = bitmask of conveyor-type buildings (either team) whose output target is tile tn
 
 # Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
 _bm_et: list[int] = []      # one bitmask per EntityType
@@ -1130,7 +1130,7 @@ def update_at(pos: Position) -> None:
     if direction is not None:
         bm_dir[new_dir_idx] |= bit
 
-    if is_conveyor[et_idx] and new_tn >= 0 and team_idx == _my_team_idx:
+    if is_conveyor[et_idx] and new_tn >= 0:
         conv_reverse[new_tn] |= bit
 
     max_hp = _MAX_HP_BY_IDX[et_idx]
@@ -1989,11 +1989,14 @@ def get_avoid(
     avoid_conveyors: bool,
     avoid_builders: bool,
     avoid_ore: bool,
-    avoid_threat = True
+    enemy_pov = False
 ) -> int:
     """Return a bitmask of tiles to avoid during pathfinding."""
     # avoid_core = _rc.get_tile_building_id(_rc.get_position()) != _core_id
     mask = _bm_blocked
+    if enemy_pov:
+        mask &= ~_bm_their_core_area
+        mask |= _bm_my_core_area
     if avoid_conveyors:
         mask |= (_bm_conveyors&~_bm_conv_into_open_ore) | _bm_conveyor_targets | _bm_my_core_area
         enemy_roads = _bm_et[_IDX_ROAD] & _bm_team[1 - _my_team_idx]
@@ -2009,7 +2012,7 @@ def get_avoid(
     #     mask |= _bm_my_core_area
     if avoid_builders:
         mask |= _bm_friendly_bots | _bm_enemy_bots
-    if avoid_threat:
+    if not enemy_pov:
         threat = _bm_enemy_hard_threat
         pos = _my_pos
         my_bit = 1 << (pos.x + pos.y * _width)
