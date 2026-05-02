@@ -94,7 +94,7 @@ def _scan_nearby_builders(core_pos: Position, my_team):
                 has_close_ally = True
         else:
             d = p.distance_squared(core_pos)
-            if closest_enemy_d is None or d < closest_enemy_d:
+            if (closest_enemy_d is None or d < closest_enemy_d) and d <= 20:
                 closest_enemy_d = d
                 closest_enemy = p
 

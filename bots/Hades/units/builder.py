@@ -243,10 +243,12 @@ def _destroy_enemy_feeders():
                 if rc.get_action_cooldown() == 0:
                     enemy_bots = map_info._bm_enemy_bots
                     threatened = enemy_bots and (lsb & map_info.expand_chebyshev(enemy_bots, 2))
-                    if threatened and rc.can_build_barrier(p):
+                    reserve = map_info.builder_ti_reserve()
+                    ti_have = rc.get_global_resources()[0]
+                    if threatened and rc.can_build_barrier(p) and ti_have >= rc.get_barrier_cost()[0] + reserve:
                         rc.build_barrier(p)
                         map_info.update_at(p)
-                    elif rc.can_build_road(p):
+                    elif rc.can_build_road(p) and ti_have >= rc.get_road_cost()[0] + reserve:
                         rc.build_road(p)
                         map_info.update_at(p)
                 return
@@ -256,11 +258,13 @@ def _destroy_enemy_feeders():
 def _try_mask(candidates):
     w = map_info._width
     mask = candidates
+    road_cost = rc.get_road_cost()[0]
+    reserve = map_info.builder_ti_reserve()
     while mask:
         lsb = mask & -mask
         n = lsb.bit_length() - 1
         p = Position(n % w, n // w)
-        if rc.can_build_road(p):
+        if rc.can_build_road(p) and rc.get_global_resources()[0] >= road_cost + reserve:
             rc.build_road(p)
             map_info.update_at(p)
             return True
@@ -333,7 +337,7 @@ def try_road_spam():
         if _try_mask(map_info.expand_chebyshev(enemy_hard) & spam_neighbors):
             return True
 
-    if (spam_zone & my_bit) and not (avoid & my_bit) and rc.can_build_road(my_pos):
+    if (spam_zone & my_bit) and not (avoid & my_bit) and rc.can_build_road(my_pos) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
         rc.build_road(my_pos)
         map_info.update_at(my_pos)
         return True

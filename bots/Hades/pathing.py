@@ -73,7 +73,7 @@ def _init_col_masks(width: int, height: int) -> None:
 def rebuild_broken_barriers(rc: Controller):
     if not destroyed_barriers:
         return
-    if  rc.get_global_resources()[0] < rc.get_barrier_cost()[0]:
+    if  rc.get_global_resources()[0] < rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
         return
     if rc.get_action_cooldown() > 0:
         return
@@ -95,7 +95,7 @@ def rebuild_broken_barriers(rc: Controller):
         if id and rc.get_entity_type(id) == EntityType.ROAD and rc.get_team(id) == my_team and rc.can_destroy(p) and not rc.get_tile_builder_bot_id(p):
             rc.destroy(p)
             map_info.update_at(p)
-        if rc.can_build_barrier(p):
+        if rc.can_build_barrier(p) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
             rc.build_barrier(p)
             map_info.update_at(p)
             rebuilt_pos = p
@@ -483,11 +483,11 @@ class Pathing:
         if rc.get_tile_builder_bot_id(new_pos) != None:
             return False
         id = rc.get_tile_building_id(new_pos)
-        if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0]:
+        if id and rc.get_entity_type(id) == EntityType.BARRIER and rc.can_destroy(new_pos) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] > rc.get_road_cost()[0] + map_info.builder_ti_reserve():
             rc.destroy(new_pos)
             map_info.update_at(new_pos)
             destroyed_barriers[new_pos] = rc.get_current_round()
-        if build_road and rc.can_build_road(new_pos):
+        if build_road and rc.can_build_road(new_pos) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
             rc.build_road(new_pos)
             map_info.update_at(new_pos)
         if rc.can_move(dir):

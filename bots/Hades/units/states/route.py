@@ -20,9 +20,17 @@ def _prefer_armoured_conveyor() -> bool:
 
 
 def _can_build_preferred_conveyor(pos: Position, direction: Direction) -> bool:
+    ti = rc.get_global_resources()[0]
+    reserve = map_info.builder_ti_reserve()
     if _prefer_armoured_conveyor():
-        return rc.can_build_armoured_conveyor(pos, direction)
-    return rc.can_build_conveyor(pos, direction)
+        return (
+            rc.can_build_armoured_conveyor(pos, direction)
+            and ti >= rc.get_armoured_conveyor_cost()[0] + reserve
+        )
+    return (
+        rc.can_build_conveyor(pos, direction)
+        and ti >= rc.get_conveyor_cost()[0] + reserve
+    )
 
 
 def _build_preferred_conveyor(pos: Position, direction: Direction) -> EntityType:
@@ -193,7 +201,7 @@ def run():
         if is_my_road and rc.can_destroy(output):
             rc.destroy(output)
             map_info.update_at(output)
-        if rc.can_build_barrier(output):
+        if rc.can_build_barrier(output) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
             rc.build_barrier(output)
             map_info.update_at(output)
         return True
@@ -204,7 +212,7 @@ def run():
         target_feeds_enemy = bool((1 << target_n) & map_info._bm_feeding_enemy)
         barrier_ready = (
             rc.get_action_cooldown() == 0
-            and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0]
+            and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve()
         )
 
         if barrier_ready and _try_barrier_output(target_n):
@@ -221,7 +229,7 @@ def run():
         ):
             rc.destroy(target)
             map_info.update_at(target)
-        if rc.can_build_barrier(target):
+        if rc.can_build_barrier(target) and rc.get_global_resources()[0] >= rc.get_barrier_cost()[0] + map_info.builder_ti_reserve():
             rc.build_barrier(target)
             map_info.update_at(target)
 
@@ -278,11 +286,11 @@ def run():
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit) and target_conveyor[0] == target_conveyor[1]:
         nav.move_adjacent(target_conveyor[0])
-        if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0]:
+        if rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0] + map_info.builder_ti_reserve():
             if rc.can_destroy(target_conveyor[0]):
                 rc.destroy(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
-            if rc.can_build_foundry(target_conveyor[0]):
+            if rc.can_build_foundry(target_conveyor[0]) and rc.get_global_resources()[0] >= rc.get_foundry_cost()[0] + map_info.builder_ti_reserve():
                 rc.build_foundry(target_conveyor[0])
                 map_info.update_at(target_conveyor[0])
         return
@@ -306,7 +314,7 @@ def run():
             if map_info.team_at(target_conveyor[1].x, target_conveyor[1].y) != map_info._my_team and rc.can_fire(target_conveyor[1]):
                 rc.fire(target_conveyor[1])
                 map_info.update_at(target_conveyor[0])
-        if rc.can_build_road(target_conveyor[0]):
+        if rc.can_build_road(target_conveyor[0]) and rc.get_global_resources()[0] >= rc.get_road_cost()[0] + map_info.builder_ti_reserve():
             rc.build_road(target_conveyor[0])
             map_info.update_at(target_conveyor[0])
         return
@@ -315,10 +323,11 @@ def run():
         next = target_conveyor[1]
         bridge = destroy.distance_squared(next) > 1
         cost = rc.get_bridge_cost()[0] if bridge else rc.get_conveyor_cost()[0]
+        cost += map_info.builder_ti_reserve()
         if rc.can_destroy(destroy) and rc.get_action_cooldown() == 0 and rc.get_global_resources()[0] >= cost:
             rc.destroy(destroy)
             map_info.update_at(destroy)
-        if bridge and rc.can_build_bridge(destroy, next):
+        if bridge and rc.can_build_bridge(destroy, next) and rc.get_global_resources()[0] >= rc.get_bridge_cost()[0] + map_info.builder_ti_reserve():
             rc.build_bridge(destroy, next)
             map_info.update_at(destroy)
         elif not bridge:
