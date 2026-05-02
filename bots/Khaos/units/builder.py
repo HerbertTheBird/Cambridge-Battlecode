@@ -248,10 +248,6 @@ def run():
     if USE_CHOKEPOINTS:
         explore.try_passive_chokepoint_action_only()
 
-    if _waiting_for_chokepoint:
-        return
-    # Road-spam if an enemy is closing in
-    try_road_spam()
 
     # Try healing adjacent building
     heal._do_best_heal()
@@ -262,6 +258,10 @@ def run():
 
     # Tear down any of our own conveyors/bridges that are feeding an enemy turret
     _destroy_enemy_feeders()
+
+    # Road-spam if an enemy is closing in
+    if not _waiting_for_chokepoint:
+        try_road_spam()
 
     # Broadcast symmetry plus a sample from a different seen map position.
     comms.broadcast_symmetry(_pick_symmetry_broadcast_pos())
