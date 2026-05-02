@@ -399,16 +399,13 @@ def run():
             # Same tile, different building → destroyed + replaced, not damaged.
             if cur_bid is None or cur_bid != prev_bid:
                 continue
-            # Significant damage only — small chip (e.g. heal contention) doesn't
-            # count.
-            if prev_hp_val - hp <= 2:
+            if hp >= prev_hp_val:
                 continue
             damaged.append(cand)
             print(
                 f"[SENTINEL_DAMAGED] round={cur_round} unit={rc.get_id()} "
                 f"tile=({tile.x},{tile.y}) et={etype.value} "
-                f"prev_hp={prev_hp_val} cur_hp={hp} delta={prev_hp_val - hp} "
-                f"bid={cur_bid}"
+                f"prev_hp={prev_hp_val} cur_hp={hp} bid={cur_bid}"
             )
 
         if damaged:
