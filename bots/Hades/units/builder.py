@@ -1,5 +1,7 @@
 from cambc import Controller, Position
 
+import random
+
 import map_info
 import pathing
 from pathing import Pathing
@@ -96,11 +98,35 @@ def wait_for_chokepoint() -> None:
 
 
 def handle_comms():
-    if map_info._solved_sym:
-        return
-    for v, _sender_pos, _marker_pos, _marker_id, _estimated_turn in comms.get_new_messages():
-        sym = comms.decode_sym(v)
-        map_info.update_symmetry_from_comms(sym)
+    for v, _sender_pos, marker_pos, _marker_id, _estimated_turn in comms.get_new_messages():
+        if not map_info._solved_sym:
+            sym = comms.decode_sym(v)
+            map_info.update_symmetry_from_comms(sym)
+        if comms.decode_type(v) == comms.TYPE_SYMMETRY_BROADCAST:
+            corresponding_pos = comms.decode_learn_map_corresponding_pos(v)
+            sample_bits = comms.decode_learn_map_sample_bits(v)
+            comms.apply_symmetry_broadcast_map(marker_pos, corresponding_pos, sample_bits)
+
+def _pick_symmetry_broadcast_pos() -> Position:
+    width = map_info._width
+    height = map_info._height
+    my_pos = map_info._my_pos
+    my_x = my_pos.x
+    my_y = my_pos.y
+    seen = map_info._bm_seen
+
+    for _ in range(40):
+        x = random.randint(0, width - 1)
+        y = random.randint(0, height - 1)
+        dx = x - my_x
+        dy = y - my_y
+        if dx * dx + dy * dy <= 13:
+            continue
+        if not (seen & (1 << (x + y * width))):
+            continue
+        return Position(x, y)
+
+    return my_pos
 
 
 def _compute_voronoi_harvest_zone():
@@ -237,8 +263,8 @@ def run():
     # Tear down any of our own conveyors/bridges that are feeding an enemy turret
     _destroy_enemy_feeders()
 
-    # Broadcast symmetry via a marker on the first available adjacent tile
-    comms.broadcast_symmetry()
+    # Broadcast symmetry plus a sample from a different seen map position.
+    comms.broadcast_symmetry(_pick_symmetry_broadcast_pos())
 
 
 def _destroy_enemy_feeders():
