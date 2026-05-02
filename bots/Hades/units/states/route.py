@@ -9,6 +9,8 @@ rc: Controller = None
 nav: Pathing = None
 _cost_map: dict[int, tuple[int, int]] = {}  # tile index -> (min titanium cost, round recorded)
 COST_MAP_TTL = 100
+ATTACK_ROUTE_DISTANCE_NUMERATOR = 3
+ATTACK_ROUTE_DISTANCE_DENOMINATOR = 2
 
 unpathable = 0
 
@@ -44,6 +46,26 @@ def init(c: Controller):
     global rc, nav
     rc = c
     nav = units.builder.nav
+
+def _core_distance(a: Position, b: Position) -> int:
+    return abs(a.x - b.x) + abs(a.y - b.y)
+
+def _core_bfs_distance(pos: Position, core: Position) -> int:
+    target = 1 << (core.x + core.y * map_info._width)
+    _closest, dist = nav.closest(target, pos=pos)
+    return dist if dist >= 0 else _core_distance(pos, core)
+
+def _should_attack_route(pos: Position) -> bool:
+    my_core = map_info._my_core
+    enemy_core = map_info._their_core or map_info._predicted_enemy_core
+    if my_core is None or enemy_core is None:
+        return False
+    enemy_dist = _core_bfs_distance(pos, enemy_core)
+    my_dist = _core_bfs_distance(pos, my_core)
+    return (
+        enemy_dist * ATTACK_ROUTE_DISTANCE_DENOMINATOR
+        <= my_dist * ATTACK_ROUTE_DISTANCE_NUMERATOR
+    )
 
 def _too_expensive():
     """Bitmask of tiles we know we can't afford right now."""
@@ -237,6 +259,7 @@ def run():
     is_refined = False
     is_harvester = False
     is_foundry = False
+    is_ti_harvester = False
 
     while candidates:
         candidate, _ = nav.closest(candidates)
@@ -250,6 +273,7 @@ def run():
         cand_is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY] & cand_bit)
         cand_raw_ax = False
         cand_refined = False
+        cand_is_ti_harvester = False
         if cand_is_foundry:
             cand_raw_ax = False
             cand_refined = True
@@ -260,6 +284,7 @@ def run():
             elif map_info._bm_env[map_info._IDX_ENV_ORE_TI] & cand_bit:
                 cand_raw_ax = False
                 cand_refined = False
+                cand_is_ti_harvester = True
         if cand_is_harvester or cand_is_foundry:
             cand_path = nav.calculate_conveyor_path(candidate, cand_raw_ax, update=False)
         else:
@@ -292,10 +317,28 @@ def run():
         is_refined = cand_refined
         is_harvester = cand_is_harvester
         is_foundry = cand_is_foundry
+        is_ti_harvester = cand_is_ti_harvester
         break
 
     if best is None:
         return
+
+    # Final-pick attack-route override: if the chosen candidate is closer
+    # to the enemy core than to ours, try routing toward the enemy core
+    # instead. Only applies when the route doesn't carry raw axionite.
+    if is_harvester or is_foundry:
+        attack_eligible = is_foundry or is_ti_harvester
+    else:
+        attack_eligible = not is_raw_ax
+    if attack_eligible and _should_attack_route(best):
+        attack_path = nav.calculate_attack_conveyor_path(
+            best, update=not (is_harvester or is_foundry)
+        )
+        if attack_path is not None:
+            attack_cost = nav.conveyor_cost(attack_path[2])
+            if is_refined or rc.get_global_resources()[0] >= attack_cost:
+                path = attack_path
+                target_conveyor = [path[0], path[1]]
 
     best_n = best.x + best.y * width
     best_bit = 1 << best_n

@@ -935,6 +935,76 @@ class Pathing:
             self.rc.draw_indicator_dot(s_pos, 255, 0, 255)
         return (s_pos, p_pos, dist)
 
+    def calculate_attack_conveyor_path(self, start: Position, update: bool = False):
+        log("attack conveyors from ", start)
+        w = self.width
+        target, avoid = self._get_attack_conveyor_targets_and_avoid()
+        if not target:
+            log("no attack target")
+            return None
+        if not update:
+            start_mask = 0
+            for d in CARD_DIR:
+                sp = map_info.pos_add(start, d)
+                if map_info.in_bounds(sp) and ((avoid >> (sp.x + sp.y * w)) & 1) == 0:
+                    start_mask |= 1 << (sp.x + sp.y * w)
+            if start_mask == 0:
+                log("no start (attack)")
+                return None
+        else:
+            start_mask = 1 << (start.x + start.y * w)
+        result = self.bfs_route(start_mask, target, avoid)
+        if result is None:
+            return None
+        s_pos, p_pos, dist = result
+        if DRAW_DEBUG:
+            self.rc.draw_indicator_line(s_pos, p_pos, 255, 128, 0)
+            self.rc.draw_indicator_dot(s_pos, 255, 128, 0)
+        return (s_pos, p_pos, dist)
+
+    def _enemy_core_area_mask(self) -> int:
+        if map_info._bm_their_core_area:
+            return map_info._bm_their_core_area
+        core = map_info._their_core or map_info._predicted_enemy_core
+        if core is None:
+            return 0
+        mask = 0
+        w = map_info._width
+        for y in range(core.y - 1, core.y + 2):
+            if y < 0 or y >= map_info._height:
+                continue
+            for x in range(core.x - 1, core.x + 2):
+                if 0 <= x < w:
+                    mask |= 1 << (x + y * w)
+        return mask
+
+    def _get_attack_conveyor_targets_and_avoid(self):
+        avoid = map_info.get_avoid(True, False, True)
+        core_area = self._enemy_core_area_mask()
+        if not core_area:
+            return 0, 0
+
+        bm_et = map_info._bm_et
+        my_team = map_info._bm_team[map_info._my_team_idx]
+        terminal_clearable = (
+            (~map_info._bm_any_building & map_info._board_mask)
+            | bm_et[map_info._IDX_MARKER]
+            | bm_et[map_info._IDX_ROAD]
+            | bm_et[map_info._IDX_CONVEYOR]
+            | bm_et[map_info._IDX_SPLITTER]
+            | bm_et[map_info._IDX_BRIDGE]
+            | (bm_et[map_info._IDX_BARRIER] & my_team)
+        )
+        ore = map_info._bm_env[map_info._IDX_ENV_ORE_TI] | map_info._bm_env[map_info._IDX_ENV_ORE_AX]
+        blocked_ground = map_info._bm_env[map_info._IDX_ENV_WALL] | ore
+
+        target = map_info.expand_manhattan(core_area) & ~core_area
+        target &= terminal_clearable & ~blocked_ground & map_info._board_mask
+        if not target:
+            target = map_info.expand_manhattan(core_area, 2) & ~core_area
+            target &= terminal_clearable & ~blocked_ground & map_info._board_mask
+        return target, avoid
+
     def conveyor_cost(self, dist, scaling=None):
         if scaling is None:
             scaling = self.rc.get_scale_percent() / 100

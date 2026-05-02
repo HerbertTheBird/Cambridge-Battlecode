@@ -199,7 +199,7 @@ _building_et_idx: list[int] = []
 _building_hp: list[int] = []
 _building_dir: list[int] = []
 _building_conv_target: list[int] = []
-_conv_reverse: list[int] = []   # reverse[tn] = bitmask of conveyor-type buildings (either team) whose output target is tile tn
+_conv_reverse: list[int] = []   # reverse[tn] = bitmask of conveyor-type buildings (either team) with any output to tile tn
 
 # Bitmask lists indexed by _ET_INT / _TM_INT / _ENV_INT
 _bm_et: list[int] = []      # one bitmask per EntityType
@@ -552,9 +552,9 @@ def _compute_fed() -> tuple[int, int]:
         carrying conveyor (no reverse, not adjacent to source) is excluded — its
         resource is transient.
 
-    Propagation runs 4 hops forward through cardinal conveyors and bridges.
-    Chain terminal targets are included even if non-conveyor (a turret there
-    still receives the delivered resource).
+    Propagation runs 4 hops forward through conveyors, splitter outputs, and
+    bridges. Chain terminal targets are included even if non-conveyor (a turret
+    there still receives the delivered resource).
 
     Both teams' harvesters/foundries seed (adjacency to enemy economy is also a
     strategic placement signal)."""
@@ -571,40 +571,64 @@ def _compute_fed() -> tuple[int, int]:
     tiles = _width * _height
     w = _width
     board = _board_mask
-    cardinal = (
-        bm_et[_IDX_CONVEYOR]
-        | bm_et[_IDX_ARMOURED_CONVEYOR]
-        | bm_et[_IDX_SPLITTER]
-    )
+    regular_cardinal = bm_et[_IDX_CONVEYOR] | bm_et[_IDX_ARMOURED_CONVEYOR]
+    splitters = bm_et[_IDX_SPLITTER]
+    cardinal = regular_cardinal | splitters
     dir_mask = _bm_dir
     convs_e = cardinal & dir_mask[_DIR_E]
     convs_w = cardinal & dir_mask[_DIR_W]
     convs_s = cardinal & dir_mask[_DIR_S]
     convs_n = cardinal & dir_mask[_DIR_N]
+    regular_e = regular_cardinal & dir_mask[_DIR_E]
+    regular_w = regular_cardinal & dir_mask[_DIR_W]
+    regular_s = regular_cardinal & dir_mask[_DIR_S]
+    regular_n = regular_cardinal & dir_mask[_DIR_N]
+    split_e = splitters & dir_mask[_DIR_E]
+    split_w = splitters & dir_mask[_DIR_W]
+    split_s = splitters & dir_mask[_DIR_S]
+    split_n = splitters & dir_mask[_DIR_N]
     bridges = bm_et[_IDX_BRIDGE]
     nlc = _not_left_col
     nrc = _not_right_col
     ntr = _not_top_row
     nbr = _not_bottom_row
+    non_splitters = board & ~splitters
+
+    def valid_cardinal_targets(cur):
+        east = ((cur & convs_e & nrc) << 1) & (non_splitters | split_e)
+        west = ((cur & convs_w & nlc) >> 1) & (non_splitters | split_w)
+        south = ((cur & convs_s & nbr) << w) & (non_splitters | split_s)
+        north = ((cur & convs_n & ntr) >> w) & (non_splitters | split_n)
+        return (east | west | south | north) & board
+
+    def splitter_side_targets(cur):
+        ew_splitters = cur & (split_e | split_w)
+        ns_splitters = cur & (split_n | split_s)
+        north = ((ew_splitters & ntr) >> w) & (non_splitters | split_n)
+        south = ((ew_splitters & nbr) << w) & (non_splitters | split_s)
+        east = ((ns_splitters & nrc) << 1) & (non_splitters | split_e)
+        west = ((ns_splitters & nlc) >> 1) & (non_splitters | split_w)
+        return (north | south | east | west) & board
 
     def adj_seed(src):
         if not src:
             return 0
-        adj = expand_manhattan(src) & bm_conveyors
+        adj = expand_manhattan(src)
         pointing_back = (
-            (((src & nlc) >> 1) & convs_e)
-            | (((src & nrc) << 1) & convs_w)
-            | (((src & ntr) >> w) & convs_s)
-            | (((src & nbr) << w) & convs_n)
+            (((src & nlc) >> 1) & regular_e)
+            | (((src & nrc) << 1) & regular_w)
+            | (((src & ntr) >> w) & regular_s)
+            | (((src & nbr) << w) & regular_n)
         )
-        return adj & ~pointing_back
+        splitter_back_input = (
+            (((src & nrc) << 1) & split_e)
+            | (((src & nlc) >> 1) & split_w)
+            | (((src & nbr) << w) & split_s)
+            | (((src & ntr) >> w) & split_n)
+        )
+        return ((adj & regular_cardinal & ~pointing_back) | (adj & bridges) | splitter_back_input) & bm_conveyors
 
-    has_reverse = (
-        ((convs_e & nrc) << 1)
-        | ((convs_w & nlc) >> 1)
-        | ((convs_s & nbr) << w)
-        | ((convs_n & ntr) >> w)
-    ) & board
+    has_reverse = valid_cardinal_targets(cardinal) | splitter_side_targets(splitters)
     m = bridges
     while m:
         lsb = m & -m
@@ -630,12 +654,7 @@ def _compute_fed() -> tuple[int, int]:
         expanded = seed
         cur = seed
         for _ in range(4):
-            targets = (
-                ((cur & convs_e & nrc) << 1)
-                | ((cur & convs_w & nlc) >> 1)
-                | ((cur & convs_s & nbr) << w)
-                | ((cur & convs_n & ntr) >> w)
-            ) & board
+            targets = valid_cardinal_targets(cur) | splitter_side_targets(cur)
             m = cur & bridges
             while m:
                 lsb = m & -m
@@ -658,10 +677,68 @@ def _compute_fed() -> tuple[int, int]:
     return ti_fed, ax_fed
 
 
+def _splitter_side_output_mask(source_mask: int) -> int:
+    """Splitters output to their primary direction AND both perpendicular
+    sides. Return just the side-output bits for splitters in source_mask."""
+    splitters = source_mask & _bm_et[_IDX_SPLITTER]
+    if not splitters:
+        return 0
+    dir_mask = _bm_dir
+    ew_splitters = splitters & (dir_mask[_DIR_E] | dir_mask[_DIR_W])
+    ns_splitters = splitters & (dir_mask[_DIR_N] | dir_mask[_DIR_S])
+    return (
+        ((ew_splitters & _not_top_row) >> _width)
+        | ((ew_splitters & _not_bottom_row) << _width)
+        | ((ns_splitters & _not_right_col) << 1)
+        | ((ns_splitters & _not_left_col) >> 1)
+    ) & _board_mask
+
+
+def _conv_output_mask(source_n: int, et_idx: int, dir_idx: int, target_n: int) -> int:
+    """All output target tiles for one source: primary plus splitter sides."""
+    if target_n < 0:
+        return 0
+    tiles = _width * _height
+    outputs = (1 << target_n) if target_n < tiles else 0
+    if et_idx != _IDX_SPLITTER or dir_idx < 0:
+        return outputs
+
+    sx = source_n % _width
+    sy = source_n // _width
+    for side_idx in ((dir_idx + 2) & 7, (dir_idx + 6) & 7):
+        dx, dy = _DIRECTION_DELTAS_I[side_idx]
+        x = sx + dx
+        y = sy + dy
+        if 0 <= x < _width and 0 <= y < _height:
+            outputs |= 1 << (x + y * _width)
+    return outputs
+
+
+def _update_conv_reverse_outputs(
+    conv_reverse: list[int],
+    source_n: int,
+    et_idx: int,
+    dir_idx: int,
+    target_n: int,
+    source_bit: int,
+    add: bool,
+) -> None:
+    """Set/clear source_bit in conv_reverse for every tile this source outputs to."""
+    outputs = _conv_output_mask(source_n, et_idx, dir_idx, target_n)
+    while outputs:
+        lsb = outputs & -outputs
+        out_n = lsb.bit_length() - 1
+        if add:
+            conv_reverse[out_n] |= source_bit
+        else:
+            conv_reverse[out_n] &= ~source_bit
+        outputs ^= lsb
+
+
 def _conveyor_target_tiles(source_mask: int) -> int:
     """Return the union of output target tiles for the given conveyor-like
-    sources. Cardinal outputs are shifted in bulk; bridges fall back to their
-    arbitrary target lookup."""
+    sources. Splitters include their primary output and both side outputs;
+    bridges fall back to their arbitrary target lookup."""
     if not source_mask:
         return 0
 
@@ -679,6 +756,8 @@ def _conveyor_target_tiles(source_mask: int) -> int:
         | ((cardinal & dir_mask[_DIR_S] & _not_bottom_row) << w)
         | ((cardinal & dir_mask[_DIR_N] & _not_top_row) >> w)
     ) & board
+
+    targets |= _splitter_side_output_mask(source_mask)
 
     bridges = source_mask & _bm_et[_IDX_BRIDGE]
     if not bridges:
@@ -767,7 +846,7 @@ def _carrying_expand(
     cur = seed
     for _ in range(3):
         not_expanded = ~expanded
-        bridges_ne = bridges & not_expanded
+        conveyors_ne = bm_conveyors & not_expanded
         nxt = (
             ((cur & not_left_col) >> 1) & convs_e
             | ((cur & not_right_col) << 1) & convs_w
@@ -778,31 +857,16 @@ def _carrying_expand(
         while m:
             lsb = m & -m
             n = lsb.bit_length() - 1
-            nxt |= reverse[n] & bridges_ne
+            nxt |= reverse[n] & conveyors_ne
             m ^= lsb
         if not nxt:
             break
         expanded |= nxt
         cur = nxt
-    # Downstream (conv_target chain).
+    # Downstream (conv_target chain, includes splitter side outputs).
     cur = seed
     for _ in range(3):
-        nxt = (
-            ((cur & convs_e & not_right_col) << 1)
-            | ((cur & convs_w & not_left_col) >> 1)
-            | ((cur & convs_s & not_bottom_row) << w)
-            | ((cur & convs_n & not_top_row) >> w)
-        ) & board & bm_conveyors & ~expanded
-        m = cur & bridges
-        while m:
-            lsb = m & -m
-            n = lsb.bit_length() - 1
-            tn = conv_target[n]
-            if 0 <= tn < tiles:
-                tbit = 1 << tn
-                if (bm_conveyors & tbit) and not (expanded & tbit):
-                    nxt |= tbit
-            m ^= lsb
+        nxt = _conveyor_target_tiles(cur) & bm_conveyors & ~expanded
         if not nxt:
             break
         expanded |= nxt
@@ -1016,9 +1080,15 @@ def update_at(pos: Position) -> None:
             if has_dir[old_et_idx]:
                 bm_dir[building_dir[n]] &= nbit
             if is_conveyor[old_et_idx]:
-                old_tn = building_conv_target[n]
-                if old_tn >= 0:
-                    conv_reverse[old_tn] &= nbit
+                _update_conv_reverse_outputs(
+                    conv_reverse,
+                    n,
+                    old_et_idx,
+                    building_dir[n],
+                    building_conv_target[n],
+                    bit,
+                    False,
+                )
                 _bm_conv_ti &= nbit
                 _bm_conv_raw_ax &= nbit
                 _bm_conv_refined &= nbit
@@ -1097,9 +1167,15 @@ def update_at(pos: Position) -> None:
             if has_dir[old_et_idx]:
                 bm_dir[building_dir[n]] &= nbit
             if is_conveyor[old_et_idx]:
-                old_tn = building_conv_target[n]
-                if old_tn >= 0:
-                    conv_reverse[old_tn] &= nbit
+                _update_conv_reverse_outputs(
+                    conv_reverse,
+                    n,
+                    old_et_idx,
+                    building_dir[n],
+                    building_conv_target[n],
+                    bit,
+                    False,
+                )
                 _bm_conv_ti &= nbit
                 _bm_conv_raw_ax &= nbit
                 _bm_conv_refined &= nbit
@@ -1122,9 +1198,15 @@ def update_at(pos: Position) -> None:
         if has_dir[old_et_idx]:
             bm_dir[building_dir[n]] &= nbit
         if is_conveyor[old_et_idx]:
-            old_tn = building_conv_target[n]
-            if old_tn >= 0:
-                conv_reverse[old_tn] &= nbit
+            _update_conv_reverse_outputs(
+                conv_reverse,
+                n,
+                old_et_idx,
+                building_dir[n],
+                building_conv_target[n],
+                bit,
+                False,
+            )
             _bm_conv_ti &= nbit
             _bm_conv_raw_ax &= nbit
             _bm_conv_refined &= nbit
@@ -1157,7 +1239,15 @@ def update_at(pos: Position) -> None:
         bm_dir[new_dir_idx] |= bit
 
     if is_conveyor[et_idx] and new_tn >= 0:
-        conv_reverse[new_tn] |= bit
+        _update_conv_reverse_outputs(
+            conv_reverse,
+            n,
+            et_idx,
+            new_dir_idx,
+            new_tn,
+            bit,
+            True,
+        )
 
     max_hp = _MAX_HP_BY_IDX[et_idx]
     if hp < max_hp:
