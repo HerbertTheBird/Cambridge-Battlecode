@@ -68,7 +68,7 @@ def binomial_p_value(wins: int, losses: int) -> float:
 
 # ── Match running ────────────────────────────────────────────────────────────
 
-WINNER_RE = __import__("re").compile(r"Winner:\s+(\S+)\s+\(.*?turn\s+(\d+)\)")
+WINNER_RE = __import__("re").compile(r"Winner:\s+(\S+)\s+\((.*?),\s*turn\s+(\d+)\)")
 
 
 @dataclass
@@ -82,6 +82,7 @@ class MatchResult:
     elapsed_s: float
     error: bool = False
     output: str = ""
+    reason: str | None = None  # how the game ended, e.g. "Core destroyed"
 
 
 def run_match(bot_a: str, bot_b: str, map_path: Path, seed: int) -> MatchResult:
@@ -105,9 +106,11 @@ def run_match(bot_a: str, bot_b: str, map_path: Path, seed: int) -> MatchResult:
 
         winner = None
         turn = None
+        reason = None
         if winner_match:
             winner_name = winner_match.group(1).strip()
-            turn = int(winner_match.group(2))
+            reason = winner_match.group(2).strip()
+            turn = int(winner_match.group(3))
             # Engine reports the directory name, but bots may be passed as
             # full paths — match against the basename of each bot.
             for bot in (bot_a, bot_b):
@@ -119,7 +122,7 @@ def run_match(bot_a: str, bot_b: str, map_path: Path, seed: int) -> MatchResult:
             bot_a=bot_a, bot_b=bot_b, map_name=map_path.stem,
             seed=seed, winner=winner, turn=turn,
             elapsed_s=elapsed, error=result.returncode != 0,
-            output=output,
+            output=output, reason=reason,
         )
     except subprocess.TimeoutExpired:
         return MatchResult(

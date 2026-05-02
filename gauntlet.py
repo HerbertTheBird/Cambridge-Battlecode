@@ -132,9 +132,10 @@ def run_gauntlet(
         else:
             outcome = "L"
         ms = stats[main_bot]
+        reason_str = f" [{mr.reason}]" if mr.reason else ""
         print(f"  [{completed}/{total_matches}] {mr.map_name} (seed {mr.seed}) | "
               f"{main_bot} as {main_side} vs {opp}: {outcome} -> {mr.winner or 'draw'} "
-              f"(T{mr.turn or '?'}) [{mr.elapsed_s:.1f}s] "
+              f"(T{mr.turn or '?'}){reason_str} [{mr.elapsed_s:.1f}s] "
               f"| total: {ms.wins}W-{ms.losses}L-{ms.draws}D")
 
     if threads == 1:
