@@ -4,6 +4,7 @@ from cambc import *
 import units.builder
 from log import log
 from units.states.harvest import possible_ore, secured
+from _config import CONVEYOR_COST_DISCOUNT
 rc: Controller = None
 nav = None
 
@@ -12,6 +13,48 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = securable_ore() & ~((_too_expensive()) & ~(map_info._bm_et[map_info._IDX_HARVESTER]|map_info._bm_et[map_info._IDX_FOUNDRY])) & ~cant_secure()
+    # Defer ore tiles whose only unsecured cardinal side is itself a
+    # harvest-ready ore: harvest will plant a harvester there next turn,
+    # which secures this tile for free. Avoids racing secure into paving
+    # over an ore that harvest is targeting.
+    if rc.get_global_resources()[0] >= rc.get_harvester_cost()[0]:
+        ore_env = map_info._bm_env[map_info._IDX_ENV_ORE_TI] | map_info._bm_env[map_info._IDX_ENV_ORE_AX]
+        other_bots = (map_info._bm_friendly_bots | map_info._bm_enemy_bots) & ~my_mask
+        harvest_ready = (
+            ore_env
+            & secured()
+            & ~other_bots
+            & ~map_info._bm_et[map_info._IDX_HARVESTER]
+            & ~map_info._bm_et[map_info._IDX_FOUNDRY]
+        )
+        my_team_idx = map_info._my_team_idx
+        securing = (
+            (map_info._bm_team[my_team_idx]
+             & ~map_info._bm_et[map_info._IDX_ROAD]
+             & ~map_info._bm_et[map_info._IDX_MARKER])
+            | map_info._bm_env[map_info._IDX_ENV_WALL]
+        )
+        not_left = map_info._not_left_col
+        not_right = map_info._not_right_col
+        bottom_row = ((1 << w) - 1) << (w * (map_info._height - 1))
+        top_row = (1 << w) - 1
+        # Per-direction "this tile's <dir> side is secured" masks (off-map counts).
+        sec_e = ((securing & not_left) >> 1) | ~not_right
+        sec_w = ((securing & not_right) << 1) | ~not_left
+        sec_s = (securing >> w) | bottom_row
+        sec_n = (securing << w) | top_row
+        # Per-direction "this tile's <dir> neighbor is harvest_ready".
+        hr_e = (harvest_ready & not_left) >> 1
+        hr_w = (harvest_ready & not_right) << 1
+        hr_s = harvest_ready >> w
+        hr_n = harvest_ready << w
+        deferred = (
+            (~sec_e & sec_w & sec_s & sec_n & hr_e)
+            | (sec_e & ~sec_w & sec_s & sec_n & hr_w)
+            | (sec_e & sec_w & ~sec_s & sec_n & hr_s)
+            | (sec_e & sec_w & sec_s & ~sec_n & hr_n)
+        ) & ore_env & map_info._board_mask
+        available &= ~deferred
     return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 
@@ -253,9 +296,9 @@ def run():
         else:
             start_piece_cost = rc.get_bridge_cost()[0]
             scale_estimate += 0.1
-        cost_estimate += start_piece_cost
+        cost_estimate += start_piece_cost * CONVEYOR_COST_DISCOUNT
         reserve_cost = map_info.builder_ti_reserve()
-        cost_estimate += reserve_cost
+        cost_estimate += reserve_cost * CONVEYOR_COST_DISCOUNT
         path_cost = nav.conveyor_cost(path[2], rc.get_scale_percent()/100+scale_estimate)
         total_cost = cost_estimate + path_cost
         _cost_map[best_n] = (total_cost, rc.get_current_round())
