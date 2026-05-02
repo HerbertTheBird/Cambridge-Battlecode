@@ -45,7 +45,7 @@ def init(c: Controller):
 
 
 SENTINEL_BUILDING_SCORE = [0] * map_info._NUM_ET
-SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 6
+SENTINEL_BUILDING_SCORE[map_info._IDX_CORE] = 16
 SENTINEL_BUILDING_SCORE[map_info._IDX_HARVESTER] = 0
 SENTINEL_BUILDING_SCORE[map_info._IDX_FOUNDRY] = 16
 SENTINEL_BUILDING_SCORE[map_info._IDX_GUNNER] = 20
@@ -329,7 +329,7 @@ def _get_cached_sentinel_scores(enemy_team_bm: int, threat: int, sentinel_masks:
     """Sentinel per-direction score planes, cached across rounds by exact masks."""
     global _SENTINEL_SCORE_CACHE_KEY, _SENTINEL_SCORE_CACHE
 
-    key = (map_info._struct_version, sentinel_masks)
+    key = (map_info._struct_version, enemy_team_bm, sentinel_masks)
     if key != _SENTINEL_SCORE_CACHE_KEY:
         _SENTINEL_SCORE_CACHE = _compute_sentinel_dir_scores(
             enemy_team_bm, threat, sentinel_masks
@@ -342,7 +342,7 @@ def _get_cached_gunner_per_dir(enemy_team_bm: int, threat: int, gunner_masks: tu
     """Gunner per-direction planes, cached across rounds by exact masks."""
     global _GUNNER_PER_DIR_CACHE_KEY, _GUNNER_PER_DIR_CACHE
 
-    key = (map_info._struct_version, gunner_masks)
+    key = (map_info._struct_version, enemy_team_bm, gunner_masks)
     if key != _GUNNER_PER_DIR_CACHE_KEY:
         _GUNNER_PER_DIR_CACHE = _compute_gunner_dir_scores(
             enemy_team_bm, threat, gunner_masks
@@ -1055,10 +1055,6 @@ def _my_claims():
     my_mask = 1 << (map_info._my_pos.x + map_info._my_pos.y * w)
     _ensure_round_cache()
     preferred, fallback = _round_cache_attack_candidates
-    if units.builder._stay_near_core:
-        near = units.builder.near_core_mask()
-        preferred &= near
-        fallback &= near
     combined = preferred | fallback
     claimed = pathing.claim_subset(
         my_mask,
@@ -1204,26 +1200,16 @@ def _try_launcher_lockdown(target: Position) -> bool:
     my_team_idx = map_info._my_team_idx
     my_team = map_info._bm_team[my_team_idx]
 
-    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
-    my_road = bm_et[map_info._IDX_ROAD] & my_team
-    my_barrier = bm_et[map_info._IDX_BARRIER] & my_team
-
-    # Existing friendly launcher 3x3s and friendly barriers are already
-    # impassable to the enemy.
+    # Existing friendly launcher 3x3s are already impassable to the enemy.
     friendly_launchers = bm_et[map_info._IDX_LAUNCHER] & my_team
     friendly_launcher_zone = (
         map_info.expand_chebyshev(friendly_launchers) | friendly_launchers
     )
-    enemy_avoid = friendly_launcher_zone | my_barrier
 
-    # Baseline enemy distance: BFS starts at the visible enemy bots and finds
-    # the closest tile adjacent to the target conveyor (heal range), through
-    # the enemy's passable mask (side=False). Enemies threaten the conveyor
-    # by being adjacent, not by standing on it.
-    target_adjacent = map_info.expand_chebyshev(target_bit) & ~target_bit
+    # Baseline enemy distance: BFS starts at the target conveyor and finds the
+    # closest enemy bot through the enemy's passable mask (side=False).
     _, baseline_dist = nav.closest(
-        target_adjacent & ~enemy_avoid, pos=visible_enemy_bots,
-        avoid=enemy_avoid, side=False,
+        visible_enemy_bots, pos=target, avoid=friendly_launcher_zone, side=False
     )
     if baseline_dist == -1:
         return False  # already unreachable; nothing to lock down
@@ -1233,8 +1219,12 @@ def _try_launcher_lockdown(target: Position) -> bool:
         return False
     my_n_for_gate = map_info._my_pos.x + map_info._my_pos.y * w
     on_target = (my_n_for_gate == target_n)
-    if on_target and hp // 2 <= baseline_dist - 1:
+    if on_target and hp // 2 <= baseline_dist - 2:
         return False  # already in firing position and will finish before they arrive
+
+    walls = map_info._bm_env[map_info._IDX_ENV_WALL]
+    my_road = bm_et[map_info._IDX_ROAD] & my_team
+    my_barrier = bm_et[map_info._IDX_BARRIER] & my_team
 
     my_pos = map_info._my_pos
     my_bit = 1 << (my_pos.x + my_pos.y * w)
@@ -1251,11 +1241,10 @@ def _try_launcher_lockdown(target: Position) -> bool:
     UNREACHABLE = 1 << 30
 
     def _dist_with_extra(extra: int) -> int:
-        avoid = enemy_avoid | extra
         _, d = nav.closest(
-            target_adjacent & ~avoid,
-            pos=visible_enemy_bots,
-            avoid=avoid,
+            visible_enemy_bots,
+            pos=target,
+            avoid=friendly_launcher_zone | extra,
             side=False,
         )
         return UNREACHABLE if d == -1 else d

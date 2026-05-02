@@ -59,15 +59,15 @@ def _should_stay():
     #             return True
     # Closest builder bot by pathing distance: if a friendly is strictly closer
     # than any enemy, we're in their way — leave. Otherwise stay.
-    _, enemy_d = nav.closest_within(map_info._bm_enemy_bots&map_info._bm_visible, max_dist=8)
-    _, friendly_d = nav.closest_within(map_info._bm_friendly_bots&map_info._bm_visible, max_dist=4)
+    _, enemy_d = nav.closest_within(map_info._bm_enemy_bots, max_dist=8)
+    _, friendly_d = nav.closest_within(map_info._bm_friendly_bots, max_dist=4)
     if enemy_d == -1 and friendly_d == -1:
         return True
     if enemy_d == -1:
         return False
     if friendly_d == -1:
         return True
-    return enemy_d <= friendly_d+1
+    return enemy_d <= friendly_d
 
 
 def _ally_feeder_mask(max_steps: int = 6) -> int:

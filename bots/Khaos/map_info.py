@@ -182,7 +182,7 @@ _width = _height = 0
 # Reserve enough Ti before any builder-bot build action that we can still
 # spawn another builder bot afterwards. Constant is the base bot Ti cost;
 # scaled at call time by the team's current cost scale.
-BUILDER_BOT_TI_RESERVE = 30
+BUILDER_BOT_TI_RESERVE = 0
 
 
 def builder_ti_reserve() -> float:
@@ -1100,6 +1100,16 @@ def update_at(pos: Position) -> None:
     # Fast path: same building as before — skip re-reading type/team/direction
     if building_id[n] == entity_id:
         et_idx = old_et_idx
+        # Gunners are the only entity that can change direction without
+        # changing entity_id (rotate). Re-read so the threat mask stays fresh.
+        if et_idx == _IDX_GUNNER:
+            new_dir_idx = _DIR_INT[get_direction(entity_id)]
+            old_dir_idx = building_dir[n]
+            if new_dir_idx != old_dir_idx:
+                bm_dir[old_dir_idx] &= nbit
+                bm_dir[new_dir_idx] |= bit
+                building_dir[n] = new_dir_idx
+                _struct_version += 1
         hp = get_hp(entity_id)
         building_hp[n] = hp
         max_hp = _MAX_HP_BY_IDX[et_idx]

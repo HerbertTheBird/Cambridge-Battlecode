@@ -154,6 +154,8 @@ def _my_claims():
         | _orphan_harvesters(not_blocked_mask)
         | _orphan_foundries(not_blocked_mask)
     ) & ~avoid
+    if units.builder._stay_near_core:
+        candidates &= units.builder.near_core_mask()
     return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, candidates, tie_self=True)
 
 _cached_claims = 0
@@ -186,11 +188,6 @@ def run():
         log("no candidates?")
         return
     width = map_info._width
-    best, _ = nav.closest(candidates)
-    if best is None:
-        log("no closest???")
-        unpathable |= candidates
-        return
 
     _BARRIER_DESTROYABLE = (
         EntityType.ROAD,
@@ -255,68 +252,85 @@ def run():
             rc.build_barrier(target)
             map_info.update_at(target)
 
-    best_bit = 1 << (best.x + best.y * width)
-    is_harvester = bool(map_info._bm_et[map_info._IDX_HARVESTER] & best_bit)
-
+    best = None
+    path = None
     target_conveyor = [None]*2
-    path = []
-    attack_route = False
-    best_n = best.x + best.y * width
-    is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY] & best_bit)
     is_raw_ax = False
     is_refined = False
-    is_ti_harvester = False
-    if is_foundry:
-        is_raw_ax = False
-        is_refined = True
-    if is_harvester:
-        if map_info._bm_env[map_info._IDX_ENV_ORE_AX] & best_bit:
-            is_raw_ax = True
-            is_refined = False
-        elif map_info._bm_env[map_info._IDX_ENV_ORE_TI] & best_bit:
-            is_raw_ax = False
-            is_refined = False
-            is_ti_harvester = True
-    if is_harvester or is_foundry:
-        attack_route = (is_foundry or is_ti_harvester) and _should_attack_route(best)
-        if attack_route:
-            path = nav.calculate_attack_conveyor_path(best, update=False)
-        else:
-            path = nav.calculate_conveyor_path(best, is_raw_ax, update=False)
-        if path is None:
-            if high_priority:
-                fallback_barrier(best)
-                return
-            unpathable |= best_bit
+    is_harvester = False
+    is_foundry = False
+
+    while candidates:
+        candidate, _ = nav.closest(candidates)
+        if candidate is None:
+            log("no closest???")
+            unpathable |= candidates
             return
-        target_conveyor = [path[0], path[1]]
-    else:
-        prev_bit = map_info._conv_reverse[best_n]&-map_info._conv_reverse[best_n]
-        is_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & best_bit)
-        is_refined = bool(map_info._bm_refined_carrying & prev_bit) or bool(map_info._bm_refined_carrying & best_bit)
-        attack_route = not is_raw_ax and _should_attack_route(best)
-        if attack_route:
-            path = nav.calculate_attack_conveyor_path(best, update=True)
+        cand_n = candidate.x + candidate.y * width
+        cand_bit = 1 << cand_n
+        cand_is_harvester = bool(map_info._bm_et[map_info._IDX_HARVESTER] & cand_bit)
+        cand_is_foundry = bool(map_info._bm_et[map_info._IDX_FOUNDRY] & cand_bit)
+        cand_raw_ax = False
+        cand_refined = False
+        cand_is_ti_harvester = False
+        if cand_is_foundry:
+            cand_raw_ax = False
+            cand_refined = True
+        if cand_is_harvester:
+            if map_info._bm_env[map_info._IDX_ENV_ORE_AX] & cand_bit:
+                cand_raw_ax = True
+                cand_refined = False
+            elif map_info._bm_env[map_info._IDX_ENV_ORE_TI] & cand_bit:
+                cand_raw_ax = False
+                cand_refined = False
+                cand_is_ti_harvester = True
+        if cand_is_harvester or cand_is_foundry:
+            cand_attack_route = (cand_is_foundry or cand_is_ti_harvester) and _should_attack_route(candidate)
+            if cand_attack_route:
+                cand_path = nav.calculate_attack_conveyor_path(candidate, update=False)
+            else:
+                cand_path = nav.calculate_conveyor_path(candidate, cand_raw_ax, update=False)
         else:
-            path = nav.calculate_conveyor_path(best, is_raw_ax, update=True)
-        log("PATH", path, bool(is_raw_ax))
-        if path is None:
+            prev_bit = map_info._conv_reverse[cand_n]&-map_info._conv_reverse[cand_n]
+            cand_raw_ax = bool(map_info._bm_raw_ax_carrying & prev_bit) or bool(map_info._bm_raw_ax_carrying & cand_bit)
+            cand_refined = bool(map_info._bm_refined_carrying & prev_bit) or bool(map_info._bm_refined_carrying & cand_bit)
+            cand_attack_route = not cand_raw_ax and _should_attack_route(candidate)
+            if cand_attack_route:
+                cand_path = nav.calculate_attack_conveyor_path(candidate, update=True)
+            else:
+                cand_path = nav.calculate_conveyor_path(candidate, cand_raw_ax, update=True)
+            log("PATH", cand_path, bool(cand_raw_ax))
+        if cand_path is None:
             if high_priority:
-                fallback_barrier(best)
+                fallback_barrier(candidate)
                 return
-            unpathable |= best_bit
-            return
+            unpathable |= cand_bit
+            candidates &= ~cand_bit
+            continue
+        cost = nav.conveyor_cost(cand_path[2])
+        if not cand_refined:
+            _cost_map[cand_n] = (cost, rc.get_current_round())
+            if rc.get_global_resources()[0] < cost:
+                log("can't afford", cost)
+                if high_priority:
+                    fallback_barrier(candidate)
+                    return
+                candidates &= ~cand_bit
+                continue
+        best = candidate
+        path = cand_path
         target_conveyor = [path[0], path[1]]
-    cost = nav.conveyor_cost(path[2])
+        is_raw_ax = cand_raw_ax
+        is_refined = cand_refined
+        is_harvester = cand_is_harvester
+        is_foundry = cand_is_foundry
+        break
+
+    if best is None:
+        return
+
     best_n = best.x + best.y * width
-    if not is_refined:
-        _cost_map[best_n] = (cost, rc.get_current_round())
-        if rc.get_global_resources()[0] < cost:
-            log("can't afford", cost)
-            if high_priority:
-                fallback_barrier(best)
-                return
-            return
+    best_bit = 1 << best_n
     foundry_sites = nav.raw_ax_foundry_sites() if is_raw_ax else 0
     tc0_bit = 1 << (target_conveyor[0].x + target_conveyor[0].y * width)
     if is_raw_ax and (foundry_sites & tc0_bit) and target_conveyor[0] == target_conveyor[1]:

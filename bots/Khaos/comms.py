@@ -3,27 +3,39 @@ import map_info
 from log import DRAW_DEBUG, log
 
 # TYPE_LAUNCHER_ORDER carries symmetry info, target_idx and sender_loc
-# SYMMETRY_BROADCAST only carries symmetry info
+# SYMMETRY_BROADCAST carries symmetry info plus a Lethe-style learn-map sample
 TYPE_LAUNCHER_ORDER = 0
 TYPE_SYMMETRY_BROADCAST = 1
 
 POS_BITS = 12
 SYM_BITS = 3
 SENDER_BITS = 3
-TYPE_BITS = 5
+TYPE_BITS = 1
+LEARN_MAP_POS_BITS = 7
+LEARN_MAP_SAMPLE_BITS = 21
 _POS_MASK = (1 << POS_BITS) - 1
 _SYM_MASK = (1 << SYM_BITS) - 1
 _SENDER_MASK = (1 << SENDER_BITS) - 1
 _TYPE_MASK = (1 << TYPE_BITS) - 1
+_LEARN_MAP_POS_MASK = (1 << LEARN_MAP_POS_BITS) - 1
+_LEARN_MAP_SAMPLE_MASK = (1 << LEARN_MAP_SAMPLE_BITS) - 1
 _SYM_SHIFT = POS_BITS
 _SENDER_SHIFT = _SYM_SHIFT + SYM_BITS
-_TYPE_SHIFT = _SENDER_SHIFT + SENDER_BITS
+_TYPE_SHIFT = 32 - TYPE_BITS
+_LEARN_MAP_SAMPLE_SHIFT = LEARN_MAP_POS_BITS
+_LEARN_MAP_SYM_SHIFT = _LEARN_MAP_SAMPLE_SHIFT + LEARN_MAP_SAMPLE_BITS
 
 _DIRS_8 = [
     Direction.NORTH, Direction.NORTHEAST, Direction.EAST, Direction.SOUTHEAST,
     Direction.SOUTH, Direction.SOUTHWEST, Direction.WEST, Direction.NORTHWEST,
 ]
 _DIR_TO_IDX = {d: i for i, d in enumerate(_DIRS_8)}
+_LEARN_MAP_OFFSETS = tuple(
+    (dx, dy)
+    for dy in range(-2, 3)
+    for dx in range(-2, 3)
+    if dx * dx + dy * dy <= 5
+)
 rc: Controller
 ENCRYPT = True
 key = 0
@@ -90,10 +102,13 @@ def decode_visible_marker(id: int, pos: Position):
     marker_id_at[pos_n] = id
 
     val = rc.get_marker_value(id) ^ key
-    sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
-    sender_dir = _DIRS_8[sender_dir_idx]
-    dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
-    sender_pos = Position(pos.x + dx, pos.y + dy)
+    if decode_type(val) == TYPE_SYMMETRY_BROADCAST:
+        sender_pos = pos
+    else:
+        sender_dir_idx = (val >> _SENDER_SHIFT) & _SENDER_MASK
+        sender_dir = _DIRS_8[sender_dir_idx]
+        dx, dy = map_info._DIRECTION_DELTAS[sender_dir]
+        sender_pos = Position(pos.x + dx, pos.y + dy)
     return (val, sender_pos, pos, id)
 
 
@@ -104,7 +119,18 @@ def decode_location(v):
     return v & _POS_MASK
 
 def decode_sym(v):
+    if decode_type(v) == TYPE_SYMMETRY_BROADCAST:
+        return (v >> _LEARN_MAP_SYM_SHIFT) & _SYM_MASK
     return (v >> _SYM_SHIFT) & _SYM_MASK
+
+def decode_learn_map_corresponding_pos(v: int) -> Position:
+    code = v & _LEARN_MAP_POS_MASK
+    x_bucket = code % 10
+    y_bucket = code // 10
+    return get_learn_map_bucket_pos(x_bucket, y_bucket)
+
+def decode_learn_map_sample_bits(v):
+    return (v >> _LEARN_MAP_SAMPLE_SHIFT) & _LEARN_MAP_SAMPLE_MASK
 
 def decode_type(v):
     return (v >> _TYPE_SHIFT) & _TYPE_MASK
@@ -117,6 +143,108 @@ def encode(target, type, sym=0, sender_loc=0):
         | ((type & _TYPE_MASK) << _TYPE_SHIFT)
     ) ^ key
 
+def get_learn_map_bucket_pos(x_bucket: int, y_bucket: int) -> Position:
+    return Position(
+        min(x_bucket * 5 + 2, map_info._width - 1),
+        min(y_bucket * 5 + 2, map_info._height - 1),
+    )
+
+def get_learn_map_corresponding_pos(pos: Position) -> Position:
+    return get_learn_map_bucket_pos(pos.x // 5, pos.y // 5)
+
+def encode_symmetry_broadcast(corresponding_pos: Position, sym_bits: int, sample_bits: int) -> int:
+    # corresponding_pos must already be bucketed via get_learn_map_corresponding_pos.
+    pos_code = corresponding_pos.x // 5 + 10 * (corresponding_pos.y // 5)
+    return (
+        (pos_code & _LEARN_MAP_POS_MASK)
+        | ((sample_bits & _LEARN_MAP_SAMPLE_MASK) << _LEARN_MAP_SAMPLE_SHIFT)
+        | ((sym_bits & _SYM_MASK) << _LEARN_MAP_SYM_SHIFT)
+        | (TYPE_SYMMETRY_BROADCAST << _TYPE_SHIFT)
+    ) ^ key
+
+def _symmetry_env_idx(marker_pos: Position) -> int:
+    # Single-bit parity: x odd → titanium, x even → wall.
+    if marker_pos.x & 1:
+        return map_info._IDX_ENV_ORE_TI
+    return map_info._IDX_ENV_WALL
+
+def _encode_learn_map_sample_bits(corresponding_pos: Position, marker_pos: Position) -> int:
+    # corresponding_pos must already be bucketed.
+    seen_env = map_info._bm_seen & map_info._bm_env[_symmetry_env_idx(marker_pos)]
+    width = map_info._width
+    base_x = corresponding_pos.x
+    base_y = corresponding_pos.y
+    base_n = base_x + base_y * width
+    in_bounds_coords = map_info.in_bounds_coords
+    result = 0
+
+    for i, (dx, dy) in enumerate(_LEARN_MAP_OFFSETS):
+        if not in_bounds_coords(base_x + dx, base_y + dy):
+            continue
+        if (seen_env >> (base_n + dx + dy * width)) & 1:
+            result |= 1 << i
+    return result
+
+def _note_comm_env(x: int, y: int, env_idx: int) -> None:
+    if not map_info.in_bounds_coords(x, y):
+        return
+
+    width = map_info._width
+    height = map_info._height
+    n = x + y * width
+    bit = 1 << n
+    if map_info._bm_seen & bit:
+        return
+
+    map_info._bm_seen |= bit
+    map_info._bm_env[env_idx] |= bit
+
+    if map_info._solved_sym:
+        if map_info._hor_sym:
+            fn = (width - 1 - x) + y * width
+        elif map_info._ver_sym:
+            fn = x + (height - 1 - y) * width
+        else:
+            fn = (width - 1 - x) + (height - 1 - y) * width
+        fbit = 1 << fn
+        map_info._bm_env[env_idx] |= fbit
+        map_info._bm_seen |= fbit
+    else:
+        bm_seen = map_info._bm_seen
+        bm_env_match = map_info._bm_env[env_idx]
+        rx = width - 1 - x
+        ry = height - 1 - y
+        if map_info._hor_sym:
+            fbit = 1 << (rx + y * width)
+            if (bm_seen & fbit) and not (bm_env_match & fbit):
+                map_info._hor_sym = False
+        if map_info._ver_sym:
+            fbit = 1 << (x + ry * width)
+            if (bm_seen & fbit) and not (bm_env_match & fbit):
+                map_info._ver_sym = False
+        if map_info._rot_sym:
+            fbit = 1 << (rx + ry * width)
+            if (bm_seen & fbit) and not (bm_env_match & fbit):
+                map_info._rot_sym = False
+
+    if env_idx == map_info._IDX_ENV_WALL:
+        map_info._struct_version += 1
+
+def apply_symmetry_broadcast_map(marker_pos: Position, corresponding_pos: Position, sample_bits: int) -> None:
+    if not sample_bits:
+        return
+    env_idx = _symmetry_env_idx(marker_pos)
+    base_x = corresponding_pos.x
+    base_y = corresponding_pos.y
+    offsets = _LEARN_MAP_OFFSETS
+    bits = sample_bits
+    while bits:
+        lsb = bits & -bits
+        i = lsb.bit_length() - 1
+        dx, dy = offsets[i]
+        _note_comm_env(base_x + dx, base_y + dy, env_idx)
+        bits ^= lsb
+
 def _is_bad_marker_spot(pos):
     """True if pos is cardinally adjacent to a harvester or is a conveyor target."""
     bit = 1 << (pos.x + pos.y * map_info._width)
@@ -127,20 +255,38 @@ def _is_bad_marker_spot(pos):
 def get_sym_bits() -> int:
     return int(map_info._hor_sym) | (int(map_info._ver_sym) << 1) | (int(map_info._rot_sym) << 2)
 
-def broadcast_symmetry():
+def broadcast_symmetry(corresponding_pos: Position):
     my_pos = map_info._my_pos
+    if not map_info.in_bounds(corresponding_pos):
+        return
+    bucketed = get_learn_map_corresponding_pos(corresponding_pos)
+
+    best_score = -1
+    best_p = None
+    best_sample_bits = 0
+
     for d in Direction:
         if d == Direction.CENTRE:
             continue
         p = map_info.pos_add(my_pos, d)
         if not map_info.in_bounds(p):
             continue
-        if rc.can_place_marker(p):
-            val = encode(0, TYPE_SYMMETRY_BROADCAST, sym=get_sym_bits())
-            rc.place_marker(p, val)
-            map_info.update_at(p)
-            _my_markers.add(rc.get_tile_building_id(p))
-            return
+        if not rc.can_place_marker(p):
+            continue
+        sample_bits = _encode_learn_map_sample_bits(bucketed, p)
+        score = sample_bits.bit_count()
+        if score > best_score:
+            best_score = score
+            best_p = p
+            best_sample_bits = sample_bits
+
+    if best_p is None:
+        return
+
+    val = encode_symmetry_broadcast(bucketed, get_sym_bits(), best_sample_bits)
+    rc.place_marker(best_p, val)
+    map_info.update_at(best_p)
+    _my_markers.add(rc.get_tile_building_id(best_p))
 
 def give_launcher_order(target_idx):
     if DRAW_DEBUG:

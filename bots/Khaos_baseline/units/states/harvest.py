@@ -13,8 +13,6 @@ def _my_claims():
     w = map_info._width
     my_mask = 1 << (my_pos.x + my_pos.y * w)
     available = harvestable_ore() & ~_too_expensive()
-    if units.builder._stay_near_core:
-        available &= units.builder.near_core_mask()
     return pathing.claim_subset(my_mask, map_info._bm_friendly_bots, available, tie_self=False)
 
 def init(c: Controller):
@@ -117,64 +115,52 @@ def run():
     if not available:
         return
 
-    w = map_info._width
-    my_team_idx = map_info._my_team_idx
-
-    best_ore = None
-    path = None
-    while available:
-        candidate, _ = nav.closest(available)
-        log("harvesting", candidate)
-        if candidate is None:
-            cant_harvest |= available
-            return
-        cand_n = candidate.x + candidate.y * w
-        cand_bit = 1 << cand_n
-        cand_is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & cand_bit)
-        cand_path = None
-        for dir in CARD:
-            pos = map_info.pos_add(candidate, dir)
-            if not map_info.in_bounds(pos):
-                continue
-            pn = pos.x + pos.y * w
-            pbit = 1 << pn
-            if (map_info._bm_et[map_info._IDX_BRIDGE] & pbit) and (map_info._bm_team[my_team_idx] & pbit):
-                target_n = map_info._building_conv_target[pn]
-                if target_n >= 0 and target_n != cand_n:
-                    cand_path = nav.calculate_conveyor_path(pos, cand_is_raw_ax, True)
-                    if cand_path is not None:
-                        break
-                continue
-            if not ((map_info._bm_et[map_info._IDX_CONVEYOR] | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]) & pbit):
-                continue
-            d_idx = map_info._building_dir[pn]
-            if d_idx < 0:
-                continue
-            conv_dir = map_info._INT_DIR[d_idx]
-            if conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & pbit):
-                cand_path = nav.calculate_conveyor_path(map_info.pos_add(pos, conv_dir), cand_is_raw_ax, True)
-                if cand_path is not None:
-                    break
-        if not cand_path:
-            cand_path = nav.calculate_conveyor_path(candidate, cand_is_raw_ax)
-        if cand_path is None:
-            cant_harvest |= cand_bit
-            available &= ~cand_bit
-            log("cant route", candidate, "— retrying")
-            continue
-        cost = rc.get_harvester_cost()[0] + nav.conveyor_cost(cand_path[2], rc.get_scale_percent()/100+0.05)
-        _cost_map[cand_n] = (cost, rc.get_current_round())
-        if cost > rc.get_global_resources()[0]:
-            available &= ~cand_bit
-            log("too expensive", candidate, "— retrying")
-            continue
-        best_ore = candidate
-        path = cand_path
-        break
-
+    best_ore, _ = nav.closest(available)
+    log("harvesting", best_ore)
     if best_ore is None:
+        cant_harvest |= available
         return
 
+    w = map_info._width
+    my_team_idx = map_info._my_team_idx
+    best_n = best_ore.x + best_ore.y * w
+    is_raw_ax = bool(map_info._bm_env[map_info._IDX_ENV_ORE_AX] & (1 << best_n))
+    path = None
+    for dir in CARD:
+        pos = map_info.pos_add(best_ore, dir)
+        if not map_info.in_bounds(pos):
+            continue
+        pn = pos.x + pos.y * w
+        pbit = 1 << pn
+        if (map_info._bm_et[map_info._IDX_BRIDGE] & pbit) and (map_info._bm_team[my_team_idx] & pbit):
+            target_n = map_info._building_conv_target[pn]
+            if target_n >= 0 and target_n != best_n:
+                path = nav.calculate_conveyor_path(pos, is_raw_ax, True)
+                if path is not None:
+                    break
+            continue
+        if not ((map_info._bm_et[map_info._IDX_CONVEYOR] | map_info._bm_et[map_info._IDX_ARMOURED_CONVEYOR]) & pbit):
+            continue
+        d_idx = map_info._building_dir[pn]
+        if d_idx < 0:
+            continue
+        conv_dir = map_info._INT_DIR[d_idx]
+        if conv_dir != dir.opposite() and not (map_info._bm_conv_into_open_ore & pbit):
+            path = nav.calculate_conveyor_path(map_info.pos_add(pos, conv_dir), is_raw_ax, True)
+            if path is not None:
+                break
+    if not path:
+        path = nav.calculate_conveyor_path(best_ore, is_raw_ax)
+    if path is not None:
+        _cost_map[best_n] = (rc.get_harvester_cost()[0] + nav.conveyor_cost(path[2], rc.get_scale_percent()/100+0.05), rc.get_current_round())
+    else:
+        cant_harvest |= 1 << (best_ore.x + best_ore.y * w)
+        log("cant route")
+        return
+    if _cost_map[best_n][0] > rc.get_global_resources()[0]:
+        log("too expensive")
+        return
+        
     ore_n = best_ore.x + best_ore.y * w
     ore_bit = 1 << ore_n
     ore_id = map_info._building_id[ore_n]
