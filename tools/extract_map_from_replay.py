@@ -25,7 +25,7 @@ import argparse
 import sys
 from pathlib import Path
 
-import cambc_pb2
+import tools.cambc_pb2 as cambc_pb2
 
 
 SCRIPT_DIR = Path(__file__).parent.resolve()

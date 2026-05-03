@@ -36,7 +36,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from stats_utils import bo9_from_pair_outcomes, bo9_win_probability
+from tools.stats_utils import bo9_from_pair_outcomes, bo9_win_probability
 from tournament import discover_maps, run_match, MatchResult, binomial_p_value
 
 

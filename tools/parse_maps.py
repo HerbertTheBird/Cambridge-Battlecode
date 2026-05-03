@@ -1,5 +1,5 @@
 from cambc import Environment, Position
-import cambc_pb2
+import tools.cambc_pb2 as cambc_pb2
 
 
 def load_map26(filename):

@@ -1,6 +1,6 @@
 from pathlib import Path
 from cambc import Position
-import cambc_pb2
+import tools.cambc_pb2 as cambc_pb2
 
 
 MAPS_DIR = Path("maps")
