@@ -31,7 +31,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 from tournament import run_match, discover_maps, MatchResult, binomial_p_value
-from stats_utils import bo9_win_probability, bo9_from_pair_outcomes
+from tools.stats_utils import bo9_win_probability, bo9_from_pair_outcomes
 
 
 # ── Cell stats ───────────────────────────────────────────────────────────────

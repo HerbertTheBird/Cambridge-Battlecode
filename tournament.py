@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
 
-from stats_utils import (
+from tools.stats_utils import (
     Glicko2Rating,
     GLICKO2_DEFAULT_RATING,
     glicko2_update,

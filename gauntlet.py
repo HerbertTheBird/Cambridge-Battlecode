@@ -33,7 +33,7 @@ from tournament import (
     elo_update,
     run_match,
 )
-from stats_utils import bo9_win_probability, bo9_from_pair_outcomes
+from tools.stats_utils import bo9_win_probability, bo9_from_pair_outcomes
 
 
 # ── Gauntlet ────────────────────────────────────────────────────────────────

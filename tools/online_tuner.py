@@ -36,12 +36,12 @@ from pathlib import Path
 
 import optuna
 
-from online_challenge import (
+from tools.online_challenge import (
     run_online_challenge, compute_overall_win_rate, print_results, MatchOutcome,
     submit_bot, challenge_opponent, poll_match, get_our_team_id,
 )
-from tuner import parse_opt_annotations, suggest_value, create_patched_bot
-from sprt_gauntlet import sprt_bounds, llr_increment_pair, elo_to_score
+from tools.tuner import parse_opt_annotations, suggest_value, create_patched_bot
+from tools.sprt_gauntlet import sprt_bounds, llr_increment_pair, elo_to_score
 
 
 # ── SPRT-aware online trial runner ──────────────────────────────────────────
