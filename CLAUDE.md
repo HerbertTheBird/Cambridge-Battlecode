@@ -91,7 +91,7 @@ class Player:
   For gunners, this is the full forward ray up to range, including tiles behind
   walls. For sentinels, this is the full +/-1 band around the forward line
   within vision radius squared 32. For breaches, this is the forward 180-degree
-  cone within distance squared 5. For launchers, this is every in-bounds tile
+  cone within distance squared 24. For launchers, this is every in-bounds tile
   with `0 < distance^2 <= 26`. Raises `GameError` if this unit is not a turret.
 </ResponseField>
 
@@ -143,8 +143,10 @@ class Player:
 </ResponseField>
 
 <ResponseField name="is_tile_passable(pos: Position)" type="bool">
-  Return True if a builder bot belonging to this team could stand on the tile
-  (conveyor, road, or allied core, and no other builder bot).
+  Return True if a builder bot belonging to this team could stand on the tile.
+  A tile is passable when it contains a walkable building (conveyor, splitter,
+  armoured conveyor, bridge, or road) or an allied core, and no builder bot is
+  already present.
 </ResponseField>
 
 <ResponseField name="is_in_vision(pos: Position)" type="bool">
@@ -273,6 +275,24 @@ c.build_foundry(pos)                      c.can_build_foundry(pos)
 c.build_launcher(pos)                     c.can_build_launcher(pos)
 ```
 
+### Generic build
+
+A single pair of methods that dispatches to the correct type-specific builder. Use these when the entity type is determined at runtime.
+
+<ResponseField name="can_build(entity_type: EntityType, position: Position, extra: Direction | Position | None = None)" type="bool">
+  Return True if `entity_type` can be built at `position`. For directional
+  buildings and turrets (conveyor, splitter, armoured\_conveyor, gunner,
+  sentinel, breach), `extra` must be a `Direction`. For bridges, `extra` must be
+  the target `Position`. For all other types (harvester, road, barrier, launcher,
+  foundry), `extra` is unused.
+</ResponseField>
+
+<ResponseField name="build(entity_type: EntityType, position: Position, extra: Direction | Position | None = None)" type="int">
+  Build `entity_type` at `position`. Returns the new entity's id. The `extra`
+  parameter follows the same rules as `can_build()`. Raises `GameError` if not
+  legal.
+</ResponseField>
+
 ## Healing & destruction
 
 <ResponseField name="heal(position: Position)" type="None">
@@ -304,10 +324,10 @@ c.build_launcher(pos)                     c.can_build_launcher(pos)
   `self_destruct()` will run.
 </ResponseField>
 
-<ResponseField name="resign()" type="None">
-  Forfeit the game immediately. Destroys this team's core, ending the game as a
-  loss. **Terminates this unit's execution immediately** — no code after
-  `resign()` will run.
+<ResponseField name="resign(message: str | None = None)" type="None">
+  Forfeit the game immediately. Destroys this team's core, ending the game as a loss. **Terminates this unit's execution immediately** — no code after `resign()` will run.
+
+  The optional `message` (max 500 characters) is saved to the replay and displayed in match results.
 </ResponseField>
 
 ## Markers
@@ -359,9 +379,10 @@ c.build_launcher(pos)                     c.can_build_launcher(pos)
 
 <ResponseField name="can_rotate(direction: Direction)" type="bool">
   Return whether `rotate(direction)` would be legal this round. This returns
-  False if the current unit is not a gunner, if the gunner cannot act this turn,
-  or if the team cannot afford the global 10 Ti rotate cost. Unlike `rotate()`,
-  this does not raise on non-gunners.
+  False if the current unit is not a gunner, if direction is `Direction.CENTRE`,
+  if direction is the gunner's current facing direction, if the gunner cannot act
+  this turn, or if the team cannot afford the global 10 Ti rotate cost. Unlike
+  `rotate()`, this does not raise on non-gunners.
 </ResponseField>
 
 <ResponseField name="rotate(direction: Direction)" type="None">
@@ -578,8 +599,8 @@ max_turns = GameConstants.MAX_TURNS  # 2000
 | `BUILDER_BOT_VISION_RADIUS_SQ` | 20    | Builder bot vision               |
 | `GUNNER_VISION_RADIUS_SQ`      | 13    | Gunner vision                    |
 | `SENTINEL_VISION_RADIUS_SQ`    | 32    | Sentinel vision                  |
-| `BREACH_VISION_RADIUS_SQ`      | 13    | Breach vision                    |
-| `BREACH_ATTACK_RADIUS_SQ`      | 5     | Breach attack cone               |
+| `BREACH_VISION_RADIUS_SQ`      | 2     | Breach vision                    |
+| `BREACH_ATTACK_RADIUS_SQ`      | 24    | Breach attack cone               |
 | `LAUNCHER_VISION_RADIUS_SQ`    | 26    | Launcher vision + throw range    |
 | `BRIDGE_TARGET_RADIUS_SQ`      | 9     | Max bridge output distance²      |
 
@@ -606,13 +627,13 @@ max_turns = GameConstants.MAX_TURNS  # 2000
 | Constant                   | Value |
 | -------------------------- | ----- |
 | `CORE_MAX_HP`              | 500   |
-| `BUILDER_BOT_MAX_HP`       | 30    |
+| `BUILDER_BOT_MAX_HP`       | 40    |
 | `CONVEYOR_MAX_HP`          | 20    |
 | `SPLITTER_MAX_HP`          | 20    |
 | `BRIDGE_MAX_HP`            | 20    |
 | `ARMOURED_CONVEYOR_MAX_HP` | 50    |
 | `HARVESTER_MAX_HP`         | 30    |
-| `ROAD_MAX_HP`              | 5     |
+| `ROAD_MAX_HP`              | 4     |
 | `BARRIER_MAX_HP`           | 30    |
 | `FOUNDRY_MAX_HP`           | 50    |
 | `MARKER_MAX_HP`            | 1     |
@@ -631,7 +652,7 @@ max_turns = GameConstants.MAX_TURNS  # 2000
 | `BUILDER_BOT_SELF_DESTRUCT_DAMAGE` | 0       | Damage on self-destruct                         |
 | `HEAL_AMOUNT`                      | 4       | HP restored per heal action                     |
 | `GUNNER_DAMAGE`                    | 10      | Gunner base damage per shot                     |
-| `GUNNER_AXIONITE_DAMAGE`           | 30      | Gunner damage when loaded with refined axionite |
+| `GUNNER_AXIONITE_DAMAGE`           | 25      | Gunner damage when loaded with refined axionite |
 | `GUNNER_FIRE_COOLDOWN`             | 1       | Turns between gunner shots                      |
 | `GUNNER_AMMO_COST`                 | 2       | Resources consumed per shot                     |
 | `GUNNER_ROTATE_COST`               | (10, 0) | Cost to rotate a gunner                         |
