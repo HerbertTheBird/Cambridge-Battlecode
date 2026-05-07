@@ -1,0 +1,291 @@
+class Node:
+    __slots__ = ("data", "_left", "_right", "_height", "parent")
+    def __init__(self, data):
+        """
+        A smart tree node with some extra functionality over standard nodes.
+        :param data: Data that is stored inside the node.
+        """
+        self.data = data
+        self._left = None
+        self._right = None
+        self._height = None
+        self.parent = None
+
+    def __repr__(self):
+        return f"Node({self.data}, left={self.left}, right={self.right})"
+
+    @property
+    def left(self) -> "Node":
+        return self._left
+
+    @property
+    def right(self) -> "Node":
+        return self._right
+
+    @property
+    def grandparent(self):
+        if self.parent is None or self.parent.parent is None:
+            return None
+        return self.parent.parent
+
+    def get_key(self, **kwargs):
+        return self.data
+
+    def get_value(self, **kwargs):
+        return self.data
+
+    def get_label(self, **kwargs):
+        return f"{self.get_key(**kwargs)}({self.height})"
+
+    @left.setter
+    def left(self, node):
+
+        if node is not None:
+
+            # Tell the child who its new parent is
+            node.parent = self
+
+        self._left = node
+
+    @right.setter
+    def right(self, node):
+
+        if node is not None:
+
+            # Tell the child who its new parent is
+            node.parent = self
+
+        self._right = node
+
+    @property
+    def height(self):
+        if self._height is None:
+            self._height = self.calculate_height()
+        return self._height
+
+    @property
+    def balance(self):
+        # Inlined to avoid per-call .height property dispatch on each child.
+        # Preserves identical lazy-fill side effect on each child's _height.
+        left = self._left
+        right = self._right
+        if left is not None:
+            lh = left._height
+            if lh is None:
+                lh = left.calculate_height()
+                left._height = lh
+        else:
+            lh = 0
+        if right is not None:
+            rh = right._height
+            if rh is None:
+                rh = right.calculate_height()
+                right._height = rh
+        else:
+            rh = 0
+        return lh - rh
+
+    def calculate_height(self):
+        """
+        Recursively calculate height of this node.
+        Height calculated for each node will be stored, so calculations need to be done only once.
+        :return: (int) Height of the current node
+        """
+        left = self._left
+        right = self._right
+        left_height = left.height if left is not None else 0
+        right_height = right.height if right is not None else 0
+        height = 1 + max(left_height, right_height)
+        return height
+
+    def update_height(self):
+        """
+        Recalculate the height of the node.
+        """
+        # Inlined calculate_height: avoids the recursive .height property
+        # dispatch on each child and the calculate_height() method call here.
+        left = self._left
+        if left is None:
+            lh = 0
+        else:
+            lh = left._height
+            if lh is None:
+                lh = left.calculate_height()
+                left._height = lh
+        right = self._right
+        if right is None:
+            rh = 0
+        else:
+            rh = right._height
+            if rh is None:
+                rh = right.calculate_height()
+                right._height = rh
+        self._height = 1 + (lh if lh > rh else rh)
+
+    def update_heights(self):
+        """
+        Recalculate the heights of this node and all ancestor nodes.
+        """
+        current = self
+        while current is not None:
+            current.update_height()
+            current = current.parent
+
+    def is_left_child(self):
+        """
+        Determines whether this node is a left child.
+        :return: (bool) True if this node is a left child, False otherwise
+        """
+        if self.parent is None:
+            return False
+        return self.parent._left is self
+
+    def is_right_child(self):
+        """
+        Determines whether this node is a right child.
+        :return: (bool) True if this node is a right child, False otherwise
+        """
+        if self.parent is None:
+            return False
+        return self.parent._right is self
+
+    def is_leaf(self):
+        """
+        Determines whether this node is a leaf.
+        :return: (bool) True if this node is a leaf, False otherwise
+        """
+        return self._left is None and self._right is None
+
+    def minimum(self):
+        """
+        Determines the node with the smallest key in the subtree rooted by this node.
+        :return: (Node) Node with the smallest key
+        """
+        current = self
+        while current._left is not None:
+            current = current._left
+        return current
+
+    def maximum(self):
+        """
+        Determines the node with the largest key in the subtree rooted by this node.
+        :return: (Node) Node with the largest key
+        """
+        current = self
+        while current._right is not None:
+            current = current._right
+        return current
+
+    @property
+    def successor(self):
+        """
+        Returns the node with the smallest key larger than this node's key, or None
+        if this node has the largest key in the tree.
+        """
+
+        # If the node has a right sub tree, take the minimum
+        if self._right is not None:
+            return self._right.minimum()
+
+        # Walk up to the left until we are no longer a right child
+        current = self
+        parent = current.parent
+        while parent is not None and parent._right is current:
+            current = parent
+            parent = current.parent
+
+        # Check there is a right branch
+        if parent is None or parent._right is None:
+            return None
+
+        # Step over to the right branch, and take the minimum
+        return parent._right.minimum()
+
+    @property
+    def predecessor(self):
+        """
+        Returns the node with the largest key smaller than this node's key, or None
+        if this node has the smallest key in the tree.
+        """
+
+        # If the node has a left sub tree, take the maximum
+        if self._left is not None:
+            return self._left.maximum()
+
+        # Walk up to the right until we are no longer a left child
+        current = self
+        parent = current.parent
+        while parent is not None and parent._left is current:
+            current = parent
+            parent = current.parent
+
+        # Check there is a left branch
+        if parent is None or parent._left is None:
+            return None
+
+        # Step over to the left branch, and take the maximum
+        return parent._left.maximum()
+
+    def replace_leaf(self, replacement, root):
+        """
+        Replace the node by a replacement tree.
+        Requires the current node to be a leaf.
+
+        :param replacement: (Node) The root node of the replacement sub tree
+        :param root: (Node) The root of the tree
+        :return: (Node) The root of the updated tree
+        """
+
+        parent = self.parent
+
+        # Give the parent of the node to the replacement
+        if replacement is not None:
+            replacement.parent = parent
+
+        if parent is None:
+            root = replacement
+        elif parent._left is self:
+            # replacement.parent already set above; bypass the .left setter
+            # to avoid a redundant parent reassignment.
+            parent._left = replacement
+        elif parent._right is self:
+            parent._right = replacement
+        else:
+            root = replacement
+
+        # For non-empty replacement, start updating heights from replacement's root
+        if replacement is not None:
+            replacement.update_heights()
+
+        # For empty replacement, start updating heights from the parent
+        elif parent is not None:
+            parent.update_heights()
+
+        # Return the new tree. No need to return the replacement, because the
+        # reference remains the same.
+        return root
+
+    def visualize(self):
+        return self._visualize()
+
+    def _visualize(self, depth=0):
+        """
+        Visualize the node and its descendants.
+
+        :param depth: (int) Used by the recursive formula, should be left at the default value
+        :return: (str) String representation of the visualization
+        """
+        ret = ""
+
+        # Print right branch
+        if self.right is not None:
+            ret += self.right._visualize(depth + 1)
+
+        # Print own value
+        ret += "\n" + ("    " * depth) + str(self.get_label())
+
+        # Print left branch
+        if self.left is not None:
+            ret += self.left._visualize(depth=depth + 1)
+
+        return ret
