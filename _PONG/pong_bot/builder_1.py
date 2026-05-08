@@ -630,8 +630,8 @@ def run(c: Controller) -> None:
     if turn == 84:
         pos = Position(4, 20)
         direction = Direction.NORTH
-        if c.can_build_splitter(pos, direction):
-            c.build_splitter(pos, direction)
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)

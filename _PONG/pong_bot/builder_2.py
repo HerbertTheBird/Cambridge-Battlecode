@@ -3,8 +3,9 @@
 
 from cambc import *
 
-
+round = 3
 def run(c: Controller) -> None:
+    global round
     turn = c.get_current_round()
     if turn == 3:
         pos = Position(6, 10)
@@ -432,8 +433,8 @@ def run(c: Controller) -> None:
     if turn == 66:
         pos = Position(16, 12)
         direction = Direction.NORTH
-        if c.can_build_splitter(pos, direction):
-            c.build_splitter(pos, direction)
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
@@ -1823,8 +1824,22 @@ def run(c: Controller) -> None:
         pos = Position(19, 15)
         if c.can_build_foundry(pos):
             c.build_foundry(pos)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
         return
-    if c.get_global_resources()[0] >= c.get_harvester_cost()[0]:
+    if turn == 351:
+        pos = Position(17, 17)
+        if c.can_destroy(pos):
+            c.destroy(pos)
+        pos = Position(17, 17)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if c.get_global_resources()[0] >= c.get_harvester_cost()[0] and 3-((c.get_current_round()-round)%4) == 2:
         c.destroy(Position(19, 16))
         c.build_harvester(Position(19, 16))
+        round = c.get_current_round()
+    # print(3-((c.get_current_round()-round)%4))
     return
