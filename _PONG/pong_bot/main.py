@@ -29,9 +29,9 @@ class Player:
                 # The builder's first turn is normally one round after it was spawned.
                 # This matches the user's SPAWN_TURN = c.get_current_round() - 1 pattern.
                 self.spawn_turn = c.get_current_round() - 1
-                if self.spawn_turn == 1:
+                if self.spawn_turn == 0:
                     self.me = builder_1
-                elif self.spawn_turn == 2:
+                elif self.spawn_turn == 1:
                     self.me = builder_2
                 else:
                     self.me = builder

@@ -1533,7 +1533,7 @@ class BotCodeExporter:
         if spawn_turns:
             for i, turn in enumerate(spawn_turns):
                 prefix = "if" if i == 0 else "elif"
-                builder_route_lines.append(f"                {prefix} self.spawn_turn == {turn}:")
+                builder_route_lines.append(f"                {prefix} self.spawn_turn == {turn - 1}:")
                 builder_route_lines.append(f"                    self.me = builder_{turn}")
             builder_route_lines.append("                else:")
             builder_route_lines.append("                    self.me = builder")
@@ -1543,10 +1543,11 @@ class BotCodeExporter:
         text = f'''# main.py
 {GENERATED_HEADER}
 
-from cambc import Controller, EntityType
+from cambc import Controller, EntityType, Team
 import random
 
 {joined_imports}
+import mirror
 
 
 class Player:
@@ -1572,6 +1573,9 @@ class Player:
                 return
 
             self.initialized = True
+
+        if c.get_team() == Team.B:
+            c = mirror.MirrorController(c)
 
         if self.me is not None:
             self.me.run(c)
@@ -1620,7 +1624,7 @@ def run(c: Controller) -> None:
 
         for turn in sorted(turn_blocks):
             blocks = turn_blocks[turn]
-            lines.append(f"    if turn == {turn}:")
+            lines.append(f"    if turn == {turn - 1}:")
             if blocks:
                 for block in blocks:
                     if not block:

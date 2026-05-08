@@ -7,7 +7,7 @@ round = 0
 def run(c: Controller) -> None:
     global round
     turn = c.get_current_round()
-    if turn == 3:
+    if turn == 2:
         pos = Position(6, 10)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -16,7 +16,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 4:
+    if turn == 3:
         pos = Position(6, 11)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -25,17 +25,17 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 5:
+    if turn == 4:
         pos = Position(5, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 6:
+    if turn == 5:
         pos = Position(7, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 7:
+    if turn == 6:
         pos = Position(6, 12)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -44,7 +44,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 8:
+    if turn == 7:
         pos = Position(6, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -52,7 +52,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 9:
+    if turn == 8:
         direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
@@ -60,7 +60,7 @@ def run(c: Controller) -> None:
         if c.can_build_foundry(pos):
             c.build_foundry(pos)
         return
-    if turn == 10:
+    if turn == 9:
         pos = Position(7, 11)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -69,7 +69,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 11:
+    if turn == 10:
         pos = Position(8, 11)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -78,7 +78,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 12:
+    if turn == 11:
         pos = Position(8, 12)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
@@ -87,7 +87,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 13:
+    if turn == 12:
         pos = Position(8, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -95,7 +95,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 14:
+    if turn == 13:
         pos = Position(9, 10)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -104,7 +104,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 15:
+    if turn == 14:
         pos = Position(10, 10)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -113,7 +113,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 16:
+    if turn == 15:
         pos = Position(10, 11)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -122,7 +122,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 17:
+    if turn == 16:
         pos = Position(10, 12)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -131,10 +131,13 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 18:
+    if turn == 17:
         pos = Position(9, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 18:
+        pass
         return
     if turn == 19:
         pass
@@ -149,23 +152,23 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 23:
-        pass
-        return
-    if turn == 24:
         pos = Position(10, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 24:
+        pass
         return
     if turn == 25:
         pass
         return
     if turn == 26:
-        pass
-        return
-    if turn == 27:
         pos = Position(11, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 27:
+        pass
         return
     if turn == 28:
         pass
@@ -186,15 +189,12 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 34:
-        pass
-        return
-    if turn == 35:
         pos = Position(11, 13)
         target = Position(10, 12)
         if c.can_build_bridge(pos, target):
             c.build_bridge(pos, target)
         return
-    if turn == 36:
+    if turn == 35:
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
@@ -202,7 +202,7 @@ def run(c: Controller) -> None:
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 37:
+    if turn == 36:
         pos = Position(10, 14)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -210,7 +210,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 38:
+    if turn == 37:
         pos = Position(10, 15)
         target = Position(10, 12)
         if c.can_build_bridge(pos, target):
@@ -219,7 +219,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 39:
+    if turn == 38:
         pos = Position(9, 15)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -228,12 +228,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 40:
+    if turn == 39:
         pos = Position(8, 16)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 41:
+    if turn == 40:
         pos = Position(9, 16)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -242,10 +242,10 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 42:
+    if turn == 41:
         pass
         return
-    if turn == 43:
+    if turn == 42:
         pos = Position(9, 17)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -253,7 +253,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 44:
+    if turn == 43:
         pos = Position(11, 15)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -262,12 +262,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 45:
+    if turn == 44:
         pos = Position(12, 16)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 46:
+    if turn == 45:
         pos = Position(11, 16)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -276,7 +276,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 47:
+    if turn == 46:
         pos = Position(11, 17)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -284,12 +284,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 48:
+    if turn == 47:
         direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 49:
+    if turn == 48:
         direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
@@ -300,7 +300,7 @@ def run(c: Controller) -> None:
         if c.can_build_foundry(pos):
             c.build_foundry(pos)
         return
-    if turn == 50:
+    if turn == 49:
         pos = Position(12, 12)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -308,7 +308,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 51:
+    if turn == 50:
         pos = Position(13, 11)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -316,12 +316,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 52:
+    if turn == 51:
         pos = Position(13, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 53:
+    if turn == 52:
         pos = Position(14, 12)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -330,17 +330,17 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 54:
+    if turn == 53:
         pos = Position(14, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 55:
+    if turn == 54:
         pos = Position(15, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 56:
+    if turn == 55:
         pos = Position(14, 11)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -349,7 +349,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 57:
+    if turn == 56:
         pos = Position(14, 10)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -358,7 +358,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 58:
+    if turn == 57:
         pos = Position(14, 9)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -367,7 +367,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 59:
+    if turn == 58:
         pos = Position(14, 8)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -376,7 +376,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 60:
+    if turn == 59:
         pos = Position(13, 8)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -385,7 +385,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 61:
+    if turn == 60:
         pos = Position(12, 8)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -394,7 +394,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 62:
+    if turn == 61:
         pos = Position(11, 8)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -403,7 +403,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 63:
+    if turn == 62:
         pos = Position(12, 9)
         target = Position(9, 9)
         if c.can_build_bridge(pos, target):
@@ -412,7 +412,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 64:
+    if turn == 63:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
@@ -421,7 +421,7 @@ def run(c: Controller) -> None:
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         return
-    if turn == 65:
+    if turn == 64:
         pos = Position(15, 9)
         target = Position(12, 9)
         if c.can_build_bridge(pos, target):
@@ -430,7 +430,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 66:
+    if turn == 65:
         pos = Position(16, 12)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
@@ -439,12 +439,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 67:
+    if turn == 66:
         pos = Position(16, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 68:
+    if turn == 67:
         pos = Position(17, 11)
         direction = Direction.EAST
         if c.can_build_splitter(pos, direction):
@@ -453,7 +453,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 69:
+    if turn == 68:
         pos = Position(17, 10)
         target = Position(15, 9)
         if c.can_build_bridge(pos, target):
@@ -462,13 +462,13 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 70:
+    if turn == 69:
         pos = Position(16, 11)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         return
-    if turn == 71:
+    if turn == 70:
         pos = Position(17, 13)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -476,7 +476,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 72:
+    if turn == 71:
         pos = Position(17, 14)
         target = Position(17, 11)
         if c.can_build_bridge(pos, target):
@@ -485,7 +485,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 73:
+    if turn == 72:
         pos = Position(17, 15)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -494,7 +494,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 74:
+    if turn == 73:
         pos = Position(16, 16)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -503,12 +503,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 75:
+    if turn == 74:
         pos = Position(15, 16)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 76:
+    if turn == 75:
         pos = Position(16, 17)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -516,7 +516,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 77:
+    if turn == 76:
         pos = Position(18, 16)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -525,17 +525,17 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 78:
+    if turn == 77:
         pos = Position(19, 16)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 79:
+    if turn == 78:
         pos = Position(18, 17)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 80:
+    if turn == 79:
         pos = Position(17, 17)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -543,7 +543,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 81:
+    if turn == 80:
         pos = Position(17, 18)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -551,17 +551,17 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 82:
+    if turn == 81:
         direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 83:
+    if turn == 82:
         pos = Position(17, 16)
         if c.can_build_foundry(pos):
             c.build_foundry(pos)
         return
-    if turn == 84:
+    if turn == 83:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
@@ -570,7 +570,7 @@ def run(c: Controller) -> None:
         if c.can_build_bridge(pos, target):
             c.build_bridge(pos, target)
         return
-    if turn == 85:
+    if turn == 84:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
@@ -579,12 +579,12 @@ def run(c: Controller) -> None:
         if c.can_build_splitter(pos, direction):
             c.build_splitter(pos, direction)
         return
-    if turn == 87:
+    if turn == 86:
         pos = Position(17, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 88:
+    if turn == 87:
         pos = Position(16, 19)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -593,10 +593,10 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 89:
+    if turn == 88:
         pass
         return
-    if turn == 90:
+    if turn == 89:
         pos = Position(16, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -604,7 +604,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 91:
+    if turn == 90:
         pos = Position(18, 19)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -613,7 +613,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 92:
+    if turn == 91:
         pos = Position(18, 20)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -622,12 +622,12 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 93:
+    if turn == 92:
         pos = Position(19, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 94:
+    if turn == 93:
         pos = Position(18, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -635,7 +635,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 95:
+    if turn == 94:
         direction = Direction.WEST
         if c.can_move(direction):
             c.move(direction)
@@ -643,7 +643,7 @@ def run(c: Controller) -> None:
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 96:
+    if turn == 95:
         pos = Position(15, 19)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -651,7 +651,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 97:
+    if turn == 96:
         pos = Position(14, 20)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -660,17 +660,17 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 98:
+    if turn == 97:
         pos = Position(14, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 99:
+    if turn == 98:
         pos = Position(13, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 100:
+    if turn == 99:
         pos = Position(14, 19)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -679,7 +679,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 101:
+    if turn == 100:
         pos = Position(14, 18)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -688,7 +688,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 102:
+    if turn == 101:
         pos = Position(14, 17)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -697,7 +697,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 103:
+    if turn == 102:
         pos = Position(14, 16)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
@@ -706,7 +706,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 104:
+    if turn == 103:
         pos = Position(14, 15)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -715,7 +715,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 105:
+    if turn == 104:
         pos = Position(13, 15)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -724,7 +724,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 106:
+    if turn == 105:
         pos = Position(13, 14)
         target = Position(13, 11)
         if c.can_build_bridge(pos, target):
@@ -733,7 +733,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 107:
+    if turn == 106:
         pos = Position(13, 13)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -741,7 +741,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 108:
+    if turn == 107:
         direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
@@ -753,7 +753,7 @@ def run(c: Controller) -> None:
         if c.can_build_splitter(pos, direction):
             c.build_splitter(pos, direction)
         return
-    if turn == 109:
+    if turn == 108:
         direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
@@ -762,7 +762,7 @@ def run(c: Controller) -> None:
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         return
-    if turn == 110:
+    if turn == 109:
         direction = Direction.WEST
         if c.can_move(direction):
             c.move(direction)
@@ -771,7 +771,7 @@ def run(c: Controller) -> None:
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         return
-    if turn == 111:
+    if turn == 110:
         pos = Position(11, 10)
         target = Position(9, 9)
         if c.can_build_bridge(pos, target):
@@ -780,18 +780,23 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 112:
+    if turn == 111:
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 113:
+    if turn == 112:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 114:
+    if turn == 113:
         direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 114:
+        direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -816,11 +821,6 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 119:
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 120:
         pos = Position(13, 19)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -829,17 +829,20 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 121:
+    if turn == 120:
         pos = Position(12, 19)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         return
-    if turn == 122:
+    if turn == 121:
         pos = Position(12, 20)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
             c.build_splitter(pos, direction)
+        return
+    if turn == 122:
+        pass
         return
     if turn == 123:
         pass
@@ -872,12 +875,12 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 133:
-        pass
-        return
-    if turn == 134:
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 134:
+        pass
         return
     if turn == 135:
         pass
@@ -889,12 +892,12 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 138:
-        pass
-        return
-    if turn == 139:
         pos = Position(12, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 139:
+        pass
         return
     if turn == 140:
         pass
@@ -918,7 +921,9 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 147:
-        pass
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
         return
     if turn == 148:
         direction = Direction.NORTHEAST
@@ -926,7 +931,7 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 149:
-        direction = Direction.NORTHEAST
+        direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -936,12 +941,12 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 151:
-        direction = Direction.NORTH
+        direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 152:
-        direction = Direction.NORTHWEST
+        direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -951,12 +956,12 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 154:
-        direction = Direction.NORTH
+        direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 155:
-        direction = Direction.NORTHWEST
+        direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -966,15 +971,13 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 157:
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 158:
         pos = Position(11, 9)
         target = Position(9, 9)
         if c.can_build_bridge(pos, target):
             c.build_bridge(pos, target)
+        return
+    if turn == 158:
+        pass
         return
     if turn == 159:
         pass
@@ -1013,9 +1016,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 171:
-        pass
-        return
-    if turn == 172:
         pos = Position(13, 10)
         target = Position(11, 9)
         if c.can_build_bridge(pos, target):
@@ -1030,7 +1030,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 173:
+    if turn == 172:
         pos = Position(12, 10)
         if c.can_destroy(pos):
             c.destroy(pos)
@@ -1038,10 +1038,13 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 174:
+    if turn == 173:
         direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 174:
+        pass
         return
     if turn == 175:
         pass
@@ -1083,9 +1086,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 188:
-        pass
-        return
-    if turn == 189:
         direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
@@ -1094,27 +1094,32 @@ def run(c: Controller) -> None:
         if c.can_build_bridge(pos, target):
             c.build_bridge(pos, target)
         return
-    if turn == 190:
+    if turn == 189:
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 191:
+    if turn == 190:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 192:
+    if turn == 191:
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 193:
+    if turn == 192:
         pos = Position(11, 11)
         direction = Direction.EAST
         if c.can_build_splitter(pos, direction):
             c.build_splitter(pos, direction)
         direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 193:
+        direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1124,7 +1129,7 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 195:
-        direction = Direction.SOUTH
+        direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1134,19 +1139,17 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 197:
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 198:
         direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 199:
+    if turn == 198:
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 199:
+        pass
         return
     if turn == 200:
         pass
@@ -1173,9 +1176,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 208:
-        pass
-        return
-    if turn == 209:
         pos = Position(11, 14)
         target = Position(11, 11)
         if c.can_build_bridge(pos, target):
@@ -1184,16 +1184,19 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 210:
+    if turn == 209:
         pass
         return
-    if turn == 211:
+    if turn == 210:
         pos = Position(10, 14)
         if c.can_destroy(pos):
             c.destroy(pos)
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 211:
+        pass
         return
     if turn == 212:
         pass
@@ -1229,9 +1232,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 223:
-        pass
-        return
-    if turn == 224:
         pos = Position(10, 16)
         target = Position(11, 14)
         if c.can_build_bridge(pos, target):
@@ -1240,6 +1240,9 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
+    if turn == 224:
+        pass
+        return
     if turn == 225:
         pass
         return
@@ -1247,9 +1250,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 227:
-        pass
-        return
-    if turn == 228:
         pos = Position(10, 17)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
@@ -1258,10 +1258,10 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 229:
+    if turn == 228:
         pass
         return
-    if turn == 230:
+    if turn == 229:
         pos = Position(10, 18)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1270,13 +1270,13 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
+    if turn == 230:
+        pass
+        return
     if turn == 231:
         pass
         return
     if turn == 232:
-        pass
-        return
-    if turn == 233:
         pos = Position(10, 19)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1285,11 +1285,14 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 234:
+    if turn == 233:
         pos = Position(10, 20)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
+        return
+    if turn == 234:
+        pass
         return
     if turn == 235:
         pass
@@ -1334,12 +1337,12 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 249:
-        pass
-        return
-    if turn == 250:
         pos = Position(11, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 250:
+        pass
         return
     if turn == 251:
         pass
@@ -1381,12 +1384,12 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 264:
-        pass
-        return
-    if turn == 265:
         pos = Position(9, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 265:
+        pass
         return
     if turn == 266:
         pass
@@ -1398,12 +1401,12 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 269:
-        pass
-        return
-    if turn == 270:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 270:
+        pass
         return
     if turn == 271:
         pass
@@ -1418,17 +1421,14 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 275:
-        pass
-        return
-    if turn == 276:
         pos = Position(10, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 277:
+    if turn == 276:
         pass
         return
-    if turn == 278:
+    if turn == 277:
         pos = Position(9, 19)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -1437,16 +1437,16 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 279:
+    if turn == 278:
         pos = Position(8, 20)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         return
-    if turn == 280:
+    if turn == 279:
         pass
         return
-    if turn == 281:
+    if turn == 280:
         pos = Position(8, 19)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -1455,10 +1455,13 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 282:
+    if turn == 281:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 282:
+        pass
         return
     if turn == 283:
         pass
@@ -1482,9 +1485,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 290:
-        pass
-        return
-    if turn == 291:
         pos = Position(8, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -1492,11 +1492,16 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 292:
+    if turn == 291:
         pass
         return
-    if turn == 293:
+    if turn == 292:
         direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 293:
+        direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1506,12 +1511,12 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 295:
-        direction = Direction.NORTH
+        direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 296:
-        direction = Direction.NORTHEAST
+        direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1526,17 +1531,17 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 299:
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 300:
         direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 301:
+    if turn == 300:
         direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 301:
+        direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1546,7 +1551,7 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 303:
-        direction = Direction.NORTHEAST
+        direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1556,16 +1561,11 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 305:
-        direction = Direction.SOUTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 306:
         pos = Position(18, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 307:
+    if turn == 306:
         pos = Position(18, 14)
         direction = Direction.SOUTH
         if c.can_build_conveyor(pos, direction):
@@ -1574,7 +1574,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 308:
+    if turn == 307:
         pos = Position(18, 15)
         direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
@@ -1583,7 +1583,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 309:
+    if turn == 308:
         pos = Position(19, 14)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1592,7 +1592,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 310:
+    if turn == 309:
         pos = Position(19, 13)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
@@ -1601,7 +1601,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 311:
+    if turn == 310:
         pos = Position(19, 12)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1610,7 +1610,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 312:
+    if turn == 311:
         pos = Position(19, 11)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1619,7 +1619,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 313:
+    if turn == 312:
         pos = Position(19, 10)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1628,7 +1628,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 314:
+    if turn == 313:
         pos = Position(19, 9)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1637,7 +1637,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 315:
+    if turn == 314:
         pos = Position(19, 8)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
@@ -1646,7 +1646,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 316:
+    if turn == 315:
         pos = Position(19, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1655,7 +1655,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 317:
+    if turn == 316:
         pos = Position(18, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1664,7 +1664,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 318:
+    if turn == 317:
         pos = Position(17, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1673,7 +1673,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 319:
+    if turn == 318:
         pos = Position(16, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1682,7 +1682,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 320:
+    if turn == 319:
         pos = Position(15, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1691,7 +1691,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 321:
+    if turn == 320:
         pos = Position(14, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1700,10 +1700,10 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 322:
+    if turn == 321:
         pass
         return
-    if turn == 323:
+    if turn == 322:
         pos = Position(13, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -1711,6 +1711,9 @@ def run(c: Controller) -> None:
         direction = Direction.WEST
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 323:
+        pass
         return
     if turn == 324:
         pass
@@ -1734,9 +1737,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 331:
-        pass
-        return
-    if turn == 332:
         pos = Position(12, 7)
         target = Position(9, 7)
         if c.can_build_bridge(pos, target):
@@ -1745,8 +1745,13 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 333:
+    if turn == 332:
         pass
+        return
+    if turn == 333:
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
         return
     if turn == 334:
         direction = Direction.EAST
@@ -1764,12 +1769,12 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 337:
-        direction = Direction.EAST
+        direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 338:
-        direction = Direction.SOUTHEAST
+        direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
@@ -1799,14 +1804,12 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 344:
-        direction = Direction.SOUTH
+        direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 345:
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
+        pass
         return
     if turn == 346:
         pass
@@ -1818,9 +1821,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 349:
-        pass
-        return
-    if turn == 350:
         pos = Position(19, 15)
         if c.can_build_foundry(pos):
             c.build_foundry(pos)
@@ -1828,7 +1828,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 351:
+    if turn == 350:
         pos = Position(17, 17)
         if c.can_destroy(pos):
             c.destroy(pos)
@@ -1840,15 +1840,18 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
+    if turn == 351:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
     if turn == 352:
         direction = Direction.NORTH
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 353:
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
+        pass
         return
     if turn == 354:
         pass
@@ -1869,20 +1872,17 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 360:
-        pass
-        return
-    if turn == 361:
         pos = Position(17, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 361:
+        pass
         return
     if turn == 362:
         pass
         return
     if turn == 363:
-        pass
-        return
-    if turn == 364:
         pos = Position(18, 12)
         direction = Direction.EAST
         if c.can_build_splitter(pos, direction):
@@ -1891,10 +1891,10 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 365:
+    if turn == 364:
         pass
         return
-    if turn == 366:
+    if turn == 365:
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
