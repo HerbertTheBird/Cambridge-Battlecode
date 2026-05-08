@@ -3,7 +3,7 @@
 
 from cambc import *
 
-round = 3
+round = 0
 def run(c: Controller) -> None:
     global round
     turn = c.get_current_round()
@@ -433,8 +433,8 @@ def run(c: Controller) -> None:
     if turn == 66:
         pos = Position(16, 12)
         direction = Direction.NORTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
@@ -1836,10 +1836,72 @@ def run(c: Controller) -> None:
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 352:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 353:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 354:
+        pass
+        return
+    if turn == 355:
+        pass
+        return
+    if turn == 356:
+        pass
+        return
+    if turn == 357:
+        pass
+        return
+    if turn == 358:
+        pass
+        return
+    if turn == 359:
+        pass
+        return
+    if turn == 360:
+        pass
+        return
+    if turn == 361:
+        pos = Position(17, 12)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 362:
+        pass
+        return
+    if turn == 363:
+        pass
+        return
+    if turn == 364:
+        pos = Position(18, 12)
+        direction = Direction.EAST
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 365:
+        pass
+        return
+    if turn == 366:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
         return
     if c.get_global_resources()[0] >= c.get_harvester_cost()[0] and 3-((c.get_current_round()-round)%4) == 2:
         c.destroy(Position(19, 16))
         c.build_harvester(Position(19, 16))
         round = c.get_current_round()
-    # print(3-((c.get_current_round()-round)%4))
+    print(3-((c.get_current_round()-round)%4))
     return

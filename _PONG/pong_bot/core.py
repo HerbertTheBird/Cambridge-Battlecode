@@ -616,4 +616,7 @@ def run(c: Controller) -> None:
         if ax >= amount:
             c.convert(amount)
         return
+    if turn == 352:
+        pass
+        return
     return
