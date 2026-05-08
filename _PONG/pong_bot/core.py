@@ -16,33 +16,6 @@ def run(c: Controller) -> None:
         if c.can_spawn(pos):
             c.spawn_builder(pos)
         return
-    if turn == 2:
-        pass
-        return
-    if turn == 3:
-        pass
-        return
-    if turn == 4:
-        pass
-        return
-    if turn == 5:
-        pass
-        return
-    if turn == 6:
-        pass
-        return
-    if turn == 7:
-        pass
-        return
-    if turn == 8:
-        pass
-        return
-    if turn == 9:
-        pass
-        return
-    if turn == 10:
-        pass
-        return
     if turn == 11:
         amount = 7
         ti, ax = c.get_global_resources()
@@ -56,19 +29,19 @@ def run(c: Controller) -> None:
             c.convert(amount)
         return
     if turn == 13:
-        amount = 4
+        amount = 6
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 14:
-        amount = 4
+        amount = 3
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 15:
-        amount = 4
+        amount = 2
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
@@ -80,40 +53,43 @@ def run(c: Controller) -> None:
             c.convert(amount)
         return
     if turn == 17:
-        amount = 16
+        amount = 4
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 18:
-        pass
+        amount = 4
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
         return
     if turn == 19:
-        amount = 2
+        amount = 16
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 20:
-        amount = 12
+        amount = 13
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 21:
-        amount = 14
+        amount = 5
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 22:
-        amount = 2
+        amount = 14
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 23:
-        amount = 19
+        amount = 5
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
@@ -125,73 +101,70 @@ def run(c: Controller) -> None:
             c.convert(amount)
         return
     if turn == 25:
-        pass
-        return
-    if turn == 26:
         amount = 15
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 27:
-        pass
-        return
-    if turn == 28:
-        amount = 8
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 29:
-        amount = 13
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 30:
-        pass
-        return
-    if turn == 31:
-        amount = 28
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 32:
         amount = 11
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
+    if turn == 30:
+        amount = 29
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 31:
+        amount = 1
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 32:
+        amount = 1
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
     if turn == 33:
-        amount = 3
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 34:
-        amount = 19
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 35:
-        amount = 18
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 36:
-        pass
-        return
-    if turn == 37:
         amount = 37
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
+    if turn == 34:
+        amount = 29
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        pos = Position(9, 9)
+        if c.can_spawn(pos):
+            c.spawn_builder(pos)
+        return
+    if turn == 35:
+        amount = 6
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 36:
+        amount = 20
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 37:
+        amount = 3
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
     if turn == 38:
-        amount = 1
+        amount = 9
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
@@ -203,199 +176,193 @@ def run(c: Controller) -> None:
             c.convert(amount)
         return
     if turn == 40:
-        amount = 1
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 41:
         amount = 19
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
-    if turn == 42:
+    if turn == 41:
         amount = 22
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
-    if turn == 43:
-        amount = 4
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 44:
-        amount = 20
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 45:
-        amount = 23
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 46:
-        amount = 23
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 47:
-        amount = 1
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 48:
-        amount = 46
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 49:
-        amount = 24
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 50:
+    if turn == 42:
         amount = 3
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
+    if turn == 43:
+        amount = 25
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 44:
+        amount = 19
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 45:
+        amount = 21
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 46:
+        amount = 21
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 47:
+        amount = 24
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 48:
+        amount = 18
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 49:
+        amount = 1
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 50:
+        amount = 46
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
     if turn == 51:
-        amount = 29
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 52:
-        amount = 28
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 53:
-        amount = 7
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 54:
-        amount = 31
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 55:
         amount = 8
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
+    if turn == 52:
+        amount = 26
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 53:
+        amount = 29
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 55:
+        amount = 28
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
     if turn == 56:
-        amount = 55
+        amount = 26
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 57:
-        amount = 4
+        amount = 25
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 58:
-        amount = 6
+        amount = 30
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 59:
-        amount = 34
+        amount = 29
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 60:
-        amount = 11
+        amount = 28
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 61:
-        amount = 6
+        amount = 28
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 62:
-        amount = 32
+        amount = 2
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 63:
-        amount = 35
+        amount = 64
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 64:
-        amount = 38
+        amount = 1
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 65:
-        amount = 41
+        amount = 43
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 66:
-        amount = 37
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 67:
         amount = 42
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
+    if turn == 67:
+        amount = 14
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
     if turn == 68:
-        amount = 32
+        amount = 37
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 69:
-        amount = 38
+        amount = 44
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 70:
-        amount = 7
+        amount = 43
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 71:
-        amount = 68
+        amount = 10
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
     if turn == 72:
-        amount = 7
+        amount = 72
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
@@ -407,216 +374,111 @@ def run(c: Controller) -> None:
             c.convert(amount)
         return
     if turn == 74:
-        amount = 106
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 75:
-        amount = 39
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 76:
-        amount = 41
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 77:
-        amount = 77
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 78:
-        amount = 44
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 79:
-        amount = 41
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 80:
-        amount = 38
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 81:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 82:
-        amount = 85
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 83:
-        amount = 55
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 84:
-        amount = 53
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 86:
-        amount = 42
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 87:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 89:
-        amount = 40
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 90:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 91:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 92:
-        amount = 40
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 93:
-        amount = 43
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 94:
-        amount = 43
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 95:
-        amount = 2
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 96:
-        amount = 4
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 97:
-        amount = 87
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 98:
-        amount = 7
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 100:
-        amount = 4
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 101:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 102:
-        amount = 14
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 103:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 104:
-        amount = 4
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 105:
-        amount = 44
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 106:
-        amount = 2
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 107:
-        amount = 14
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 108:
-        amount = 4
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 109:
-        amount = 6
-        ti, ax = c.get_global_resources()
-        if ax >= amount:
-            c.convert(amount)
-        return
-    if turn == 110:
         amount = 45
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
-    if turn == 319:
-        amount = 3
+    if turn == 75:
+        amount = 46
         ti, ax = c.get_global_resources()
         if ax >= amount:
             c.convert(amount)
         return
-    if turn == 351:
-        pass
+    if turn == 76:
+        amount = 69
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 77:
+        amount = 42
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 78:
+        amount = 16
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 79:
+        amount = 17
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 80:
+        amount = 45
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 81:
+        amount = 54
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 82:
+        amount = 49
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 83:
+        amount = 16
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 84:
+        amount = 80
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 85:
+        amount = 12
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 86:
+        amount = 41
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 87:
+        amount = 41
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 88:
+        amount = 38
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 89:
+        amount = 42
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 90:
+        amount = 42
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
+        return
+    if turn == 91:
+        amount = 93
+        ti, ax = c.get_global_resources()
+        if ax >= amount:
+            c.convert(amount)
         return
     return

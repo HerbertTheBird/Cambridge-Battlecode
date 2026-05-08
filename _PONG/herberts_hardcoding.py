@@ -2723,12 +2723,14 @@ class HardcodeApp:
             unit_count = self.game.unit_count(0)
             scale_factor = max(0.01, ts.scale_percent / 100.0)
             effective_ti = (ts.titanium + ts.axionite * 4) / scale_factor
+            equivalent_ti = ts.titanium + ts.axionite * 4
             lines = [
                 f"Round: {self.game.round}  (bot turn {self.bot_turn()})",
                 f"Units: {unit_count}",
                 f"Ti: {ts.titanium}",
                 f"Ax: {ts.axionite}",
-                f"Effective Ti: {effective_ti:.0f}",
+                f"Equivalent Ti: {equivalent_ti}",
+                f"Effective Ti: {int(effective_ti)}",
                 f"Scale: {ts.scale_percent:.1f}%",
                 f"Ti collected: {ts.ti_collected}",
                 f"Ax collected: {ts.ax_collected}",

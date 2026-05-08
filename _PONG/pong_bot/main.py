@@ -8,6 +8,7 @@ import builder
 import core
 import builder_1
 import builder_2
+import builder_35
 import mirror
 
 
@@ -33,6 +34,8 @@ class Player:
                     self.me = builder_1
                 elif self.spawn_turn == 1:
                     self.me = builder_2
+                elif self.spawn_turn == 34:
+                    self.me = builder_35
                 else:
                     self.me = builder
             else:

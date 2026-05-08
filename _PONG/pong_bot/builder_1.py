@@ -16,59 +16,54 @@ def run(c: Controller) -> None:
             c.move(direction)
         return
     if turn == 2:
-        pos = Position(6, 5)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 3:
-        pos = Position(5, 5)
+        pos = Position(5, 6)
         if c.can_build_road(pos):
             c.build_road(pos)
-        direction = Direction.NORTHWEST
+        direction = Direction.WEST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 4:
-        pos = Position(4, 4)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 5:
+    if turn == 3:
         pos = Position(4, 6)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 6:
+    if turn == 4:
+        pos = Position(6, 5)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 5:
         pos = Position(4, 5)
         target = Position(6, 6)
         if c.can_build_bridge(pos, target):
             c.build_bridge(pos, target)
-        direction = Direction.WEST
+        direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 6:
+        pos = Position(4, 4)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
         return
     if turn == 7:
         pos = Position(3, 5)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
-        direction = Direction.EAST
+        direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 8:
+        pos = Position(6, 7)
+        if c.can_build_road(pos):
+            c.build_road(pos)
         direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 9:
-        pos = Position(6, 7)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 10:
         pos = Position(5, 8)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
@@ -76,6 +71,9 @@ def run(c: Controller) -> None:
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
+        return
+    if turn == 10:
+        pass
         return
     if turn == 11:
         pos = Position(4, 9)
@@ -132,25 +130,22 @@ def run(c: Controller) -> None:
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
-        return
-    if turn == 18:
-        pass
-        return
-    if turn == 19:
-        pos = Position(3, 11)
-        direction = Direction.WEST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
         direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 20:
+    if turn == 18:
+        pos = Position(3, 11)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 19:
         pos = Position(2, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 21:
+    if turn == 20:
         pos = Position(3, 12)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -158,13 +153,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 22:
-        pos = Position(4, 11)
-        direction = Direction.NORTH
-        if c.can_build_splitter(pos, direction):
-            c.build_splitter(pos, direction)
-        return
-    if turn == 23:
+    if turn == 21:
         pos = Position(4, 12)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
@@ -173,352 +162,117 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 24:
+    if turn == 22:
         pos = Position(4, 13)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
-        direction = Direction.NORTHWEST
+        return
+    if turn == 23:
+        pos = Position(4, 11)
+        direction = Direction.NORTH
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        return
+    if turn == 24:
+        pos = Position(3, 13)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 25:
-        direction = Direction.NORTHWEST
-        if c.can_move(direction):
-            c.move(direction)
+        pass
         return
     if turn == 26:
-        direction = Direction.NORTHEAST
+        pos = Position(4, 14)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
-        pos = Position(4, 8)
-        direction = Direction.WEST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
         return
     if turn == 27:
-        pos = Position(3, 8)
-        direction = Direction.SOUTH
+        pass
+        return
+    if turn == 28:
+        pos = Position(4, 15)
+        direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
-        direction = Direction.NORTHEAST
+        direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 28:
-        pos = Position(5, 7)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
     if turn == 29:
-        pos = Position(4, 7)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
+        pass
         return
     if turn == 30:
-        pos = Position(3, 7)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
+        pass
         return
     if turn == 31:
-        pos = Position(3, 9)
-        if c.can_destroy(pos):
-            c.destroy(pos)
-        pos = Position(3, 9)
-        if c.can_build_foundry(pos):
-            c.build_foundry(pos)
-        direction = Direction.NORTHWEST
+        pos = Position(3, 15)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
         if c.can_move(direction):
             c.move(direction)
         return
     if turn == 32:
-        pos = Position(3, 6)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
+        pos = Position(2, 16)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
         return
     if turn == 33:
-        pos = Position(2, 6)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.NORTHWEST
-        if c.can_move(direction):
-            c.move(direction)
+        pos = Position(1, 16)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
         return
     if turn == 34:
-        pos = Position(2, 7)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        return
-    if turn == 35:
-        pos = Position(2, 5)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 36:
-        pos = Position(2, 4)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 37:
-        pos = Position(2, 5)
-        if c.can_destroy(pos):
-            c.destroy(pos)
-        pos = Position(2, 5)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 38:
-        pos = Position(2, 3)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 39:
-        pos = Position(2, 4)
-        if c.can_destroy(pos):
-            c.destroy(pos)
-        pos = Position(3, 3)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 40:
-        pos = Position(3, 2)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
         direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 41:
-        pos = Position(4, 3)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        pos = Position(2, 3)
-        if c.can_destroy(pos):
-            c.destroy(pos)
-        return
-    if turn == 42:
-        pos = Position(4, 2)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 43:
-        pos = Position(5, 2)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 44:
-        pos = Position(5, 3)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 45:
-        pos = Position(5, 4)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 46:
-        pos = Position(6, 3)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 47:
-        pos = Position(7, 3)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 48:
-        pos = Position(7, 4)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 49:
-        pos = Position(7, 5)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 50:
-        pos = Position(8, 4)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 51:
-        pos = Position(9, 4)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 52:
-        pos = Position(10, 4)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 53:
-        pos = Position(10, 5)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 54:
-        pos = Position(10, 6)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 55:
-        pos = Position(10, 7)
-        direction = Direction.SOUTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 56:
-        pos = Position(10, 8)
-        if c.can_build_foundry(pos):
-            c.build_foundry(pos)
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 57:
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 58:
-        pos = Position(7, 10)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 59:
-        direction = Direction.WEST
-        if c.can_move(direction):
-            c.move(direction)
-        pos = Position(5, 10)
-        target = Position(7, 9)
-        if c.can_build_bridge(pos, target):
-            c.build_bridge(pos, target)
-        return
-    if turn == 60:
-        pos = Position(5, 11)
-        direction = Direction.WEST
-        if c.can_build_splitter(pos, direction):
-            c.build_splitter(pos, direction)
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 61:
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        pos = Position(3, 13)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        return
-    if turn == 62:
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        pos = Position(4, 14)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        return
-    if turn == 63:
-        direction = Direction.SOUTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        pos = Position(5, 14)
-        target = Position(5, 11)
-        if c.can_build_bridge(pos, target):
-            c.build_bridge(pos, target)
-        return
-    if turn == 64:
-        pos = Position(5, 15)
-        direction = Direction.EAST
-        if c.can_build_splitter(pos, direction):
-            c.build_splitter(pos, direction)
-        direction = Direction.SOUTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 65:
-        pos = Position(5, 16)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 66:
+    if turn == 35:
         pos = Position(4, 16)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
-        direction = Direction.SOUTHWEST
+        direction = Direction.SOUTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 67:
+    if turn == 36:
+        pos = Position(5, 16)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 37:
+        pass
+        return
+    if turn == 38:
+        pos = Position(5, 15)
+        direction = Direction.EAST
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 39:
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
         pos = Position(4, 17)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 68:
+    if turn == 40:
         pos = Position(3, 17)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -526,52 +280,7 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 69:
-        pos = Position(2, 17)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 70:
-        pos = Position(2, 16)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.NORTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 71:
-        pos = Position(1, 16)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 72:
-        pos = Position(3, 15)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.NORTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 73:
-        pos = Position(4, 15)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 74:
-        pos = Position(3, 16)
-        if c.can_build_foundry(pos):
-            c.build_foundry(pos)
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 75:
+    if turn == 41:
         pos = Position(3, 18)
         if c.can_build_road(pos):
             c.build_road(pos)
@@ -579,56 +288,178 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 76:
-        pos = Position(3, 19)
-        target = Position(3, 16)
-        if c.can_build_bridge(pos, target):
-            c.build_bridge(pos, target)
-        direction = Direction.SOUTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 77:
-        pos = Position(3, 20)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        return
-    if turn == 78:
-        pos = Position(2, 20)
-        direction = Direction.NORTH
+    if turn == 42:
+        pos = Position(2, 19)
+        direction = Direction.EAST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 79:
+    if turn == 43:
+        pos = Position(2, 20)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 44:
         pos = Position(2, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 80:
+    if turn == 45:
         pos = Position(1, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 46:
+        pos = Position(3, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 47:
+        pos = Position(3, 19)
+        target = Position(3, 16)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        return
+    if turn == 48:
         direction = Direction.NORTHEAST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 81:
-        pos = Position(2, 19)
-        direction = Direction.EAST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        return
-    if turn == 82:
+    if turn == 49:
         pos = Position(4, 19)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
         return
-    if turn == 83:
+    if turn == 50:
+        pass
+        return
+    if turn == 51:
         pos = Position(4, 20)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 52:
+        pos = Position(4, 21)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 53:
+        pos = Position(5, 19)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 54:
+        pos = Position(6, 19)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 55:
+        pos = Position(7, 19)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 56:
+        pos = Position(8, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 57:
+        pass
+        return
+    if turn == 58:
+        pos = Position(9, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 59:
+        pass
+        return
+    if turn == 60:
+        pos = Position(10, 19)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 61:
+        pos = Position(11, 19)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 62:
+        pos = Position(12, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 63:
+        pos = Position(13, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 64:
+        pos = Position(14, 19)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 65:
+        pos = Position(15, 19)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 66:
+        pos = Position(16, 20)
         direction = Direction.NORTH
         if c.can_build_splitter(pos, direction):
             c.build_splitter(pos, direction)
@@ -636,12 +467,167 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 84:
-        pos = Position(4, 21)
+    if turn == 67:
+        pos = Position(16, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 68:
+        pos = Position(17, 18)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 69:
+        pos = Position(18, 19)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 70:
+        pos = Position(18, 20)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 71:
+        pass
+        return
+    if turn == 72:
+        pos = Position(18, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
+    if turn == 73:
+        pass
+        return
+    if turn == 74:
+        pos = Position(19, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 75:
+        pos = Position(17, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 76:
+        pos = Position(17, 19)
+        target = Position(17, 16)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 77:
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(16, 21)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 78:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 79:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(17, 17)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 80:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(16, 16)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 81:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(15, 16)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 82:
+        pos = Position(16, 17)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 83:
+        pos = Position(18, 16)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 84:
+        pass
+        return
     if turn == 85:
-        c.self_destruct()
+        pos = Position(17, 15)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 86:
+        pos = Position(18, 17)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 87:
+        pos = Position(19, 16)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 88:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(17, 14)
+        target = Position(17, 11)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        return
+    if turn == 89:
+        pass
+        return
+    if turn == 90:
+        pass
+        return
+    if turn == 91:
+        pos = Position(17, 16)
+        if c.can_build_foundry(pos):
+            c.build_foundry(pos)
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
         return
     return
