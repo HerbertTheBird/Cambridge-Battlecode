@@ -578,15 +578,24 @@ def run(c: Controller) -> None:
         if c.can_build_splitter(pos, direction):
             c.build_splitter(pos, direction)
         return
-    if turn == 86:
+    if turn == 87:
         pos = Position(17, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
+        return
+    if turn == 88:
+        pos = Position(16, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
         direction = Direction.SOUTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 87:
+    if turn == 89:
+        pass
+        return
+    if turn == 90:
         pos = Position(16, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
@@ -594,36 +603,1059 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 88:
-        pos = Position(16, 19)
-        direction = Direction.EAST
+    if turn == 91:
+        pos = Position(18, 19)
+        direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
         return
-    if turn == 89:
+    if turn == 92:
         pos = Position(18, 20)
         direction = Direction.NORTH
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
-        direction = Direction.SOUTHEAST
+        direction = Direction.SOUTH
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 90:
-        pos = Position(18, 21)
+    if turn == 93:
+        pos = Position(19, 20)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         return
-    if turn == 91:
-        pos = Position(19, 20)
+    if turn == 94:
+        pos = Position(18, 21)
         if c.can_build_harvester(pos):
             c.build_harvester(pos)
         direction = Direction.NORTHWEST
         if c.can_move(direction):
             c.move(direction)
         return
-    if turn == 92:
-        pos = Position(18, 19)
+    if turn == 95:
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(15, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 96:
+        pos = Position(15, 19)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 97:
+        pos = Position(14, 20)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 98:
+        pos = Position(14, 21)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 99:
+        pos = Position(13, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 100:
+        pos = Position(14, 19)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 101:
+        pos = Position(14, 18)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 102:
+        pos = Position(14, 17)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 103:
+        pos = Position(14, 16)
+        direction = Direction.NORTH
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 104:
+        pos = Position(14, 15)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 105:
+        pos = Position(13, 15)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 106:
+        pos = Position(13, 14)
+        target = Position(13, 11)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 107:
+        pos = Position(13, 13)
+        if c.can_build_road(pos):
+            c.build_road(pos)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 108:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(13, 11)
+        if c.can_destroy(pos):
+            c.destroy(pos)
+        pos = Position(13, 11)
+        direction = Direction.WEST
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        return
+    if turn == 109:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(12, 11)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 110:
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(12, 10)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 111:
+        pos = Position(11, 10)
+        target = Position(9, 9)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 112:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 113:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 114:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 115:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 116:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 117:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 118:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 119:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 120:
+        pos = Position(13, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 121:
+        pos = Position(12, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 122:
+        pos = Position(12, 20)
+        direction = Direction.NORTH
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        return
+    if turn == 123:
+        pass
+        return
+    if turn == 124:
+        pass
+        return
+    if turn == 125:
+        pass
+        return
+    if turn == 126:
+        pass
+        return
+    if turn == 127:
+        pass
+        return
+    if turn == 128:
+        pass
+        return
+    if turn == 129:
+        pass
+        return
+    if turn == 130:
+        pass
+        return
+    if turn == 131:
+        pass
+        return
+    if turn == 132:
+        pass
+        return
+    if turn == 133:
+        pass
+        return
+    if turn == 134:
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 135:
+        pass
+        return
+    if turn == 136:
+        pass
+        return
+    if turn == 137:
+        pass
+        return
+    if turn == 138:
+        pass
+        return
+    if turn == 139:
+        pos = Position(12, 21)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 140:
+        pass
+        return
+    if turn == 141:
+        pass
+        return
+    if turn == 142:
+        pass
+        return
+    if turn == 143:
+        pass
+        return
+    if turn == 144:
+        pass
+        return
+    if turn == 145:
+        pass
+        return
+    if turn == 146:
+        pass
+        return
+    if turn == 147:
+        pass
+        return
+    if turn == 148:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 149:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 150:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 151:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 152:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 153:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 154:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 155:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 156:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 157:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 158:
+        pos = Position(11, 9)
+        target = Position(9, 9)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        return
+    if turn == 159:
+        pass
+        return
+    if turn == 160:
+        pass
+        return
+    if turn == 161:
+        pass
+        return
+    if turn == 162:
+        pass
+        return
+    if turn == 163:
+        pass
+        return
+    if turn == 164:
+        pass
+        return
+    if turn == 165:
+        pass
+        return
+    if turn == 166:
+        pass
+        return
+    if turn == 167:
+        pass
+        return
+    if turn == 168:
+        pass
+        return
+    if turn == 169:
+        pass
+        return
+    if turn == 170:
+        pass
+        return
+    if turn == 171:
+        pass
+        return
+    if turn == 172:
+        pos = Position(13, 10)
+        target = Position(11, 9)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        pos = Position(12, 11)
+        if c.can_destroy(pos):
+            c.destroy(pos)
+        pos = Position(11, 10)
+        if c.can_destroy(pos):
+            c.destroy(pos)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 173:
+        pos = Position(12, 10)
+        if c.can_destroy(pos):
+            c.destroy(pos)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 174:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 175:
+        pass
+        return
+    if turn == 176:
+        pass
+        return
+    if turn == 177:
+        pass
+        return
+    if turn == 178:
+        pass
+        return
+    if turn == 179:
+        pass
+        return
+    if turn == 180:
+        pass
+        return
+    if turn == 181:
+        pass
+        return
+    if turn == 182:
+        pass
+        return
+    if turn == 183:
+        pass
+        return
+    if turn == 184:
+        pass
+        return
+    if turn == 185:
+        pass
+        return
+    if turn == 186:
+        pass
+        return
+    if turn == 187:
+        pass
+        return
+    if turn == 188:
+        pass
+        return
+    if turn == 189:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        pos = Position(11, 10)
+        target = Position(9, 9)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        return
+    if turn == 190:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 191:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 192:
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 193:
+        pos = Position(11, 11)
+        direction = Direction.EAST
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 194:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 195:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 196:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 197:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 198:
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 199:
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 200:
+        pass
+        return
+    if turn == 201:
+        pass
+        return
+    if turn == 202:
+        pass
+        return
+    if turn == 203:
+        pass
+        return
+    if turn == 204:
+        pass
+        return
+    if turn == 205:
+        pass
+        return
+    if turn == 206:
+        pass
+        return
+    if turn == 207:
+        pass
+        return
+    if turn == 208:
+        pass
+        return
+    if turn == 209:
+        pos = Position(11, 14)
+        target = Position(11, 11)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 210:
+        pass
+        return
+    if turn == 211:
+        pos = Position(10, 14)
+        if c.can_destroy(pos):
+            c.destroy(pos)
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 212:
+        pass
+        return
+    if turn == 213:
+        pass
+        return
+    if turn == 214:
+        pass
+        return
+    if turn == 215:
+        pass
+        return
+    if turn == 216:
+        pass
+        return
+    if turn == 217:
+        pass
+        return
+    if turn == 218:
+        pass
+        return
+    if turn == 219:
+        pass
+        return
+    if turn == 220:
+        pass
+        return
+    if turn == 221:
+        pass
+        return
+    if turn == 222:
+        pass
+        return
+    if turn == 223:
+        pass
+        return
+    if turn == 224:
+        pos = Position(10, 16)
+        target = Position(11, 14)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 225:
+        pass
+        return
+    if turn == 226:
+        pass
+        return
+    if turn == 227:
+        pass
+        return
+    if turn == 228:
+        pos = Position(10, 17)
+        direction = Direction.NORTH
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 229:
+        pass
+        return
+    if turn == 230:
+        pos = Position(10, 18)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 231:
+        pass
+        return
+    if turn == 232:
+        pass
+        return
+    if turn == 233:
+        pos = Position(10, 19)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 234:
+        pos = Position(10, 20)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 235:
+        pass
+        return
+    if turn == 236:
+        pass
+        return
+    if turn == 237:
+        pass
+        return
+    if turn == 238:
+        pass
+        return
+    if turn == 239:
+        pass
+        return
+    if turn == 240:
+        pass
+        return
+    if turn == 241:
+        pass
+        return
+    if turn == 242:
+        pass
+        return
+    if turn == 243:
+        pass
+        return
+    if turn == 244:
+        pass
+        return
+    if turn == 245:
+        pass
+        return
+    if turn == 246:
+        pass
+        return
+    if turn == 247:
+        pass
+        return
+    if turn == 248:
+        pass
+        return
+    if turn == 249:
+        pass
+        return
+    if turn == 250:
+        pos = Position(11, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 251:
+        pass
+        return
+    if turn == 252:
+        pass
+        return
+    if turn == 253:
+        pass
+        return
+    if turn == 254:
+        pass
+        return
+    if turn == 255:
+        pass
+        return
+    if turn == 256:
+        pass
+        return
+    if turn == 257:
+        pass
+        return
+    if turn == 258:
+        pass
+        return
+    if turn == 259:
+        pass
+        return
+    if turn == 260:
+        pass
+        return
+    if turn == 261:
+        pass
+        return
+    if turn == 262:
+        pass
+        return
+    if turn == 263:
+        pass
+        return
+    if turn == 264:
+        pass
+        return
+    if turn == 265:
+        pos = Position(9, 20)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 266:
+        pass
+        return
+    if turn == 267:
+        pass
+        return
+    if turn == 268:
+        pass
+        return
+    if turn == 269:
+        pass
+        return
+    if turn == 270:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 271:
+        pass
+        return
+    if turn == 272:
+        pass
+        return
+    if turn == 273:
+        pass
+        return
+    if turn == 274:
+        pass
+        return
+    if turn == 275:
+        pass
+        return
+    if turn == 276:
+        pos = Position(10, 21)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 277:
+        pass
+        return
+    if turn == 278:
+        pos = Position(9, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 279:
+        pos = Position(8, 20)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        return
+    if turn == 280:
+        pass
+        return
+    if turn == 281:
+        pos = Position(8, 19)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 282:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 283:
+        pass
+        return
+    if turn == 284:
+        pass
+        return
+    if turn == 285:
+        pass
+        return
+    if turn == 286:
+        pass
+        return
+    if turn == 287:
+        pass
+        return
+    if turn == 288:
+        pass
+        return
+    if turn == 289:
+        pass
+        return
+    if turn == 290:
+        pass
+        return
+    if turn == 291:
+        pos = Position(8, 21)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 292:
+        pass
+        return
+    if turn == 293:
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 294:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 295:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 296:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 297:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 298:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 299:
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 300:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 301:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 302:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 303:
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 304:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 305:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 306:
+        pos = Position(18, 13)
+        if c.can_build_harvester(pos):
+            c.build_harvester(pos)
+        return
+    if turn == 307:
+        pos = Position(18, 14)
+        direction = Direction.SOUTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 308:
+        pos = Position(18, 15)
+        direction = Direction.EAST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 309:
+        pos = Position(19, 14)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 310:
+        pos = Position(19, 13)
+        direction = Direction.NORTH
+        if c.can_build_splitter(pos, direction):
+            c.build_splitter(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 311:
+        pos = Position(19, 12)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 312:
+        pos = Position(19, 11)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 313:
+        pos = Position(19, 10)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 314:
+        pos = Position(19, 9)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 315:
+        pos = Position(19, 8)
+        direction = Direction.NORTH
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 316:
+        pos = Position(19, 7)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.NORTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 317:
+        pos = Position(18, 7)
         direction = Direction.WEST
         if c.can_build_conveyor(pos, direction):
             c.build_conveyor(pos, direction)
@@ -631,4 +1663,168 @@ def run(c: Controller) -> None:
         if c.can_move(direction):
             c.move(direction)
         return
+    if turn == 318:
+        pos = Position(17, 7)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 319:
+        pos = Position(16, 7)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 320:
+        pos = Position(15, 7)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 321:
+        pos = Position(14, 7)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 322:
+        pass
+        return
+    if turn == 323:
+        pos = Position(13, 7)
+        direction = Direction.WEST
+        if c.can_build_conveyor(pos, direction):
+            c.build_conveyor(pos, direction)
+        direction = Direction.WEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 324:
+        pass
+        return
+    if turn == 325:
+        pass
+        return
+    if turn == 326:
+        pass
+        return
+    if turn == 327:
+        pass
+        return
+    if turn == 328:
+        pass
+        return
+    if turn == 329:
+        pass
+        return
+    if turn == 330:
+        pass
+        return
+    if turn == 331:
+        pass
+        return
+    if turn == 332:
+        pos = Position(12, 7)
+        target = Position(9, 7)
+        if c.can_build_bridge(pos, target):
+            c.build_bridge(pos, target)
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 333:
+        pass
+        return
+    if turn == 334:
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 335:
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 336:
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 337:
+        direction = Direction.EAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 338:
+        direction = Direction.SOUTHEAST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 339:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 340:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 341:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 342:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 343:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 344:
+        direction = Direction.SOUTH
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 345:
+        direction = Direction.SOUTHWEST
+        if c.can_move(direction):
+            c.move(direction)
+        return
+    if turn == 346:
+        pass
+        return
+    if turn == 347:
+        pass
+        return
+    if turn == 348:
+        pass
+        return
+    if turn == 349:
+        pass
+        return
+    if turn == 350:
+        pos = Position(19, 15)
+        if c.can_build_foundry(pos):
+            c.build_foundry(pos)
+        return
+    if c.get_global_resources()[0] >= c.get_harvester_cost()[0]:
+        c.destroy(Position(19, 16))
+        c.build_harvester(Position(19, 16))
     return

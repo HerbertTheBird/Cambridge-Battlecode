@@ -642,55 +642,6 @@ def run(c: Controller) -> None:
             c.build_harvester(pos)
         return
     if turn == 86:
-        pos = Position(5, 19)
-        if c.can_build_road(pos):
-            c.build_road(pos)
-        direction = Direction.NORTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 87:
-        pos = Position(6, 20)
-        direction = Direction.NORTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTHEAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 88:
-        pos = Position(6, 19)
-        direction = Direction.NORTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        return
-    if turn == 89:
-        pos = Position(6, 21)
-        if c.can_build_harvester(pos):
-            c.build_harvester(pos)
-        direction = Direction.NORTH
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 90:
-        pos = Position(6, 18)
-        direction = Direction.NORTH
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        return
-    if turn == 91:
-        pos = Position(7, 19)
-        direction = Direction.WEST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.EAST
-        if c.can_move(direction):
-            c.move(direction)
-        return
-    if turn == 92:
-        pos = Position(8, 19)
-        direction = Direction.WEST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
+        c.self_destruct()
         return
     return
