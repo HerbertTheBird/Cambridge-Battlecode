@@ -379,4 +379,7 @@ def run(c: Controller) -> None:
         if c.can_build_bridge(pos, target):
             c.build_bridge(pos, target)
         return
+    if turn == 92:
+        c.self_destruct()
+        return
     return

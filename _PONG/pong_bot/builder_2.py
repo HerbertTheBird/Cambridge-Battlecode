@@ -578,12 +578,6 @@ def run(c: Controller) -> None:
         pass
         return
     if turn == 91:
-        pos = Position(11, 9)
-        direction = Direction.WEST
-        if c.can_build_conveyor(pos, direction):
-            c.build_conveyor(pos, direction)
-        direction = Direction.SOUTHWEST
-        if c.can_move(direction):
-            c.move(direction)
+        c.self_destruct()
         return
     return
