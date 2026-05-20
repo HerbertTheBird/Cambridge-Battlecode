@@ -15,3 +15,14 @@ profiles/
 
 .claude
 .DS_Store
+
+# LaTeX build files
+postmortem.aux
+postmortem.log
+postmortem.out
+postmortem.fls
+postmortem.fdb_latexmk
+postmortem.synctex.gz
+
+# Minted
+_minted*
