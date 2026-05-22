@@ -23,6 +23,7 @@ postmortem.out
 postmortem.fls
 postmortem.fdb_latexmk
 postmortem.synctex.gz
+postmortem.synctex(busy)
 
 # Minted
 _minted*

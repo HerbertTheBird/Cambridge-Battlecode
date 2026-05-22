@@ -348,7 +348,7 @@ The intent is for long-term behavior to emerge from every builder acting optimal
 Although these territorial strategies are not hard-coded, they emerge
 from our state management and scoring system and are worth highlighting.
 
-\textbf{Ore hopping} is our strategy of using ally-controlled harvesters as staging points
+\textbf{Ore hopping} (Figure~\ref{fig:orehopping}) is our strategy of using ally-controlled harvesters as staging points
 for attack turrets. By placing turrets along the frontier of our controlled territory, we
 can shoot the defenses around nearby opponent harvesters. Our builder bots can then take over
 the enemy harvester by building more turrets around it.
@@ -373,11 +373,12 @@ out enough, a turret placed at an ally ore cannot reach an enemy ore, and it is 
     {\small After}
   \end{minipage}
   \caption{Ore hopping.}
+  \label{fig:orehopping}
   \Description{Two side-by-side game screenshots showing the ore-hopping strategy: in the ``before'' image, friendly turrets sit along the frontier of our territory; in the ``after'' image, those turrets have eliminated an enemy gunner adjacent to a nearby enemy harvester, allowing us to take it over.}
 \end{figure}
 
 
-\textbf{Seeding} is a more aggressive way of gaining territory. This involves
+\textbf{Seeding} (Figure~\ref{fig:seeding}) is a more aggressive way of gaining territory. This involves
 builder bots intercepting an enemy conveyor line by attacking it until an allied ``seed'' turret can be placed in the gap. The analogy is that much like seeding a plant, our infrastructure can grow from a single turret investment as it destroys enemy targets around it and frees up space for more of our turrets and conveyors to be placed.
 
 Seeding is easily countered by enemy builder bots simply out-healing the attack if nearby, though there are special cases described later where this can be prevented.
@@ -396,6 +397,7 @@ Seeding is easily countered by enemy builder bots simply out-healing the attack 
     {\small After}
   \end{minipage}
   \caption{Seeding.}
+  \label{fig:seeding}
   \Description{Two side-by-side game screenshots showing the seeding strategy: in the ``before'' image, a builder bot attacks an enemy conveyor line to create a gap; in the ``after'' image, an allied ``seed'' turret has been placed in that gap.}
 \end{figure}
 
@@ -1070,6 +1072,14 @@ On the new builder's first turn, it reads its own position relative to the core,
 
 The bot follows that target until it is within squared distance 18 or 30 rounds have elapsed, after which the slot is cleared and default explore takes over.
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/initial_explore.png}
+  \caption{Initial Exploration Targets.}
+  \label{fig:initial-exploration-targets}
+  \Description{Screenshot showing the four initial exploration rays going out from the core, showing the paths the first few builder bots plan to take.}
+\end{figure}
+
 \subsubsection*{Frontier Sampling}
 
 If not following the initial explore plan, the explore-target generator floodfills from the bot's current position and other known friendly bot locations. It then samples a random tile from a frontier ring near the edge of the explored area once the flood terminates:
@@ -1132,8 +1142,16 @@ else:
 
 We only coordinate one-taps this way for sentinels with a higher id than the other ally sentinel in vision. This is because entities act in increasing id order, so the higher-id sentinel will always be able to react to the lower-id sentinel's shot within the same turn, but not vice versa.
 
+
 Our sentinels will consider self-destructing if they are not adjacent to a harvester and there is no enemy builder bot nearby. They will self-destruct after 16 turns if they have no ammo, or after only 4 turns if they also have no possible upstream feeder.
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{images/one_shot.png}
+  \caption{A sentinel one-shot on an enemy harvester.}
+  \label{fig:one_shot}
+  \Description{Screenshot of two sentinels shooting the same enemy harvester on the same turn. By coordinating their shot and killing the harvester quickly, they leave no room for enemy builder bots to heal it.}
+\end{figure}
 
 \subsection{Gunner}
 
@@ -1157,6 +1175,7 @@ throw to argmin (size[dest], -wall_bfs_dist(dest))
 
 The effect is to either keep the enemy out of our territory, or keep them away from a tile we are trying to disrupt.
 
+\vfill\null
 
 \section{Chokepoint Detection}
 
@@ -1247,7 +1266,6 @@ chokepointer sets the numeric backend to ordinary Python floats rather
 than \code{Decimal}. This loses arbitrary precision, but the inputs are
 already quantized to map/sub-tile coordinates, and the speedup is large
 enough to matter for all-map iteration.
-\vfill\null
 
 \begin{lstlisting}
 set_foronoi_numeric_mode("float")
@@ -1617,7 +1635,6 @@ blocking terrain is useful opportunistically but should not override
 obvious attacks, repairs, or routing work. Instead, after the main state
 runs, the builder checks whether it can cheaply place a chokepoint blocker
 nearby.
-\vfill\null
 
 \begin{lstlisting}
 def try_passive_chokepoint_action_only():
@@ -1775,7 +1792,7 @@ Thus, if we build a mask containing possible target tiles (for explore targets, 
 
 Python attribute and global lookups are not free, and some of our inner loops
 run hundreds of thousands of times per turn. Hence, every hot function binds the module and
-controller members it needs to locals \emph{once}, before the loop:
+controller members it needs to locals once before the loop:
 
 \begin{lstlisting}
 # bfs_move, before the frontier loop iterates:
@@ -1806,12 +1823,12 @@ The harvest zone, which is a Voronoi floodfill from our core against the predict
 enemy core used to approximate safe harvest locations, only runs when symmetry predictions update.
 The column and row guard masks and the eight per-facing direction
 templates for sentinels are likewise built at
-\code{init} and not touched again.
+\code{init} and not updated again.
 
 \subsection{Incremental Updates}
 
-We also prioritize patching information rather than fully rebuilding it.
-\code{update\_at} maintains conveyor output and reverse conveyor output bitmasks as buildings are updated,
+We prioritize updating our map info structures rather than fully rebuilding them.
+For example, \code{update\_at} maintains conveyor output and reverse conveyor output bitmasks as buildings are updated,
 rather than rescanning the entire map.
 
 Furthermore, after a move, \code{update\_move} diffs the old and
@@ -1830,12 +1847,7 @@ This reduces the number of tiles we scan after moving from all tiles within visi
 
 \subsection{TTL Caches}
 
-States that depend on expensive build paths remember failure. Bounded-TTL
-sets include caches for harvest failures, unaffordable attempts, secure
-failures, attack failures, and pathing failures,
-which record ``this tile was unbuildable or unaffordable'' for $\sim\!100$
-rounds, so a bot does not waste runtime trying to recompute if a previously failed
-target tile should be acted on again.
+States that depend on expensive calculations to find target tiles remember the tiles that failed. We use Time to Live (TTL) caches that store target tiles we want to skip for $100$ rounds, so we don't waste compute trying to calculate if a recently failed target tile should be acted on again.
 
 \subsection{Debugging}
 
