@@ -131,8 +131,8 @@
 \section{Overview}
 
 We competed in the inaugural Cambridge Battlecode as Team
-Pantheon, consisting of Derek Wang, Yufan Wang, Alex
-Thummalapalli, and Ioannis Pantidis.
+Pantheon, consisting of \href{https://www.linkedin.com/in/derek-wang-a3b815408/}{Derek Wang}, \href{https://www.linkedin.com/in/yufan-skye-wang/}{Yufan Wang}, \href{https://www.linkedin.com/in/alext101/}{Alex
+  Thummalapalli}, and \href{https://www.linkedin.com/in/ioannis-pantidis/}{Ioannis Pantidis}.
 
 We entered the competition with mixed levels of experience. For three
 of us, this was our first year doing Battlecode.
@@ -1175,8 +1175,6 @@ throw to argmin (size[dest], -wall_bfs_dist(dest))
 
 The effect is to either keep the enemy out of our territory, or keep them away from a tile we are trying to disrupt.
 
-\vfill\null
-
 \section{Chokepoint Detection}
 
 We also have a significant amount of logic geared around chokepoint
@@ -1520,7 +1518,6 @@ def union(a, b):
     ra, rb = find(a), find(b)
     if ra == rb:
         return
-    # keep the wider region as the representative
     if radius[ra] >= radius[rb]:
         parent[rb] = ra
     else:
@@ -1794,6 +1791,8 @@ Python attribute and global lookups are not free, and some of our inner loops
 run hundreds of thousands of times per turn. Hence, every hot function binds the module and
 controller members it needs to locals once before the loop:
 
+\newpage
+
 \begin{lstlisting}
 # bfs_move, before the frontier loop iterates:
 bm_et = map_info._bm_et; 
@@ -1815,10 +1814,7 @@ and thereafter uses list indexing and boolean lookup tables instead of dictionar
 
 \subsection{Caching and Memoization}
 
-Many of our derived bitmasks, calculated targets, etc., are memoized on the map info structures they depend on.
-Hence, we limit recomputation to when relevant infrastructure changes.
-
-We also memoize some calculations irrespective of local map changes.
+Many of our derived bitmasks, calculated targets, etc., are memoized on the map info structures they depend on. We also memoize some calculations irrespective of local map changes.
 The harvest zone, which is a Voronoi floodfill from our core against the predicted
 enemy core used to approximate safe harvest locations, only runs when symmetry predictions update.
 The column and row guard masks and the eight per-facing direction
@@ -1864,10 +1860,60 @@ else:
 
 Every \code{log(...)} call site thus becomes a no-op function call when we turn the flag off before submitting our bot.
 
+\section{Results}
+
+Our tournament results are summarized in Table~\ref{tab:results}. Sprints were the weekly tournaments held throughout the competition, where teams could evaluate their performance and gain a better understanding of the meta. The International Qualifiers was a tournament for the top eight teams outside the UK, offering a chance to advance to the Grand Finals.
+
+The Grand Finals was the culminating in-person tournament for the top eight international and top eight UK teams to watch the matches play out.
+
+The Meme and Pong tournaments were for-fun tournaments held after the Grand Finals. The Meme tournament featured several edge-case and troll maps. The Pong tournament involved min-maxing axionite collection by hardcoding strategies specifically for the Pong map. This map was unique in that the game would end in a forced draw if both sides avoided placing roads near the barrier in the middle, since then neither side could reach the opponent's core.
+
+\begin{table}[htbp]
+  \caption{Tournament Results.}
+  \label{tab:results}
+  \begin{tabular}{lll}
+    \toprule
+    Tournament                & Date         & Result                                       \\
+    \midrule
+    Sprint One                & 3/22         & Top 128                                      \\
+    Sprint Two                & 3/28         & Top 8                                        \\
+    Sprint Three              & 4/5          & Top 4                                        \\
+    Sprint Four               & 4/11         & Top 8                                        \\
+    Sprint Five               & 4/19         & Top 4                                        \\
+    International Qualifiers  & 4/20         & 3rd                                          \\
+    \textbf{Grand Finals}     & \textbf{5/4} & \textbf{1st}                                 \\
+    \textit{Meme Tournament*} & 5/9          & Top 8                                        \\
+    \textit{Pong Tournament*} & 5/9          & 2nd                                          \\
+    \midrule
+    \multicolumn{3}{l}{\footnotesize *For-fun tournaments played with different rule-sets.} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Figure~\ref{fig:elo-results} shows our Elo progression over time. We went into the Grand Finals as the first seed (Figure~\ref{fig:ladder-results} shows the top eight seeded teams before the Grand Finals).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{images/results.png}
+  \caption{Elo rating over the course of the competition.}
+  \Description{A graph showing Team Pantheon's Elo rating over time throughout the competition.}
+  \label{fig:elo-results}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{images/ladder.png}
+  \caption{Top eight seeded teams for the Grand Finals.}
+  \Description{A leaderboard image showing the top eight seeded teams before the Grand Finals.}
+  \label{fig:ladder-results}
+\end{figure}
+
 \section{Conclusion}
 
-Overall, our final bot uses a memoryless approach, backed
-by a robust map info layer and caching system, to decide on the best set of actions for
-any given turn. This allows our builder bots to adapt quickly to changing circumstances and allows for complex behavior to emerge.
+We learned a lot over the course of the competition through trial and error. We had many more bot versions outside of the ones listed at the beginning (such as Hermes and Hephaestus, along with sub-versions of all of our bots) and were still adding in new strategies like attack route just hours before the final submission deadline.
+
+Overall, our final solution is different from most Battlecode solutions, which tend to have persistent states and defined state transitions. However, we believe our memoryless approach was one of the main factors in our bot being very dynamic and adaptable. It also allowed for a lot of complex behavior to emerge without hardcoding strategies, which made our bot less prone to overfitting.
+
+In the end, our team had a lot of fun competing, and we're already looking forward to the next competition.
 
 \end{document}
